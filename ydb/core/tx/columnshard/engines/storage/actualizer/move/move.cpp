@@ -91,7 +91,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 }
 
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
-    InitialPortionIds.erase(portionId);
+    // InitialPortionIds is kept: a level move removes and re-adds the same portion, which must still pass admission.
     PendingPortionIds.erase(portionId);
     RequestedAt.erase(portionId);
     InFlightPortionIds.erase(portionId);

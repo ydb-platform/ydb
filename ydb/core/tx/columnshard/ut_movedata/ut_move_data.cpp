@@ -282,6 +282,26 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "past the deadline the session must stop adopting");
     }
 
+    // A compaction-level move removes and re-adds the same portion; past the deadline it must still be moved.
+    Y_UNIT_TEST(PortionChangedAfterTheDeadlineIsStillMoved) {
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex versionedIndex;
+        versionedIndex.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(NOlap::NTest::MakePortionTestIndexInfo()));
+
+        TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, versionedIndex);
+        const TInstant start = TInstant::Seconds(1000);
+        const auto portion = NOlap::NTest::MakeTestCompactedPortion(pathId, 1, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt);
+        const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
+        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+        UNIT_ASSERT(actualizer.IsInPendingPortionIds(1));
+
+        const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
+        actualizer.RemovePortion(1);
+        actualizer.AddPortion(portion, NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
+        UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "a portion the session started with must stay tracked across a level move");
+    }
+
     Y_UNIT_TEST(MoveDataMetadataRequestsBatching) {
         static constexpr ui64 PortionsCount = 7;
         const auto pathId = NOlap::TInternalPathId::FromRawValue(1);

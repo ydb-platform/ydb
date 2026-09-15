@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/signals/object_counter.h>
 #include <ydb/library/signals/owner.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -44,12 +45,25 @@ public:
     }
 };
 
+// Shared by the processes belonging to the same workload manager query.
+class TWorkloadManagerQuery {
+private:
+    YDB_READONLY_DEF(TWorkloadManagerQueryIdentity, Identity);
+    YDB_ACCESSOR_DEF(NYql::NDq::IDqSchedulableWorkFactoryPtr, SchedulerContext);
+
+public:
+    explicit TWorkloadManagerQuery(const TWorkloadManagerQueryIdentity& identity)
+        : Identity(identity) {
+    }
+};
+
 class TProcess: public TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TProcess> {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
+    YDB_READONLY_DEF(std::shared_ptr<TWorkloadManagerQuery>, WorkloadManagerQuery);
 
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
@@ -100,9 +114,11 @@ public:
     }
 
     TProcess(
-        const ui64 processId, const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount)
+        const ui64 processId, const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TPositiveControlInteger>& waitingTasksCount,
+        std::shared_ptr<TWorkloadManagerQuery> workloadManagerQuery = nullptr)
         : ProcessId(processId)
         , Scope(scope)
+        , WorkloadManagerQuery(std::move(workloadManagerQuery))
         , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());

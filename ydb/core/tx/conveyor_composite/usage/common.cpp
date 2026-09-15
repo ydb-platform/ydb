@@ -29,14 +29,17 @@ void TProcessGuard::Finish() {
 }
 
 TProcessGuard::TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
-    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId)
+    const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId,
+    std::optional<TWorkloadManagerQueryIdentity> workloadManagerQueryIdentity)
     : Category(category)
     , ScopeId(scopeId)
     , ExternalProcessId(externalProcessId)
+    , WorkloadManagerQueryIdentity(std::move(workloadManagerQueryIdentity))
     , ServiceActorId(actorId) {
     if (ServiceActorId) {
         NActors::TActorContext::AsActorContext().Send(
-            *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(cpuLimits, category, scopeId, InternalProcessId));
+            *ServiceActorId, new NConveyorComposite::TEvExecution::TEvRegisterProcess(
+                cpuLimits, category, scopeId, InternalProcessId, WorkloadManagerQueryIdentity));
     }
 }
 

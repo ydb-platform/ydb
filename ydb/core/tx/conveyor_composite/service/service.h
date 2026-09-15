@@ -4,6 +4,7 @@
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -33,6 +34,7 @@ private:
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
+    void HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
     void HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
@@ -54,6 +56,7 @@ public:
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
+            hFunc(NKqp::NScheduler::TEvQueryResponse, HandleMain);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleMain);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);

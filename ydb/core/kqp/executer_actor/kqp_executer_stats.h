@@ -3,6 +3,7 @@
 #include <array>
 
 #include "kqp_tasks_graph.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -411,19 +412,6 @@ struct TAggExecStat {
     ui64 OutputBytes = 0;
 };
 
-// Snapshot of one physical execution, based on the latest task reports.
-// CPU sums compute tasks and reported storage CPU. Memory is the compute tasks'
-// accounted quota, excluding the separate channel quota, not RSS or a peak.
-// Table and source bytes may overlap: do not add
-// them together or interpret them as a local-disk/S3 breakdown.
-struct TCurrentExecStats {
-    ui64 DurationUs = 0;
-    ui64 CpuTimeUs = 0;
-    ui64 ComputeMemoryBytes = 0;
-    ui64 TableReadBytes = 0;
-    ui64 SourceReadBytes = 0;
-};
-
 struct TQueryExecutionStats {
 private:
     struct TCurrentTaskStats {
@@ -431,6 +419,7 @@ private:
         ui64 SourceReadBytes = 0;
     };
     std::vector<TCurrentTaskStats> CurrentTaskStats;
+    TCurrentExecStats LastReportedCurrentStats;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<ui32, TNodeExecutionStats> NodeStats;
@@ -529,6 +518,7 @@ public:
     ui64 EstimateFinishMem();
     void ExportAggExecStats(TAggExecStat* metrics);
     TCurrentExecStats GetCurrentExecStats(TInstant now) const;
+    void ReportCurrentStats(TCurrentQueryStats& queryStats, bool finished = false);
 };
 
 struct TTableStat {

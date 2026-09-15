@@ -838,7 +838,14 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId);
+            // Keep the active request's metadata until its response reaches the
+            // proxy, even if the session actor has already become ready.
+            if (sessionInfo->State == TKqpSessionInfo::EXECUTING) {
+                ReplyProcessError(Ydb::StatusIds::SESSION_BUSY, "Session is busy", requestId);
+                return;
+            }
+            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+            ev->Get()->GetUserRequestContext()->CurrentQueryStats = sessionInfo->CurrentQueryStats;
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -1055,13 +1062,14 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info && !info->AttachedRpcId) {
+        if (info && !info->AttachedRpcId
+            && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
-        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
             LocalSessions->DetachQueryText(info);
         }
 

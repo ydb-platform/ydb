@@ -413,6 +413,13 @@ message TSessionInfo {
     optional string TraceId = 21;
     // Description of how the query was classified into WmPoolId
     optional string WmClassifiedBy = 22;
+    // Elapsed query time, including compilation and queueing. Resources are
+    // latest reported values; absent until the first execution report.
+    optional uint64 DurationUs = 23;
+    optional uint64 CpuTimeUs = 24;
+    optional uint64 ComputeMemoryBytes = 25;
+    optional uint64 TableReadBytes = 26;
+    optional uint64 SourceReadBytes = 27;
 }
 
 message TEvListSessionsRequest {

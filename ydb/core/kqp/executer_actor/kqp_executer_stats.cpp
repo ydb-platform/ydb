@@ -1577,6 +1577,14 @@ TCurrentExecStats TQueryExecutionStats::GetCurrentExecStats(TInstant now) const 
     return result;
 }
 
+void TQueryExecutionStats::ReportCurrentStats(TCurrentQueryStats& queryStats, bool finished) {
+    auto current = GetCurrentExecStats(TInstant::Now());
+    if (finished) {
+        current.ComputeMemoryBytes = 0;
+    }
+    queryStats.Update(current, LastReportedCurrentStats);
+}
+
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;

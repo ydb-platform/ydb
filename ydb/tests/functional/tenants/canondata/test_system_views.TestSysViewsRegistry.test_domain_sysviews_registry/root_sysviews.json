@@ -996,6 +996,26 @@
       {
         "name": "WmClassifiedBy",
         "type": "Utf8?"
+      },
+      {
+        "name": "DurationUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CpuTimeUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeMemoryBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TableReadBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "SourceReadBytes",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [

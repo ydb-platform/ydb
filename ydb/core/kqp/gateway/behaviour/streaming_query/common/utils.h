@@ -42,6 +42,12 @@ public:
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
+        static inline constexpr char CreatedBy[] = "__created_by";
+        static inline constexpr char ModifiedBy[] = "__modified_by";
+        static inline constexpr char StartedBy[] = "__started_by";
+        static inline constexpr char StoppedBy[] = "__stopped_by";
+        static inline constexpr char CreatedAt[] = "__created_at";
+        static inline constexpr char ModifiedAt[] = "__modified_at";
     };
 
     static inline constexpr char InternalTablesPath[] = "streaming/queries";
@@ -63,6 +69,12 @@ public:
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     TString CheckpointIntervalString;
     std::optional<TDuration> CheckpointInterval;
+    TString CreatedBy;
+    TString ModifiedBy;
+    TString StartedBy;
+    TString StoppedBy;
+    TInstant CreatedAt;
+    TInstant ModifiedAt;
 };
 
 }  // namespace NKikimr::NKqp

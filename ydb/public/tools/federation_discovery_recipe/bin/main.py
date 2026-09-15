@@ -1,6 +1,7 @@
 import argparse
 from concurrent import futures
 import logging
+import os
 
 import grpc
 
@@ -29,28 +30,22 @@ def forward_to_cm(method, request, context):
 
 
 class DiscoveryService(ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer):
-    def __init__(self, channel):
-        self.stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
-
     def ListEndpoints(self, request, context):
         # Ordinary SDK clients need CM's endpoints before loading metadata.
-        return forward_to_cm(self.stub.ListEndpoints, request, context)
+        with grpc.insecure_channel(f"localhost:{os.environ['CM_PORT']}") as channel:
+            stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
+            return forward_to_cm(stub.ListEndpoints, request, context)
 
 
 class SchemeService(ydb_scheme_v1_pb2_grpc.SchemeServiceServicer):
-    def __init__(self, channel):
-        self.stub = ydb_scheme_v1_pb2_grpc.SchemeServiceStub(channel)
-
     def DescribePath(self, request, context):
         # KQP determines the external entity type before discovering clusters.
-        return forward_to_cm(self.stub.DescribePath, request, context)
+        with grpc.insecure_channel(f"localhost:{os.environ['CM_PORT']}") as channel:
+            stub = ydb_scheme_v1_pb2_grpc.SchemeServiceStub(channel)
+            return forward_to_cm(stub.DescribePath, request, context)
 
 
 class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.FederationDiscoveryServiceServicer):
-    def __init__(self, cm_endpoint, clusters):
-        self.cm_endpoint = cm_endpoint
-        self.clusters = clusters
-
     def ListFederationDatabases(self, request, context):
         database = dict(context.invocation_metadata()).get("x-ydb-database", "")
         response = ydb_federation_discovery_pb2.ListFederationDatabasesResponse()
@@ -61,15 +56,15 @@ class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.Federation
             return response
 
         result = ydb_federation_discovery_pb2.ListFederationDatabasesResult(
-            control_plane_endpoint=self.cm_endpoint,
+            control_plane_endpoint=f"localhost:{os.environ['CM_PORT']}",
             self_location="cluster_a",
         )
-        for name, endpoint in self.clusters:
+        for name in ("cluster_a", "cluster_b"):
             result.federation_databases.add(
                 name=name,
                 id=name,
                 path=f"/Root{database}",
-                endpoint=endpoint,
+                endpoint=f"localhost:{os.environ[f'{name}_port']}",
                 location=name,
                 status=ydb_federation_discovery_pb2.DatabaseInfo.AVAILABLE,
                 weight=100,
@@ -83,21 +78,14 @@ class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.Federation
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True, type=int)
-    parser.add_argument("--cm-endpoint", required=True)
-    parser.add_argument("--cluster-a-endpoint", required=True)
-    parser.add_argument("--cluster-b-endpoint", required=True)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    cm_channel = grpc.insecure_channel(args.cm_endpoint)
-    ydb_discovery_v1_pb2_grpc.add_DiscoveryServiceServicer_to_server(DiscoveryService(cm_channel), server)
-    ydb_scheme_v1_pb2_grpc.add_SchemeServiceServicer_to_server(SchemeService(cm_channel), server)
+    ydb_discovery_v1_pb2_grpc.add_DiscoveryServiceServicer_to_server(DiscoveryService(), server)
+    ydb_scheme_v1_pb2_grpc.add_SchemeServiceServicer_to_server(SchemeService(), server)
     ydb_federation_discovery_v1_pb2_grpc.add_FederationDiscoveryServiceServicer_to_server(
-        FederationDiscoveryService(
-            args.cm_endpoint,
-            (("cluster_a", args.cluster_a_endpoint), ("cluster_b", args.cluster_b_endpoint)),
-        ),
+        FederationDiscoveryService(),
         server,
     )
     if not server.add_insecure_port(f"[::]:{args.port}"):
@@ -108,7 +96,6 @@ def main():
         server.wait_for_termination()
     finally:
         server.stop(grace=0).wait()
-        cm_channel.close()
 
 
 if __name__ == "__main__":

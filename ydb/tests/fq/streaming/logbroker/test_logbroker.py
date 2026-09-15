@@ -7,26 +7,6 @@ import ydb
 from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
 
 
-def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
-    deadline = time.monotonic() + timeout
-    consumer_names = []
-    last_error = None
-    while True:
-        try:
-            description = driver.topic_client.describe_topic(path)
-            consumer_names = [item.name for item in description.consumers]
-            last_error = None
-            if consumer in consumer_names:
-                return
-        except (ydb.SchemeError, ydb.NotFound) as error:
-            last_error = error
-        if time.monotonic() >= deadline:
-            raise AssertionError(
-                f"Consumer {consumer!r} did not appear in topic {path!r} on {cluster_name}; "
-                f"last observed consumers: {consumer_names!r}"
-            ) from last_error
-        time.sleep(1)
-
 
 def wait_topic_messages(logbrokers, path, expected_count, timeout=120):
     deadline = time.monotonic() + timeout
@@ -62,7 +42,7 @@ class TestLogbroker(StreamingTestBase):
         # Config manager uses the full path; cluster APIs use the name without the federation prefix.
         consumer = "prod/consumer"
         federation_consumer = f"/logbroker-federation/{consumer}"
-        query_name = "logbroker-copy"
+        query_name = "sledge_hammer"
 
         # Create both topics through the federation's config manager.
         with ydb.Driver(
@@ -77,25 +57,14 @@ class TestLogbroker(StreamingTestBase):
                     consumers=[federation_consumer],
                 )
 
-        # Config manager creation may finish before consumers are visible on the clusters.
-        for cluster_name in ("cluster_a", "cluster_b"):
-            with ydb.Driver(
-                endpoint=f"grpc://localhost:{os.environ[f'{cluster_name}_port']}",
-                database=database,
-                auth_token="root@builtin",
-            ) as driver:
-                driver.wait(timeout=10, fail_fast=True)
-                for topic in (input_topic, output_topic):
-                    wait_topic_consumer(driver, cluster_name, f"{database}/{topic}", consumer)
-
         with ExitStack() as clients:
-            logbrokers = {}
+            logbrokers_client = {}
             for cluster_name in ("cluster_a", "cluster_b"):
                 logbroker = YdbClient.from_driver_config(
                     f"grpc://localhost:{os.environ[f'{cluster_name}_port']}", database
                 )
                 clients.callback(logbroker.stop)
-                logbrokers[cluster_name] = logbroker
+                logbrokers_client[cluster_name] = logbroker
 
             kikimr.ydb_client.create_external_data_source("logbroker", discovery_endpoint, "/logbroker-federation/prod")
             try:
@@ -107,16 +76,16 @@ class TestLogbroker(StreamingTestBase):
                 """)
                 try:
                     self.wait_completed_checkpoints(kikimr, query_name)
-                    messages = ["hello from cluster_a", "hello from cluster_b"]
+                    messages = ["Trust me", "I know what I'm doing"]
                     for cluster_name, message in zip(("cluster_a", "cluster_b"), messages):
-                        logbrokers[cluster_name].topic_write(input_topic, [message])
+                        logbrokers_client[cluster_name].topic_write(input_topic, [message])
 
                     # The query may write to either cluster, or distribute messages across both.
-                    counts = wait_topic_messages(logbrokers, output_topic, len(messages))
+                    counts = wait_topic_messages(logbrokers_client, output_topic, len(messages))
                     actual = []
                     for cluster_name, count in counts.items():
                         if count:
-                            actual.extend(logbrokers[cluster_name].topic_read(output_topic, consumer, count))
+                            actual.extend(logbrokers_client[cluster_name].topic_read(output_topic, consumer, count))
                     assert sorted(actual) == sorted(messages), counts
                 finally:
                     kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

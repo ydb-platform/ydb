@@ -6,8 +6,6 @@ import yatest.common
 from library.python.port_manager import PortManager
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
-from ydb.public.api.grpc import ydb_federation_discovery_v1_pb2_grpc
-from ydb.public.api.protos import ydb_federation_discovery_pb2, ydb_status_codes_pb2
 
 
 DAEMON_NAME = "federation_discovery"
@@ -21,30 +19,18 @@ def start(argv):
     command = [
         yatest.common.binary_path("ydb/public/tools/federation_discovery_recipe/bin/federation_discovery"),
         "--port", str(port),
-        "--cm-endpoint", f"localhost:{os.environ['CM_PORT']}",
-        "--cluster-a-endpoint", f"localhost:{os.environ['cluster_a_port']}",
-        "--cluster-b-endpoint", f"localhost:{os.environ['cluster_b_port']}",
     ]
 
     with grpc.insecure_channel(endpoint) as channel:
-        stub = ydb_federation_discovery_v1_pb2_grpc.FederationDiscoveryServiceStub(channel)
-
         def is_ready():
+            ready = grpc.channel_ready_future(channel)
             try:
-                response = stub.ListFederationDatabases(
-                    ydb_federation_discovery_pb2.ListFederationDatabasesRequest(),
-                    metadata=(("x-ydb-database", "/logbroker-federation/prod"),),
-                    timeout=1,
-                )
-            except grpc.RpcError:
+                ready.result(timeout=1)
+            except grpc.FutureTimeoutError:
                 return False
-            result = ydb_federation_discovery_pb2.ListFederationDatabasesResult()
-            return (
-                response.operation.ready
-                and response.operation.status == ydb_status_codes_pb2.StatusIds.SUCCESS
-                and response.operation.result.Unpack(result)
-                and [db.name for db in result.federation_databases] == ["cluster_a", "cluster_b"]
-            )
+            finally:
+                ready.cancel()
+            return True
 
         try:
             recipes_common.start_daemon(

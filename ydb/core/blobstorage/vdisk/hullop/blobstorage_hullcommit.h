@@ -393,6 +393,30 @@ namespace NKikimr {
         {}
     };
 
+    // Delete output from an aborted attempt without marking Fresh as compacted.
+    // Its records still live in Old and must continue to pin the recovery log.
+    template <class TKey, class TMemRec>
+    class TAsyncFreshAbortCommitter
+        : public TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitFreshAborted,
+            NKikimrServices::TActivity::BS_ASYNC_FRESH_COMMITTER>
+    {
+        using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitFreshAborted,
+            NKikimrServices::TActivity::BS_ASYNC_FRESH_COMMITTER>;
+
+    public:
+        TAsyncFreshAbortCommitter(
+                std::shared_ptr<THullLogCtx> hullLogCtx,
+                THullDbCommitterCtxPtr ctx,
+                TIntrusivePtr<typename TBase::TLevelIndex> levelIndex,
+                const TActorId& notifyID,
+                TVector<ui32>&& chunksDeleted)
+            : TBase(std::move(hullLogCtx), std::move(ctx), std::move(levelIndex), notifyID,
+                    TActorId(), nullptr,
+                    {TVector<ui32>(), std::move(chunksDeleted), TDiskPartVec(), TDiskPartVec(), false},
+                    "fresh compaction aborted", 0)
+        {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // TAsyncLevelCommitter
     ////////////////////////////////////////////////////////////////////////////

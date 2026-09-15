@@ -17,6 +17,7 @@ namespace NKikimr {
             CommitAdvanceLsn,
             CommitReplSst,
             CommitSyncSst,
+            CommitFreshAborted,
         };
 
         EType Type;
@@ -32,6 +33,7 @@ namespace NKikimr {
                 case CommitAdvanceLsn: return "CommitAdvanceLsn";
                 case CommitReplSst:    return "CommitReplSst";
                 case CommitSyncSst:    return "CommitSyncSst";
+                case CommitFreshAborted: return "CommitFreshAborted";
                 default:               return "<invalid>";
             }
         }

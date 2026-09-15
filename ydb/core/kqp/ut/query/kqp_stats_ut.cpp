@@ -1448,6 +1448,70 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
     }
 }
 
+Y_UNIT_TEST(UpsertWithReturningStats) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // RETURNING must actually return the written rows.
+        const auto& resultSets = result.GetResultSets();
+        UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+        NYdb::TResultSetParser parser(resultSets[0]);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 3);
+
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "ReturningSink"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Name", "Upsert"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "TableFullScan"), 1);
+
+        // Both the source read and the destination write stats must be collected.
+        AssertTableStats(result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+}
+
 } // suite
 
 } // namespace NKqp

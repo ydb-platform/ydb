@@ -1216,6 +1216,11 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Name", "Upsert"), 1);
         UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "TableFullScan"), 1);
 
+        const auto& plainSimplified = plainPlan.GetMapSafe().at("SimplifiedPlan");
+        auto plainSimplifiedUpsert = FindPlanNodeByKv(plainSimplified, "Node Type", "Upsert");
+        UNIT_ASSERT(plainSimplifiedUpsert.IsDefined());
+        UNIT_ASSERT(plainSimplifiedUpsert.GetMapSafe().contains("Plans"));
+
         auto returningPlanJson = explain(R"(
             UPSERT INTO `/Root/ReturningDst` SELECT * FROM `/Root/ReturningSrc` RETURNING *;
         )");

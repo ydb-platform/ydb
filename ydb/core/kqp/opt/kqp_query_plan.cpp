@@ -1284,6 +1284,10 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
+        auto inputContext = CurrentArgContext.AddArg(sinkLike.Ptr().Get());
+        LambdaInputs[inputContext] = &stagePlanNode;
+        op.Inputs.push_back(inputContext);
+
         AddOperator(planNode, planNodeSuffix, op);
     }
 
@@ -2794,17 +2798,6 @@ private:
                 processedInternalOperators.insert(inputPlanId);
 
                 planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false, inheritedTableStats, Nothing()) );
-            }
-        }
-
-        if (planInputs.empty() && operatorIndex == 0
-            && op.GetMapSafe().contains("SinkType")
-            && plan.GetMapSafe().contains("Plans"))
-        {
-            // Sink operators (Upsert/Insert/..., including write results with RETURNING) don't carry
-            // explicit inputs, so reconnect the feeding subplan to keep the simplified plan connected.
-            for (const auto& subplan : plan.GetMapSafe().at("Plans").GetArraySafe()) {
-                planInputs.push_back(ReconstructImpl(subplan, 0, taskCount, false, ownTableStats, Nothing()));
             }
         }
 

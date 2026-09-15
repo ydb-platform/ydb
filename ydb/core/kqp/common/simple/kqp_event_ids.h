@@ -211,5 +211,11 @@ struct TKqpQueryTextCacheEvents {
     };
 };
 
+struct TKqpStreamingQueryNodesManagerEvents {
+    enum EKqpStreamingQueryNodesManagerEvents {
+        EvAbortQuery = EventSpaceBegin(TKikimrEvents::ES_KQP) + 1000,
+    };
+};
+
 } // namespace NKqp
 } // namespace NKikimr

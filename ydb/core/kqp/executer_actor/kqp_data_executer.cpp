@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
@@ -283,6 +284,7 @@ public:
         try {
             switch(ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
@@ -393,6 +395,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
@@ -445,6 +448,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -474,6 +478,17 @@ private:
                 {"sender", ev->Sender},
                 {"traceId", TraceId()});
         }
+    }
+
+    void Handle(TEvStreamingQueryNodesManager::TEvAbortQuery::TPtr& ev) {
+        YDB_LOG_WARN("StreamingQueryNodesManager requested query abort",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"reason", ev->Get()->Reason},
+            {"traceId", TraceId()});
+        auto issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, ev->Get()->Reason);
+        ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issue);
     }
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -926,6 +941,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
@@ -1091,6 +1107,7 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
+            IgnoreFunc(TEvStreamingQueryNodesManager::TEvAbortQuery);
             default:
                 YDB_LOG_ERROR("Unexpected event while waiting for shutdown",
                     {"marker", "KQPDATA"},
@@ -1289,6 +1306,32 @@ private:
             {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
             {"enableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
             {"traceId", TraceId()});
+
+        bool hasPqSources = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (transaction.Body->GetHasPqSources()) {
+                hasPqSources = true;
+                break;
+            }
+        }
+
+        if (hasPqSources) {
+            StreamingQueryNodesManagerId = Register(
+                CreateStreamingQueryNodesManager(
+                    SelfId(),
+                    Database,
+                    context->StreamingQueryPath,
+                    graphParams.GetTasks(),
+                    TDuration::Seconds(300),
+                    TDuration::Seconds(120),
+                    Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()));
+            YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
+                {"traceId", TraceId()});
+        }
     }
 
 private:

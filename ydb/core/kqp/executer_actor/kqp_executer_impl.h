@@ -1614,6 +1614,7 @@ protected:
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = EnableWatermarks,
+            .StreamingQueryNodesManager = StreamingQueryNodesManagerId,
         });
 
         auto err = Planner->PlanExecution();
@@ -2029,6 +2030,12 @@ protected:
             }
         }
 
+        if (StreamingQueryNodesManagerId) {
+            this->Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
+            StreamingQueryNodesManagerId = TActorId{};
+        }
+
+
         if (CheckpointCoordinatorId) {
             this->Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
             CheckpointCoordinatorId = TActorId{};
@@ -2220,6 +2227,7 @@ protected:
 
     THashSet<ui32> SentResultIndexes;
 
+    TActorId StreamingQueryNodesManagerId;
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 

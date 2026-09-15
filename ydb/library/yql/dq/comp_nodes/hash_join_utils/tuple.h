@@ -179,6 +179,9 @@ struct TTupleLayout {
     // Join-key slots from settings must be remapped to these indexes first.
     void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
 
+    void NormalizeEqualNullsFixedKeys(ui8* res) const;
+    bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
+
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
     Create(const std::vector<TColumnDesc> &columns);

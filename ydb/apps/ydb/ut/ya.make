@@ -31,6 +31,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/tests/unit/client/oidc/helpers
     contrib/libs/grpc
     contrib/libs/fmt
     contrib/libs/jwt-cpp

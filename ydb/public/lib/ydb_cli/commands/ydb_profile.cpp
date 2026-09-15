@@ -184,7 +184,7 @@ namespace {
     }
 
     std::string TryBlurValue(const TString& authMethod, const TString& value) {
-        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file" || authMethod == "oidc-config") {
             return value;
         }
         if (authMethod == "password") {
@@ -206,7 +206,7 @@ namespace {
             Cout << "  " << authMethod;
             if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
-                || authMethod == "token-file" || authMethod == "yc-token-file") {
+                || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oidc-config") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
             } else if (authMethod == "static-credentials") {
                 auto authData = authValue["data"];
@@ -262,6 +262,9 @@ int TCommandConnectionInfo::Run(TConfig& config) {
 }
 
 void TCommandConnectionInfo::PrintInfo(TConfig& config) {
+    if (config.OidcConfigFile) {
+        Cout << "oidc-config: " << config.OidcConfigFile << Endl;
+    }
     if (config.Address) {
         Cout << "endpoint: " << config.Address << Endl;
     }
@@ -384,6 +387,7 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"database", Database},
         {"token-file", TokenFile},
         {"oauth2-key-file", Oauth2KeyFile},
+        {"oidc-config", OidcConfigFile},
         {"yc-token-file", YcTokenFile},
         {"iam-token-file", IamTokenFile},
         {"sa-key-file", SaKeyFile},
@@ -594,6 +598,11 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
         profile->RemoveValue(AuthNode);
     });
 
+    options.push_back("Use OIDC credentials\t(oidc-config)");
+    actions.push_back([&profile, &profileName]() {
+        SetAuthMethod("oidc-config", "Path to OIDC credentials YAML configuration file", profile, profileName, /* hideInput */ false);
+    });
+
     if (existingProfile && profile->Has(AuthNode)) {
         auto& authValue = profile->GetValue(AuthNode);
         if (authValue["method"]) {
@@ -602,7 +611,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings\t" << method;
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << ": " << BlurSecret(authValue["data"].as<TString>());
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file" || method == "oidc-config") {
                 description << ": " << authValue["data"].as<TString>();
             }
             options.push_back(description);
@@ -627,6 +636,8 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
         PutAuthMethod(profile, "token-file", TokenFile);
     } else if (Oauth2KeyFile) {
         PutAuthMethod(profile, "oauth2-key-file", Oauth2KeyFile);
+    } else if (OidcConfigFile) {
+        PutAuthMethod(profile, "oidc-config", OidcConfigFile);
     } else if (IamTokenFile) {
         // no error here, we take the iam-token-file option as just a token-file authentication
         PutAuthMethod(profile, "token-file", IamTokenFile);
@@ -649,6 +660,7 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
 void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
             (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
+            (bool) (OidcConfigFile) +
             (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
@@ -666,6 +678,9 @@ void TCommandProfileCommon::ValidateAuth() {
         }
         if (Oauth2KeyFile) {
             str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
+        }
+        if (OidcConfigFile) {
+            str << " OidcConfigFile (" << OidcConfigFile << ")";
         }
         if (IamTokenFile) {
             str << " IamTokenFile (" << IamTokenFile << ")";
@@ -694,7 +709,7 @@ void TCommandProfileCommon::ValidateAuth() {
 }
 
 bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
-    return Endpoint || Database || TokenFile || Oauth2KeyFile ||
+    return Endpoint || Database || TokenFile || Oauth2KeyFile || OidcConfigFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
            PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile ||
@@ -716,6 +731,7 @@ void TCommandProfileCommon::Config(TConfig& config) {
     opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH").StoreResult(&Database);
 
     opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
+    opts.AddLongOption("oidc-config", "OIDC credentials YAML configuration file").RequiredArgument("PATH").StoreResult(&OidcConfigFile);
     if (config.UseOauth2TokenExchange) {
         opts.AddLongOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file").RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
     }
@@ -1115,6 +1131,7 @@ void TCommandUpdateProfile::Config(TConfig& config) {
 void TCommandUpdateProfile::ValidateNoOptions() {
     size_t authMethodCount =
             (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
+            (bool) (OidcConfigFile) +
             (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +

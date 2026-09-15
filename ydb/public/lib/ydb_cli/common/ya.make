@@ -27,6 +27,7 @@ SRCS(
     local_paths.cpp
     markdown.cpp
     normalize_path.cpp
+    oidc.cpp
     parameter_stream.cpp
     parameters.cpp
     pg_dump_parser.cpp
@@ -70,6 +71,7 @@ PEERDIR(
     library/cpp/string_utils/csv
     library/cpp/string_utils/url
     library/cpp/yaml/as
+    ydb/public/sdk/cpp/src/client/types/credentials/oidc/file
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value

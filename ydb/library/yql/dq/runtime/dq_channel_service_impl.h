@@ -405,6 +405,7 @@ public:
     std::atomic<bool> Aborted = false;
     std::atomic<bool> Finished = false;
     std::atomic<bool> FinishPushed = false;
+    std::atomic<bool> ConfirmFinishSent = false;
     std::atomic<bool> Leading = true;
     std::atomic<bool> PeerMemoryPressure = false; // last value reported by the peer (receiver) node
 

@@ -2683,6 +2683,8 @@ private:
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return false;
                 }
+            } else if (name == "resetMetricsLevel") {
+                // ALTER TOPIC RESET (metrics_level) is encoded in TopicSettings.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
                         errorPos,

@@ -746,6 +746,13 @@ protected:
             {"newBlobId", ev->Get()->NewBlobId.ToString()},
             {"requestUid", ev->Get()->RequestUid});
 
+        IExecutor* executor = Executor();
+        if (executor) {
+            if (!ev->Get()->YellowMoveChannels.empty() || !ev->Get()->YellowStopChannels.empty()) {
+                executor->OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+            }
+        }
+
         Execute(new TTxBlobCopied(
             this, ev->Get()->Result, ev->Get()->BlobId, ev->Get()->NewBlobId, ev->Get()->RequestUid));
     }

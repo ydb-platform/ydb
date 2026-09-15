@@ -333,7 +333,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
 }
 
 std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
-    if (!dbPath.starts_with('/') || topic.starts_with(dbPath)) {
+    if (!dbPath.starts_with('/') || topic.starts_with('/')) {
         return std::string(topic);
     }
     std::string full;
@@ -341,9 +341,6 @@ std::string FullTopicPath(const std::string& dbPath, std::string_view topic) {
     full.append(dbPath);
     if (!full.ends_with('/')) {
         full.push_back('/');
-    }
-    if (topic.starts_with('/')) {
-        topic = topic.substr(1);
     }
     full.append(topic);
     return full;

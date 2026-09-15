@@ -967,6 +967,7 @@ struct TEvChunkForgetResult : TEventLocal<TEvChunkForgetResult, TEvBlobStorage::
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
 
     TEvChunkForgetResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -988,6 +989,7 @@ struct TEvChunkForgetResult : TEventLocal<TEvChunkForgetResult, TEvBlobStorage::
         str << "{EvChunkForgetResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
         str << "}";
         return str.Str();
     }

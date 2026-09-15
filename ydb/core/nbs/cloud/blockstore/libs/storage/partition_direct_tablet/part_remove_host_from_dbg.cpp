@@ -173,6 +173,15 @@ void TPartitionActor::CompleteCommitRemoveHost(
 
 void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip RemoveHost BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     Y_ABORT_UNLESS(RemoveHostInFlight.has_value());
 
     const size_t dbgId = RemoveHostInFlight->DirectBlockGroupId;

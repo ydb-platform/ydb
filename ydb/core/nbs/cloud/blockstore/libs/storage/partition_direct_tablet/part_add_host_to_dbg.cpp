@@ -392,6 +392,16 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
     size_t dbgId)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip AddHost BSC send during delete dbgId=%lu",
+            LogTitle.GetWithTime().c_str(),
+            dbgId);
+        return;
+    }
+
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();

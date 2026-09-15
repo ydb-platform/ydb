@@ -18,12 +18,15 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// BSController pipe owned by a child actor: the parent sends TEvSend and gets
-// the native allocate result (or a synthesized pipe-failure / already-in-flight
-// result) on its mailbox with the same cookie. One pipe per inflight request,
-// closed when that request finishes. A second TEvSend while inflight is not
-// sent to BSC; the owner gets TRYLATER for that cookie. Poison closes the pipe
-// and drops inflight without synthesizing.
+// Child actor that owns the BSController tablet pipe. The parent sends TEvSend
+// and gets the native allocate result (or a synthesized TRYLATER) on its
+// mailbox with the same ClientRequestCookie. One inflight, one pipe, closed
+// when that request finishes. BscRequestCookie is a proxy-local sequence so a
+// retry that reuses ClientRequestCookie cannot match a late result from the
+// previous pipe. A second TEvSend while inflight is not sent to BSC; the
+// parent gets TRYLATER for that ClientRequestCookie. Connect uses
+// RetryLimitCount = 3. Connect fail or destroy while inflight synthesizes
+// TRYLATER. Poison closes the pipe and drops inflight without synthesizing.
 class TBscProxy final: public NActors::TActor<TBscProxy>
 {
 public:
@@ -36,9 +39,9 @@ public:
     };
 
     // Forwards Request through a new BSC pipe that is closed when the result
-    // arrives. Cookie on the handle identifies the single inflight. A second
-    // send while that slot is taken gets a synthesized TRYLATER with this
-    // cookie.
+    // arrives. Cookie on the handle is ClientRequestCookie for the reply. A
+    // second send while that slot is taken gets a synthesized TRYLATER with
+    // this cookie.
     struct TEvSend: NActors::TEventLocal<TEvSend, EvSend>
     {
         THolder<NActors::IEventBase> Request;
@@ -52,12 +55,22 @@ public:
     static constexpr NKikimrProto::EReplyStatus PipeFailureStatus =
         NKikimrProto::TRYLATER;
 
-    // owner receives native allocate results and synthesized pipe-failure
-    // results. logTitle is copied so the child can outlive the parent after
-    // Poison.
+    // owner is the parent actor that receives native allocate results and
+    // synthesized pipe-failure results. logTitle is the child's own copy for
+    // logging while it runs; the parent poisons the child.
     TBscProxy(NActors::TActorId owner, TLogTitle logTitle);
 
 private:
+    // The one request waiting for a BSC result.
+    struct TInFlight
+    {
+        // Cookie on TEvSend / the reply to Owner.
+        ui64 ClientRequestCookie = 0;
+        // Cookie on SendData / the BSC result. Distinct per send so a retry
+        // that reuses ClientRequestCookie cannot match a late OK.
+        ui64 BscRequestCookie = 0;
+    };
+
     STFUNC(StateWork);
 
     void HandleSend(TEvSend::TPtr& ev, const NActors::TActorContext& ctx);
@@ -79,8 +92,10 @@ private:
     const NActors::TActorId Owner;
     const TLogTitle LogTitle;
     NActors::TActorId PipeClient;
-    // Cookie of the one request waiting for a BSC result. Empty when idle.
-    std::optional<ui64> InFlightCookie;
+    // Empty when idle.
+    std::optional<TInFlight> InFlight;
+    // Next value for SendData / BscRequestCookie.
+    ui64 NextBscRequestCookie = 1;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

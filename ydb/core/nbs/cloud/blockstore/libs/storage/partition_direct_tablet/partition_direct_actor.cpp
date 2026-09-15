@@ -842,6 +842,15 @@ void TPartitionActor::SendToBsc(
     THolder<IEventBase> request,
     ui64 cookie)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     if (!BscProxy) {
         BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
     }

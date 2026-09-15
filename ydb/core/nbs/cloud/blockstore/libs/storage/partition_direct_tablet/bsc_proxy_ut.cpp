@@ -36,7 +36,7 @@ public:
     TActorId Proxy;
     TActorId PipeClient;
     ui32 SendCount = 0;
-    ui64 LastSendCookie = 0;
+    ui64 LastBscRequestCookie = 0;
 
     TBscProxyTestEnv()
         : LogTitle(
@@ -85,7 +85,7 @@ public:
                 const bool isPipeSend = type == TEvTabletPipe::EvSend;
                 if (toOrFromPipe || isPipeSend) {
                     if (isPipeSend) {
-                        LastSendCookie = ev->Cookie;
+                        LastBscRequestCookie = ev->Cookie;
                         ++SendCount;
                         if (!PipeClient) {
                             PipeClient = ev->Recipient;
@@ -115,7 +115,7 @@ public:
         Runtime.DispatchEvents(options);
         UNIT_ASSERT_C(SendCount > before, "BSC EvSend was not observed");
         UNIT_ASSERT(PipeClient);
-        UNIT_ASSERT_VALUES_EQUAL(LastSendCookie, cookie);
+        UNIT_ASSERT(LastBscRequestCookie);
     }
 
     // A second TEvSend while one request is inflight must not hit BSC.
@@ -186,6 +186,11 @@ public:
             new IEventHandle(Proxy, Edge, result.release(), 0, cookie));
     }
 
+    void InjectInFlightAllocateResult(NKikimrProto::EReplyStatus status)
+    {
+        InjectAllocateResult(LastBscRequestCookie, status);
+    }
+
     [[nodiscard]] TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult*
     GrabAllocateResult(TAutoPtr<IEventHandle>& handle, TDuration timeout)
     {
@@ -207,7 +212,7 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
         TBscProxyTestEnv env;
         env.SendAllocate(1);
         const TActorId firstPipe = env.PipeClient;
-        env.InjectAllocateResult(1, NKikimrProto::OK);
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
 
         TAutoPtr<IEventHandle> handle;
         UNIT_ASSERT(env.GrabAllocateResult(handle, TDuration::Max()));
@@ -251,7 +256,7 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(7);
-        env.InjectAllocateResult(7, NKikimrProto::OK);
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
 
         TAutoPtr<IEventHandle> handle;
         auto* result = env.GrabAllocateResult(handle, TDuration::Max());
@@ -299,7 +304,7 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
         env.SendAllocate(1);
         env.SendAllocateWhileInFlight(2);
         env.SendAllocateWhileInFlight(1);
-        env.InjectAllocateResult(1, NKikimrProto::OK);
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
 
         TAutoPtr<IEventHandle> handle;
         auto* result = env.GrabAllocateResult(handle, TDuration::Max());
@@ -312,6 +317,7 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(3);
+        const ui64 staleBscRequestCookie = env.LastBscRequestCookie;
         env.InjectDestroy(env.PipeClient);
 
         TAutoPtr<IEventHandle> failureHandle;
@@ -321,7 +327,7 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
             TBscProxy::PipeFailureStatus,
             failure->Record.GetStatus());
 
-        env.InjectAllocateResult(3, NKikimrProto::OK);
+        env.InjectAllocateResult(staleBscRequestCookie, NKikimrProto::OK);
         TAutoPtr<IEventHandle> staleHandle;
         UNIT_ASSERT(!env.GrabAllocateResult(staleHandle, NoEventTimeout));
     }
@@ -330,23 +336,49 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(1);
+        const ui64 firstBscRequestCookie = env.LastBscRequestCookie;
         env.InjectDestroy(env.PipeClient);
 
         TAutoPtr<IEventHandle> failureHandle;
         UNIT_ASSERT(env.GrabAllocateResult(failureHandle, TDuration::Max()));
 
         env.SendAllocate(2);
-        env.InjectAllocateResult(1, NKikimrProto::OK);
+        env.InjectAllocateResult(firstBscRequestCookie, NKikimrProto::OK);
 
         TAutoPtr<IEventHandle> staleHandle;
         UNIT_ASSERT(!env.GrabAllocateResult(staleHandle, NoEventTimeout));
 
-        env.InjectAllocateResult(2, NKikimrProto::OK);
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
         TAutoPtr<IEventHandle> okHandle;
         auto* result = env.GrabAllocateResult(okHandle, TDuration::Max());
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, result->Record.GetStatus());
         UNIT_ASSERT_VALUES_EQUAL(2u, okHandle->Cookie);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreStaleResultAfterRetryWithSameClientRequestCookie)
+    {
+        TBscProxyTestEnv env;
+        env.SendAllocate(1);
+        const ui64 firstBscRequestCookie = env.LastBscRequestCookie;
+        env.InjectDestroy(env.PipeClient);
+
+        TAutoPtr<IEventHandle> failureHandle;
+        UNIT_ASSERT(env.GrabAllocateResult(failureHandle, TDuration::Max()));
+
+        env.SendAllocate(1);
+        UNIT_ASSERT(env.LastBscRequestCookie != firstBscRequestCookie);
+
+        env.InjectAllocateResult(firstBscRequestCookie, NKikimrProto::OK);
+        TAutoPtr<IEventHandle> staleHandle;
+        UNIT_ASSERT(!env.GrabAllocateResult(staleHandle, NoEventTimeout));
+
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
+        TAutoPtr<IEventHandle> okHandle;
+        auto* result = env.GrabAllocateResult(okHandle, TDuration::Max());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, result->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(1u, okHandle->Cookie);
     }
 
     Y_UNIT_TEST(ShouldOpenNewPipeAfterFailure)
@@ -363,11 +395,11 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
         UNIT_ASSERT(env.PipeClient != firstPipe);
     }
 
-    Y_UNIT_TEST(ShouldClosePipeOnIdleDestroyWithoutSynthesizingResult)
+    Y_UNIT_TEST(ShouldIgnoreDestroyAfterSuccessWithoutSynthesizingResult)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(1);
-        env.InjectAllocateResult(1, NKikimrProto::OK);
+        env.InjectInFlightAllocateResult(NKikimrProto::OK);
 
         TAutoPtr<IEventHandle> okHandle;
         UNIT_ASSERT(env.GrabAllocateResult(okHandle, TDuration::Max()));

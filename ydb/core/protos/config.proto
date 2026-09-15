@@ -484,8 +484,8 @@ message TLogConfig {
         required uint32 FlushTimeout = 3 [default = 1000];
 
         optional bool LocalDatabase = 4 [default = false];
-        optional uint8 StoreShardCount = 5 [default = 4];
-        optional uint8 TableShardCount = 6 [default = 3];
+        optional uint32 StoreShardCount = 5 [default = 4];
+        optional uint32 TableShardCount = 6 [default = 3];
     }
 
     repeated TSchematizedLog Sinks = 18;

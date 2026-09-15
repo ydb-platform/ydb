@@ -276,9 +276,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
-        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);

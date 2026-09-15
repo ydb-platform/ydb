@@ -120,7 +120,8 @@ private:
     TPrivatePageCache& Cache;
     const NTable::TPartStore& PartStore;
     const bool Sticky;
-    TVector<NSharedCache::TPinnedPageRef> PinnedBodies;
+    // TDeque keeps element addresses stable: TryGetPage hands out pointers into it
+    TDeque<NSharedCache::TPinnedPageRef> PinnedBodies;
 };
 
 } // namespace
@@ -5241,7 +5242,9 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     { // Check B-Tree index existence
-        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && !partView->IndexPages.HasBTree()) {
+        if ((AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() ||
+             AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) &&
+            !partView->IndexPages.HasBTree()) {
             return true;
         }
     }
@@ -5411,18 +5414,16 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
-    const bool writeBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    const bool writeBTreeIndexV2 =
-        writeBTreeIndex && AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    comp->Layout.WriteBTreeIndex = writeBTreeIndex;
+    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
+    comp->Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
     comp->Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
     // V2 b-tree index replaces the flat index
     comp->Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    comp->Layout.BTreeIndexV2KeepV1Shadow =
-        writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2ShadowV1Write();
     comp->Writer.StickyFlatIndex = !writeBTreeIndex;
+    comp->Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
     comp->Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    comp->Writer.BTreeIndexV2KeepV1Shadow = comp->Layout.BTreeIndexV2KeepV1Shadow;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         comp->Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});

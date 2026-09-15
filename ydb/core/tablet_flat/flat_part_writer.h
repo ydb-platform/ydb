@@ -39,9 +39,10 @@ namespace NTable {
                         const NPage::TConf &conf, TEpoch epoch)
             : Final(conf.Final)
             , CutIndexKeys(conf.CutIndexKeys)
-            , WriteBTreeIndex(conf.WriteBTreeIndex)
+            , WriteBTreeIndexV1(conf.WriteBTreeIndexV1)
             , WriteBTreeIndexV2(conf.WriteBTreeIndexV2)
-            , WriteFlatIndex(conf.WriteFlatIndex || (!conf.WriteBTreeIndex && !conf.WriteBTreeIndexV2))
+            , WriteBTreeIndex(WriteBTreeIndexV1 || WriteBTreeIndexV2)
+            , WriteFlatIndex(conf.WriteFlatIndex || !WriteBTreeIndex)
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
             , MaxLargeBlob(conf.MaxLargeBlob)
@@ -1175,8 +1176,9 @@ namespace NTable {
     private:
         const bool Final = false;
         const bool CutIndexKeys;
-        const bool WriteBTreeIndex;
+        const bool WriteBTreeIndexV1;
         const bool WriteBTreeIndexV2;
+        const bool WriteBTreeIndex;  /* any b-tree index is written */
         const bool WriteFlatIndex;
         const ui32 SmallEdge;
         const ui32 LargeEdge;
@@ -1244,7 +1246,7 @@ namespace NTable {
                 , BTreeIndexV2(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize,
                                conf.Groups[groupId.Index].BTreeIndexNodeKeysMin,
                                conf.Groups[groupId.Index].BTreeIndexNodeKeysMax)
-                , WriteBTreeIndexV1(!conf.WriteBTreeIndexV2 || conf.BTreeIndexV2KeepV1Shadow)
+                , WriteBTreeIndexV1(conf.WriteBTreeIndexV1)
             {
             }
         };

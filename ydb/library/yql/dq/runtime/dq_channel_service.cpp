@@ -468,8 +468,10 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
 
     auto finished = data.Finished;
     const bool earlyFinish = finished && EarlyFinished.load();
+    // a gate only, decided again under FlowControlMutex below
+    const bool replacesSpilledFinish = earlyFinish && Storage && SpilledBytes.load() > 0;
 
-    if (FinishPushed.load() && !data.ConfirmFinish && !earlyFinish &&
+    if (FinishPushed.load() && !data.ConfirmFinish && !replacesSpilledFinish &&
         !data.Checkpoint // Checkpoint traffic should be handled after finish
     ) {
         return;

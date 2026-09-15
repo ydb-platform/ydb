@@ -4214,7 +4214,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     // FORGET on a full-only Completed restore must succeed and clear the persisted row;
     // the LongIncrementalRestoreOps guard must not block FORGET after finalize completes.
-    Y_UNIT_TEST(FullOnlyRestoreForgetCleansState) {
+    Y_UNIT_TEST_FLAG(FullOnlyRestoreForgetCleansState, Restart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
@@ -4257,6 +4257,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_C(!listResp.GetEntries().empty(), "List empty after full-only restore");
         ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
 
+        if (Restart) {
+            // Completed metadata is retained on disk and reloaded until FORGET.
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            UNIT_ASSERT_C(response.GetBackupCollectionRestore().GetProgress()
+                == Ydb::Backup::RestoreProgress::PROGRESS_DONE, response.ShortDebugString());
+        }
+
         env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
         TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
         env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
@@ -4269,6 +4277,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
         UNIT_ASSERT_VALUES_EQUAL_C(persistedState, -1,
             "IncrementalRestoreState row not deleted after FORGET");
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            R"(Name: "MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"),
+            {NLs::PathNotExist});
     }
 
     static TVector<TString> PrepareRestoreWithOneIncremental(

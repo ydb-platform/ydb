@@ -19,8 +19,6 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui32 DefaultLogLevel = 5;
-
 TNbsServicePtr NbsService;
 
 NVhost::TServerConfig CreateVhostServerConfig(
@@ -45,7 +43,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     , Scheduler(CreateScheduler(Timer))
 {
     TLogSettings logSettings;
-    logSettings.FiltrationLevel = static_cast<ELogPriority>(DefaultLogLevel);
+    logSettings.FiltrationLevel =
+        static_cast<ELogPriority>(Config.GetConsoleLogLevel());
     Logging = CreateLoggingService("console", logSettings);
     Log = Logging->CreateLog("NBS2_SERVICE");
 
@@ -69,7 +68,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
         VhostCallbacks);
 
     if (Config.GetNbsFrontendConfig().GetEnabled()) {
-        Frontend = std::make_unique<TNbsFrontendRuntime>();
+        Frontend = std::make_unique<TNbsFrontendRuntime>(
+            Logging->CreateLog("NBS2_FRONTEND"));
     }
 }
 

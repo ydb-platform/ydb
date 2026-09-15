@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow/serializer
     library/cpp/protobuf/json
+    library/cpp/logger
 )
 
 END()

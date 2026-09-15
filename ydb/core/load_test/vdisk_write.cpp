@@ -192,7 +192,7 @@ namespace NKikimr {
                 GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,
                     parts.Parts[logoBlobId.PartId() - 1].OwnedString, VDiskId, true, &cookie, TInstant::Max(),
-                    PutHandleClass, TWriteSource::GroupWriteLoadActor);
+                    PutHandleClass, false, TWriteSource::GroupWriteLoadActor);
                 ctx.Send(QueueActorId, ev.release());
                 ++TEvVPutsSent;
             }

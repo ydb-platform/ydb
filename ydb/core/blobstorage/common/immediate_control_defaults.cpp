@@ -14,4 +14,7 @@ TControlWrapper MaxNumOfSlowDisksDefaultControl =
 TControlWrapper LongRequestThresholdDefaultControl =
         TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);
 
+TControlWrapper EnableChecksumCalcAndValidationOnDsProxyDefaultControl =
+        TControlWrapper(DefaultEnableChecksumCalcAndValidationOnDsProxy, false, true);
+
 } // namespace NKikimr

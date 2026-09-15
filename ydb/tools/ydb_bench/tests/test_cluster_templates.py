@@ -87,7 +87,8 @@ const original=JSON.stringify(template),draft=ctRunDraft(template,'/Root/bench')
 assert.equal(JSON.stringify(template),original);
 assert.throws(()=>ctRunDraft(template,'/Root/missing'),/Select a tenant/);
 template.nodes[0].name='changed later';
-assert.notEqual(JSON.parse(draft)['distributed-ydb'].cluster['cluster-template'].nodes[0].name,template.nodes[0].name);
+assert(!draft.includes('changed later'));
+assert(draft.includes('"nodes":\n'));
 process.stdout.write(draft);
 """
         )

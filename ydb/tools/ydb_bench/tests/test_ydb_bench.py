@@ -4059,6 +4059,7 @@ const profileByKey=()=>null;
         script += """
 const app={innerHTML:''},buttons=new Map(),sessionStorage={setItem:()=>{}};
 let activeRun='',failConfig=false,configReads=0;
+const distributedHosts=new Map(),hostRecord=id=>({name:distributedHosts.get(id)||id});
 const viewedHost='',splitRunRef=()=>null,runDisplay=value=>value;
 const document={querySelector:selector=>{
   if(!buttons.has(selector))buttons.set(selector,{querySelectorAll:()=>[]});
@@ -4085,6 +4086,12 @@ async function api(path){
 }
 (async()=>{
   await renderRun('run-id','','configuration');
+  const distributed=configurationProfile({'cluster-template':{name:'cluster',nodes:[{name:'node-1',host_id:'local'}]},
+    storage:{'cpu-count':8},tenants:{'/Root/db':{'cpu-count':16}},'cli-nodes':{'cli-1':{client:{threads:4}}},measurement:{duration:60}});
+  for(const text of ['Cluster','Storage','Tenant · /Root/db','Load generator · cli-1','Run policy','Local']){
+    if(!distributed.includes(text))throw Error('Distributed section missing: '+text)
+  }
+  if((distributed.match(/node-1/g)||[]).length!==1)throw Error('Repeated node name');
   if(!app.innerHTML.includes('saved: &lt;script>'))throw Error('Saved YAML is absent or unescaped');
   if(!app.innerHTML.includes('perf: on'))throw Error('Run options missing');
   if(!app.innerHTML.includes('data-config-profile="yaml"'))throw Error('YAML is not a peer profile tab');
@@ -8281,6 +8288,7 @@ class WebTest(unittest.TestCase):
         const assert=require('assert'),enc=encodeURIComponent;
         const esc=value=>String(value).replaceAll('<','&lt;').replaceAll('"','&quot;');
         let refreshes=0,activeRun=null;
+        const location={hash:'#runs'};
         const viewedHost='';
         const queueMicrotask=callback=>callback(),refreshActiveBanner=()=>{refreshes++};
         for(const page of ['runs','new','topology','comparisons']){
@@ -8295,7 +8303,10 @@ class WebTest(unittest.TestCase):
           for(const destination of ['runs','topology','comparisons'])assert(html.includes('href="#'+destination+'"'));
         }
         activeRun='run/<tag>';
+        location.hash='#run/example';
         const html=shell('runs','');
+        assert(html.includes('id=refresh-run'));
+        assert(html.indexOf('id=refresh-run')<html.indexOf('</header>'));
         assert(html.includes('href="#run/run%2F%3Ctag%3E"'));
         assert(html.includes('Active run: run/&lt;tag>'));
         assert.equal(refreshes,5);

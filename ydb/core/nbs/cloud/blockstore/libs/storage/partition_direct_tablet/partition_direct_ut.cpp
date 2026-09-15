@@ -2646,8 +2646,14 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const TString& html = response->Get()->Html;
         UNIT_ASSERT(!html.empty());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            TStringBuilder() << "<td>TabletId</td><td>" << tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region count");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)

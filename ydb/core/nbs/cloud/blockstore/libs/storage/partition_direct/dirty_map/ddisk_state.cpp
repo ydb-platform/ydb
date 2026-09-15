@@ -204,14 +204,11 @@ ui16 TDDiskState::GetRottenBlockCount() const
     return Lagging ? BehindField.GetBlockCount() : 0;
 }
 
-size_t TDDiskState::GetAllocatedSize() const
+TArenaPoolStats TDDiskState::GetMemoryStats() const
 {
-    return AheadField.GetAllocatedSize() + BehindField.GetAllocatedSize();
-}
-
-size_t TDDiskState::GetUsedSize() const
-{
-    return AheadField.GetUsedSize() + BehindField.GetUsedSize();
+    auto result = AheadField.GetMemoryStats();
+    result.Aggregate(BehindField.GetMemoryStats());
+    return result;
 }
 
 void TDDiskState::UpdateWatermarkDebugOnly(ui16 blockCount)

@@ -147,14 +147,34 @@ void TKqpRewriteSelectTransformer::Rewind() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    settings.VisitTuples = true;
+
+    YQL_CLOG(TRACE, CoreDq) << "Input: " << PrintRBOExpression(input, ctx);
 
     // At first step convert KqpOps to RBO Ops.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
-            if (TKqpOpRoot::Match(node.Get())) {
-                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
+
+            if (node->IsList()) {
+                TVector<TExprNode::TPtr> roots;
+                for (const auto& child : node->Children()) {
+                    if (!child->IsList()) {
+                        return node;
+                    }
+                    if (!TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        return node;
+                    } else {
+                        roots.push_back(child->ChildPtr(0));
+                    }
+                }
+
+                if (roots.empty()) {
+                    return node;
+                }
+
+                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(roots[0]);
                 OpRoot->ComputeParents();
                 return node;
             } else {
@@ -331,13 +351,30 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    settings.VisitTuples = true;
     Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
 
     // Apply optimizations.
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            if (TKqpOpRoot::Match(node.Get())) {
+            if (node->IsList()) {
+                TVector<TExprNode::TPtr> roots;
+                for (const auto& child : node->Children()) {
+                    if (!child->IsList()) {
+                        return node;
+                    }
+                    if (!TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        return node;
+                    } else {
+                        roots.push_back(child->ChildPtr(0));
+                    }
+                }
+
+                if (roots.empty()) {
+                    return node;
+                }
+
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(*OpRoot, rboCtx);

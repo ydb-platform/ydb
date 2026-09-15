@@ -9,6 +9,7 @@ on:
       - "ydb/docs/**"
 
 permissions:
+  actions: write # Stop previous translation runs before replacing their branch.
   contents: write
   pull-requests: write
   issues: write

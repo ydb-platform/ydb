@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <util/generic/scope.h>
 
@@ -139,6 +140,39 @@ public:
     THolder<TSharedPageCacheCounters> SharedPageCacheCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> MemoryControllerCounters;
     TProcessMemoryInfo* ProcessMemoryInfo;
+};
+
+// A killable registrant for the death-detection test; edge actors never die
+class TStubRegistrant : public TActorBootstrapped<TStubRegistrant> {
+public:
+    TStubRegistrant(TActorId controller, EMemoryConsumerKind kind, TIntrusivePtr<IMemoryConsumer>* out)
+        : Controller(controller)
+        , Kind(kind)
+        , Out(out)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Controller, new TEvConsumerRegister(Kind));
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvConsumerRegistered, Handle);
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+private:
+    void Handle(TEvConsumerRegistered::TPtr& ev) {
+        *Out = ev->Get()->Consumer;
+    }
+
+private:
+    const TActorId Controller;
+    const EMemoryConsumerKind Kind;
+    TIntrusivePtr<IMemoryConsumer>* const Out;
 };
 
 }
@@ -813,12 +847,6 @@ Y_UNIT_TEST(ConsumerReportClamp) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Consumption"), 100_MB);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Demand"), 100_MB);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Reclaimable"), 100_MB);
-
-    consumer->SetReport({.Used = 100_MB, .Demand = 150_MB, .Reclaimable = 40_MB});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Consumption"), 100_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Demand"), 150_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Reclaimable"), 40_MB);
 }
 
 Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
@@ -837,38 +865,64 @@ Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
     UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Reclaimable, 0);
 }
 
-Y_UNIT_TEST(ConsumerTakeoverRebindsKind) {
+Y_UNIT_TEST(ConsumerKindSumsRegistrants) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    // Min == Max pins the kind limit to 60 MB, so the shares are exact regardless of the coefficient
+    config.SetSharedCacheMinBytes(60_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId first = fixture.Runtime.AllocateEdgeActor();
+    const TActorId second = fixture.Runtime.AllocateEdgeActor();
+    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::SharedCache);
+    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::SharedCache);
+    UNIT_ASSERT(firstConsumer.Get() != secondConsumer.Get());
+
+    firstConsumer->SetReport({.Used = 10_MB, .Demand = 30_MB, .Reclaimable = 5_MB});
+    secondConsumer->SetConsumption(20_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 50_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 5_MB);
+
+    // Demand fits the 60 MB limit: each registrant gets its demand plus half of the 10 MB left over
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(first)->Get()->LimitBytes, 35_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(second)->Get()->LimitBytes, 25_MB);
+
+    // The unregistered entry leaves the sum and the survivor gets the whole limit back
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, second, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
+    // Skip the queued pre-unregister limits; every tick keeps producing one, so the drain must be bounded
+    ui64 lastLimit = 0;
+    for (size_t attempt = 0; attempt < 5 && lastLimit != 60_MB; ++attempt) {
+        lastLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(first)->Get()->LimitBytes;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(lastLimit, 60_MB);
+}
+
+Y_UNIT_TEST(DeadRegistrantLeavesTheSum) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);
     TControllerFixture fixture(config);
 
-    const TActorId first = fixture.Runtime.AllocateEdgeActor();
-    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::SharedCache);
-    firstConsumer->SetConsumption(30_MB);
+    TIntrusivePtr<IMemoryConsumer> doomedConsumer;
+    const TActorId doomed = fixture.Runtime.Register(new TStubRegistrant(fixture.MemoryController, EMemoryConsumerKind::SharedCache, &doomedConsumer));
+    auto survivorConsumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT(doomedConsumer);
+
+    doomedConsumer->SetConsumption(25_MB);
+    survivorConsumer->SetConsumption(5_MB);
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
 
-    // A restarted registrant takes the kind over instead of aborting the node
-    const TActorId second = fixture.Runtime.AllocateEdgeActor();
-    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::SharedCache);
-    // A fresh object: the predecessor keeps its pointer, and writes through it must not reach MC
-    UNIT_ASSERT(firstConsumer.Get() != secondConsumer.Get());
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerTakeovers", true), 1);
-
-    // The number of the replaced registrant is not inherited
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
-
-    // Limits now go to the new registrant
-    secondConsumer->SetConsumption(10_MB);
-    fixture.Tick();
-    UNIT_ASSERT(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(second) != nullptr);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
-
-    // The replaced registrant writes into an object MC no longer reads
-    firstConsumer->SetConsumption(0);
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
+    // The poisoned registrant stops existing; the next tracked limit send detects the death
+    fixture.Runtime.Send(new IEventHandle(doomed, TActorId(), new TEvents::TEvPoison));
+    fixture.Runtime.SimulateSleep(TDuration::Seconds(3));
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerRegistrantDeaths", true), 1);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 5_MB);
 }
 
 Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
@@ -878,9 +932,11 @@ Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
 
     const TActorId owner = fixture.Runtime.AllocateEdgeActor();
     auto consumer = fixture.Register(owner, EMemoryConsumerKind::SharedCache);
-    consumer->SetConsumption(30_MB);
+    consumer->SetReport({.Used = 30_MB, .Demand = 40_MB, .Reclaimable = 10_MB});
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 10_MB);
 
     // A stale unregister from an actor that no longer owns the kind changes nothing
     const TActorId stranger = fixture.Runtime.AllocateEdgeActor();
@@ -893,6 +949,8 @@ Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
     fixture.Tick();
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reclaimable"), 0);
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
 
     // Writes through the unregistered object no longer reach MC

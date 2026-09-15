@@ -7,6 +7,11 @@
 
 namespace NKikimr {
 
+enum class ECumulativeHistoryPolicy {
+    DiscardOnSourceRemoval,
+    RetainOnSourceRemoval,
+};
+
 /**
  * The aggregator for the YDB metrics (for example, table.datashard.*),
  * which combines the same metrics from different sources into a single target value.
@@ -73,6 +78,10 @@ public:
      *          after removing all the necessary source groups.
      *
      * @param[in] sourceGroupId The ID of the source group to remove
+     *
+     * @note RetainOnSourceRemoval saves the source's current cumulative values.
+     *       Publish any pending source updates before calling this function.
+     *       Reusing the source ID starts a new contribution in addition to that history.
      */
     virtual void RemoveSourceCountersGroup(const TString& sourceGroupId) = 0;
 
@@ -92,12 +101,16 @@ using TYdbMetricsAggregatorPtr = TIntrusivePtr<TYdbMetricsAggregator>;
  *
  * @param[in] tabletType The tablet type for which to create the TYdbMetricsAggregator class
  * @param[in] targetCounterGroup The counter group where the target (aggregated) counters are created
+ * @param[in] cumulativeHistoryPolicy Whether removed sources retain their scalar cumulative
+ *            contributions for the lifetime of this aggregator. Simple and histogram counters
+ *            always aggregate only current sources.
  *
  * @return The corresponding instance of the TYdbMetricsAggregator class
  */
 TYdbMetricsAggregatorPtr CreateYdbMetricsAggregatorByTabletType(
     TTabletTypes::EType tabletType,
-    NMonitoring::TDynamicCounterPtr targetCounterGroup);
+    NMonitoring::TDynamicCounterPtr targetCounterGroup,
+    ECumulativeHistoryPolicy cumulativeHistoryPolicy = ECumulativeHistoryPolicy::DiscardOnSourceRemoval);
 
 
 } // namespace NKikimr

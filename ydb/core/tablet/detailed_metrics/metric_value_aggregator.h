@@ -13,11 +13,13 @@ public:
      * Start a new aggregation process for the given target counter.
      *
      * @param[in] targetCounter The target counter for the aggregation
+     * @param[in] initialValue The retained contribution to include in the result
      */
     explicit TAdditiveMetricAggregator(
-        NMonitoring::TDynamicCounters::TCounterPtr targetCounter
+        NMonitoring::TDynamicCounters::TCounterPtr targetCounter,
+        ui64 initialValue = 0
     ) noexcept
-        : Value(0)
+        : Value(initialValue)
         , TargetCounter(targetCounter)
     {
     }

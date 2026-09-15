@@ -34,7 +34,12 @@ public:
      *
      * @param[in] targetCounterGroup The counter group where the target (aggregated) counters are created
      */
-    TYdbMetricsAggregatorImpl(NMonitoring::TDynamicCounterPtr targetCounterGroup) {
+    TYdbMetricsAggregatorImpl(
+        NMonitoring::TDynamicCounterPtr targetCounterGroup,
+        ECumulativeHistoryPolicy cumulativeHistoryPolicy
+    )
+        : CumulativeHistoryPolicy(cumulativeHistoryPolicy)
+    {
         // Create all target simple counters
         this->template CreateTargetCountersForCounterType<
             typename TYdbMetricsAggregatorImpl::TSimpleCountersOpts,
@@ -135,13 +140,24 @@ public:
     }
 
     virtual void RemoveSourceCountersGroup(const TString& sourceGroupId) override {
-        const auto result = SourceCounterGroups.erase(sourceGroupId);
+        const auto source = SourceCounterGroups.find(sourceGroupId);
 
         Y_ABORT_UNLESS(
-            result != 0,
+            source != SourceCounterGroups.end(),
             "The source counter group %s does not exist",
             sourceGroupId.c_str()
         );
+
+        if (CumulativeHistoryPolicy == ECumulativeHistoryPolicy::RetainOnSourceRemoval) {
+            const auto& counters = source->second.CumulativeCounters;
+            for (size_t i = 0; i < counters.size(); ++i) {
+                if (counters[i]) {
+                    TargetCumulativeCounters[i].RetiredValue += counters[i]->Val();
+                }
+            }
+        }
+
+        SourceCounterGroups.erase(source);
     }
 
     virtual void RecalculateAllTargetCounters() override {
@@ -149,24 +165,21 @@ public:
         AggregateCounterValuesForCounterType<
             decltype(TargetSimpleCounters),
             decltype(TGroupSourceCounters::SimpleCounters),
-            &TGroupSourceCounters::SimpleCounters,
-            TAdditiveMetricAggregator
+            &TGroupSourceCounters::SimpleCounters
         >(TargetSimpleCounters);
 
         // Recalculate the values of all cumulative counters
         AggregateCounterValuesForCounterType<
             decltype(TargetCumulativeCounters),
             decltype(TGroupSourceCounters::CumulativeCounters),
-            &TGroupSourceCounters::CumulativeCounters,
-            TAdditiveMetricAggregator
+            &TGroupSourceCounters::CumulativeCounters
         >(TargetCumulativeCounters);
 
         // Recalculate the values of all percentile counters
         AggregateCounterValuesForCounterType<
             decltype(TargetPercentileCounters),
             decltype(TGroupSourceCounters::PercentileCounters),
-            &TGroupSourceCounters::PercentileCounters,
-            THistogramMetricAggregator
+            &TGroupSourceCounters::PercentileCounters
         >(TargetPercentileCounters);
     }
 
@@ -210,22 +223,20 @@ private:
      * @tparam TTargetCounters The type of the container with the target counters
      * @tparam TSourceCounters The type of the container with the source counters
      * @tparam SourceCountersField The field within TGroupSourceCounters, which holds source counters
-     * @tparam TMetricValueAggregator The aggregator for individual metric values
      *
      * @param[in] targetCounters The container for the target counters
      */
     template <
         class TTargetCounters,
         class TSourceCounters,
-        TSourceCounters TGroupSourceCounters::*SourceCountersField,
-        class TMetricValueAggregator
+        TSourceCounters TGroupSourceCounters::*SourceCountersField
     >
     void AggregateCounterValuesForCounterType(const TTargetCounters& targetCounters) {
         size_t index = 0;
 
         for (const auto& counter : targetCounters) {
             // NOTE: The destructor will update the target counter value
-            TMetricValueAggregator aggregator(counter.TargetCounter);
+            auto aggregator = counter.MakeAggregator();
 
             for (const auto& [sourceGroupId, sourceCounters] : SourceCounterGroups) {
                 // NOTE: The order of all source/target counters always matches
@@ -302,6 +313,12 @@ private:
      */
     struct TAggregatedCounter {
         NMonitoring::TDynamicCounters::TCounterPtr TargetCounter;
+        // A bounded sum of retired cumulative contributions; always zero for Simple.
+        ui64 RetiredValue = 0;
+
+        TAdditiveMetricAggregator MakeAggregator() const {
+            return TAdditiveMetricAggregator(TargetCounter, RetiredValue);
+        }
     };
 
     /**
@@ -309,7 +326,13 @@ private:
      */
     struct TAggregatedHistogram {
         NMonitoring::THistogramPtr TargetCounter;
+
+        THistogramMetricAggregator MakeAggregator() const {
+            return THistogramMetricAggregator(TargetCounter);
+        }
     };
+
+    const ECumulativeHistoryPolicy CumulativeHistoryPolicy;
 
     /**
      * The list of target counters used for aggregating simple counters.
@@ -346,7 +369,8 @@ private:
 
 TYdbMetricsAggregatorPtr CreateYdbMetricsAggregatorByTabletType(
     TTabletTypes::EType tabletType,
-    NMonitoring::TDynamicCounterPtr targetCounterGroup
+    NMonitoring::TDynamicCounterPtr targetCounterGroup,
+    ECumulativeHistoryPolicy cumulativeHistoryPolicy
 ) {
     switch (tabletType) {
     case TTabletTypes::DataShard:
@@ -354,7 +378,7 @@ TYdbMetricsAggregatorPtr CreateYdbMetricsAggregatorByTabletType(
             NDataShard::ESimpleDetailedCounters_descriptor,
             NDataShard::ECumulativeDetailedCounters_descriptor,
             NDataShard::EPercentileDetailedCounters_descriptor
-        >>(targetCounterGroup);
+        >>(targetCounterGroup, cumulativeHistoryPolicy);
 
     default:
         Y_ABORT("Unsupported tablet type %s", TTabletTypes::TypeToStr(tabletType));

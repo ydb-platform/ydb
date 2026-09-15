@@ -3200,9 +3200,14 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                             }
                             continue;
                         }
-                        b.IndexName = idx.Name;
-                        b.PrefixColumns = std::move(*prefixColumns);
-                        ++matches;
+                        // Prefer the longest bound prefix; equally specific indexes remain ambiguous.
+                        if (matches == 0 || prefixColumns->size() > b.PrefixColumns.size()) {
+                            b.IndexName = idx.Name;
+                            b.PrefixColumns = std::move(*prefixColumns);
+                            matches = 1;
+                        } else if (prefixColumns->size() == b.PrefixColumns.size()) {
+                            ++matches;
+                        }
                     }
                 }
                 if (matches == 0) {

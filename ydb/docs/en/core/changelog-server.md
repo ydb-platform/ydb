@@ -1,5 +1,65 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 26.2 {#26-2}
+
+### Version 26.2.1.14 {#26-2-1-14}
+
+Release date: September 16, 2026.
+
+#### Functionality
+
+* [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
+* Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection. This functionality is disabled by a feature flag.
+* [Column-oriented tables](https://github.com/ydb-platform/ydb/issues/26498) can be exported and imported using S3-compatible storage. Tables with a large number of columns are not supported. This functionality is disabled by a feature flag.
+* Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS. This functionality is disabled by a feature flag.
+* Added [snapshot retention](https://github.com/ydb-platform/ydb/pull/36668) for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes. This functionality is disabled by a feature flag.
+* QueryService can [notify SDKs when a node or session is shutting down](https://github.com/ydb-platform/ydb/pull/39274), allowing clients to stop sending new queries there. This functionality is disabled by a feature flag.
+* Added database-level [limits on the count and volume of small blobs](https://github.com/ydb-platform/ydb/pull/43393) for column-oriented tables. New writes are rejected when the hard limit is exceeded. This functionality is disabled by a feature flag.
+* [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
+* Streaming queries support [watermarks](./dev/streaming-query/watermarks.md?version=v26.2).
+* [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message. This functionality is disabled by a feature flag.
+* Streaming queries can read [user attributes of topic messages](https://github.com/ydb-platform/ydb/pull/40378). This functionality is disabled by a feature flag.
+* Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables.
+* [Column compression](./yql/reference/syntax/create_table/index.md?version=v26.2) settings for column-oriented tables are available by default.
+* Added [min-max skip indexes](https://github.com/ydb-platform/ydb/pull/38585) for column-oriented tables. This functionality is disabled by a feature flag.
+* Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables. This functionality is disabled by a feature flag.
+* Added [online construction of unique secondary indexes](https://github.com/ydb-platform/ydb/pull/35981). This functionality is disabled by a feature flag.
+* The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can now be configured for index builds.
+* For row-oriented tables, [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
+* For row-oriented tables, the YQL statement [`TRUNCATE TABLE`](./yql/reference/syntax/truncate-table.md?version=v26.2) is available by default.
+* The YQL statement [`DISCARD SELECT`](./yql/reference/syntax/discard.md?version=v26.2) is available by default.
+* QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
+* Added forced [compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) for row-oriented tables using `ALTER TABLE ... COMPACT`.
+* Added automatic storage balancing between groups and background validation of disk placement.
+* [Table split and merge operations are faster](https://github.com/ydb-platform/ydb/pull/38803) for tables with many partitions: SchemeShard updates only the affected partitions instead of rebuilding the entire partition list.
+* [Transactions between topics and tables can use optimized conflict checking](https://github.com/ydb-platform/ydb/pull/36706). This functionality is disabled by a feature flag.
+* Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
+* Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
+* Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46747) incorrect results from some scan queries over column-oriented tables.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50358) handling of malformed Kafka requests that could cause excessive memory use or out-of-bounds access.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) topic reads hanging after a read balancer restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35470) race conditions in the server-side topic read session and in the [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50897) a crash and a [hang](https://github.com/ydb-platform/ydb/pull/50621) in streaming query checkpointing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/50379) race conditions when cancelling and planning distributed transactions.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49469) handling of oversized blocks during encrypted export and a [false data corruption error](https://github.com/ydb-platform/ydb/pull/48986) during encrypted restore.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49460) a race condition when collecting statistics with `ydb workload topic`.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/48174) a double free during `DqHashCombine` spilling teardown.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40912) lost `ReadSet` acknowledgements that could prevent a transaction involving topics from completing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40801) handling of `NODATA` responses in the KeyValue API: `NOT_FOUND` or `INTERNAL_ERROR` is returned instead of terminating the process.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41895) IAM authentication for external data sources in Generic Provider and [error handling](https://github.com/ydb-platform/ydb/pull/40761) for provider responses.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41411) a memory leak when loading external data source metadata.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46739) parsing of tri-state feature flags in YAML configuration that could cause subsequent settings to be lost.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41009) copying and exporting tables with secondary indexes after index implementation tables were removed.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/45958) object filtering and list operations during file-system export.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/47591) Kafka API Metadata responses that could return an empty broker list or an inconsistent controller ID, causing Kafka AdminClient and Kafka Streams operations to time out.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/46033) a leak of script execution records created by streaming queries.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/42277) `local-ydb` overwriting a user-provided `config.yaml` mounted at the default path during the first Docker deployment.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/44011) a Hive crash on restart when a tablet lock and its persisted leader pointed to different nodes.
+
 ## Version 26.1 {#26-1}
 
 ### Version 26.1.1.22 {#26-1-1-22}

@@ -1734,9 +1734,10 @@ now may need to send very last msg from terminated descriptor
                 waiter->AddPopChunk(data.Bytes, data.Rows);
                 item = std::make_shared<TOutputItem>(std::move(data), waiter, quoted);
                 waiter->WaitQueue.pop();
-                waiter->WaitQueueBytes -= bytes;
-                waiter->WaitQueueSize--;
 
+                // PushDataChunk goes past the WaitQueue on WaitQueueSize alone, without WaitQueueMutex, so
+                // the chunk stays counted until it is numbered under Mutex: a push of the same descriptor in
+                // between would take Mutex first and the older chunk would get the higher SeqNo
                 std::lock_guard lock1(Mutex);
 
                 if (!waiter->WaitQueue.empty()) {
@@ -1759,6 +1760,9 @@ now may need to send very last msg from terminated descriptor
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
+
+                waiter->WaitQueueBytes -= bytes;
+                waiter->WaitQueueSize--;
             }
 
             WaiterBytes -= bytes;

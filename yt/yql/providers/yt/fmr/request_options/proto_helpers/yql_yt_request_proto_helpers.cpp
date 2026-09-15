@@ -19,7 +19,9 @@ NProto::TFmrError FmrErrorToProto(const TFmrError& error) {
     if (error.OperationId) {
         protoError.SetOperationId(*error.OperationId);
     }
-    protoError.SetJobId(*error.JobId);
+    if (error.JobId) {
+        protoError.SetJobId(*error.JobId);
+    }
     return protoError;
 }
 
@@ -37,38 +39,42 @@ TFmrError FmrErrorFromProto(const NProto::TFmrError& protoError) {
     if (protoError.HasOperationId()) {
         fmrError.OperationId = protoError.GetOperationId();
     }
-    fmrError.JobId = protoError.GetJobId();
+    if (protoError.HasJobId()) {
+        fmrError.JobId = protoError.GetJobId();
+    }
     return fmrError;
 }
 
 NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef) {
     NProto::TYtTableRef protoYtTableRef;
-    protoYtTableRef.SetPath(ytTableRef.Path);
-    protoYtTableRef.SetCluster(ytTableRef.Cluster);
+    protoYtTableRef.SetRichPath(SerializeRichPath(ytTableRef.RichPath));
     if (ytTableRef.FilePath) {
         protoYtTableRef.SetFilePath(*ytTableRef.FilePath);
     }
+    protoYtTableRef.SetTableIndex(ytTableRef.TableIndex);
     return protoYtTableRef;
 }
 
 TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef) {
     TYtTableRef ytTableRef;
-    ytTableRef.Path = protoYtTableRef.GetPath();
-    ytTableRef.Cluster = protoYtTableRef.GetCluster();
+    ytTableRef.RichPath = DeserializeRichPath(protoYtTableRef.GetRichPath());
     if (protoYtTableRef.HasFilePath()) {
         ytTableRef.FilePath = protoYtTableRef.GetFilePath();
     }
+    ytTableRef.TableIndex = protoYtTableRef.GetTableIndex();
     return ytTableRef;
 }
 
 NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTaskRef) {
     NProto::TYtTableTaskRef protoYtTableTaskRef;
     for (auto& richPath: ytTableTaskRef.RichPaths) {
-        TString serializedRichPath = NYT::NodeToYsonString(NYT::PathToNode(richPath));
-        protoYtTableTaskRef.AddRichPath(serializedRichPath);
+        protoYtTableTaskRef.AddRichPath(SerializeRichPath(richPath));
     }
     for (auto& filePath: ytTableTaskRef.FilePaths) {
         protoYtTableTaskRef.AddFilePath(filePath);
+    }
+    for (auto& tableIndex: ytTableTaskRef.TableIndices) {
+        protoYtTableTaskRef.AddTableIndex(tableIndex);
     }
     return protoYtTableTaskRef;
 }
@@ -76,15 +82,38 @@ NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTask
 TYtTableTaskRef YtTableTaskRefFromProto(const NProto::TYtTableTaskRef protoYtTableTaskRef) {
     TYtTableTaskRef ytTableTaskRef;
     for (auto& serializedPath: protoYtTableTaskRef.GetRichPath()) {
-        auto node = NYT::NodeFromYsonString(serializedPath);
-        NYT::TRichYPath richPath;
-        NYT::Deserialize(richPath, node);
-        ytTableTaskRef.RichPaths.emplace_back(richPath);
+        ytTableTaskRef.RichPaths.emplace_back(DeserializeRichPath(serializedPath));
     }
     for (auto& filePath: protoYtTableTaskRef.GetFilePath()) {
         ytTableTaskRef.FilePaths.emplace_back(filePath);
     }
+    for (auto& tableIndex: protoYtTableTaskRef.GetTableIndex()) {
+        ytTableTaskRef.TableIndices.emplace_back(tableIndex);
+    }
     return ytTableTaskRef;
+}
+
+TSortingColumns SortingColumnsFromProto(const NProto::TSortingColumns& protoSortingColumns) {
+    TSortingColumns sortingColumns;
+    for (auto& column: protoSortingColumns.GetColumns()) {
+        sortingColumns.Columns.emplace_back(column);
+    }
+    for (auto& sortOrder: protoSortingColumns.GetSortOrder()) {
+        sortingColumns.SortOrders.emplace_back(static_cast<ESortOrder>(sortOrder));
+    }
+    return sortingColumns;
+}
+
+NProto::TSortingColumns SortingColumnsToProto(const TSortingColumns& sortingColumns) {
+    NProto::TSortingColumns protoSortingColumns;
+    for (auto& column: sortingColumns.Columns) {
+        protoSortingColumns.AddColumns(column);
+    }
+    for (auto& sortOrder: sortingColumns.SortOrders) {
+        auto sortOrderProto = static_cast<NProto::ESortOrder>(sortOrder);
+        protoSortingColumns.AddSortOrder(sortOrderProto);
+    }
+    return protoSortingColumns;
 }
 
 NProto::TFmrTableId FmrTableIdToProto(const TFmrTableId& fmrTableId) {
@@ -101,12 +130,36 @@ NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef) {
     NProto::TFmrTableRef protoFmrTableRef;
     auto protoFmrTableId = FmrTableIdToProto(fmrTableRef.FmrTableId);
     protoFmrTableRef.MutableFmrTableId()->Swap(&protoFmrTableId);
+    for (auto& column: fmrTableRef.Columns) {
+        protoFmrTableRef.AddColumns(column);
+    }
+    for (auto& sortColumn: fmrTableRef.SortColumns) {
+        protoFmrTableRef.AddSortColumns(sortColumn);
+    }
+    for (auto& sortOrder: fmrTableRef.SortOrder) {
+        auto sortOrderProto = static_cast<NProto::ESortOrder>(sortOrder);
+        protoFmrTableRef.AddSortOrder(sortOrderProto);
+    }
+    protoFmrTableRef.SetColumnGroups(fmrTableRef.SerializedColumnGroups);
+    protoFmrTableRef.SetTableIndex(fmrTableRef.TableIndex);
     return protoFmrTableRef;
 }
 
 TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
-    auto tableId = FmrTableIdFromProto(protoFmrTableRef.GetFmrTableId());
-    return TFmrTableRef(tableId);
+    TFmrTableRef fmrTableRef;
+    fmrTableRef.FmrTableId = FmrTableIdFromProto(protoFmrTableRef.GetFmrTableId());
+    for (auto& column: protoFmrTableRef.GetColumns()) {
+        fmrTableRef.Columns.emplace_back(column);
+    }
+    for (auto& sortColumn: protoFmrTableRef.GetSortColumns()) {
+        fmrTableRef.SortColumns.emplace_back(sortColumn);
+    }
+    for (auto& sortOrder: protoFmrTableRef.GetSortOrder()) {
+        fmrTableRef.SortOrder.emplace_back(static_cast<ESortOrder>(sortOrder));
+    }
+    fmrTableRef.SerializedColumnGroups = protoFmrTableRef.GetColumnGroups();
+    fmrTableRef.TableIndex = protoFmrTableRef.GetTableIndex();
+    return fmrTableRef;
 }
 
 NProto::TTableRange TableRangeToProto(const TTableRange& tableRange) {
@@ -133,6 +186,23 @@ NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTa
         auto* curTableRange = protoFmrTableInputRef.AddTableRanges();
         curTableRange->Swap(&protoTableRange);
     }
+    for (auto& column: fmrTableInputRef.Columns) {
+        protoFmrTableInputRef.AddColumns(column);
+    }
+    protoFmrTableInputRef.SetColumnGroups(fmrTableInputRef.SerializedColumnGroups);
+    if (fmrTableInputRef.IsFirstRowInclusive) {
+        protoFmrTableInputRef.SetIsFirstRowInclusive(*fmrTableInputRef.IsFirstRowInclusive);
+    }
+    if (fmrTableInputRef.IsLastRowInclusive) {
+        protoFmrTableInputRef.SetIsLastRowInclusive(*fmrTableInputRef.IsLastRowInclusive);
+    }
+    if (fmrTableInputRef.FirstRowKeys) {
+        protoFmrTableInputRef.SetFirstRowKeys(*fmrTableInputRef.FirstRowKeys);
+    }
+    if (fmrTableInputRef.LastRowKeys) {
+        protoFmrTableInputRef.SetLastRowKeys(*fmrTableInputRef.LastRowKeys);
+    }
+    protoFmrTableInputRef.SetTableIndex(fmrTableInputRef.TableIndex);
     return protoFmrTableInputRef;
 }
 
@@ -145,6 +215,19 @@ TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& pro
         tableRanges.emplace_back(tableRange);
     }
     fmrTableInputRef.TableRanges = tableRanges;
+    for (auto& column: protoFmrTableInputRef.GetColumns()) {
+        fmrTableInputRef.Columns.emplace_back(column);
+    }
+    fmrTableInputRef.SerializedColumnGroups = protoFmrTableInputRef.GetColumnGroups();
+    fmrTableInputRef.IsFirstRowInclusive = protoFmrTableInputRef.HasIsFirstRowInclusive()
+        ? TMaybe<bool>(protoFmrTableInputRef.GetIsFirstRowInclusive())
+        : Nothing();
+    fmrTableInputRef.IsLastRowInclusive = protoFmrTableInputRef.HasIsLastRowInclusive()
+        ? TMaybe<bool>(protoFmrTableInputRef.GetIsLastRowInclusive())
+        : Nothing();
+    fmrTableInputRef.FirstRowKeys = protoFmrTableInputRef.HasFirstRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetFirstRowKeys()) : Nothing();
+    fmrTableInputRef.LastRowKeys = protoFmrTableInputRef.HasLastRowKeys() ? TMaybe<TString>(protoFmrTableInputRef.GetLastRowKeys()) : Nothing();
+    fmrTableInputRef.TableIndex = protoFmrTableInputRef.GetTableIndex();
     return fmrTableInputRef;
 }
 
@@ -152,14 +235,19 @@ NProto::TFmrTableOutputRef FmrTableOutputRefToProto(const TFmrTableOutputRef& fm
     NProto::TFmrTableOutputRef protoFmrTableOutputRef;
     protoFmrTableOutputRef.SetTableId(fmrTableOutputRef.TableId);
     protoFmrTableOutputRef.SetPartId(fmrTableOutputRef.PartId);
+    protoFmrTableOutputRef.SetColumnGroups(fmrTableOutputRef.SerializedColumnGroups);
+    auto protoSortingColumns = SortingColumnsToProto(fmrTableOutputRef.SortingColumns);
+    protoFmrTableOutputRef.MutableSortingColumns()->Swap(&protoSortingColumns);
     return protoFmrTableOutputRef;
 }
 
 TFmrTableOutputRef FmrTableOutputRefFromProto(const NProto::TFmrTableOutputRef& protoFmrTableOutputRef) {
-    return TFmrTableOutputRef{
-        .TableId = protoFmrTableOutputRef.GetTableId(),
-        .PartId = protoFmrTableOutputRef.GetPartId()
-    };
+    TFmrTableOutputRef fmrTableOutputRef;
+    fmrTableOutputRef.TableId = protoFmrTableOutputRef.GetTableId();
+    fmrTableOutputRef.PartId = protoFmrTableOutputRef.GetPartId();
+    fmrTableOutputRef.SerializedColumnGroups = protoFmrTableOutputRef.GetColumnGroups();
+    fmrTableOutputRef.SortingColumns = SortingColumnsFromProto(protoFmrTableOutputRef.GetSortingColumns());
+    return fmrTableOutputRef;
 }
 
 NProto::TTableStats TableStatsToProto(const TTableStats& tableStats) {
@@ -178,15 +266,45 @@ TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats) {
     };
 }
 
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats) {
+    NProto::TSortedChunkStats protoSortedChunkStats;
+    protoSortedChunkStats.SetIsSorted(sortedChunkStats.IsSorted);
+    if (!sortedChunkStats.FirstRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetFirstRowKeys(NYT::NodeToYsonString(sortedChunkStats.FirstRowKeys));
+    }
+    if (!sortedChunkStats.LastRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetLastRowKeys(NYT::NodeToYsonString(sortedChunkStats.LastRowKeys));
+    }
+    return protoSortedChunkStats;
+}
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats) {
+    TSortedChunkStats sortedChunkStats;
+    sortedChunkStats.IsSorted = protoSortedChunkStats.GetIsSorted();
+    if (!protoSortedChunkStats.GetFirstRowKeys().empty()) {
+        sortedChunkStats.FirstRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetFirstRowKeys());
+    }
+    if (!protoSortedChunkStats.GetLastRowKeys().empty()) {
+        sortedChunkStats.LastRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetLastRowKeys());
+    }
+    return sortedChunkStats;
+}
+
 NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats) {
     NProto::TChunkStats protoChunkStats;
     protoChunkStats.SetRows(chunkStats.Rows);
     protoChunkStats.SetDataWeight(chunkStats.DataWeight);
+    auto protoSortedChunkStats = SortedChunkStatsToProto(chunkStats.SortedChunkStats);
+    protoChunkStats.MutableSortedChunkStats()->Swap(&protoSortedChunkStats);
     return protoChunkStats;
 }
 
 TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats) {
-    return TChunkStats{.Rows = protoChunkStats.GetRows(), .DataWeight = protoChunkStats.GetDataWeight()};
+    TChunkStats chunkStats;
+    chunkStats.Rows = protoChunkStats.GetRows();
+    chunkStats.DataWeight = protoChunkStats.GetDataWeight();
+    chunkStats.SortedChunkStats = SortedChunkStatsFromProto(protoChunkStats.GetSortedChunkStats());
+    return chunkStats;
 }
 
 NProto::TTableChunkStats TableChunkStatsToProto(const TTableChunkStats& tableChunkStats) {
@@ -222,6 +340,8 @@ NProto::TStatistics StatisticsToProto(const TStatistics& stats) {
         auto* curOutputTable = protoStatistics.AddOutputTables();
         curOutputTable->Swap(&statTableObject);
     }
+    NProto::TTaskResult protoTaskResult = TaskResultToProto(stats.TaskResult);
+    protoStatistics.MutableTaskResult()->Swap(&protoTaskResult);
     return protoStatistics;
 }
 
@@ -233,7 +353,11 @@ TStatistics StatisticsFromProto(const NProto::TStatistics& protoStats) {
         TTableChunkStats tableChunkStats = TableChunkStatsFromProto(protoStatTableObject.GetTableChunkStats());
         outputTables[fmrTableOutputRef] = tableChunkStats;
     }
-    return TStatistics{.OutputTables = outputTables};
+    TStatistics stats{.OutputTables = std::move(outputTables)};
+    if (protoStats.HasTaskResult()) {
+        stats.TaskResult = TaskResultFromProto(protoStats.GetTaskResult());
+    }
+    return stats;
 }
 
 NProto::TOperationTableRef OperationTableRefToProto(const TOperationTableRef& operationTableRef) {
@@ -311,10 +435,40 @@ NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperati
 }
 
 TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams) {
-    return TUploadOperationParams(
-        FmrTableRefFromProto(protoUploadOperationParams.GetInput()),
-        YtTableRefFromProto(protoUploadOperationParams.GetOutput())
-    );
+    return TUploadOperationParams{
+        .Input = FmrTableRefFromProto(protoUploadOperationParams.GetInput()),
+        .Output = YtTableRefFromProto(protoUploadOperationParams.GetOutput())
+    };
+}
+
+NProto::TSortedUploadOperationParams SortedUploadOperationParamsToProto(const TSortedUploadOperationParams& SortedUploadOperationParams) {
+    NProto::TSortedUploadOperationParams protoSortedUploadOperationParams;
+    auto input = FmrTableRefToProto(SortedUploadOperationParams.Input);
+    auto output = YtTableRefToProto(SortedUploadOperationParams.Output);
+    protoSortedUploadOperationParams.MutableInput()->Swap(&input);
+    protoSortedUploadOperationParams.MutableOutput()->Swap(&output);
+    protoSortedUploadOperationParams.SetSessionId(SortedUploadOperationParams.SessionId);
+    for (const auto& cookie : SortedUploadOperationParams.Cookies) {
+        protoSortedUploadOperationParams.AddCookies(cookie);
+    }
+    protoSortedUploadOperationParams.SetIsOrdered(SortedUploadOperationParams.IsOrdered);
+    protoSortedUploadOperationParams.SetPartitionId(SortedUploadOperationParams.PartitionId);
+    return protoSortedUploadOperationParams;
+}
+
+TSortedUploadOperationParams SortedUploadOperationParamsFromProto(const NProto::TSortedUploadOperationParams& protoSortedUploadOperationParams) {
+    std::vector<TString> cookies;
+    for (const auto& cookie : protoSortedUploadOperationParams.GetCookies()) {
+        cookies.push_back(cookie);
+    }
+    return TSortedUploadOperationParams{
+        .Input = FmrTableRefFromProto(protoSortedUploadOperationParams.GetInput()),
+        .Output = YtTableRefFromProto(protoSortedUploadOperationParams.GetOutput()),
+        .SessionId = protoSortedUploadOperationParams.GetSessionId(),
+        .Cookies = cookies,
+        .PartitionId = protoSortedUploadOperationParams.GetPartitionId(),
+        .IsOrdered = protoSortedUploadOperationParams.GetIsOrdered()
+    };
 }
 
 NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploadTaskParams) {
@@ -343,10 +497,10 @@ NProto::TDownloadOperationParams DownloadOperationParamsToProto(const TDownloadO
 }
 
 TDownloadOperationParams DownloadOperationParamsFromProto(const NProto::TDownloadOperationParams& protoDownloadOperationParams) {
-    return TDownloadOperationParams(
-        YtTableRefFromProto(protoDownloadOperationParams.GetInput()),
-        FmrTableRefFromProto(protoDownloadOperationParams.GetOutput())
-    );
+    return TDownloadOperationParams{
+        .Input = YtTableRefFromProto(protoDownloadOperationParams.GetInput()),
+        .Output = FmrTableRefFromProto(protoDownloadOperationParams.GetOutput())
+    };
 }
 
 NProto::TDownloadTaskParams DownloadTaskParamsToProto(const TDownloadTaskParams& downloadTaskParams) {
@@ -378,16 +532,42 @@ NProto::TMergeOperationParams MergeOperationParamsToProto(const TMergeOperationP
 }
 
 TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperationParams& protoMergeOperationParams) {
-    TMergeOperationParams mergeOperationParams(
-        {},
-        FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
-    );
+    TMergeOperationParams mergeOperationParams{
+        .Input = {},
+        .Output = FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
+    };
     for (size_t i = 0; i < protoMergeOperationParams.InputSize(); ++i) {
         TOperationTableRef inputTable = OperationTableRefFromProto(protoMergeOperationParams.GetInput(i));
         mergeOperationParams.Input.emplace_back(inputTable);
     }
     return mergeOperationParams;
 }
+
+NProto::TSortedMergeOperationParams SortedMergeOperationParamsToProto(const TSortedMergeOperationParams& sortedMergeOperationParams) {
+    NProto::TSortedMergeOperationParams protoSortedMergeOperationParams;
+    for (ui64 i = 0; i < sortedMergeOperationParams.Input.size(); ++i) {
+        auto inputTable = OperationTableRefToProto(sortedMergeOperationParams.Input[i]);
+        auto* curInput = protoSortedMergeOperationParams.AddInput();
+        curInput->Swap(&inputTable);
+    }
+    auto outputTable = FmrTableRefToProto(sortedMergeOperationParams.Output);
+    protoSortedMergeOperationParams.MutableOutput()->Swap(&outputTable);
+    return protoSortedMergeOperationParams;
+}
+
+TSortedMergeOperationParams SortedMergeOperationParamsFromProto(const NProto::TSortedMergeOperationParams& protoMergeOperationParams) {
+    TSortedMergeOperationParams mergeOperationParams{
+        .Input = {},
+        .Output = FmrTableRefFromProto(protoMergeOperationParams.GetOutput())
+    };
+    for (ui64 i = 0; i < protoMergeOperationParams.InputSize(); ++i) {
+        TOperationTableRef inputTable = OperationTableRefFromProto(protoMergeOperationParams.GetInput(i));
+        mergeOperationParams.Input.emplace_back(inputTable);
+    }
+    return mergeOperationParams;
+}
+
+
 
 NProto::TMergeTaskParams MergeTaskParamsToProto(const TMergeTaskParams& mergeTaskParams) {
     NProto::TMergeTaskParams protoMergeTaskParams;
@@ -405,6 +585,22 @@ TMergeTaskParams MergeTaskParamsFromProto(const NProto::TMergeTaskParams& protoM
     return mergeTaskParams;
 }
 
+NProto::TSortedMergeTaskParams SortedMergeTaskParamsToProto(const TSortedMergeTaskParams& sortedMergeTaskParams) {
+    NProto::TSortedMergeTaskParams protoSortedMergeTaskParams;
+    auto inputTables = TaskTableInputRefToProto(sortedMergeTaskParams.Input);
+    protoSortedMergeTaskParams.MutableInput()->Swap(&inputTables);
+    auto outputTable = FmrTableOutputRefToProto(sortedMergeTaskParams.Output);
+    protoSortedMergeTaskParams.MutableOutput()->Swap(&outputTable);
+    return protoSortedMergeTaskParams;
+}
+
+TSortedMergeTaskParams SortedMergeTaskParamsFromProto(const NProto::TSortedMergeTaskParams& protoSortedMergeTaskParams) {
+    TSortedMergeTaskParams sortedMergeTaskParams;
+    sortedMergeTaskParams.Input = TaskTableInputRefFromProto(protoSortedMergeTaskParams.GetInput());
+    sortedMergeTaskParams.Output = FmrTableOutputRefFromProto(protoSortedMergeTaskParams.GetOutput());
+    return sortedMergeTaskParams;
+}
+
 NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams& mapOperationParams) {
     NProto::TMapOperationParams protoMapOperationParams;
     for (auto& operationTableRef: mapOperationParams.Input) {
@@ -415,7 +611,9 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
-    protoMapOperationParams.SetExecutable(mapOperationParams.Executable);
+    protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
+    protoMapOperationParams.SetMapJobType(static_cast<NProto::EFmrJobType>(mapOperationParams.MapJobType));
+    protoMapOperationParams.SetForceSingleTask(mapOperationParams.ForceSingleTask);
     return protoMapOperationParams;
 }
 
@@ -428,7 +626,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .Executable = protoMapOperationParams.GetExecutable()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .MapJobType = static_cast<EFmrJobType>(protoMapOperationParams.GetMapJobType()), .ForceSingleTask = protoMapOperationParams.GetForceSingleTask()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -439,7 +637,8 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
-    protoMapTaskParams.SetExecutable(mapTaskParams.Executable);
+    protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
+    protoMapTaskParams.SetMapJobType(static_cast<NProto::EFmrJobType>(mapTaskParams.MapJobType));
     return protoMapTaskParams;
 }
 
@@ -451,8 +650,290 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
         outputTables.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
     }
     mapTaskParams.Output = outputTables;
-    mapTaskParams.Executable = protoMapTaskParams.GetExecutable();
+    mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
+    mapTaskParams.MapJobType = static_cast<EFmrJobType>(protoMapTaskParams.GetMapJobType());
     return mapTaskParams;
+}
+
+NProto::TReduceOperationSpec ReduceOperationSpecToProto(const TReduceOperationSpec& reduceOperationSpec) {
+    NProto::TReduceOperationSpec protoReduceOperationSpec;
+    auto protoReduceBy = SortingColumnsToProto(reduceOperationSpec.ReduceBy);
+    protoReduceOperationSpec.MutableReduceBy()->Swap(&protoReduceBy);
+    auto protoSortBy = SortingColumnsToProto(reduceOperationSpec.SortBy);
+    protoReduceOperationSpec.MutableSortBy()->Swap(&protoSortBy);
+    protoReduceOperationSpec.SetReduceType(static_cast<NProto::EReduceType>(reduceOperationSpec.ReduceType));
+    return protoReduceOperationSpec;
+}
+
+TReduceOperationSpec ReduceOperationSpecFromProto (const NProto::TReduceOperationSpec& protoReduceOperationSpec) {
+    TReduceOperationSpec reduceOperationSpec;
+    reduceOperationSpec.ReduceBy = SortingColumnsFromProto(protoReduceOperationSpec.GetReduceBy());
+    reduceOperationSpec.SortBy = SortingColumnsFromProto(protoReduceOperationSpec.GetSortBy());
+    reduceOperationSpec.ReduceType = static_cast<EReduceType>(protoReduceOperationSpec.GetReduceType());
+    return reduceOperationSpec;
+}
+
+NProto::TReduceOperationParams ReduceOperationParamsToProto(const TReduceOperationParams& reduceOperationParams) {
+    NProto::TReduceOperationParams protoReduceOperationParams;
+    for (auto& operationTableRef: reduceOperationParams.Input) {
+        auto protoOperationTableRef = OperationTableRefToProto(operationTableRef);
+        protoReduceOperationParams.AddInput()->Swap(&protoOperationTableRef);
+    }
+    for (auto& fmrTableRef: reduceOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
+        protoReduceOperationParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    protoReduceOperationParams.SetSerializedReduceJobState(reduceOperationParams.SerializedReduceJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceOperationParams.ReduceOperationSpec);
+    protoReduceOperationParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    return protoReduceOperationParams;
+}
+
+TReduceOperationParams ReduceOperationParamsFromProto(const NProto::TReduceOperationParams& protoReduceOperationParams) {
+    std::vector<TOperationTableRef> inputTables;
+    std::vector<TFmrTableRef> outputTables;
+    for (auto& protoOperationTableRef: protoReduceOperationParams.GetInput()) {
+        inputTables.emplace_back(OperationTableRefFromProto(protoOperationTableRef));
+    }
+    for (auto& protoFmrTableRef: protoReduceOperationParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
+    }
+    return TReduceOperationParams{
+        .Input = inputTables,
+        .Output = outputTables,
+        .SerializedReduceJobState = protoReduceOperationParams.GetSerializedReduceJobState(),
+        .ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceOperationParams.GetReduceOperationSpec())
+    };
+}
+
+NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduceTaskParams) {
+    NProto::TReduceTaskParams protoReduceTaskParams;
+    auto protoTaskTableInputRef = TaskTableInputRefToProto(reduceTaskParams.Input);
+    protoReduceTaskParams.MutableInput()->Swap(&protoTaskTableInputRef);
+    for (auto& fmrTableOutputRef: reduceTaskParams.Output) {
+        auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
+        protoReduceTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
+    }
+    protoReduceTaskParams.SetSerializedReduceJobState(reduceTaskParams.SerializedReduceJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(reduceTaskParams.ReduceOperationSpec);
+    protoReduceTaskParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    protoReduceTaskParams.SetSortByHasKeyHashPrefix(reduceTaskParams.SortByHasKeyHashPrefix);
+    return protoReduceTaskParams;
+}
+
+TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& protoReduceTaskParams) {
+    TReduceTaskParams reduceTaskParams;
+    reduceTaskParams.Input = TaskTableInputRefFromProto(protoReduceTaskParams.GetInput());
+    std::vector<TFmrTableOutputRef> outputTables;
+    for (auto& protoFmrTableOutputRef: protoReduceTaskParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
+    }
+    reduceTaskParams.Output = outputTables;
+    reduceTaskParams.SerializedReduceJobState = protoReduceTaskParams.GetSerializedReduceJobState();
+    reduceTaskParams.ReduceOperationSpec = ReduceOperationSpecFromProto(protoReduceTaskParams.GetReduceOperationSpec());
+    reduceTaskParams.SortByHasKeyHashPrefix = protoReduceTaskParams.GetSortByHasKeyHashPrefix();
+    return reduceTaskParams;
+}
+
+NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams) {
+    NProto::TSortOperationParams protoSortOperationParams;
+    for (size_t i = 0; i < sortOperationParams.Input.size(); ++i) {
+        auto inputTable = OperationTableRefToProto(sortOperationParams.Input[i]);
+        auto* curInput = protoSortOperationParams.AddInput();
+        curInput->Swap(&inputTable);
+    }
+    auto outputTable = FmrTableRefToProto(sortOperationParams.Output);
+    protoSortOperationParams.MutableOutput()->Swap(&outputTable);
+    return protoSortOperationParams;
+}
+
+TSortOperationParams SortOperationParamsFromProto(const NProto::TSortOperationParams& protoSortOperationParams) {
+    TSortOperationParams sortOperationParams{
+        .Input = {},
+        .Output = FmrTableRefFromProto(protoSortOperationParams.GetOutput())
+    };
+    for (size_t i = 0; i < protoSortOperationParams.InputSize(); ++i) {
+        TOperationTableRef inputTable = OperationTableRefFromProto(protoSortOperationParams.GetInput(i));
+        sortOperationParams.Input.emplace_back(inputTable);
+    }
+    return sortOperationParams;
+}
+
+NProto::TLocalSortTaskParams LocalSortTaskParamsToProto(const TLocalSortTaskParams& localSortTaskParams) {
+    NProto::TLocalSortTaskParams protoLocalSortTaskParams;
+    auto inputTables = TaskTableInputRefToProto(localSortTaskParams.Input);
+    protoLocalSortTaskParams.MutableInput()->Swap(&inputTables);
+    auto outputTable = FmrTableOutputRefToProto(localSortTaskParams.Output);
+    protoLocalSortTaskParams.MutableOutput()->Swap(&outputTable);
+    return protoLocalSortTaskParams;
+}
+
+TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskParams& protoLocalSortTaskParams) {
+    TLocalSortTaskParams localSortTaskParams;
+    localSortTaskParams.Input = TaskTableInputRefFromProto(protoLocalSortTaskParams.GetInput());
+    localSortTaskParams.Output = FmrTableOutputRefFromProto(protoLocalSortTaskParams.GetOutput());
+    return localSortTaskParams;
+}
+
+NProto::TPullOperationParams PullOperationParamsToProto(const TPullOperationParams& pullOperationParams) {
+    NProto::TPullOperationParams protoPullOperationParams;
+    for (const auto& inputTable : pullOperationParams.Input) {
+        auto protoInput = OperationTableRefToProto(inputTable);
+        auto* curInput = protoPullOperationParams.AddInput();
+        curInput->Swap(&protoInput);
+    }
+    return protoPullOperationParams;
+}
+
+TPullOperationParams PullOperationParamsFromProto(const NProto::TPullOperationParams& protoPullOperationParams) {
+    TPullOperationParams pullOperationParams;
+    for (size_t i = 0; i < protoPullOperationParams.InputSize(); ++i) {
+        pullOperationParams.Input.emplace_back(OperationTableRefFromProto(protoPullOperationParams.GetInput(i)));
+    }
+    return pullOperationParams;
+}
+
+NProto::TPullTaskParams PullTaskParamsToProto(const TPullTaskParams& pullTaskParams) {
+    NProto::TPullTaskParams protoPullTaskParams;
+    auto inputTables = TaskTableInputRefToProto(pullTaskParams.Input);
+    protoPullTaskParams.MutableInput()->Swap(&inputTables);
+    return protoPullTaskParams;
+}
+
+TPullTaskParams PullTaskParamsFromProto(const NProto::TPullTaskParams& protoPullTaskParams) {
+    TPullTaskParams pullTaskParams;
+    pullTaskParams.Input = TaskTableInputRefFromProto(protoPullTaskParams.GetInput());
+    return pullTaskParams;
+}
+
+NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullResult) {
+    NProto::TTaskPullResult protoTaskPullResult;
+    protoTaskPullResult.SetData(taskPullResult.Data);
+    return protoTaskPullResult;
+}
+
+TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult) {
+    return TTaskPullResult{.Data = protoTaskPullResult.GetData()};
+}
+
+NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationParams& fillOperationParams) {
+    NProto::TFillOperationParams protoFillOperationParams;
+    for (auto& fmrTableRef: fillOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
+        protoFillOperationParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    protoFillOperationParams.SetSerializedFillJobState(fillOperationParams.SerializedFillJobState);
+    return protoFillOperationParams;
+}
+
+TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams) {
+    std::vector<TFmrTableRef> outputTables;
+    for (auto& protoFmrTableRef: protoFillOperationParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
+    }
+    return TFillOperationParams{.Output = outputTables, .SerializedFillJobState = protoFillOperationParams.GetSerializedFillJobState()};
+}
+
+NProto::TTouchOperationParams TouchOperationParamsToProto(const TTouchOperationParams& touchOperationParams) {
+    NProto::TTouchOperationParams protoTouchOperationParams;
+    for (auto& fmrTableRef: touchOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(fmrTableRef);
+        protoTouchOperationParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    return protoTouchOperationParams;
+}
+
+TTouchOperationParams TouchOperationParamsFromProto(const NProto::TTouchOperationParams& protoTouchOperationParams) {
+    std::vector<TFmrTableRef> outputTables;
+    for (auto& protoFmrTableRef: protoTouchOperationParams.GetOutput()) {
+        outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
+    }
+    return TTouchOperationParams{.Output = outputTables};
+}
+
+NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams) {
+    NProto::TFillTaskParams protoFillTaskParams;
+    for (auto& fmrTableOutputRef: fillTaskParams.Output) {
+        auto protoFmrTableOutputRef = FmrTableOutputRefToProto(fmrTableOutputRef);
+        protoFillTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
+    }
+    protoFillTaskParams.SetSerializedFillJobState(fillTaskParams.SerializedFillJobState);
+    return protoFillTaskParams;
+}
+
+TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams) {
+    TFillTaskParams fillTaskParams;
+    for (auto& protoFmrTableOutputRef: protoFillTaskParams.GetOutput()) {
+        fillTaskParams.Output.emplace_back(FmrTableOutputRefFromProto(protoFmrTableOutputRef));
+    }
+    fillTaskParams.SerializedFillJobState = protoFillTaskParams.GetSerializedFillJobState();
+    return fillTaskParams;
+}
+
+NProto::TMapReduceOperationParams MapReduceOperationParamsToProto(const TMapReduceOperationParams& mapReduceOperationParams) {
+    NProto::TMapReduceOperationParams protoParams;
+    for (auto& inputTable : mapReduceOperationParams.Input) {
+        auto protoOperationTableRef = OperationTableRefToProto(inputTable);
+        protoParams.AddInput()->Swap(&protoOperationTableRef);
+    }
+    for (auto& outputTable : mapReduceOperationParams.Output) {
+        auto protoFmrTableRef = FmrTableRefToProto(outputTable);
+        protoParams.AddOutput()->Swap(&protoFmrTableRef);
+    }
+    protoParams.SetSerializedMapJobState(mapReduceOperationParams.SerializedMapJobState);
+    protoParams.SetSerializedReduceJobState(mapReduceOperationParams.SerializedReduceJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(mapReduceOperationParams.ReduceOperationSpec);
+    protoParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    for (auto& directOutputTable : mapReduceOperationParams.DirectMapOutput) {
+        auto protoFmrTableRef = FmrTableRefToProto(directOutputTable);
+        protoParams.AddDirectMapOutput()->Swap(&protoFmrTableRef);
+    }
+    return protoParams;
+}
+
+TMapReduceOperationParams MapReduceOperationParamsFromProto(const NProto::TMapReduceOperationParams& protoParams) {
+    TMapReduceOperationParams params;
+    for (auto& protoInputTable : protoParams.GetInput()) {
+        params.Input.emplace_back(OperationTableRefFromProto(protoInputTable));
+    }
+    for (auto& protoOutputTable : protoParams.GetOutput()) {
+        params.Output.emplace_back(FmrTableRefFromProto(protoOutputTable));
+    }
+    params.SerializedMapJobState = protoParams.GetSerializedMapJobState();
+    params.SerializedReduceJobState = protoParams.GetSerializedReduceJobState();
+    params.ReduceOperationSpec = ReduceOperationSpecFromProto(protoParams.GetReduceOperationSpec());
+    for (auto& protoDirectOutputTable : protoParams.GetDirectMapOutput()) {
+        params.DirectMapOutput.emplace_back(FmrTableRefFromProto(protoDirectOutputTable));
+    }
+    return params;
+}
+
+NProto::TMapReduceMapTaskParams MapReduceMapTaskParamsToProto(const TMapReduceMapTaskParams& mapReduceMapTaskParams) {
+    NProto::TMapReduceMapTaskParams protoParams;
+    auto protoInput = TaskTableInputRefToProto(mapReduceMapTaskParams.Input);
+    protoParams.MutableInput()->Swap(&protoInput);
+    auto protoOutput = FmrTableOutputRefToProto(mapReduceMapTaskParams.Output);
+    protoParams.MutableOutput()->Swap(&protoOutput);
+    protoParams.SetSerializedMapJobState(mapReduceMapTaskParams.SerializedMapJobState);
+    auto protoReduceOperationSpec = ReduceOperationSpecToProto(mapReduceMapTaskParams.ReduceOperationSpec);
+    protoParams.MutableReduceOperationSpec()->Swap(&protoReduceOperationSpec);
+    for (auto& directOutputRef : mapReduceMapTaskParams.DirectOutputs) {
+        auto protoFmrTableOutputRef = FmrTableOutputRefToProto(directOutputRef);
+        protoParams.AddDirectOutputs()->Swap(&protoFmrTableOutputRef);
+    }
+    return protoParams;
+}
+
+TMapReduceMapTaskParams MapReduceMapTaskParamsFromProto(const NProto::TMapReduceMapTaskParams& protoParams) {
+    TMapReduceMapTaskParams params;
+    params.Input = TaskTableInputRefFromProto(protoParams.GetInput());
+    params.Output = FmrTableOutputRefFromProto(protoParams.GetOutput());
+    params.SerializedMapJobState = protoParams.GetSerializedMapJobState();
+    params.ReduceOperationSpec = ReduceOperationSpecFromProto(protoParams.GetReduceOperationSpec());
+    for (auto& protoDirectOutputRef : protoParams.GetDirectOutputs()) {
+        params.DirectOutputs.emplace_back(FmrTableOutputRefFromProto(protoDirectOutputRef));
+    }
+    return params;
 }
 
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams) {
@@ -466,10 +947,33 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* mergeOperationParamsPtr = std::get_if<TMergeOperationParams>(&operationParams)) {
         NProto::TMergeOperationParams protoMergeOperationParams = MergeOperationParamsToProto(*mergeOperationParamsPtr);
         protoOperationParams.MutableMergeOperationParams()->Swap(&protoMergeOperationParams);
-    } else {
-        auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams);
+    } else if (auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams)) {
         NProto::TMapOperationParams protoMapOperationParams = MapOperationParamsToProto(*mapOperationParamsPtr);
         protoOperationParams.MutableMapOperationParams()->Swap(&protoMapOperationParams);
+    } else if (auto* SortedUploadOperationParamsPtr = std::get_if<TSortedUploadOperationParams>(&operationParams)) {
+        NProto::TSortedUploadOperationParams protoSortedUploadOperationParams = SortedUploadOperationParamsToProto(*SortedUploadOperationParamsPtr);
+        protoOperationParams.MutableSortedUploadOperationParams()->Swap(&protoSortedUploadOperationParams);
+    } else if (auto* SortedMergeOperationParamsPtr = std::get_if<TSortedMergeOperationParams>(&operationParams)) {
+        NProto::TSortedMergeOperationParams protoSortedMergeOperationParams = SortedMergeOperationParamsToProto(*SortedMergeOperationParamsPtr);
+        protoOperationParams.MutableSortedMergeOperationParams()->Swap(&protoSortedMergeOperationParams);
+    } else if (auto* SortOperationParamsPtr = std::get_if<TSortOperationParams>(&operationParams)) {
+        NProto::TSortOperationParams protoSortOperationParams = SortOperationParamsToProto(*SortOperationParamsPtr);
+        protoOperationParams.MutableSortOperationParams()->Swap(&protoSortOperationParams);
+    } else if (auto* ReduceOperationParamsPtr = std::get_if<TReduceOperationParams>(&operationParams)) {
+        NProto::TReduceOperationParams protoReduceOperationParams = ReduceOperationParamsToProto(*ReduceOperationParamsPtr);
+        protoOperationParams.MutableReduceOperationParams()->Swap(&protoReduceOperationParams);
+    } else if (const auto* pullOperationParamsPtr = std::get_if<TPullOperationParams>(&operationParams)) {
+        NProto::TPullOperationParams protoPullOperationParams = PullOperationParamsToProto(*pullOperationParamsPtr);
+        protoOperationParams.MutablePullOperationParams()->Swap(&protoPullOperationParams);
+    } else if (const auto* fillOperationParamsPtr = std::get_if<TFillOperationParams>(&operationParams)) {
+        NProto::TFillOperationParams protoFillOperationParams = FillOperationParamsToProto(*fillOperationParamsPtr);
+        protoOperationParams.MutableFillOperationParams()->Swap(&protoFillOperationParams);
+    } else if (const auto* mapReduceOperationParamsPtr = std::get_if<TMapReduceOperationParams>(&operationParams)) {
+        NProto::TMapReduceOperationParams protoMapReduceOperationParams = MapReduceOperationParamsToProto(*mapReduceOperationParamsPtr);
+        protoOperationParams.MutableMapReduceOperationParams()->Swap(&protoMapReduceOperationParams);
+    } else if (const auto* touchOperationParamsPtr = std::get_if<TTouchOperationParams>(&operationParams)) {
+        NProto::TTouchOperationParams protoTouchOperationParams = TouchOperationParamsToProto(*touchOperationParamsPtr);
+        protoOperationParams.MutableTouchOperationParams()->Swap(&protoTouchOperationParams);
     }
     return protoOperationParams;
 }
@@ -481,9 +985,52 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
     } else if (protoOperationParams.HasMergeOperationParams()) {
         return MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
-    } else {
+    } else if (protoOperationParams.HasMapOperationParams()) {
         return MapOperationParamsFromProto(protoOperationParams.GetMapOperationParams());
+    } else if (protoOperationParams.HasSortedUploadOperationParams()) {
+        return SortedUploadOperationParamsFromProto(protoOperationParams.GetSortedUploadOperationParams());
+    } else if (protoOperationParams.HasSortedMergeOperationParams()) {
+        return SortedMergeOperationParamsFromProto(protoOperationParams.GetSortedMergeOperationParams());
+    } else if (protoOperationParams.HasSortOperationParams()) {
+        return SortOperationParamsFromProto(protoOperationParams.GetSortOperationParams());
+    } else if (protoOperationParams.HasReduceOperationParams()) {
+        return ReduceOperationParamsFromProto(protoOperationParams.GetReduceOperationParams());
+    } else if (protoOperationParams.HasPullOperationParams()) {
+        return PullOperationParamsFromProto(protoOperationParams.GetPullOperationParams());
+    } else if (protoOperationParams.HasFillOperationParams()) {
+        return FillOperationParamsFromProto(protoOperationParams.GetFillOperationParams());
+    } else if (protoOperationParams.HasMapReduceOperationParams()) {
+        return MapReduceOperationParamsFromProto(protoOperationParams.GetMapReduceOperationParams());
+    } else if (protoOperationParams.HasTouchOperationParams()) {
+        return TouchOperationParamsFromProto(protoOperationParams.GetTouchOperationParams());
     }
+    return TOperationParams();
+}
+
+TSortedUploadTaskParams SortedUploadTaskParamsFromProto(const NProto::TSortedUploadTaskParams& protoSortedUploadTaskParams) {
+    TSortedUploadTaskParams SortedUploadTaskParams;
+    SortedUploadTaskParams.Input = FmrTableInputRefFromProto(protoSortedUploadTaskParams.GetInput());
+    SortedUploadTaskParams.Output = YtTableRefFromProto(protoSortedUploadTaskParams.GetOutput());
+    SortedUploadTaskParams.CookieYson = protoSortedUploadTaskParams.GetCookieYson();
+    SortedUploadTaskParams.Order = protoSortedUploadTaskParams.GetOrder();
+    if (protoSortedUploadTaskParams.HasSortingColumns()) {
+        SortedUploadTaskParams.SortingColumns = SortingColumnsFromProto(protoSortedUploadTaskParams.GetSortingColumns());
+    }
+    return SortedUploadTaskParams;
+}
+
+NProto::TSortedUploadTaskParams SortedUploadTaskParamsToProto(const TSortedUploadTaskParams& SortedUploadTaskParams) {
+    NProto::TSortedUploadTaskParams protoSortedUploadTaskParams;
+    auto input = FmrTableInputRefToProto(SortedUploadTaskParams.Input);
+    auto output = YtTableRefToProto(SortedUploadTaskParams.Output);
+    protoSortedUploadTaskParams.MutableInput()->Swap(&input);
+    protoSortedUploadTaskParams.MutableOutput()->Swap(&output);
+    protoSortedUploadTaskParams.SetCookieYson(SortedUploadTaskParams.CookieYson);
+    protoSortedUploadTaskParams.SetOrder(SortedUploadTaskParams.Order);
+    auto protoSortingColumns = SortingColumnsToProto(SortedUploadTaskParams.SortingColumns);
+    protoSortedUploadTaskParams.MutableSortingColumns()->Swap(&protoSortingColumns);
+
+    return protoSortedUploadTaskParams;
 }
 
 NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
@@ -497,10 +1044,30 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* mergeTaskParamsPtr = std::get_if<TMergeTaskParams>(&taskParams)) {
         NProto::TMergeTaskParams protoMergeTaskParams = MergeTaskParamsToProto(*mergeTaskParamsPtr);
         protoTaskParams.MutableMergeTaskParams()->Swap(&protoMergeTaskParams);
-    } else {
-        auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams);
+    } else if (auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams)) {
         NProto::TMapTaskParams protoMapTaskParams = MapTaskParamsToProto(*mapTaskParamsPtr);
         protoTaskParams.MutableMapTaskParams()->Swap(&protoMapTaskParams);
+    } else if (auto* SortedUploadTaskParamsPtr = std::get_if<TSortedUploadTaskParams>(&taskParams)) {
+        NProto::TSortedUploadTaskParams protoSortedUploadTaskParams = SortedUploadTaskParamsToProto(*SortedUploadTaskParamsPtr);
+        protoTaskParams.MutableSortedUploadTaskParams()->Swap(&protoSortedUploadTaskParams);
+    } else if (auto* SortedMergeTaskParamsPtr = std::get_if<TSortedMergeTaskParams>(&taskParams)) {
+        NProto::TSortedMergeTaskParams protoSortedMergeTaskParams = SortedMergeTaskParamsToProto(*SortedMergeTaskParamsPtr);
+        protoTaskParams.MutableSortedMergeTaskParams()->Swap(&protoSortedMergeTaskParams);
+    } else if (auto* LocalSortTaskParamsPtr = std::get_if<TLocalSortTaskParams>(&taskParams)) {
+        NProto::TLocalSortTaskParams protoLocalSortTaskParams = LocalSortTaskParamsToProto(*LocalSortTaskParamsPtr);
+        protoTaskParams.MutableLocalSortTaskParams()->Swap(&protoLocalSortTaskParams);
+    } else if (auto* reduceTaskParamsPtr = std::get_if<TReduceTaskParams>(&taskParams)) {
+        NProto::TReduceTaskParams protoReduceTaskParams = ReduceTaskParamsToProto(*reduceTaskParamsPtr);
+        protoTaskParams.MutableReduceTaskParams()->Swap(&protoReduceTaskParams);
+    } else if (auto* pullTaskParamsPtr = std::get_if<TPullTaskParams>(&taskParams)) {
+        NProto::TPullTaskParams protoPullTaskParams = PullTaskParamsToProto(*pullTaskParamsPtr);
+        protoTaskParams.MutablePullTaskParams()->Swap(&protoPullTaskParams);
+    } else if (auto* fillTaskParamsPtr = std::get_if<TFillTaskParams>(&taskParams)) {
+        NProto::TFillTaskParams protoFillTaskParams = FillTaskParamsToProto(*fillTaskParamsPtr);
+        protoTaskParams.MutableFillTaskParams()->Swap(&protoFillTaskParams);
+    } else if (auto* mapReduceMapTaskParamsPtr = std::get_if<TMapReduceMapTaskParams>(&taskParams)) {
+        NProto::TMapReduceMapTaskParams protoMapReduceMapTaskParams = MapReduceMapTaskParamsToProto(*mapReduceMapTaskParamsPtr);
+        protoTaskParams.MutableMapReduceMapTaskParams()->Swap(&protoMapReduceMapTaskParams);
     }
     return protoTaskParams;
 }
@@ -513,8 +1080,22 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = UploadTaskParamsFromProto(protoTaskParams.GetUploadTaskParams());
     } else if (protoTaskParams.HasMergeTaskParams()) {
         taskParams = MergeTaskParamsFromProto(protoTaskParams.GetMergeTaskParams());
-    } else {
+    } else if (protoTaskParams.HasMapTaskParams()) {
         taskParams = MapTaskParamsFromProto(protoTaskParams.GetMapTaskParams());
+    } else if (protoTaskParams.HasSortedUploadTaskParams()) {
+        taskParams = SortedUploadTaskParamsFromProto(protoTaskParams.GetSortedUploadTaskParams());
+    } else if (protoTaskParams.HasSortedMergeTaskParams()) {
+        taskParams = SortedMergeTaskParamsFromProto(protoTaskParams.GetSortedMergeTaskParams());
+    } else if (protoTaskParams.HasLocalSortTaskParams()) {
+        taskParams = LocalSortTaskParamsFromProto(protoTaskParams.GetLocalSortTaskParams());
+    } else if (protoTaskParams.HasReduceTaskParams()) {
+        taskParams = ReduceTaskParamsFromProto(protoTaskParams.GetReduceTaskParams());
+    } else if (protoTaskParams.HasPullTaskParams()) {
+        taskParams = PullTaskParamsFromProto(protoTaskParams.GetPullTaskParams());
+    } else if (protoTaskParams.HasFillTaskParams()) {
+        taskParams = FillTaskParamsFromProto(protoTaskParams.GetFillTaskParams());
+    } else if (protoTaskParams.HasMapReduceMapTaskParams()) {
+        taskParams = MapReduceMapTaskParamsFromProto(protoTaskParams.GetMapReduceMapTaskParams());
     }
     return taskParams;
 }
@@ -539,9 +1120,79 @@ TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& 
     return clusterConnection;
 }
 
+NProto::TFileInfo FileInfoToProto(const TFileInfo& fileInfo) {
+    NProto::TFileInfo protoFileInfo;
+    protoFileInfo.SetMd5Key(fileInfo.Md5Key);
+    protoFileInfo.SetAlias(fileInfo.Alias);
+    protoFileInfo.SetLocalPath(fileInfo.LocalPath);
+    return protoFileInfo;
+}
+
+TFileInfo FileInfoFromProto(const NProto::TFileInfo& protoFileInfo) {
+    return TFileInfo{
+        .LocalPath = protoFileInfo.GetLocalPath(),
+        .Md5Key = protoFileInfo.GetMd5Key(),
+        .Alias = protoFileInfo.GetAlias()
+    };
+}
+
+NProto::TYtResourceInfo YtResourceInfoToProto(const TYtResourceInfo& ytResourceInfo) {
+    NProto::TYtResourceInfo protoYtResourceInfo;
+    protoYtResourceInfo.SetRichPath(SerializeRichPath(ytResourceInfo.RichPath));
+    protoYtResourceInfo.SetYtServerName(ytResourceInfo.YtServerName);
+    protoYtResourceInfo.SetToken(ytResourceInfo.Token);
+    protoYtResourceInfo.SetLocalPath(ytResourceInfo.LocalPath);
+    return protoYtResourceInfo;
+}
+
+TYtResourceInfo YtResourceInfoFromProto(const NProto::TYtResourceInfo& protoYtResourceInfo) {
+    return TYtResourceInfo {
+        .RichPath = DeserializeRichPath(protoYtResourceInfo.GetRichPath()),
+        .YtServerName = protoYtResourceInfo.GetYtServerName(),
+        .Token = protoYtResourceInfo.GetToken(),
+        .LocalPath = protoYtResourceInfo.GetLocalPath()
+    };
+}
+
+NProto::TFmrResourceOperationInfo FmrResourceOperationInfoToProto(const TFmrResourceOperationInfo& fmrResourceOperationInfo) {
+    NProto::TFmrResourceOperationInfo protoFmrResourceOperationInfo;
+    auto protoFmrTable = FmrTableRefToProto(fmrResourceOperationInfo.FmrTable);
+    protoFmrResourceOperationInfo.MutableFmrTable()->Swap(&protoFmrTable);
+    protoFmrResourceOperationInfo.SetAlias(fmrResourceOperationInfo.Alias);
+    return protoFmrResourceOperationInfo;
+}
+
+TFmrResourceOperationInfo FmrResourceOperationInfoFromProto(const NProto::TFmrResourceOperationInfo& protoFmrResourceOperationInfo) {
+    return TFmrResourceOperationInfo{
+        .FmrTable = FmrTableRefFromProto(protoFmrResourceOperationInfo.GetFmrTable()),
+        .Alias = protoFmrResourceOperationInfo.GetAlias()
+    };
+}
+
+NProto::TFmrResourceTaskInfo FmrResourceTaskInfoToProto(const TFmrResourceTaskInfo& fmrResourceTaskInfo) {
+    NProto::TFmrResourceTaskInfo protoFmrResourceTaskInfo;
+    for (auto& resourceTask: fmrResourceTaskInfo.FmrResourceTasks) {
+        auto protoResourceTask = FmrTableInputRefToProto(resourceTask);
+        protoFmrResourceTaskInfo.AddFmrResourceTasks()->Swap(&protoResourceTask);
+    }
+    protoFmrResourceTaskInfo.SetLocalPath(fmrResourceTaskInfo.LocalPath);
+    protoFmrResourceTaskInfo.SetAlias(fmrResourceTaskInfo.Alias);
+    return protoFmrResourceTaskInfo;
+}
+
+TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTaskInfo& protoFmrResourceTaskInfo) {
+    TFmrResourceTaskInfo resourceTaskInfo;
+    for (ui64 i = 0; i < protoFmrResourceTaskInfo.FmrResourceTasksSize(); ++i) {
+        resourceTaskInfo.FmrResourceTasks.emplace_back(FmrTableInputRefFromProto(protoFmrResourceTaskInfo.GetFmrResourceTasks(i)));
+    }
+    resourceTaskInfo.LocalPath = protoFmrResourceTaskInfo.GetLocalPath();
+    resourceTaskInfo.Alias = protoFmrResourceTaskInfo.GetAlias();
+    return resourceTaskInfo;
+}
+
 NProto::TTask TaskToProto(const TTask& task) {
     NProto::TTask protoTask;
-    protoTask.SetTaskType(static_cast<NProto::ETaskType>(task.TaskType));
+    protoTask.SetTaskType(NProto::ETaskType(task.TaskType));
     protoTask.SetTaskId(task.TaskId);
     auto taskParams = TaskParamsToProto(task.TaskParams);
     protoTask.MutableTaskParams()->Swap(&taskParams);
@@ -554,12 +1205,27 @@ NProto::TTask TaskToProto(const TTask& task) {
     if (task.JobSettings) {
         protoTask.SetJobSettings(NYT::NodeToYsonString(*task.JobSettings));
     }
+    for (auto& fileInfo: task.Files) {
+        NProto::TFileInfo protoFileInfo = FileInfoToProto(fileInfo);
+        protoTask.AddFiles()->Swap(&protoFileInfo);
+    }
+    for (auto& ytResourceInfo: task.YtResources) {
+        NProto::TYtResourceInfo protoYtResourceInfo = YtResourceInfoToProto(ytResourceInfo);
+        protoTask.AddYtResources()->Swap(&protoYtResourceInfo);
+    }
+    for (auto& fmrResourceInfo: task.FmrResources) {
+        NProto::TFmrResourceTaskInfo protoFmrResourceTaskInfo = FmrResourceTaskInfoToProto(fmrResourceInfo);
+        protoTask.AddFmrResources()->Swap(&protoFmrResourceTaskInfo);
+    }
+    if (task.JobEnvironmentDir.Defined()) {
+        protoTask.SetJobEnvironmentDir(*task.JobEnvironmentDir);
+    }
     return protoTask;
 }
 
 TTask TaskFromProto(const NProto::TTask& protoTask) {
     TTask task;
-    task.TaskType = static_cast<ETaskType>(protoTask.GetTaskType());
+    task.TaskType = ETaskType(protoTask.GetTaskType());
     task.TaskId = protoTask.GetTaskId();
     task.TaskParams = TaskParamsFromProto(protoTask.GetTaskParams());
     task.SessionId = protoTask.GetSessionId();
@@ -572,7 +1238,133 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     if (protoTask.HasJobSettings()) {
         task.JobSettings = NYT::NodeFromYsonString(protoTask.GetJobSettings());
     }
+    for (ui64 i = 0; i < protoTask.FilesSize(); ++i) {
+        task.Files.emplace_back(FileInfoFromProto(protoTask.GetFiles(i)));
+    }
+    for (ui64 i = 0; i < protoTask.YtResourcesSize(); ++i) {
+        task.YtResources.emplace_back(YtResourceInfoFromProto(protoTask.GetYtResources(i)));
+    }
+    for (ui64 i = 0; i < protoTask.FmrResourcesSize(); ++i) {
+        task.FmrResources.emplace_back(FmrResourceTaskInfoFromProto(protoTask.GetFmrResources(i)));
+    }
+    if (protoTask.HasJobEnvironmentDir()) {
+        task.JobEnvironmentDir = protoTask.GetJobEnvironmentDir();
+    }
     return task;
+}
+
+NProto::TTaskUploadResult TaskUploadResultToProto(const TTaskUploadResult& taskUploadResult) {
+    Y_UNUSED(taskUploadResult);
+    NProto::TTaskUploadResult protoTaskUploadResult;
+    return protoTaskUploadResult;
+}
+
+TTaskUploadResult TaskUploadResultFromProto(const NProto::TTaskUploadResult& protoTaskUploadResult) {
+    Y_UNUSED(protoTaskUploadResult);
+    return TTaskUploadResult();
+}
+
+NProto::TTaskDownloadResult TaskDownloadResultToProto(const TTaskDownloadResult& taskDownloadResult) {
+    Y_UNUSED(taskDownloadResult);
+    NProto::TTaskDownloadResult protoTaskDownloadResult;
+    return protoTaskDownloadResult;
+}
+
+TTaskDownloadResult TaskDownloadResultFromProto(const NProto::TTaskDownloadResult& protoTaskDownloadResult) {
+    Y_UNUSED(protoTaskDownloadResult);
+    return TTaskDownloadResult();
+}
+
+NProto::TTaskMergeResult TaskMergeResultToProto(const TTaskMergeResult& taskMergeResult) {
+    Y_UNUSED(taskMergeResult);
+    NProto::TTaskMergeResult protoTaskMergeResult;
+    return protoTaskMergeResult;
+}
+
+TTaskMergeResult TaskMergeResultFromProto(const NProto::TTaskMergeResult& protoTaskMergeResult) {
+    Y_UNUSED(protoTaskMergeResult);
+    return TTaskMergeResult();
+}
+
+NProto::TTaskMapResult TaskMapResultToProto(const TTaskMapResult& taskMapResult) {
+    Y_UNUSED(taskMapResult);
+    NProto::TTaskMapResult protoTaskMapResult;
+    return protoTaskMapResult;
+}
+
+TTaskMapResult TaskMapResultFromProto(const NProto::TTaskMapResult& protoTaskMapResult) {
+    Y_UNUSED(protoTaskMapResult);
+    return TTaskMapResult();
+}
+
+NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedUploadResult& taskSortedUploadResult) {
+    NProto::TTaskSortedUploadResult protoTaskSortedUploadResult;
+    protoTaskSortedUploadResult.SetFragmentResult(taskSortedUploadResult.FragmentResultYson);
+    protoTaskSortedUploadResult.SetFragmentOrder(taskSortedUploadResult.FragmentOrder);
+    return protoTaskSortedUploadResult;
+}
+
+TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult) {
+    TTaskSortedUploadResult taskSortedUploadResult;
+    taskSortedUploadResult.FragmentResultYson = protoTaskSortedUploadResult.GetFragmentResult();
+    taskSortedUploadResult.FragmentOrder = protoTaskSortedUploadResult.GetFragmentOrder();
+    return taskSortedUploadResult;
+}
+
+TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult) {
+    if (protoTaskResult.HasTaskUploadResult()) {
+        return TaskUploadResultFromProto(protoTaskResult.GetTaskUploadResult());
+    } else if (protoTaskResult.HasTaskDownloadResult()) {
+        return TaskDownloadResultFromProto(protoTaskResult.GetTaskDownloadResult());
+    } else if (protoTaskResult.HasTaskMergeResult()) {
+        return TaskMergeResultFromProto(protoTaskResult.GetTaskMergeResult());
+    } else if (protoTaskResult.HasTaskMapResult()) {
+        return TaskMapResultFromProto(protoTaskResult.GetTaskMapResult());
+    } else if (protoTaskResult.HasTaskSortedUploadResult()) {
+        return TaskSortedUploadResultFromProto(protoTaskResult.GetTaskSortedUploadResult());
+    } else if (protoTaskResult.HasTaskPullResult()) {
+        return TaskPullResultFromProto(protoTaskResult.GetTaskPullResult());
+    } else if (protoTaskResult.HasTaskFillResult()) {
+        return TTaskFillResult();
+    }
+    return TTaskUploadResult();
+}
+
+NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult) {
+    NProto::TTaskResult protoTaskResult;
+    if (auto* taskUploadResultPtr = std::get_if<TTaskUploadResult>(&taskResult)) {
+        auto uploadTask = TaskUploadResultToProto(*taskUploadResultPtr);
+        protoTaskResult.MutableTaskUploadResult()->Swap(&uploadTask);
+    } else if (auto* taskDownloadResultPtr = std::get_if<TTaskDownloadResult>(&taskResult)) {
+        auto downloadTask = TaskDownloadResultToProto(*taskDownloadResultPtr);
+        protoTaskResult.MutableTaskDownloadResult()->Swap(&downloadTask);
+    } else if (auto* taskMergeResultPtr = std::get_if<TTaskMergeResult>(&taskResult)) {
+        auto mergeTask = TaskMergeResultToProto(*taskMergeResultPtr);
+        protoTaskResult.MutableTaskMergeResult()->Swap(&mergeTask);
+    } else if (auto* taskMapResultPtr = std::get_if<TTaskMapResult>(&taskResult)) {
+        auto mapTask = TaskMapResultToProto(*taskMapResultPtr);
+        protoTaskResult.MutableTaskMapResult()->Swap(&mapTask);
+    } else if (auto* taskSortedUploadResultPtr = std::get_if<TTaskSortedUploadResult>(&taskResult)) {
+        auto SortedUploadTask = TaskSortedUploadResultToProto(*taskSortedUploadResultPtr);
+        protoTaskResult.MutableTaskSortedUploadResult()->Swap(&SortedUploadTask);
+    } else if (auto* taskPullResultPtr = std::get_if<TTaskPullResult>(&taskResult)) {
+        auto pullTask = TaskPullResultToProto(*taskPullResultPtr);
+        protoTaskResult.MutableTaskPullResult()->Swap(&pullTask);
+    } else if (std::get_if<TTaskFillResult>(&taskResult)) {
+        protoTaskResult.MutableTaskFillResult();
+    }
+    return protoTaskResult;
+}
+
+TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState) {
+    TTaskState taskState;
+    taskState.TaskStatus = static_cast<ETaskStatus>(protoTaskState.GetTaskStatus());
+    taskState.TaskId = protoTaskState.GetTaskId();
+    if (protoTaskState.HasTaskErrorMessage()) {
+        taskState.TaskErrorMessage = FmrErrorFromProto(protoTaskState.GetTaskErrorMessage());
+    }
+    taskState.Stats = StatisticsFromProto(protoTaskState.GetStats());
+    return taskState;
 }
 
 NProto::TTaskState TaskStateToProto(const TTaskState& taskState) {
@@ -586,17 +1378,6 @@ NProto::TTaskState TaskStateToProto(const TTaskState& taskState) {
     auto protoStatistics = StatisticsToProto(taskState.Stats);
     protoTaskState.MutableStats()->Swap(&protoStatistics);
     return protoTaskState;
-}
-
-TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState) {
-    TTaskState taskState;
-    taskState.TaskStatus = static_cast<ETaskStatus>(protoTaskState.GetTaskStatus());
-    taskState.TaskId = protoTaskState.GetTaskId();
-    if (protoTaskState.HasTaskErrorMessage()) {
-        taskState.TaskErrorMessage = FmrErrorFromProto(protoTaskState.GetTaskErrorMessage());
-    }
-    taskState.Stats = StatisticsFromProto(protoTaskState.GetStats());
-    return taskState;
 }
 
 } // namespace NYql::NFmr

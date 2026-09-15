@@ -1,9 +1,18 @@
 #include "kqp_query_data.h"
 
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_builders.h>
+#include <ydb/core/kqp/common/kqp_row_builder.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -71,9 +80,9 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
     }
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite) {
+Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, const NFormats::TFormatsSettings& settings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
     Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
-    FillYdb(ydbResult, rowsLimitPerWrite);
+    FillYdb(ydbResult, settings, fillSchema, rowsLimitPerWrite);
     return ydbResult;
 }
 
@@ -81,33 +90,10 @@ bool TKqpExecuterTxResult::HasTrailingResults() {
     return HasTrailingResult;
 }
 
-
-void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite) {
-    YQL_ENSURE(ydbResult);
-    YQL_ENSURE(!Rows.IsWide());
-    YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
-    const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(MkqlItemType);
-
-    for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
-        auto* column = ydbResult->add_columns();
-        ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
-        column->set_name(ColumnHints && ColumnHints->size() ? ColumnHints->at(idx) : TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
-        ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
-    }
-
-    Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
-        if (rowsLimitPerWrite) {
-            if (*rowsLimitPerWrite == 0) {
-                ydbResult->set_truncated(true);
-                return false;
-            }
-            --(*rowsLimitPerWrite);
-        }
-        ExportValueToProto(MkqlItemType, value, *ydbResult->add_rows(), ColumnOrder);
-        return true;
-    });
+void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, const NFormats::TFormatsSettings& settings, bool fillSchema, TMaybe<ui64> rowsLimitPerWrite) {
+    NFormats::BuildResultSetFromRows(ydbResult, settings, fillSchema, MkqlItemType,
+        Rows, ColumnOrder, ColumnHints, rowsLimitPerWrite);
 }
-
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
@@ -190,13 +176,6 @@ TQueryData::~TQueryData() {
     }
 }
 
-const TQueryData::TParamMap& TQueryData::GetParams() {
-    for(auto& [name, _] : UnboxedData) {
-        GetParameterMiniKqlValue(name);
-    }
-
-    return Params;
-}
 
 const TQueryData::TParamProtobufMap& TQueryData::GetParamsProtobuf() {
     for(auto& [name, _] : UnboxedData) {
@@ -232,19 +211,32 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
 bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+
+    YQL_ENSURE(HasResult(txIndex, resultIndex));
     return TxResults[txIndex][resultIndex].HasTrailingResults();
 }
 
-
-Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite) {
+Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, const NFormats::TFormatsSettings& formatsSettings, TMaybe<ui64> rowsLimitPerWrite)
+{
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
 
     YQL_ENSURE(HasResult(txIndex, resultIndex));
-    auto g = TypeEnv().BindAllocator();
-    return TxResults[txIndex][resultIndex].GetYdb(arena, rowsLimitPerWrite);
-}
 
+    bool fillSchema = false;
+    if (formatsSettings.IsSchemaInclusionAlways()) {
+        fillSchema = true;
+    } else if (formatsSettings.IsSchemaInclusionFirstOnly()) {
+        fillSchema = (BuiltResultIndexes.find(resultIndex) == BuiltResultIndexes.end());
+    } else {
+        YQL_ENSURE(false, "Unexpected schema inclusion mode");
+    }
+
+    AddBuiltResultIndex(resultIndex);
+
+    auto g = TypeEnv().BindAllocator();
+    return TxResults[txIndex][resultIndex].GetYdb(arena, formatsSettings, fillSchema, rowsLimitPerWrite);
+}
 
 void TQueryData::AddTxResults(ui32 txIndex, TVector<TKqpExecuterTxResult>&& results) {
     auto g = TypeEnv().BindAllocator();
@@ -267,9 +259,20 @@ void TQueryData::ValidateParameter(const TString& name, const NKikimrMiniKQL::TT
     }
 
     auto pType = ImportTypeFromProto(type, txTypeEnv);
-    if (pType == nullptr || !parameterType->IsSameType(*pType)) {
-        ythrow yexception() << "Parameter " << name
-            << " type mismatch, expected: " << type << ", actual: " << *parameterType;
+    if (pType == nullptr) {
+        ythrow yexception() << "Parameter " << name << " type is empty";
+    }
+
+    if (!parameterType->IsSameType(*pType)) {
+        TString incompatibility;
+        if (GetFirstTypeIncompatibility(pType, parameterType, "root", incompatibility) && incompatibility) {
+            // shorter message with the first actual incompatibility reported
+            ythrow yexception() << "Parameter " << name << " type mismatch: " << incompatibility;
+        } else {
+            // fallback to old option
+            ythrow yexception() << "Parameter " << name
+                << " type mismatch, expected: " << *pType << ", actual: " << *parameterType;
+        }
     }
 }
 
@@ -302,20 +305,6 @@ void TQueryData::ParseParameters(const google::protobuf::Map<TBasicString<char>,
     }
 }
 
-void TQueryData::ParseParameters(const NKikimrMiniKQL::TParams& parameters) {
-    if (!parameters.HasType()) {
-        return;
-    }
-
-    YQL_ENSURE(parameters.GetType().GetKind() == NKikimrMiniKQL::Struct, "Expected struct as query parameters type");
-    auto& structType = parameters.GetType().GetStruct();
-    for (ui32 i = 0; i < structType.MemberSize(); ++i) {
-        const auto& memberName = structType.GetMember(i).GetName();
-        YQL_ENSURE(i < parameters.GetValue().StructSize(), "Missing value for parameter: " << memberName);
-        auto success = AddMkqlParam(memberName, structType.GetMember(i).GetType(), parameters.GetValue().GetStruct(i));
-        YQL_ENSURE(success, "Duplicate parameter: " << memberName);
-    }
-}
 
 bool TQueryData::AddUVParam(const TString& name, NKikimr::NMiniKQL::TType* type, const NUdf::TUnboxedValue& value) {
     auto g = TypeEnv().BindAllocator();
@@ -358,26 +347,35 @@ TQueryData::TTypedUnboxedValue* TQueryData::GetParameterUnboxedValuePtr(const TS
     return &it->second;
 }
 
-const NKikimrMiniKQL::TParams* TQueryData::GetParameterMiniKqlValue(const TString& name) {
-    if (UnboxedData.find(name) == UnboxedData.end())
-        return nullptr;
-
-    auto it = Params.find(name);
-    if (it == Params.end()) {
-        with_lock(*AllocState->Alloc) {
-            const auto& [type, uv] = GetParameterUnboxedValue(name);
-            NKikimrMiniKQL::TParams param;
-            ExportTypeToProto(type, *param.MutableType());
-            ExportValueToProto(type, uv, *param.MutableValue());
-
-            auto [nit, success] = Params.emplace(name, std::move(param));
-            YQL_ENSURE(success);
-
-            return &(nit->second);
+bool TQueryData::TryGetParameterAsString(const TString& name, TString& outValue, TString& outError) const {
+    auto it = UnboxedData.find(name);
+    if (it == UnboxedData.end()) {
+        outError = TStringBuilder() << "Parameter " << name << " is required";
+        return false;
+    }
+    TType* type = it->second.first;
+    // remove all optionals
+    NUdf::TUnboxedValue unboxedValue = it->second.second;
+    while (type->IsOptional()) {
+        type = static_cast<const TOptionalType*>(type)->GetItemType();
+        if (!unboxedValue.HasValue()) {
+            outError = TStringBuilder() << "Parameter " << name << " must not be NULL";
+            return false;
         }
+        unboxedValue = unboxedValue.GetOptionalValue();
     }
 
-    return &(it->second);
+    if (!type->IsData()) {
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
+        return false;
+    }
+    const auto schemeType = static_cast<const TDataType*>(type)->GetSchemeType();
+    if (schemeType != NUdf::TDataType<NUdf::TUtf8>::Id && schemeType != NUdf::TDataType<char*>::Id) {
+        outError = TStringBuilder() << "Parameter " << name << " must be String or Utf8";
+        return false;
+    }
+    outValue = TString(unboxedValue.AsStringRef());
+    return true;
 }
 
 const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
@@ -403,6 +401,11 @@ const Ydb::TypedValue* TQueryData::GetParameterTypedValue(const TString& name) {
 
 const NKikimr::NMiniKQL::TTypeEnvironment& TQueryData::TypeEnv() {
     return AllocState->TypeEnv;
+}
+
+
+const NKikimr::NMiniKQL::THolderFactory& TQueryData::HolderFactory() {
+    return AllocState->HolderFactory;
 }
 
 bool TQueryData::MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding) {
@@ -476,7 +479,7 @@ NDqProto::TData TQueryData::GetShardParam(ui64 shardId, const TString& name) {
     }
 
     auto guard = TypeEnv().BindAllocator();
-    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
+    NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0, EValuePackerVersion::V0, DefaultDatumValidationMode};
     NDq::TDqSerializedBatch batch = dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
     YQL_ENSURE(!batch.IsOOB());
     return batch.Proto;

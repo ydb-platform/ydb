@@ -1,0 +1,137 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Public-Domain        172b6ba0bd0a8217542579d30d83ed89
+BELONGS Lib/ya.make Programs/wavm/ya.make
+    License text:
+        // Thank you to the wasi-sysroot developers for their contributions to the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        Include/WAVM/WASI/WASIABI.h [7:7]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make
+
+KEEP     CC0-1.0              3853e2a78a247145b4aa16667736f6de
+BELONGS Lib/ya.make Programs/wavm/ya.make
+# KEEP     LicenseRef-scancode-unknown-license-reference AND CC0-1.0 87e3a27df750ab5f57fe802ebf201345
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        Include/WAVM/WASI/WASIABI.LICENSE [1:121]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make
+
+KEEP     CC0-1.0              87e3a27df750ab5f57fe802ebf201345
+BELONGS Lib/ya.make Programs/wavm/ya.make
+    # Scancode info:
+    #     Original SPDX id: LicenseRef-scancode-unknown-license-reference
+    #     Score           : 27.00
+    #     Match type      : INTRO
+    #     Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    # Files with this license:
+    #     Include/WAVM/WASI/WASIABI.h [4:4]
+    License text:
+        // The wasi-sysroot code is licensed under the terms of the CC0 1.0 Universal license:
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 27.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        Include/WAVM/WASI/WASIABI.h [4:4]
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        Include/WAVM/WASI/WASIABI.h [4:4]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make
+
+KEEP     BSD-3-Clause AND BSD-3-Clause c02ae30466a75ef349365e42843ec132
+BELONGS Lib/ya.make Programs/wavm/ya.make
+    License text:
+        [![BSD license](https://img.shields.io/badge/license-BSD-green)](LICENSE.txt)
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [1:1]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        README.md [1:1]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make
+
+KEEP     Apache-2.0           dc7f21ccff0f672f2a7cd6f412ae627d
+BELONGS Lib/ya.make Programs/wavm/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        Include/WAVM/wavm-c/wasm-c-api.LICENSE [1:201]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make
+
+KEEP     BSD-3-Clause         fcbb94cf7b289bc566af6acf86f226df
+BELONGS Lib/ya.make Programs/wavm/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.53
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.txt [4:9]
+    Belongs difference:
+        + Lib/ya.make Programs/wavm/ya.make

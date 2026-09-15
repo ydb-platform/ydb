@@ -23,7 +23,7 @@
 #include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
-#include "upb/upb.h"
+#include "upb/base/string_view.h"
 
 namespace grpc_core {
 

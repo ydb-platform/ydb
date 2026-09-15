@@ -29,6 +29,11 @@
             "uri": "file://test.test_BlockTo_/results.txt"
         }
     ],
+    "test.test[DateTimeInvalidSpecifierFail]": [
+        {
+            "uri": "file://test.test_DateTimeInvalidSpecifierFail_/extracted"
+        }
+    ],
     "test.test[EndOf]": [
         {
             "uri": "file://test.test_EndOf_/results.txt"
@@ -44,9 +49,29 @@
             "uri": "file://test.test_FormatMicroseconds_/results.txt"
         }
     ],
+    "test.test[FormatWriteOffsetWithColonFail]": [
+        {
+            "uri": "file://test.test_FormatWriteOffsetWithColonFail_/extracted"
+        }
+    ],
+    "test.test[FormatWriteOffsetWithColon]": [
+        {
+            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+        }
+    ],
     "test.test[Format]": [
         {
             "uri": "file://test.test_Format_/results.txt"
+        }
+    ],
+    "test.test[FromSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.02_/extracted"
+        }
+    ],
+    "test.test[FromSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_FromSeconds_2025.03_/results.txt"
         }
     ],
     "test.test[From]": [
@@ -69,6 +94,11 @@
             "uri": "file://test.test_ImplicitSplit_/results.txt"
         }
     ],
+    "test.test[MakeWriteOffsetWithColonAvailableSince_202501]": [
+        {
+            "uri": "file://test.test_MakeWriteOffsetWithColonAvailableSince_202501_/results.txt"
+        }
+    ],
     "test.test[MultirowBlockTo]": [
         {
             "uri": "file://test.test_MultirowBlockTo_/results.txt"
@@ -82,6 +112,21 @@
     "test.test[ParseLim]": [
         {
             "uri": "file://test.test_ParseLim_/results.txt"
+        }
+    ],
+    "test.test[ParseTzNameVsTzOffset]": [
+        {
+            "uri": "file://test.test_ParseTzNameVsTzOffset_/extracted"
+        }
+    ],
+    "test.test[ParseTzOffsetVsTzName]": [
+        {
+            "uri": "file://test.test_ParseTzOffsetVsTzName_/extracted"
+        }
+    ],
+    "test.test[ParseTzOffset]": [
+        {
+            "uri": "file://test.test_ParseTzOffset_/results.txt"
         }
     ],
     "test.test[Parse]": [
@@ -117,6 +162,16 @@
     "test.test[StartOf]": [
         {
             "uri": "file://test.test_StartOf_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.02]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.02_/results.txt"
+        }
+    ],
+    "test.test[ToSeconds_2025.03]": [
+        {
+            "uri": "file://test.test_ToSeconds_2025.03_/results.txt"
         }
     ],
     "test.test[To]": [

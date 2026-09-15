@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NTxProxy {
 
@@ -132,8 +134,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                "TxLimitControls.DefaultTimeoutMs");
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 
@@ -307,7 +308,8 @@ public:
                 const TString explanation = TStringBuilder()
                     << "Cannot create snapshot for system tableId# "
                     << entry.KeyDescription->TableId;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -326,7 +328,8 @@ public:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);
@@ -413,17 +416,16 @@ public:
     }
 
     void HandleLongTxSnaphot(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            PlanStep = record.GetSnapshotStep();
-            SnapshotTxId = record.GetSnapshotTxId();
+        const auto* msg = ev->Get();
+        if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            PlanStep = msg->Snapshot.Step;
+            SnapshotTxId = msg->Snapshot.TxId;
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
         } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            NYql::TIssues issues = msg->Issues;
             IssueManager.RaiseIssues(issues);
             NKikimrIssues::TStatusIds::EStatusCode statusCode = NKikimrIssues::TStatusIds::ERROR;
-            switch (record.GetStatus()) {
+            switch (msg->Status) {
             case Ydb::StatusIds::SCHEME_ERROR:
                 statusCode = NKikimrIssues::TStatusIds::SCHEME_ERROR;
                 break;
@@ -510,12 +512,11 @@ public:
 
                     TxProxyMon->TxResultAborted->Inc();
 
-                    LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                        "HANDLE Prepare TEvProposeTransactionResult TCreateSnapshotReq "
-                        << explanation
-                        << ", actorId: " << ctx.SelfID.ToString()
-                        << ", coordinator selected at resolve keys state: " << SelectedCoordinator
-                        << ", coordinator selected at propose result state: " << privateCoordinator);
+                    YDB_LOG_ERROR_CTX(ctx, "Handle Prepare TEvProposeTransactionResult TCreateSnapshotReq",
+                        {"error", explanation},
+                        {"selfId", ctx.SelfID},
+                        {"selectedCoordinator", SelectedCoordinator},
+                        {"privateCoordinator", privateCoordinator});
 
                     return Die(ctx);
                 }
@@ -536,7 +537,8 @@ public:
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, explanation));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError,
                         NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 TxProxyMon->TxResultComplete->Inc();
                 return Die(ctx);
             }
@@ -943,11 +945,9 @@ public:
 
         // no tablets keys are found in requests keys
         // it take place when a transaction have only checks locks
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                    "Actor# " << ctx.SelfID.ToString() <<
-                    " txid# " << TxId <<
-                    " SelectCoordinator unable to choose coordinator from resolved keys," <<
-                    " will try to pick it from TEvProposeTransactionResult from datashard");
+        YDB_LOG_DEBUG_CTX(ctx, "SelectCoordinator unable to choose coordinator from resolved keys, will try to pick it from TEvProposeTransactionResult from datashard",
+            {"selfId", ctx.SelfID},
+            {"txId", TxId});
         return 0;
     }
 
@@ -1169,8 +1169,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                "TxLimitControls.DefaultTimeoutMs");
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 
@@ -1334,7 +1333,8 @@ public:
                 const TString explanation = TStringBuilder()
                     << "Cannot refresh/discard snapshot for system tableId# "
                     << entry.KeyDescription->TableId;
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation);
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, explanation));
                 UnresolvedKeys.push_back(explanation);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, NKikimrIssues::TStatusIds::SCHEME_ERROR, true, ctx);
@@ -1369,7 +1369,8 @@ public:
                     << " with access " << NACLib::AccessRightsToString(access)
                     << " to tableId# " << entry.KeyDescription->TableId;
 
-                LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, explanation.Str());
+                YDB_LOG_ERROR_CTX(ctx, "Error",
+                    {"error", explanation.Str()});
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, explanation.Str()));
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, NKikimrIssues::TStatusIds::ACCESS_DENIED, true, ctx);
                 return Die(ctx);

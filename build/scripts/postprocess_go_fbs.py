@@ -2,7 +2,6 @@ import argparse
 import re
 import os
 
-
 # very simple regexp to find go import statement in the source code
 # NOTE! only one-line comments are somehow considered
 IMPORT_DECL = re.compile(

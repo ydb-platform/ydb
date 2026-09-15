@@ -29,7 +29,7 @@ struct TMPMCRingQueueV1 {
 #define OBSERVE(ENTRY_POINT) \
     OBSERVE_WITH_CONDITION(ENTRY_POINT, true)
 // OBSERVE
- 
+
     static constexpr ui32 MaxSize = 1 << MaxSizeBits;
 
     struct alignas(ui64) TSlot {

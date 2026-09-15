@@ -24,7 +24,7 @@ public:
         TClientsCacheConfigPtr clientsCacheConfig,
         NApi::TClientOptions options,
         TConnectionConfigPtr federationConfig,
-        TString clusterSeparator)
+        std::string clusterSeparator)
         : ClientsCacheConfig_(std::move(clientsCacheConfig))
         , Options_(std::move(options))
         , FederationConfig_(std::move(federationConfig))
@@ -59,7 +59,7 @@ private:
 
         THROW_ERROR_EXCEPTION_UNLESS(
             clusters.size() == seenClusters.size(),
-            "Numbers of desired (%Qv) and configured (%Qv) clusters do not match",
+            "Numbers of desired and configured clusters do not match: desired %v, configured %v",
             clusters,
             seenClusters);
 
@@ -71,7 +71,7 @@ private:
 
         if (!FederatedConnection_) {
             // TODO(ashishkin): use proper invoker here?
-            NApi::NRpcProxy::TConnectionOptions options;
+            NApi::TConnectionOptions options;
             FederatedConnection_ = CreateConnection(FederationConfig_, std::move(options));
         }
         return FederatedConnection_->CreateClient(Options_);
@@ -81,7 +81,8 @@ private:
     const TClientsCacheConfigPtr ClientsCacheConfig_;
     const NApi::TClientOptions Options_;
     const NFederated::TConnectionConfigPtr FederationConfig_;
-    const TString ClusterSeparator_;
+    const std::string ClusterSeparator_;
+
     NApi::IConnectionPtr FederatedConnection_;
 };
 
@@ -93,7 +94,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const TClientsCacheConfigPtr& clientsCacheConfig,
     const NApi::TClientOptions& options,
-    TString clusterSeparator)
+    std::string clusterSeparator)
 {
     return NYT::New<TClientsCache>(
         clientsCacheConfig,
@@ -106,7 +107,7 @@ IClientsCachePtr CreateFederatedClientsCache(
     TConnectionConfigPtr federatedConfig,
     const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig,
     const NApi::TClientOptions& options,
-    TString clusterSeparator)
+    std::string clusterSeparator)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
     clientsCacheConfig->DefaultConnection = CloneYsonStruct(

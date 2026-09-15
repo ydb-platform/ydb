@@ -2,7 +2,8 @@
 #include "ast_nodes.h"
 #include "parse_double.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/rewrapper/proto/serialization.pb.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
 
@@ -60,7 +61,7 @@ bool TryStringContent(const TString& str, TString& result, TString& error, bool 
     }
 }
 
-}
+} // namespace
 
 TAstBuilder::TAstBuilder(TIssues& issues)
     : Issues_(issues)
@@ -78,7 +79,7 @@ TArrayAccessNode::TSubscript TAstBuilder::BuildArraySubscript(const TRule_array_
     if (node.HasBlock2()) {
         to = BuildExpr(node.GetBlock2().GetRule_expr2());
     }
-    return {from, to};
+    return {.From = from, .To = to};
 }
 
 TAstNodePtr TAstBuilder::BuildArrayAccessor(const TRule_array_accessor& node, TAstNodePtr input) {
@@ -206,10 +207,10 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
             return new TLastArrayIndexNode(GetPos(token));
         }
         case TRule_primary::kAltPrimary4: {
-            const auto& primary = node.GetAlt_primary4().GetBlock1();
-            const auto input = BuildExpr(primary.GetRule_expr2());
-            if (primary.HasBlock4()) {
-                const auto& token = primary.GetBlock4().GetToken1();
+            const auto& alt = node.GetAlt_primary4();
+            auto input = BuildExpr(alt.GetRule_expr2());
+            if (alt.HasBlock4()) {
+                const auto& token = alt.GetBlock4().GetToken1();
                 return new TIsUnknownPredicateNode(GetPos(token), input);
             }
             return input;
@@ -220,11 +221,11 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
         }
         case TRule_primary::kAltPrimary6: {
             const auto& token = node.GetAlt_primary6().GetToken1();
-            return new TBooleanLiteralNode(GetPos(token), true);
+            return new TBooleanLiteralNode(GetPos(token), /*value=*/true);
         }
         case TRule_primary::kAltPrimary7: {
             const auto& token = node.GetAlt_primary7().GetToken1();
-            return new TBooleanLiteralNode(GetPos(token), false);
+            return new TBooleanLiteralNode(GetPos(token), /*value=*/false);
         }
         case TRule_primary::kAltPrimary8: {
             const auto& token = node.GetAlt_primary8().GetToken1();
@@ -280,13 +281,10 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
         }
 
         for (char flag : flags) {
-            switch (flag) {
-                case 'i':
-                    parsedFlags |= FLAGS_CASELESS;
-                    break;
-                default:
-                    Error(GetPos(flagsToken), TStringBuilder() << "Unsupported regex flag '" << flag << "'");
-                    break;
+            if (flag == 'i') {
+                parsedFlags |= FLAGS_CASELESS;
+            } else {
+                Error(GetPos(flagsToken), TStringBuilder() << "Unsupported regex flag '" << flag << "'");
             }
         }
     }
@@ -294,7 +292,7 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
     IRePtr compiledRegex;
     try {
         compiledRegex = NDispatcher::Compile(regex, parsedFlags,
-            NDispatcher::Has(RegexpLibId) ? RegexpLibId : TSerialization::kRe2);
+                                             NDispatcher::Has(RegexpLibId) ? RegexpLibId : TSerialization::kRe2);
     } catch (const NReWrapper::TCompileException& e) {
         Error(GetPos(regexToken), e.AsStrBuf());
         return nullptr;
@@ -306,40 +304,40 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
 TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
     switch (node.GetAltCase()) {
         case TRule_predicate_expr::kAltPredicateExpr1: {
-            const auto& predicate = node.GetAlt_predicate_expr1().GetBlock1();
-            const auto input = BuildPlainExpr(predicate.GetRule_plain_expr1());
+            const auto& predicate = node.GetAlt_predicate_expr1();
+            auto input = BuildPlainExpr(predicate.GetRule_plain_expr1());
             if (!predicate.HasBlock2()) {
                 return input;
             }
 
             const auto& block = predicate.GetBlock2();
             switch (block.GetAltCase()) {
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::kAlt1: {
+                case TRule_predicate_expr_TAlt1_TBlock2::kAlt1: {
                     const auto& innerBlock = block.GetAlt1().GetRule_starts_with_expr1();
                     const auto& prefix = BuildPlainExpr(innerBlock.GetRule_plain_expr3());
                     return new TStartsWithPredicateNode(GetPos(innerBlock.GetToken1()), input, prefix);
                 }
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::kAlt2: {
+                case TRule_predicate_expr_TAlt1_TBlock2::kAlt2: {
                     return BuildLikeRegexExpr(block.GetAlt2().GetRule_like_regex_expr1(), input);
                 }
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::ALT_NOT_SET:
+                case TRule_predicate_expr_TAlt1_TBlock2::ALT_NOT_SET:
                     Y_ABORT("Alternative for inner block of 'predicate_expr' rule is not set");
             }
-            Y_UNREACHABLE();
+            MKQL_ENSURE(false, "Unreachable");
         }
         case TRule_predicate_expr::kAltPredicateExpr2: {
-            const auto& predicate = node.GetAlt_predicate_expr2().GetBlock1();
+            const auto& predicate = node.GetAlt_predicate_expr2();
             const auto input = BuildExpr(predicate.GetRule_expr3());
             return new TExistsPredicateNode(GetPos(predicate.GetToken1()), input);
         }
         case TRule_predicate_expr::ALT_NOT_SET:
             Y_ABORT("Alternative for 'predicate' rule is not set");
     }
-    Y_UNREACHABLE();
+    MKQL_ENSURE(false, "Unreachable");
 }
 
 TAstNodePtr TAstBuilder::BuildUnaryExpr(const TRule_unary_expr& node) {
-    const auto predicateExpr = BuildPredicateExpr(node.GetRule_predicate_expr2());
+    auto predicateExpr = BuildPredicateExpr(node.GetRule_predicate_expr2());
     if (!node.HasBlock1()) {
         return predicateExpr;
     }
@@ -497,4 +495,4 @@ ui32 GetReLibId() {
     return RegexpLibId;
 }
 
-}
+} // namespace NYql::NJsonPath

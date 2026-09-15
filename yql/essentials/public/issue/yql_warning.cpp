@@ -3,7 +3,6 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 
-
 namespace NYql {
 
 TWarningRule::EParseResult TWarningRule::ParseFrom(const TString& codePattern, const TString& action,
@@ -33,11 +32,12 @@ TWarningRule::EParseResult TWarningRule::ParseFrom(const TString& codePattern, c
 
 TWarningPolicy::TWarningPolicy(bool isReplay)
     : IsReplay_(isReplay)
-{}
+{
+}
 
 void TWarningPolicy::AddRule(const TWarningRule& rule)
 {
-    TString pattern = rule.GetPattern();
+    const TString& pattern = rule.GetPattern();
     if (pattern.empty()) {
         return;
     }
@@ -65,8 +65,7 @@ void TWarningPolicy::AddRule(const TWarningRule& rule)
     }
 }
 
-EWarningAction TWarningPolicy::GetAction(TIssueCode code) const
-{
+EWarningAction TWarningPolicy::GetAction(TIssueCode code) const {
     auto it = Overrides_.find(code);
     return (it == Overrides_.end()) ? BaseAction_ : it->second;
 }
@@ -78,4 +77,4 @@ void TWarningPolicy::Clear()
     Rules_.clear();
 }
 
-}
+} // namespace NYql

@@ -1,0 +1,1 @@
+SELECT column_0 , column_1 , column_2 FROM table_0 WHERE column_0 = 0

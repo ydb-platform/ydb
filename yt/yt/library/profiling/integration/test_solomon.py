@@ -5,12 +5,12 @@ import datetime
 
 import yatest.common
 
-from yatest.common import network
+from library.python.port_manager import PortManager
 
 
 @pytest.fixture(scope="session")
 def test_url():
-    with network.PortManager() as pm:
+    with PortManager() as pm:
         port = pm.get_port()
 
         cmd = [

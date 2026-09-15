@@ -37,14 +37,14 @@ items:
       href: table-ttl-reset.md
     - name: Deleting a table
       href: table-drop.md
+    - name: Generating CREATE TABLE from a file
+      href: tools-infer.md
   - name: Operations with data
     items:
     - name: Getting a query execution plan and AST
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
-    - name: Scan queries
-      href: commands/scan-query.md
   - name: Importing and exporting data
     include: { mode: link, path: export-import/toc_p.yaml }
   - name: Working with topics
@@ -79,6 +79,10 @@ items:
       href: parameterized-query-execution.md
     - name: Interactive query execution mode
       href: interactive-cli.md
+    - name: AI assistant mode
+      href: interactive-cli-ai.md
+    - name: Scan queries
+      href: scan-query.md
 # Deprecated commands:
     - name: Running a script (with streaming support)
       href: yql.md
@@ -92,12 +96,6 @@ items:
     - name: Running parameterized queries
       href: parameterized-queries-cli.md
       hidden: true
-#  - name: Utilities
-#    items:
-    # - name: Backup
-    #   href: commands/tools/dump.md
-    # - name: Restore backup
-    #   href: commands/tools/restore.md
   - name: Managing background operations
     items:
     - name: Getting a list of long-running operations
@@ -121,7 +119,7 @@ items:
     - name: Getting the YDB CLI version
       href: version.md
     - name: Health check
-      href: commands/monitoring-healthcheck.md 
+      href: commands/monitoring-healthcheck.md
   - name: Load testing
     items:
     - name: Overview
@@ -136,12 +134,24 @@ items:
       href: workload-topic.md
     - name: Transfer load
       href: workload-transfer.md
+    - name: TPC-C load
+      href: workload-tpcc.md
     - name: TPC-H load
       href: workload-tpch.md
     - name: TPC-DS load
       href: workload-tpcds.md
+    - name: Query load
+      href: workload-query.md
+    - name: Fulltext load
+      href: workload-fulltext.md
+    - name: Vector load
+      href: workload-vector.md
   - name: Managing configuration
     href: configs.md
     include:
       mode: link
       path: commands/configuration/toc_p.yaml
+  - name: Bridge cluster management
+    include:
+      mode: link
+      path: commands/bridge/toc_p.yaml

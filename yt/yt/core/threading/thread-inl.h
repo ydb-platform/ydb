@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "thread.h"
 #endif
-#undef THREAD_INL_H_
 
 namespace NYT::NThreading {
 
@@ -11,8 +10,8 @@ namespace NYT::NThreading {
 
 inline bool TThread::Start()
 {
-    if (Y_LIKELY(Started_.load(std::memory_order::relaxed))) {
-        if (Y_UNLIKELY(Stopping_.load(std::memory_order::relaxed))) {
+    if (Started_.load(std::memory_order::relaxed)) [[likely]] {
+        if (Stopping_.load(std::memory_order::relaxed)) [[unlikely]] {
             return false;
         }
         return true;

@@ -25,6 +25,11 @@ DeprecatedIn37 = CryptographyDeprecationWarning
 DeprecatedIn40 = CryptographyDeprecationWarning
 DeprecatedIn41 = CryptographyDeprecationWarning
 
+def register_interface(iface):
+    def register_decorator(klass):
+        return klass
+    return register_decorator
+
 
 def _check_bytes(name: str, value: bytes) -> None:
     if not isinstance(value, bytes):

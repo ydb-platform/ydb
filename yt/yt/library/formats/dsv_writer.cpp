@@ -82,9 +82,9 @@ private:
             }
 
             output->Write(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteValue(const TUnversionedValue& value)
@@ -269,7 +269,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& exc) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for DSV format") << exc;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for DSV format").With(exc);
     }
 }
 

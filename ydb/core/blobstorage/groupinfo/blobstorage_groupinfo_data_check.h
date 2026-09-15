@@ -16,9 +16,10 @@ class TDataIntegrityCheckerTrivial : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
         Y_UNUSED(id);
         Y_UNUSED(partsData);
+        Y_UNUSED(separator);
         return {};
     }
 };
@@ -27,7 +28,7 @@ class TDataIntegrityCheckerBlock42 : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
         Y_ABORT_UNLESS(partsData.Parts.size() == 6);
 
         TPartsState partsState;
@@ -58,7 +59,7 @@ public:
 
         // checking layout
         TStringStream layoutReport;
-        layoutReport << "Layout info:" << Endl;
+        layoutReport << "Layout info:" << separator;
 
         TStringStream str;
         bool hasUnequalParts = false;
@@ -80,19 +81,19 @@ public:
                 str << "]";
                 ++ver;
             }
-            str << Endl;
+            str << separator;
         }
 
         layoutReport << str.Str();
         if (hasUnequalParts) {
             partsState.IsOk = false;
-            layoutReport << "ERROR: There are unequal parts" << Endl;
+            layoutReport << "ERROR: There are unequal parts" << separator;
         }
-        partsState.DataErrorInfo = layoutReport.Str();
+        partsState.DataInfo = layoutReport.Str();
 
         // checking erasure
         TStringStream erasureReport;
-        erasureReport << "Erasure info:" << Endl;
+        erasureReport << "Erasure info:" << separator;
 
         std::vector<ui32> partIds;
         partIds.reserve(6);
@@ -144,7 +145,7 @@ public:
                         if (cmp) {
                             erasureError = true;
                         } else {
-                            str << "OK" << Endl;
+                            str << "OK" << separator;
                             erasureReport << str.Str(); // report only succesful restore
                         }
                     }
@@ -170,7 +171,7 @@ public:
         if (!hasUnequalParts) {
             checkCombination();
             if (!erasureError) {
-                partsState.DataErrorInfo += erasureReport.Str();
+                partsState.DataInfo += erasureReport.Str();
                 return partsState;
             }
         }
@@ -199,10 +200,10 @@ public:
 
         if (erasureError) {
             partsState.IsOk = false;
-            erasureReport << "ERROR: There are erasure restore fails" << Endl;
+            erasureReport << "ERROR: There are erasure restore fails" << separator;
         }
 
-        partsState.DataErrorInfo += erasureReport.Str();
+        partsState.DataInfo += erasureReport.Str();
         return partsState;
     }
 };
@@ -214,7 +215,7 @@ private:
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
-    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData) const override {
+    TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
         Y_UNUSED(id);
         Y_ABORT_UNLESS(partsData.Parts.size() == 3);
 
@@ -244,7 +245,7 @@ public:
         }
 
         TStringStream layoutReport;
-        layoutReport << "Layout info:" << Endl;
+        layoutReport << "Layout info:" << separator;
 
         TStringStream str;
         bool hasUnequalParts = (seenParts.size() > 1);
@@ -260,14 +261,14 @@ public:
             str << "]";
             ++ver;
         }
-        str << Endl;
+        str << separator;
         layoutReport << str.Str();
 
         if (hasUnequalParts) {
             partsState.IsOk = false;
-            layoutReport << "ERROR: There are unequal parts" << Endl;
+            layoutReport << "ERROR: There are unequal parts" << separator;
         }
-        partsState.DataErrorInfo = layoutReport.Str();
+        partsState.DataInfo = layoutReport.Str();
 
         return partsState;
     }

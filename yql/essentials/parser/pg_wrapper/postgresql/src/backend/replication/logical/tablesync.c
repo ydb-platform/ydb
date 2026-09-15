@@ -425,6 +425,7 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 	ListCell   *lc;
 	bool		started_tx = false;
 	bool		should_exit = false;
+	Relation	rel = NULL;
 
 	Assert(!IsTransactionState());
 
@@ -492,7 +493,16 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 				 * worker to remove the origin tracking as if there is any
 				 * error while dropping we won't restart it to drop the
 				 * origin. So passing missing_ok = true.
+				 *
+				 * Lock the subscription and origin in the same order as we
+				 * are doing during DDL commands to avoid deadlocks. See
+				 * AlterSubscription_refresh.
 				 */
+				LockSharedObject(SubscriptionRelationId, MyLogicalRepWorker->subid,
+								 0, AccessShareLock);
+				if (!rel)
+					rel = table_open(SubscriptionRelRelationId, RowExclusiveLock);
+
 				ReplicationOriginNameForLogicalRep(MyLogicalRepWorker->subid,
 												   rstate->relid,
 												   originname,
@@ -502,9 +512,9 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 				/*
 				 * Update the state to READY only after the origin cleanup.
 				 */
-				UpdateSubscriptionRelState(MyLogicalRepWorker->subid,
-										   rstate->relid, rstate->state,
-										   rstate->lsn);
+				UpdateSubscriptionRelStateEx(MyLogicalRepWorker->subid,
+											 rstate->relid, rstate->state,
+											 rstate->lsn, true);
 			}
 		}
 		else
@@ -555,7 +565,14 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 						 * This is required to avoid any undetected deadlocks
 						 * due to any existing lock as deadlock detector won't
 						 * be able to detect the waits on the latch.
+						 *
+						 * Also close any tables prior to the commit.
 						 */
+						if (rel)
+						{
+							table_close(rel, NoLock);
+							rel = NULL;
+						}
 						CommitTransactionCommand();
 						pgstat_report_stat(false);
 					}
@@ -603,18 +620,27 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 						TimestampDifferenceExceeds(hentry->last_start_time, now,
 												   wal_retrieve_retry_interval))
 					{
-						logicalrep_worker_launch(MyLogicalRepWorker->dbid,
-												 MySubscription->oid,
-												 MySubscription->name,
-												 MyLogicalRepWorker->userid,
-												 rstate->relid,
-												 DSM_HANDLE_INVALID);
+						/*
+						 * Set the last_start_time even if we fail to start
+						 * the worker, so that we won't retry until
+						 * wal_retrieve_retry_interval has elapsed.
+						 */
 						hentry->last_start_time = now;
+						(void) logicalrep_worker_launch(MyLogicalRepWorker->dbid,
+														MySubscription->oid,
+														MySubscription->name,
+														MyLogicalRepWorker->userid,
+														rstate->relid,
+														DSM_HANDLE_INVALID);
 					}
 				}
 			}
 		}
 	}
+
+	/* Close table if opened */
+	if (rel)
+		table_close(rel, NoLock);
 
 	if (started_tx)
 	{
@@ -1385,12 +1411,26 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 	MyLogicalRepWorker->relstate_lsn = InvalidXLogRecPtr;
 	SpinLockRelease(&MyLogicalRepWorker->relmutex);
 
-	/* Update the state and make it visible to others. */
+	/*
+	 * Update the state, create the replication origin, and make them visible
+	 * to others.
+	 */
 	StartTransactionCommand();
 	UpdateSubscriptionRelState(MyLogicalRepWorker->subid,
 							   MyLogicalRepWorker->relid,
 							   MyLogicalRepWorker->relstate,
 							   MyLogicalRepWorker->relstate_lsn);
+
+	/*
+	 * Create the replication origin in a separate transaction from the one
+	 * that sets up the origin in shared memory. This prevents the risk that
+	 * changes to the origin in shared memory cannot be rolled back if the
+	 * transaction aborts.
+	 */
+	originid = replorigin_by_name(originname, true);
+	if (!OidIsValid(originid))
+		originid = replorigin_create(originname);
+
 	CommitTransactionCommand();
 	pgstat_report_stat(true);
 
@@ -1429,37 +1469,21 @@ LogicalRepSyncTableStart(XLogRecPtr *origin_startpos)
 					   CRS_USE_SNAPSHOT, origin_startpos);
 
 	/*
-	 * Setup replication origin tracking. The purpose of doing this before the
-	 * copy is to avoid doing the copy again due to any error in setting up
-	 * origin tracking.
+	 * Advance the origin to the LSN got from walrcv_create_slot and then set
+	 * up the origin. The advancement is WAL logged for the purpose of
+	 * recovery. Locks are to prevent the replication origin from vanishing
+	 * while advancing.
+	 *
+	 * The purpose of doing these before the copy is to avoid doing the copy
+	 * again due to any error in advancing or setting up origin tracking.
 	 */
-	originid = replorigin_by_name(originname, true);
-	if (!OidIsValid(originid))
-	{
-		/*
-		 * Origin tracking does not exist, so create it now.
-		 *
-		 * Then advance to the LSN got from walrcv_create_slot. This is WAL
-		 * logged for the purpose of recovery. Locks are to prevent the
-		 * replication origin from vanishing while advancing.
-		 */
-		originid = replorigin_create(originname);
+	LockRelationOid(ReplicationOriginRelationId, RowExclusiveLock);
+	replorigin_advance(originid, *origin_startpos, InvalidXLogRecPtr,
+					   true /* go backward */ , true /* WAL log */ );
+	UnlockRelationOid(ReplicationOriginRelationId, RowExclusiveLock);
 
-		LockRelationOid(ReplicationOriginRelationId, RowExclusiveLock);
-		replorigin_advance(originid, *origin_startpos, InvalidXLogRecPtr,
-						   true /* go backward */ , true /* WAL log */ );
-		UnlockRelationOid(ReplicationOriginRelationId, RowExclusiveLock);
-
-		replorigin_session_setup(originid, 0);
-		replorigin_session_origin = originid;
-	}
-	else
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("replication origin \"%s\" already exists",
-						originname)));
-	}
+	replorigin_session_setup(originid, 0);
+	replorigin_session_origin = originid;
 
 	/*
 	 * Make sure that the copy command runs as the table owner, unless the

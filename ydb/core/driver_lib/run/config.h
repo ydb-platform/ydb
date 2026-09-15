@@ -23,6 +23,7 @@ struct TKikimrRunConfig {
 
     TString TenantName;
     TBasicKikimrServicesMask ServicesMask;
+    bool TinyMode = false;
 
     TString ClusterName;
 

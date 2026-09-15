@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -40,7 +40,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterSolomonVolume);
 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        auto solomon = context.SS->SolomonVolumes.at(txState->TargetPathId);
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
 
@@ -101,7 +101,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        auto solomon = context.SS->SolomonVolumes.at(txState->TargetPathId);
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
 
@@ -109,7 +109,7 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomon->AlterData->Partitions.size());
 
         context.SS->PersistSolomonVolume(db, txState->TargetPathId, solomon->AlterData);
-        context.SS->SolomonVolumes[txState->TargetPathId] = solomon->AlterData;
+        context.SS->SolomonVolumes.Set(txState->TargetPathId, solomon->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -243,7 +243,7 @@ public:
                 return result;
             }
 
-            if (alter.GetPartitionCount() == solomon->Partitions.size()) {
+            if (alter.GetPartitionCount() == solomon->Partitions.size() && !alter.HasStorageConfig()) {
                 result->SetError(NKikimrScheme::StatusSuccess, "solomon volume has already the same shards as requested");
                 return result;
             }

@@ -38,6 +38,11 @@ struct TEvPrivate {
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
+        EvUpdateBalanceCounters,
+        EvProcessTabletMetrics,
+        EvReassignInactiveGroupsComplete,
+        EvMoveDataComplete,
+        EvLogHangingRequests,
         EvEnd
     };
 
@@ -88,9 +93,9 @@ struct TEvPrivate {
 
     struct TEvRestartComplete : TEventLocal<TEvRestartComplete, EvRestartComplete> {
         TFullTabletId TabletId;
-        TStringBuf Status;
+        TString Status;
 
-        TEvRestartComplete(TFullTabletId tabletId, TStringBuf status)
+        TEvRestartComplete(TFullTabletId tabletId, const TString& status)
             : TabletId(tabletId)
             , Status(status)
         {}
@@ -142,6 +147,25 @@ struct TEvPrivate {
 
     struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
+
+    struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
+
+    struct TEvProcessTabletMetrics : TEventLocal<TEvProcessTabletMetrics, EvProcessTabletMetrics> {};
+
+    struct TEvReassignInactiveGroupsComplete : TEventLocal<TEvReassignInactiveGroupsComplete, EvReassignInactiveGroupsComplete> {
+        TString PoolName;
+
+        TEvReassignInactiveGroupsComplete(const TString& poolName) : PoolName(poolName) {};
+    };
+
+    struct TEvMoveDataComplete : TEventLocal<TEvMoveDataComplete, EvMoveDataComplete> {
+        TString PoolName;
+        bool Success;
+
+        TEvMoveDataComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
+    };
+
+    struct TEvLogHangingRequests : TEventLocal<TEvLogHangingRequests, EvLogHangingRequests> {};
 };
 
 } // NHive

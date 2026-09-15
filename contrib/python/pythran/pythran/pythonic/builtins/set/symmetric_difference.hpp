@@ -15,8 +15,8 @@ namespace builtins
   {
 
     template <typename T, typename U>
-    typename __combined<types::set<T>, U>::type
-    symmetric_difference(types::set<T> const &set, U const &other)
+    typename __combined<types::set<T>, U>::type symmetric_difference(types::set<T> const &set,
+                                                                     U const &other)
     {
       return set.symmetric_difference(other);
     }
@@ -28,8 +28,8 @@ namespace builtins
      * set([1.0, 4.0])
      */
     template <typename U>
-    typename __combined<types::empty_set, U>::type
-    symmetric_difference(types::empty_set const &set, U const &other)
+    typename __combined<types::empty_set, U>::type symmetric_difference(types::empty_set const &set,
+                                                                        U const &other)
     {
       return other;
     }

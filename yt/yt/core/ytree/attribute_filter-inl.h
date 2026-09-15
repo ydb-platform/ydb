@@ -11,7 +11,7 @@ namespace NYT::NYTree {
 template <class T>
 TAttributeFilter::TAttributeFilter(std::initializer_list<T> keys)
     : Keys_({keys.begin(), keys.end()})
-    , Universal(false)
+    , Universal_(false)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

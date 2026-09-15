@@ -4,7 +4,6 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/library/actors/core/event_pb.h>

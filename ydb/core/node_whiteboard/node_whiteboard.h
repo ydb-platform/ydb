@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_tablet_types.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet_types.h>
@@ -16,15 +16,13 @@
 #include <ydb/core/base/tracing.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
-namespace NKikimr {
-
-namespace NNodeWhiteboard {
+namespace NKikimr::NNodeWhiteboard {
 
 using TTabletId = ui64;
 using TFollowerId = ui32;
 using TNodeId = ui32;
 
-struct TEvWhiteboard{
+struct TEvWhiteboard {
     enum EEv {
         EvTabletStateUpdate = EventSpaceBegin(TKikimrEvents::ES_NODE_WHITEBOARD),
         EvTabletStateRequest,
@@ -65,6 +63,9 @@ struct TEvWhiteboard{
         EvVDiskDropDonors,
         EvClockSkewUpdate,
         EvMemoryStatsUpdate,
+        EvBridgeInfoUpdate,
+        EvBridgeInfoRequest,
+        EvBridgeInfoResponse,
         EvEnd
     };
 
@@ -226,6 +227,7 @@ struct TEvWhiteboard{
                                      bool replicated,
                                      bool unreplicatedPhantoms,
                                      bool unreplicatedNonPhantoms,
+                                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E detailedReplicationStatus,
                                      ui64 unsyncedVDisks,
                                      NKikimrWhiteboard::EFlag frontQueuesLigth,
                                      bool hasUnreadableBlobs) {
@@ -234,6 +236,7 @@ struct TEvWhiteboard{
             Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
             Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);
+            Record.SetDetailedReplicationStatus(detailedReplicationStatus);
             Record.SetUnsyncedVDisks(unsyncedVDisks);
             Record.SetFrontQueues(frontQueuesLigth);
             Record.SetHasUnreadableBlobs(hasUnreadableBlobs);
@@ -328,6 +331,10 @@ struct TEvWhiteboard{
                 Record.SetBlobDepotId(*groupInfo->BlobDepotId);
             }
             Record.SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
+            if (const auto& bridgeProxyGroupId = groupInfo->GetBridgeProxyGroupId()) {
+                bridgeProxyGroupId->CopyToProto(&Record, &decltype(Record)::SetBridgeProxyGroupId);
+            }
+            groupInfo->GetBridgePileId().CopyToProto(&Record, &decltype(Record)::SetBridgePileId);
         }
     };
 
@@ -518,5 +525,4 @@ struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
 template<typename TResponseType>
 ::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
 
-} // NNodeWhiteboard
-} // NKikimr
+} // NKikimr::NNodeWhiteboard

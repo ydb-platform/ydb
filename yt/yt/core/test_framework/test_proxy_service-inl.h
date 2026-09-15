@@ -16,7 +16,7 @@ namespace NYT::NRpc {
 
 inline TServiceMap ConvertToMap(const IServicePtr& service)
 {
-    return {std::make_pair(service->GetServiceId().ServiceName, service)};
+    return {std::pair(service->GetServiceId().ServiceName, service)};
 }
 
 inline TServiceMap ConvertToMap(const std::vector<IServicePtr>& services)

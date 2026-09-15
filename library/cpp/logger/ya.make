@@ -4,7 +4,6 @@ GENERATE_ENUM_SERIALIZATION(priority.h)
 
 PEERDIR(
     library/cpp/json
-    library/cpp/deprecated/atomic
 )
 
 SRCS(
@@ -40,6 +39,7 @@ SRCS(
 END()
 
 RECURSE(
+    deploy
     global
     ut
 )

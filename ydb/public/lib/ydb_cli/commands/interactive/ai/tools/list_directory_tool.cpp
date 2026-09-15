@@ -1,0 +1,117 @@
+#include "list_directory_tool.h"
+#include "tool_base.h"
+
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/ydb_path.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
+#include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
+#include <util/generic/scope.h>
+#include <util/string/builder.h>
+#include <util/string/strip.h>
+
+namespace NYdb::NConsoleClient::NAi {
+
+namespace {
+
+class TListDirectoryTool final : public TDatabaseToolBase, public TInterruptableCommand {
+    using TBase = TDatabaseToolBase;
+
+    static constexpr char DESCRIPTION[] = R"(
+List directory in Yandex Data Base (YDB) scheme tree. Returns list of item names inside directory and their types.
+For example if called on directory "data/", which contains two tables "my_table1", "my_table2" and one topic "my_topic", then tool will return:
+[
+    {"name": "my_table1", "type": "table"},
+    {"name": "my_table2", "type": "table"},
+    {"name": "my_topic", "type": "topic"}
+])";
+
+    static constexpr char DIRECTORY_PROPERTY[] = "directory";
+
+public:
+    explicit TListDirectoryTool(const TListDirectoryToolSettings& settings)
+        : TBase(settings.Database, CreateParametersSchema(), DESCRIPTION)
+        , LazyDriver(settings.LazyDriver)
+    {
+        Y_VALIDATE(LazyDriver, "TListDirectoryTool requires a non-null LazyDriver");
+    }
+
+protected:
+    void ParseParameters(const NJson::TJsonValue& parameters) final {
+        TJsonParser parser(parameters);
+        Directory = CanonizePath(parser.GetKey(DIRECTORY_PROPERTY).GetString());
+
+        TString message;
+        if (Directory == Database || Directory == Database + "/") {
+            message = "Listing database root directory";
+        } else {
+            message = TStringBuilder() << "Listing directory " << Directory;
+        }
+
+        PrintFtxuiMessage("", message, ftxui::Color::Green);
+    }
+
+    bool AskPermissions() final {
+        return true;
+    }
+
+    TResponse DoExecute() final {
+        Y_DEFER { ResetInterrupted(); };
+
+        NScheme::TSchemeClient client(LazyDriver->Get());
+        auto feature = client.ListDirectory(Directory);
+        if (!WaitInterruptable(feature)) {
+            return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");
+        }
+
+        const auto& response = feature.GetValue();
+        if (!response.IsSuccess()) {
+            Cout << Endl << Colors.Red() << "Listing directory \"" << Directory << "\" failed: " << Strip(response.GetIssues().ToString()) << Colors.OldColor() << Endl;
+            return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
+        }
+
+        const auto& children = response.GetChildren();
+
+        NJson::TJsonValue result;
+        auto& resultArray = result.SetType(NJson::JSON_ARRAY).GetArraySafe();
+        for (const auto& child : children) {
+            auto& item = resultArray.emplace_back();
+            item["name"] = child.Name;
+            item["type"] = EntryTypeToString(child.Type);
+        }
+
+        if (GetGlobalLogger().IsVerbose()) {
+            Cout << TAdaptiveTabbedTable(children) << Endl;
+        }
+
+        return TResponse::Success(std::move(result));
+    }
+
+private:
+    static NJson::TJsonValue CreateParametersSchema() {
+        return TJsonSchemaBuilder()
+            .Property(DIRECTORY_PROPERTY)
+                .Type(TJsonSchemaBuilder::EType::String)
+                .Description("Path to directory which should be listed (use empty string to list database root), for example 'data/cold/'")
+                .Done()
+            .Build();
+    }
+
+private:
+    TLazyDriver::TPtr LazyDriver;
+
+    TString Directory;
+};
+
+} // anonymous namespace
+
+ITool::TPtr CreateListDirectoryTool(const TListDirectoryToolSettings& settings) {
+    return std::make_shared<TListDirectoryTool>(settings);
+}
+
+} // namespace NYdb::NConsoleClient::NAi

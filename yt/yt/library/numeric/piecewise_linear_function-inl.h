@@ -174,7 +174,7 @@ TValue TPiecewiseSegment<TValue>::InterpolateNormalized(double t) const
 }
 
 template <class TValue>
-bool operator ==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs) {
+bool operator==(const TPiecewiseSegment<TValue>& lhs, const TPiecewiseSegment<TValue>& rhs) {
     return lhs.LeftBound() == rhs.LeftBound() && lhs.RightBound() == rhs.RightBound() &&
         lhs.LeftValue() == rhs.LeftValue() && lhs.RightValue() == rhs.RightValue();
 }
@@ -1141,9 +1141,9 @@ void FormatValue(TStringBuilderBase* builder, const TPiecewiseLinearFunction<TVa
         FormatValue(builder, segments[0].LeftValue(), spec);
         for (size_t index = 1; index < segments.size(); index++) {
             builder->AppendString(", ");
-            FormatValue(builder, segments[0].RightBound(), spec);
+            FormatValue(builder, segments[index].RightBound(), spec);
             builder->AppendString(": ");
-            FormatValue(builder, segments[0].RightValue(), spec);
+            FormatValue(builder, segments[index].RightValue(), spec);
         }
     }
     builder->AppendChar(']');

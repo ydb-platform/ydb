@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:48:1: Error: Execution of node: Result
+    	select $c($p(1));
+	^
+        <tmp_path>/program.sql:<main>:48:1: Error: <main>:42:14: Linear value is not consumed
+        	select $c($p(1));
+	^

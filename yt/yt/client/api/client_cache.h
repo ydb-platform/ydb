@@ -10,12 +10,26 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TClientAuthenticationIdentity
+    : public NRpc::TAuthenticationIdentity
+{
+    TClientAuthenticationIdentity() = default;
+    explicit TClientAuthenticationIdentity(
+        const std::string& user,
+        const std::string& userTag = {},
+        const std::string& serviceTicket = {});
+
+    bool operator==(const TClientAuthenticationIdentity& other) const = default;
+
+    std::string ServiceTicket;
+};
+
 class TCachedClient
-    : public TSyncCacheValueBase<NRpc::TAuthenticationIdentity, TCachedClient>
+    : public TSyncCacheValueBase<TClientAuthenticationIdentity, TCachedClient>
 {
 public:
     TCachedClient(
-        const NRpc::TAuthenticationIdentity& identity,
+        const TClientAuthenticationIdentity& identity,
         IClientPtr client);
 
     const IClientPtr& GetClient();
@@ -33,12 +47,16 @@ private:
  *  Cache is completely thread-safe.
  */
 class TClientCache
-    : public TSyncSlruCacheBase<NRpc::TAuthenticationIdentity, TCachedClient>
+    : public TSyncSlruCacheBase<TClientAuthenticationIdentity, TCachedClient>
 {
 public:
     TClientCache(
         TSlruCacheConfigPtr config,
         IConnectionPtr connection);
+
+    IClientPtr Get(
+        const TClientAuthenticationIdentity& identity,
+        const TClientOptions& options);
 
     IClientPtr Get(
         const NRpc::TAuthenticationIdentity& identity,
@@ -54,3 +72,10 @@ DEFINE_REFCOUNTED_TYPE(TClientCache)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
+
+
+template <>
+struct THash<NYT::NApi::TClientAuthenticationIdentity>
+{
+    size_t operator()(const NYT::NApi::TClientAuthenticationIdentity& value) const;
+};

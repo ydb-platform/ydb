@@ -5,6 +5,7 @@ import logging
 import pytest
 import requests
 import yatest.common
+import library.python.port_manager
 
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403 Adding custom hooks for YQv2 support
@@ -18,6 +19,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import ComputeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import StatsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import BindingsModeExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import YdbMvpExtension
+from ydb.tests.tools.fq_runner.kikimr_utils import SynchronizationServiceExtension
 from ydb.tests.tools.fq_runner.kikimr_utils import start_kikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import YQV1_VERSION_NAME, YQV2_VERSION_NAME
 from ydb.tests.fq.s3.s3_helpers import S3
@@ -49,7 +51,7 @@ def mvp_external_ydb_endpoint(request) -> str:
 
 @pytest.fixture(scope="module")
 def s3(request) -> S3:
-    port_manager = yatest.common.network.PortManager()
+    port_manager = library.python.port_manager.PortManager()
     s3_port = port_manager.get_port()
     s3_url = "http://localhost:{port}".format(port=s3_port)
 
@@ -93,11 +95,16 @@ def get_kikimr_extensions(s3: S3, yq_version: str, kikimr_settings, mvp_external
         AddAllowConcurrentListingsExtension(),
         AddDataInflightExtension(),
         DefaultConfigExtension(s3.s3_url),
-        YQv2Extension(yq_version, kikimr_settings.get("is_replace_if_exists", False)),
+        YQv2Extension(
+            yq_version,
+            kikimr_settings.get("is_replace_if_exists", False),
+            kikimr_settings.get("enable_schema_inference", True),
+        ),
         ComputeExtension(),
         YdbMvpExtension(mvp_external_ydb_endpoint),
         StatsModeExtension(kikimr_settings.get("stats_mode", "")),
         BindingsModeExtension(kikimr_settings.get("bindings_mode", ""), yq_version),
+        SynchronizationServiceExtension(),
     ]
 
 

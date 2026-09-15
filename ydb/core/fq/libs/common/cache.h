@@ -41,26 +41,27 @@ public:
     { }
 
     void Put(const TKey& key, const TMaybe<TValue>& value) {
-        TGuard<TAdaptiveLock> lock(AdaptiveLock);
-        auto it = Data.find(key);
-        if (it != Data.end()) {
-            it->second.Queue->erase(it->second.Position);
-        }
-
+        const auto now = TInstant::Now();
         auto* queue = value.Empty()
             ? &ErrorQueue
             : &OkQueue;
-        queue->push_back({key, TInstant::Now()});
-        auto position = queue->end();
-        --position;
-        TCacheObject object = {value, position, queue};
-        Data[key] = object;
-        DropOld(lock);
+        TGuard<TAdaptiveLock> lock(AdaptiveLock);
+        auto [it, inserted] = Data.try_emplace(key, value, queue->end(), queue);
+        if (inserted) {
+            it->second.Position = queue->emplace(queue->end(), it->first, now);
+        } else {
+            it->second.Endpoint = value;
+            auto* oldQueue = std::exchange(it->second.Queue, queue);
+            it->second.Position->LastAccess = now;
+            queue->splice(queue->end(), *oldQueue, it->second.Position);
+        }
+        DropOld(lock, now);
     }
 
     bool Get(const TKey& key, TMaybe<TValue>* value) {
+        const auto now = TInstant::Now();
         TGuard<TAdaptiveLock> lock(AdaptiveLock);
-        DropOld(lock);
+        DropOld(lock, now);
         auto it = Data.find(key);
         if (it == Data.end()) {
             return false;
@@ -68,10 +69,9 @@ public:
         *value = it->second.Endpoint;
 
         if (Config.TouchOnGet) {
-            it->second.Queue->erase(it->second.Position);
-            it->second.Queue->push_back({key, TInstant::Now()});
-            it->second.Position = it->second.Queue->end();
-            --it->second.Position;
+            it->second.Position->LastAccess = now;
+            auto& queue = *it->second.Queue;
+            queue.splice(queue.end(), queue, it->second.Position);
         }
 
         return true;
@@ -83,8 +83,7 @@ public:
     }
 
 private:
-    void DropOld(const TGuard<TAdaptiveLock>&) {
-        auto now = TInstant::Now();
+    void DropOld(const TGuard<TAdaptiveLock>&, TInstant now) {
         auto cleanUp = [&](TList<TKeyAndTime>& queue, const TDuration& ttl) {
             for (auto it = queue.begin(); it != queue.end() && (it->LastAccess <= now - ttl || Data.size() > Config.MaxSize) ; ) {
                 Data.erase(it->Key);

@@ -94,7 +94,7 @@ public:
             << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[txState->TargetPathId];
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -204,7 +204,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[pathId];
+        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -215,7 +215,7 @@ public:
         alterData->AlterBody.Clear();
         alterData->ColumnTables = storeInfo->ColumnTables;
         alterData->ColumnTablesUnderOperation = storeInfo->ColumnTablesUnderOperation;
-        context.SS->OlapStores[pathId] = alterData;
+        context.SS->OlapStores.Set(pathId, alterData);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *alterData);
@@ -338,7 +338,7 @@ public:
         if (!TablesInitialized) {
             TPathId pathId = txState->TargetPathId;
 
-            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[pathId];
+            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
             Y_ABORT_UNLESS(storeInfo);
 
             for (TPathId tablePathId : storeInfo->ColumnTables) {
@@ -474,6 +474,24 @@ public:
         if (!AppData()->FeatureFlags.GetEnableOlapCompression() && IsAlterCompression()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Compression is disabled for OLAP tables");
             return result;
+        }
+
+        for (auto& schemaPreset : Transaction.GetAlterColumnStore().GetAddSchemaPresets()) {
+            if (schemaPreset.HasSchema()) {
+                if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetSchema().GetColumns(), AppData()); !checkResult) {
+                    result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                    return result;
+                }
+            }
+        }
+
+        for (auto& schemaPreset : Transaction.GetAlterColumnStore().GetAlterSchemaPresets()) {
+            if (schemaPreset.HasAlterSchema()) {
+                if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetAlterSchema().GetAddColumns(), AppData()); !checkResult) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter, checkResult.error());
+                    return result;
+                }
+            }
         }
 
         TPath parentPath = TPath::Resolve(parentPathStr, context.SS);

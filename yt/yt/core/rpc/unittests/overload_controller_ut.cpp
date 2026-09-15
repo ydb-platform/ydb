@@ -51,8 +51,8 @@ public:
 
 struct TMethodInfo
 {
-    TString Service;
-    TString Method;
+    std::string Service;
+    std::string Method;
     double WaitingTimeoutFraction = 0;
 };
 
@@ -60,24 +60,24 @@ using TMethodInfoList = std::vector<TMethodInfo>;
 
 constexpr auto MeanWaitTimeThreshold = TDuration::MilliSeconds(20);
 
-TOverloadControllerConfigPtr CreateConfig(const THashMap<TString, TMethodInfoList>& schema)
+TOverloadControllerConfigPtr CreateConfig(const THashMap<std::string, TMethodInfoList>& schema)
 {
     auto config = New<TOverloadControllerConfig>();
     config->Enabled = true;
 
     for (const auto& [trackerName, methods] : schema) {
         TOverloadTrackerConfig trackerConfig(EOverloadTrackerConfigType::MeanWaitTime);
-        auto trackerMeanWaitTimeConfig = trackerConfig.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
+        auto trackerMeanWaitTimeConfig = trackerConfig.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
 
         for (const auto& methodInfo : methods) {
             {
-                TServiceMethod serviceMethod;
+                TOverloadTrackedServiceMethod serviceMethod;
                 serviceMethod.Service = methodInfo.Service;
                 serviceMethod.Method = methodInfo.Method;
                 trackerMeanWaitTimeConfig->MethodsToThrottle.push_back(std::move(serviceMethod));
             }
             {
-                auto serviceMethodConfig = New<TServiceMethodConfig>();
+                auto serviceMethodConfig = New<TOverloadTrackedServiceMethodConfig>();
                 serviceMethodConfig->Service = methodInfo.Service;
                 serviceMethodConfig->Method = methodInfo.Method;
                 serviceMethodConfig->WaitingTimeoutFraction = methodInfo.WaitingTimeoutFraction;

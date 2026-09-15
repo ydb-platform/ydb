@@ -18,6 +18,7 @@ struct TTaskInfo {
     bool HasSingleCompositeActionGroup = false;
     TInstant CreateTime;
     TInstant LastRefreshTime;
+    ui32 MaxInflightActions = 0;
 
     TString ToString() const {
         return TStringBuilder() << "{"
@@ -28,8 +29,15 @@ struct TTaskInfo {
             << " HasSingleCompositeActionGroup: " << HasSingleCompositeActionGroup
             << " CreateTime: " << CreateTime
             << " LastRefreshTime: " << LastRefreshTime
+            << " MaxInflightActions: " << MaxInflightActions
             << " }";
     }
+};
+
+struct TCmsDDiskInfo {
+    ui64 Revision = 0;
+    TInstant LastChangedAt;
+    TString State;
 };
 
 struct TCmsState : public TAtomicRefCount<TCmsState> {
@@ -43,6 +51,7 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     ui64 NextRequestId = 0;
     ui64 NextNotificationId = 0;
     ui64 LastLogRecordTimestamp = 0;
+    TInstant FirstBootTimestamp;
 
     // State of Wall-E tasks.
     THashMap<TString, TTaskInfo> WalleTasks;
@@ -50,6 +59,9 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
 
     THashMap<TString, TTaskInfo> MaintenanceTasks;
     THashMap<TString, TString> MaintenanceRequests;
+
+    // Last successfully fetched Direct Block Group state, keyed by tablet id.
+    THashMap<ui64, TCmsDDiskInfo> DDiskInfo;
 
     // CMS config.
     TCmsConfig Config;

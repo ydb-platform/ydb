@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/fq/libs/compute/common)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

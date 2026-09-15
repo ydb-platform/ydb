@@ -3,6 +3,8 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <util/generic/overloaded.h>
+
 namespace NKikimr {
 
     // inline table specifier
@@ -135,6 +137,11 @@ namespace NKikimr {
             to.ConstructInPlace(from);
         }
 
+        template<typename To, typename From>
+        std::enable_if_t<std::is_convertible_v<From, To>> Cast(const From& from, std::optional<To>& to) {
+            to.emplace(from);
+        }
+
         inline void Cast(const TInstant& from, TMaybe<ui64>& to) {
             to.ConstructInPlace(from.GetValue());
         }
@@ -148,50 +155,77 @@ namespace NKikimr {
             to.ConstructInPlace(from.GetRawId());
         }
 
+        inline void Cast(const NProtoBuf::Message& from, TMaybe<TString>& to) {
+            const bool success = from.SerializeToString(&to.ConstructInPlace());
+            Y_DEBUG_ABORT_UNLESS(success);
+        }
+
         template<typename TRow, typename TColumn>
         struct TCell {
-            typename TColumn::Type TRow::*CellPtr = nullptr;
-            TMaybe<typename TColumn::Type> TRow::*MaybeCellPtr = nullptr;
+            using TCellRef = std::variant<
+                typename TColumn::Type TRow::*,
+                TMaybe<typename TColumn::Type> TRow::*,
+                std::optional<typename TColumn::Type> TRow::*
+            >;
+            TCellRef Cell;
 
             constexpr TCell(typename TColumn::Type TRow::*cell)
-                : CellPtr(cell)
+                : Cell(cell)
             {}
 
             constexpr TCell(TMaybe<typename TColumn::Type> TRow::*maybe)
-                : MaybeCellPtr(maybe)
+                : Cell(maybe)
             {}
 
+            constexpr TCell(std::optional<typename TColumn::Type> TRow::*opt)
+                : Cell(opt)
+            {}
+
+            const typename TColumn::Type *GetValuePtr(const TRow &row) const {
+                return std::visit(TOverloaded{
+                    [&](typename TColumn::Type TRow::*x) { return &(row.*x); },
+                    [&](TMaybe<typename TColumn::Type> TRow::*x) { return row.*x ? &*(row.*x) : nullptr; },
+                    [&](std::optional<typename TColumn::Type> TRow::*x) { return row.*x ? &*(row.*x) : nullptr; },
+                }, Cell);
+            }
+
             const typename TColumn::Type& GetValue(const TRow &row) const {
-                if (CellPtr) {
-                    return row.*CellPtr;
-                } else if (MaybeCellPtr) {
-                    return *(row.*MaybeCellPtr);
-                } else {
-                    Y_ABORT();
-                }
+                const auto *ptr = GetValuePtr(row);
+                Y_DEBUG_ABORT_UNLESS(ptr);
+                return *ptr;
             }
 
             bool Equals(const TRow &x, const TRow &y) const {
-                if (CellPtr) {
-                    return x.*CellPtr == y.*CellPtr;
-                } else if (MaybeCellPtr) {
-                    return x.*MaybeCellPtr == y.*MaybeCellPtr;
+                const auto *px = GetValuePtr(x);
+                const auto *py = GetValuePtr(y);
+                if (px && py) {
+                    return *px == *py;
                 } else {
-                    Y_ABORT();
+                    return !px && !py;
                 }
             }
 
             template<typename TRowset>
             void ConstructFromRowset(const TRowset &rowset, TRow &row) const {
-                if (CellPtr) {
-                    row.*CellPtr = rowset.template GetValue<TColumn>();
-                } else if (MaybeCellPtr) {
-                    if (rowset.template HaveValue<TColumn>()) {
-                        row.*MaybeCellPtr = rowset.template GetValue<TColumn>();
+                std::visit(TOverloaded{
+                    [&](typename TColumn::Type TRow::*x) {
+                        row.*x = rowset.template GetValue<TColumn>();
+                    },
+                    [&](TMaybe<typename TColumn::Type> TRow::*x) {
+                        if (rowset.template HaveValue<TColumn>()) {
+                            (row.*x).ConstructInPlace(rowset.template GetValue<TColumn>());
+                        } else {
+                            (row.*x).Clear();
+                        }
+                    },
+                    [&](std::optional<typename TColumn::Type> TRow::*x) {
+                        if (rowset.template HaveValue<TColumn>()) {
+                            (row.*x).emplace(rowset.template GetValue<TColumn>());
+                        } else {
+                            (row.*x).reset();
+                        }
                     }
-                } else {
-                    Y_ABORT();
-                }
+                }, Cell);
             }
 
             // extend tuple with one more item
@@ -200,17 +234,25 @@ namespace NKikimr {
                 using T = typename NIceDb::NSchemeTypeMapper<TColumn::ColumnType>::Type;
                 TMaybe<T> value;
 
-                if (CellPtr) {
-                    Cast(row.*CellPtr, value);
-                } else if (MaybeCellPtr) {
-                    if (const auto& m = row.*MaybeCellPtr) {
-                        Cast(*m, value);
-                    } else {
-                        value = Nothing();
+                std::visit(TOverloaded{
+                    [&](typename TColumn::Type TRow::*x) {
+                        Cast(row.*x, value);
+                    },
+                    [&](TMaybe<typename TColumn::Type> TRow::*x) {
+                        if (const auto& m = row.*x) {
+                            Cast(*m, value);
+                        } else {
+                            value = Nothing();
+                        }
+                    },
+                    [&](std::optional<typename TColumn::Type> TRow::*x) {
+                        if (const auto& m = row.*x) {
+                            Cast(*m, value);
+                        } else {
+                            value = Nothing();
+                        }
                     }
-                } else {
-                    Y_ABORT();
-                }
+                }, Cell);
 
                 return std::tuple_cat(tuple, std::make_tuple(std::move(value)));
             }
@@ -223,8 +265,8 @@ namespace NKikimr {
 
                 std::tuple_element_t<Index, std::tuple<TArgs...>> &maybe = std::get<Index>(*tuple);
                 op.Value = NIceDb::TConvertTypeValue<TColumn::ColumnType>(
-                        maybe ? NIceDb::TTypeValue(*maybe) : NIceDb::TTypeValue()
-                    );
+                    maybe ? NIceDb::TTypeValue(*maybe) : NIceDb::TTypeValue()
+                );
 
                 updates.push_back(std::move(op));
             }

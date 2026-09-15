@@ -48,3 +48,6 @@
 "pg_get_partkeydef",
 "pg_tablespace_location",
 "current_schemas",
+
+// Core component for processing range frames in CalcOverWindow
+"in_range",

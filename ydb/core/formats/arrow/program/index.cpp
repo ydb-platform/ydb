@@ -7,7 +7,7 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto scalarConst = context.GetResources()->GetConstantScalarVerified(GetInput().back().GetColumnId());
+    auto scalarConst = context.GetResources().GetConstantScalarVerified(GetInput().back().GetColumnId());
 
     auto source = context.GetDataSource().lock();
     if (!source) {
@@ -18,13 +18,13 @@ TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExec
         return conclusion;
     }
     if (conclusion->IsTotalDenyFilter()) {
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
     } else if (conclusion->IsTotalAllowFilter() || !ApplyToFilterFlag) {
-        context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
     } else {
-        context.GetResources()->AddFilter(*conclusion);
+        context.MutableResources().AddFilter(*conclusion);
     }
     return IResourceProcessor::EExecutionResult::Success;
 }

@@ -206,6 +206,7 @@ def connect(
     tcp_keepalive=True,
     application_name=None,
     replication=None,
+    startup_params=None,
     sock=None,
 ):
     return Connection(
@@ -221,6 +222,7 @@ def connect(
         tcp_keepalive=tcp_keepalive,
         application_name=application_name,
         replication=replication,
+        startup_params=startup_params,
         sock=sock,
     )
 

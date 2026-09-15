@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
     TEvPersQueue::TEvResponse* GenerateData(ui32 dataPatternCookie) {
         auto* readResponse = new TEvPersQueue::TEvResponse;
+        readResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
         auto& cmdReadResult = *readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
         auto& readResult1 = *cmdReadResult.AddResult();
@@ -74,9 +75,10 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         return readResponse;
     }
 
-    TEvPersQueue::TEvResponse* GenerateEmptyData() {
+    TEvPersQueue::TEvResponse* GenerateUnavailableData() {
         auto* readResponse = new TEvPersQueue::TEvResponse;
-        readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+        readResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_NOTREADY);
+        readResponse->Record.SetErrorCode(NPersQueue::NErrorCode::OVERLOAD);
         readResponse->Record.MutablePartitionResponse()->MutableCmdReadResult();
 
         return readResponse;
@@ -148,7 +150,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
         Y_UNUSED(handshake);
     }
 
-    Y_UNIT_TEST(FeedSlowly) {
+    Y_UNIT_TEST(Retries) {
         TTestActorRuntime runtime;
         runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
 
@@ -177,7 +179,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             runtime.SimulateSleep(TDuration::Seconds(1));
 
-            runtime.Send(new IEventHandle(reader, pqtablet, GenerateEmptyData()));
+            runtime.Send(new IEventHandle(reader, pqtablet, GenerateUnavailableData()));
         }
 
         for (auto i = 0; i < 3; ++i) {
@@ -201,7 +203,7 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             runtime.SimulateSleep(TDuration::Seconds(1));
 
-            runtime.Send(new IEventHandle(reader, pqtablet, GenerateEmptyData()));
+            runtime.Send(new IEventHandle(reader, pqtablet, GenerateUnavailableData()));
         }
 
         for (auto i = 3; i < 5; ++i) {
@@ -217,6 +219,48 @@ Y_UNIT_TEST_SUITE(LocalPartitionReader) {
 
             // TODO check commit
         }
+    }
+
+    // Reproduces ydb-platform/ydb#41295: during heavy tablet reboots the PQ
+    // tablet dispatcher answers CmdGetClientOffset with a code that is neither
+    // INITIALIZING nor OK (TABLET_IS_DROPPED when TabletState==EDropped, or
+    // WRONG_PARTITION_NUMBER when the partition is transiently absent from the
+    // Partitions map). HandleInit() has no handling for these and aborts the
+    // node via Y_VERIFY_S(..., "Unimplemented!") at local_partition_reader.cpp:79.
+    void ReproInitErrorCode(NPersQueue::NErrorCode::EErrorCode errorCode) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        TActorId pqtablet = runtime.AllocateEdgeActor();
+        TActorId reader = runtime.Register(CreateLocalPartitionReader(pqtablet, PARTITION));
+        runtime.EnableScheduleForActor(reader);
+        TActorId worker = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        runtime.Send(new IEventHandle(reader, worker, new TEvWorker::TEvHandshake));
+
+        GrabInitialPQRequest(runtime);
+
+        // The tablet is mid-reboot / dropped and replies with a non-OK,
+        // non-INITIALIZING error code.
+        auto* getOffsetResponse = new TEvPersQueue::TEvResponse;
+        getOffsetResponse->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        getOffsetResponse->Record.SetErrorCode(errorCode);
+        runtime.Send(new IEventHandle(reader, pqtablet, getOffsetResponse));
+
+        // Expected (post-fix): the reader gracefully reports it is gone so the
+        // Worker can recreate/retry it. On the current code this line is never
+        // reached because HandleInit aborts the process at the Y_VERIFY_S above.
+        auto gone = runtime.GrabEdgeEventRethrow<TEvWorker::TEvGone>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Status, TEvWorker::TEvGone::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TabletDroppedDuringInit) {
+        ReproInitErrorCode(NPersQueue::NErrorCode::TABLET_IS_DROPPED);
+    }
+
+    Y_UNIT_TEST(WrongPartitionNumberDuringInit) {
+        ReproInitErrorCode(NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER);
     }
 
     // TODO write tests with real PQ

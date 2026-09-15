@@ -46,24 +46,24 @@ template <>
 struct TFpTraits<float> {
     static constexpr bool Supported = std::numeric_limits<float>::is_iec559;
     using TIntegral = ui32;
-    static constexpr TIntegral SignMask = (1u << 31);
+    static constexpr TIntegral SignMask = (1U << 31);
     static constexpr TIntegral Mantissa = 23;
     static constexpr TIntegral Exp = 8;
-    static constexpr TIntegral MaxMantissa = (1u << Mantissa) - 1;
-    static constexpr TIntegral MaxExp = (1u << Exp) - 1;
-    static constexpr TIntegral QNan = 0x7fc00000u;
+    static constexpr TIntegral MaxMantissa = (1U << Mantissa) - 1;
+    static constexpr TIntegral MaxExp = (1U << Exp) - 1;
+    static constexpr TIntegral QNan = 0x7fc00000U;
 };
 
 template <>
 struct TFpTraits<double> {
     static constexpr bool Supported = std::numeric_limits<double>::is_iec559;
     using TIntegral = ui64;
-    static constexpr TIntegral SignMask = (1ull << 63);
+    static constexpr TIntegral SignMask = (1ULL << 63);
     static constexpr TIntegral Mantissa = 52;
     static constexpr TIntegral Exp = 11;
-    static constexpr TIntegral MaxMantissa = (1ull << Mantissa) - 1;
-    static constexpr TIntegral MaxExp = (1ull << Exp) - 1;
-    static constexpr TIntegral QNan = 0x7ff8000000000000ull;
+    static constexpr TIntegral MaxMantissa = (1ULL << Mantissa) - 1;
+    static constexpr TIntegral MaxExp = (1ULL << Exp) - 1;
+    static constexpr TIntegral QNan = 0x7ff8000000000000ULL;
 };
 
 template <typename T, bool>
@@ -98,13 +98,13 @@ struct TCanonizeFpBitsImpl<T, false> {
         using TNumTraits = std::numeric_limits<T>;
         const T value = *(T*)buffer;
         switch (std::fpclassify(value)) {
-        case FP_NAN:
-            static_assert(TNumTraits::has_quiet_NaN, "no QNAN");
-            *(T*)buffer = TNumTraits::quiet_NaN();
-            break;
-        case FP_ZERO:
-            *(T*)buffer = T(0);
-            break;
+            case FP_NAN:
+                static_assert(TNumTraits::has_quiet_NaN, "no QNAN");
+                *(T*)buffer = TNumTraits::quiet_NaN();
+                break;
+            case FP_ZERO:
+                *(T*)buffer = T(0);
+                break;
         }
     }
 };
@@ -119,4 +119,4 @@ void CanonizeFpBits(void* buffer) {
     return TCanonizeFpBitsImpl<T, TFpTraits<T>::Supported>::Do(buffer);
 }
 
-}
+} // namespace NYql

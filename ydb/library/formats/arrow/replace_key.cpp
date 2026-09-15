@@ -16,4 +16,4 @@ TReplaceKeyView TReplaceKey::GetView() const {
     return TReplaceKeyView(*GetColumns(), GetPosition());
 }
 
-}
+}   // namespace NKikimr::NArrow

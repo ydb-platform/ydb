@@ -2,10 +2,8 @@
 
 #include <ydb/core/base/defs.h>
 
-#include <util/generic/vector.h>
-
 namespace NKikimrReplication {
-class TReplicationConfig;
+    class TReplicationConfig;
 }
 
 namespace NKikimr::NReplication::NController {

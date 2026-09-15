@@ -12,13 +12,20 @@
 /// \file register_runtime_class.hpp
 /// \brief Contains the macros BOOST_TYPE_INDEX_IMPLEMENT_RUNTIME_CAST and
 /// BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS
+
+#include <boost/type_index/detail/config.hpp>
+
 #include <boost/type_index.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
 namespace boost { namespace typeindex { namespace detail {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 template<typename T>
 inline type_index runtime_class_construct_type_id(T const*) {
@@ -39,7 +46,11 @@ const void* find_instance(boost::typeindex::type_index const& idx, const Self* s
     return boost::typeindex::detail::find_instance<OtherBases...>(idx, self);
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }}} // namespace boost::typeindex::detail
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 
 /// \def BOOST_TYPE_INDEX_REGISTER_RUNTIME_CLASS

@@ -1,7 +1,5 @@
 #include "ut_helpers.h"
 
-#include <ydb/core/testlib/basics/appdata.h>
-
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/retry/retry.h>
@@ -50,45 +48,20 @@ void InitAsyncOutput(
             0,
             NYql::NDq::TCollectStatsLevel::None,
             "TxId-42",
+            777,
             secureParams,
             &actor.GetAsyncOutputCallbacks(),
             counters,
-            nullptr,
+            CreateStructuredTokenCredentialsFactory(),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
 }
 
-void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isCloud) {
-    const auto solomonPort = TString(getenv("SOLOMON_PORT"));
-    TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
-    TStringStream str;
-    TStringBuilder builder;
-    builder << "/cleanup";
-    if (isCloud) {
-        builder << "?folderId=" << folderId << "&service=" << service;
-    } else {
-        builder << "?project=" << cloudId << "&cluster=" << folderId << "&service=" << service;
-    }
-
-    DoWithRetry(
-        [&]{ httpClient.DoPost(builder, "", &str); },
-        TRetryOptions(3, TDuration::Seconds(1)),
-        true);
-}
-
-TString GetSolomonMetrics(TString folderId, TString service) {
-    const auto solomonPort = TString(getenv("SOLOMON_PORT"));
-    TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
-    TStringStream str;
-    httpClient.DoGet("/metrics?folderId=" + folderId + "&service=" + service, &str);
-    return TString(str.Str());
-}
-
 NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
     NSo::NProto::TDqSolomonShard settings;
-    settings.SetEndpoint(TStringBuilder() << getenv("SOLOMON_HOST") << ":" << TString(getenv("SOLOMON_PORT")));
+    settings.SetEndpoint(TString(getenv("SOLOMON_HTTP_ENDPOINT")));
     if (isCloud) {
         settings.SetProject("folderId1");
         settings.SetCluster("folderId1");

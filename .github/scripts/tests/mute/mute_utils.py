@@ -1,0 +1,248 @@
+from __future__ import annotations
+import os
+import re
+import xml.etree.ElementTree as ET
+import sys
+import json
+
+CONFIG_DIR = os.path.join('.github', 'config')
+MUTE_CONFIG = os.path.join(CONFIG_DIR, 'mute_config.json')
+
+def _normalize_relative_path(path: str) -> str:
+    return path.replace('\\', '/')
+
+
+def _repo_root_from_this_file() -> str:
+    # .../<repo>/.github/scripts/tests/mute/mute_utils.py
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+
+
+def _load_muted_ya_path_policy() -> tuple[str, dict[str, str]]:
+    cfg_path = os.path.join(_repo_root_from_this_file(), MUTE_CONFIG)
+    with open(cfg_path, encoding='utf-8') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f'{cfg_path}: expected JSON object')
+
+    raw_default = data.get('default_muted_ya_path')
+    if not isinstance(raw_default, str) or not raw_default.strip():
+        raise ValueError(f'{cfg_path}: "default_muted_ya_path" must be a non-empty string')
+    default_path = _normalize_relative_path(raw_default.strip())
+
+    per_preset: dict[str, str] = {}
+    raw_paths = data.get('muted_ya_paths', {})
+    if not isinstance(raw_paths, dict):
+        raise ValueError(f'{cfg_path}: "muted_ya_paths" must be a JSON object')
+    for preset, rel_path in raw_paths.items():
+        if not isinstance(preset, str) or not preset:
+            raise ValueError(f'{cfg_path}: "muted_ya_paths" keys must be non-empty strings')
+        if not isinstance(rel_path, str) or not rel_path.strip():
+            raise ValueError(f'{cfg_path}: muted_ya_paths["{preset}"] must be a non-empty string')
+        per_preset[preset] = _normalize_relative_path(rel_path.strip())
+    return default_path, per_preset
+
+
+def dedicated_relative(preset: str) -> str:
+    default_path, per_preset = _load_muted_ya_path_policy()
+    return per_preset.get(preset, default_path)
+
+
+def pattern_to_re(pattern):
+    res = []
+    for c in pattern:
+        if c == '*':
+            res.append('.*')
+        else:
+            res.append(re.escape(c))
+
+    return f"(?:^{''.join(res)}$)"
+
+
+class MuteTestCheck:
+    def __init__(self, fn):
+        self.regexps = []
+
+        with open(fn, 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                pattern = pattern_to_re(line)
+
+                try:
+                    self.regexps.append(re.compile(pattern))
+                except re.error:
+                    print(f"Unable to compile regex {pattern!r}")
+                    raise
+
+    def __call__(self, fullname):
+        for r in self.regexps:
+            if r.match(fullname):
+                return True
+        return False
+
+
+def mute_target(testcase):
+    try:
+        from junit_utils import add_junit_property
+    except ModuleNotFoundError:
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        from junit_utils import add_junit_property
+
+    err_text = []
+    err_msg = None
+    found = False
+
+    for node_name in ('failure', 'error'):
+        while 1:
+            err_node = testcase.find(node_name)
+            if err_node is None:
+                break
+
+            msg = err_node.get('message')
+            if msg:
+                if err_msg is None:
+                    err_msg = msg
+                else:
+                    err_text.append(msg)
+
+            if err_node.text:
+                err_text.append(err_node.text)
+
+            found = True
+            testcase.remove(err_node)
+
+    if not found:
+        return False
+
+    skipped = ET.Element("skipped")
+
+    if err_msg:
+        skipped.set('message', err_msg)
+
+    if err_text:
+        skipped.text = '\n'.join(err_text)
+    testcase.append(skipped)
+
+    add_junit_property(testcase, "mute", "automatically muted based on rules")
+
+    return True
+
+
+def recalc_suite_info(suite):
+    tests = failures = skipped = 0
+    elapsed = 0.0
+
+    for case in suite.findall("testcase"):
+        tests += 1
+        elapsed += float(case.get("time", 0))
+        if case.find("skipped"):
+            skipped += 1
+        if case.find("failure"):
+            failures += 1
+
+    suite.set("tests", str(tests))
+    suite.set("failures", str(failures))
+    suite.set("skipped", str(skipped))
+    suite.set("time", str(elapsed))
+
+
+def _split(s: str, sep: str) -> tuple[str, str]:
+    p = s.find(sep)
+    if p < 0:
+        return s, ''
+    else:
+        return s[:p], s[p + 1 :]
+
+def load_report_results(report_json_path: str) -> list[dict]:
+    if not report_json_path:
+        return []
+    with open(report_json_path, 'r') as f:
+        return json.load(f).get('results', [])
+
+
+def get_previously_skipped_tests(results: list[dict]) -> set[tuple[str, str]]:
+    result: set[tuple[str, str]] = set()
+    for test in results:
+        if test.get('status', '') not in {'SKIPPED'}:
+            continue
+        path = test.get('path', '')
+        name = test.get('name', '')
+        sub_name = test.get('subtest_name', '')
+        if name and sub_name:
+            result.add((path, f'{name}.{sub_name}'))
+        elif name:
+            result.add((path, name))
+        elif sub_name:
+            result.add((path, sub_name))
+    return result
+
+
+def get_suites_with_unmuted_failures(results: list[dict]) -> set[str]:
+    """Suites whose previous-run failures were not covered by the mute list.
+
+    Muted failures are rewritten to MUTE by transform_build_results.py, so a leftover
+    FAILED/ERROR (test or chunk) is exactly what fail-checker counted and what made this
+    rerun happen.
+
+    Blacklisting such a suite can lose those failures. When a chunk itself failed (the
+    test binary died before the first test, a crashed chunk), ya marks the whole suite
+    in its last-failed cache and `-X` restarts it without per-test filters. The
+    blacklist is then applied before the suite is listed, so there is no test list to
+    subtract the muted test from: ya reads that as an empty suite and drops it
+    (unittest), or narrows it down to a placeholder name that matches nothing (pytest).
+    """
+    return {
+        test['path']
+        for test in results
+        if test.get('status', '') in {'FAILED', 'ERROR'} and test.get('path', '')
+    }
+
+
+def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
+    import yaml
+
+    with open(muted_txt_path) as file:
+        muted_tests = file.readlines()
+    results = load_report_results(report_json_path)
+    previously_skipped = get_previously_skipped_tests(results)
+    suites_to_rerun_fully = get_suites_with_unmuted_failures(results)
+    filter_by_suite: dict[tuple[str, str], list[str]] = {}
+    for test_line in [l.strip() for l in muted_tests]:
+        if not test_line:
+            continue
+        path, filter = _split(test_line, ' ')
+        if filter.endswith('chunk'):
+            continue
+        if (path, filter) in previously_skipped:
+            continue
+        if path in suites_to_rerun_fully:
+            continue
+        suite_type = ''
+        filter = filter.replace('.', '::').replace('::py::', '.py::')
+
+        filter_by_suite.setdefault((path, suite_type), [])
+        filter_by_suite[(path, suite_type)].append(filter)
+
+    result = []
+    for (path, suite_type), filter in filter_by_suite.items():
+        result.append({})
+        if path:
+            result[-1]['path'] = path
+        if suite_type:
+            result[-1]['suite_type'] = suite_type
+        if filter and '' not in filter:
+            if len(filter) == 1:
+                result[-1]['test_filter'] = filter[0]
+            else:
+                result[-1]['test_filter'] = filter
+    print(yaml.dump(result))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "convert_muted_txt_to_yaml":
+        convert_muted_txt_to_yaml(sys.argv[2], sys.argv[3])
+    else:
+        print(
+            "Usage: mute_utils.py convert_muted_txt_to_yaml <muted_txt_path> <report_json_path>",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)

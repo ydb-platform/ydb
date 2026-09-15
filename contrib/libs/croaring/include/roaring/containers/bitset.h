@@ -1,6 +1,15 @@
 /*
  * bitset.h
  *
+ * Bitset containers store a set of 16-bit integers as a fixed-size bitmap.
+ * The words pointer references an array of 64-bit words covering the full
+ * 16-bit domain, with one bit per possible value. The cardinality field tracks
+ * the number of set bits; when it is BITSET_UNKNOWN_CARDINALITY, the count must
+ * be recomputed from the bitmap contents.
+ *
+ * This representation is used for denser containers because membership tests,
+ * set operations, and sequential scans can be implemented efficiently with
+ * word-level bitwise operations.
  */
 
 #ifndef INCLUDE_CONTAINERS_BITSET_H_
@@ -46,6 +55,10 @@ typedef struct bitset_container_s bitset_container_t;
 
 /* Create a new bitset. Return NULL in case of failure. */
 bitset_container_t *bitset_container_create(void);
+
+/* Create a bitset without zeroing the words. Caller must overwrite `words`
+ * before the container is used. Return NULL in case of failure. */
+bitset_container_t *bitset_container_create_uninitialized(void);
 
 /* Free memory. */
 void bitset_container_free(bitset_container_t *bitset);
@@ -234,7 +247,7 @@ static inline bool bitset_container_contains_range(
 }
 
 /* Get the number of bits set */
-ALLOW_UNALIGNED
+CROARING_ALLOW_UNALIGNED
 static inline int bitset_container_cardinality(
     const bitset_container_t *bitset) {
     return bitset->cardinality;

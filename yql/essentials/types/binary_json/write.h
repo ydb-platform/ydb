@@ -1,6 +1,7 @@
 #pragma once
 
 #include "format.h"
+#include "read.h"
 
 #include <util/generic/maybe.h>
 
@@ -8,18 +9,23 @@
 
 namespace NYql::NUdf {
 class TUnboxedValue;
-};
+}; // namespace NYql::NUdf
 
 namespace NKikimr::NBinaryJson {
 
 /**
  * @brief Translates textual JSON into BinaryJson
  */
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, bool allowInf = false);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(TStringBuf json, bool allowInf = false);
 
 /**
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson
  */
 TBinaryJson SerializeToBinaryJson(const NYql::NUdf::TUnboxedValue& value);
-}
 
+/**
+ * @brief Translates read cursor into a separate BinaryJson
+ */
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value);
+
+} // namespace NKikimr::NBinaryJson

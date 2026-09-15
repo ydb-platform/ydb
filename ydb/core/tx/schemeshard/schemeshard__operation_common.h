@@ -55,6 +55,8 @@ TSet<ui32> AllIncomingEvents();
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
+
 void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentPath, TOperationContext& context, bool isBackup = false);
@@ -62,8 +64,9 @@ void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentP
 
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName);
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 
@@ -284,7 +287,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context) override;
 
-private:
+protected:
     const TOperationId OperationId;
 }; // TConfigurePartsAtTable
 
@@ -319,7 +322,35 @@ namespace NForceDrop {
 
 void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPathId>& paths, TOperationContext& context);
 void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTxState* txState, TOperationContext& context);
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix);
 
 } // namespace NForceDrop
 
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
+
 } // namespace NKikimr::NSchemeShard
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+// Syncs child index versions with the parent table's AlterVersion.
+// This ensures all indexes are at least at the table's version before publishing.
+// Parameters:
+//   - path: the parent table path element
+//   - table: the parent table info
+//   - targetVersion: the version to sync indexes to
+//   - operationId: for PublishToSchemeBoard
+//   - context: operation context
+//   - db: database for persistence
+//   - skipPlannedToDrop: if true, skip indexes that are PlannedToDrop (used by drop index)
+// Returns: vector of index PathIds that were published
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop = false);
+
+} // namespace NKikimr::NSchemeShard::NTableIndexVersion

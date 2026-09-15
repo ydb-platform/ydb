@@ -67,7 +67,7 @@ enum class EReturnType {
     Bool = 1,
 };
 
-class TAstNode : public TSimpleRefCount<TAstNode> {
+class TAstNode: public TSimpleRefCount<TAstNode> {
 public:
     explicit TAstNode(TPosition pos);
 
@@ -85,11 +85,11 @@ private:
 
 using TAstNodePtr = TIntrusivePtr<TAstNode>;
 
-class TRootNode : public TAstNode {
+class TRootNode: public TAstNode {
 public:
     TRootNode(TPosition pos, TAstNodePtr expr, EJsonPathMode mode);
 
-    const TAstNodePtr GetExpr() const;
+    TAstNodePtr GetExpr() const;
 
     EJsonPathMode GetMode() const;
 
@@ -102,16 +102,16 @@ private:
     EJsonPathMode Mode_;
 };
 
-class TContextObjectNode : public TAstNode {
+class TContextObjectNode: public TAstNode {
 public:
     explicit TContextObjectNode(TPosition pos);
 
     void Accept(IAstNodeVisitor& visitor) const override;
 };
 
-class TVariableNode : public TAstNode {
+class TVariableNode: public TAstNode {
 public:
-    TVariableNode(TPosition pos, const TString& name);
+    TVariableNode(TPosition pos, TString name);
 
     const TString& GetName() const;
 
@@ -121,14 +121,14 @@ private:
     TString Name_;
 };
 
-class TLastArrayIndexNode : public TAstNode {
+class TLastArrayIndexNode: public TAstNode {
 public:
     explicit TLastArrayIndexNode(TPosition pos);
 
     void Accept(IAstNodeVisitor& visitor) const override;
 };
 
-class TNumberLiteralNode : public TAstNode {
+class TNumberLiteralNode: public TAstNode {
 public:
     TNumberLiteralNode(TPosition pos, double value);
 
@@ -140,13 +140,13 @@ private:
     double Value_;
 };
 
-class TMemberAccessNode : public TAstNode {
+class TMemberAccessNode: public TAstNode {
 public:
-    TMemberAccessNode(TPosition pos, const TString& member, TAstNodePtr input);
+    TMemberAccessNode(TPosition pos, TString member, TAstNodePtr input);
 
-    const TStringBuf GetMember() const;
+    TStringBuf GetMember() const;
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -155,11 +155,11 @@ private:
     TAstNodePtr Input_;
 };
 
-class TWildcardMemberAccessNode : public TAstNode {
+class TWildcardMemberAccessNode: public TAstNode {
 public:
     TWildcardMemberAccessNode(TPosition pos, TAstNodePtr input);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -167,7 +167,7 @@ private:
     TAstNodePtr Input_;
 };
 
-class TArrayAccessNode : public TAstNode {
+class TArrayAccessNode: public TAstNode {
 public:
     struct TSubscript {
         TAstNodePtr From;
@@ -178,7 +178,7 @@ public:
 
     const TVector<TSubscript>& GetSubscripts() const;
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -187,11 +187,11 @@ private:
     TAstNodePtr Input_;
 };
 
-class TWildcardArrayAccessNode : public TAstNode {
+class TWildcardArrayAccessNode: public TAstNode {
 public:
     TWildcardArrayAccessNode(TPosition pos, TAstNodePtr input);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -205,13 +205,13 @@ enum class EUnaryOperation {
     Not = 2,
 };
 
-class TUnaryOperationNode : public TAstNode {
+class TUnaryOperationNode: public TAstNode {
 public:
     TUnaryOperationNode(TPosition pos, EUnaryOperation op, TAstNodePtr expr);
 
     EUnaryOperation GetOp() const;
 
-    const TAstNodePtr GetExpr() const;
+    TAstNodePtr GetExpr() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -238,15 +238,15 @@ enum class EBinaryOperation {
     Or = 12,
 };
 
-class TBinaryOperationNode : public TAstNode {
+class TBinaryOperationNode: public TAstNode {
 public:
     TBinaryOperationNode(TPosition pos, EBinaryOperation op, TAstNodePtr leftExpr, TAstNodePtr rightExpr);
 
     EBinaryOperation GetOp() const;
 
-    const TAstNodePtr GetLeftExpr() const;
+    TAstNodePtr GetLeftExpr() const;
 
-    const TAstNodePtr GetRightExpr() const;
+    TAstNodePtr GetRightExpr() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -258,7 +258,7 @@ private:
     TAstNodePtr RightExpr_;
 };
 
-class TBooleanLiteralNode : public TAstNode {
+class TBooleanLiteralNode: public TAstNode {
 public:
     TBooleanLiteralNode(TPosition pos, bool value);
 
@@ -270,16 +270,16 @@ private:
     bool Value_;
 };
 
-class TNullLiteralNode : public TAstNode {
+class TNullLiteralNode: public TAstNode {
 public:
     explicit TNullLiteralNode(TPosition pos);
 
     void Accept(IAstNodeVisitor& visitor) const override;
 };
 
-class TStringLiteralNode : public TAstNode {
+class TStringLiteralNode: public TAstNode {
 public:
-    TStringLiteralNode(TPosition pos, const TString& value);
+    TStringLiteralNode(TPosition pos, TString value);
 
     const TString& GetValue() const;
 
@@ -289,20 +289,20 @@ private:
     TString Value_;
 };
 
-class TFilterObjectNode : public TAstNode {
+class TFilterObjectNode: public TAstNode {
 public:
     explicit TFilterObjectNode(TPosition pos);
 
     void Accept(IAstNodeVisitor& visitor) const override;
 };
 
-class TFilterPredicateNode : public TAstNode {
+class TFilterPredicateNode: public TAstNode {
 public:
     TFilterPredicateNode(TPosition pos, TAstNodePtr predicate, TAstNodePtr input);
 
-    const TAstNodePtr GetPredicate() const;
+    TAstNodePtr GetPredicate() const;
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -321,13 +321,13 @@ enum class EMethodType {
     KeyValue = 6,
 };
 
-class TMethodCallNode : public TAstNode {
+class TMethodCallNode: public TAstNode {
 public:
     TMethodCallNode(TPosition pos, EMethodType type, TAstNodePtr input);
 
     EMethodType GetType() const;
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     void Accept(IAstNodeVisitor& visitor) const override;
 
@@ -336,13 +336,13 @@ private:
     TAstNodePtr Input_;
 };
 
-class TStartsWithPredicateNode : public TAstNode {
+class TStartsWithPredicateNode: public TAstNode {
 public:
     TStartsWithPredicateNode(TPosition pos, TAstNodePtr input, TAstNodePtr prefix);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
-    const TAstNodePtr GetPrefix() const;
+    TAstNodePtr GetPrefix() const;
 
     EReturnType GetReturnType() const override;
 
@@ -353,11 +353,11 @@ private:
     TAstNodePtr Prefix_;
 };
 
-class TExistsPredicateNode : public TAstNode {
+class TExistsPredicateNode: public TAstNode {
 public:
     TExistsPredicateNode(TPosition pos, TAstNodePtr input);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     EReturnType GetReturnType() const override;
 
@@ -367,11 +367,11 @@ private:
     TAstNodePtr Input_;
 };
 
-class TIsUnknownPredicateNode : public TAstNode {
+class TIsUnknownPredicateNode: public TAstNode {
 public:
     TIsUnknownPredicateNode(TPosition pos, TAstNodePtr input);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     EReturnType GetReturnType() const override;
 
@@ -381,11 +381,11 @@ private:
     TAstNodePtr Input_;
 };
 
-class TLikeRegexPredicateNode : public TAstNode {
+class TLikeRegexPredicateNode: public TAstNode {
 public:
     TLikeRegexPredicateNode(TPosition pos, TAstNodePtr input, NReWrapper::IRePtr&& regex);
 
-    const TAstNodePtr GetInput() const;
+    TAstNodePtr GetInput() const;
 
     const NReWrapper::IRePtr& GetRegex() const;
 
@@ -398,4 +398,4 @@ private:
     NReWrapper::IRePtr Regex_;
 };
 
-}
+} // namespace NYql::NJsonPath

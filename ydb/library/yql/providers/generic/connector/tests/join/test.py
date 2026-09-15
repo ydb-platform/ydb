@@ -2,7 +2,7 @@ import pytest
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import configure_runner
 
 import conftest
 import scenario
@@ -18,18 +18,16 @@ tc_collection = Collection(
 )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('join'), ids=tc_collection.ids('join'))
 @pytest.mark.usefixtures("settings")
 @pytest.mark.usefixtures("clients")
 def test_join(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     clients: conftest.Clients,
     test_case: TestCase,
 ):
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.join(
         test_name=request.node.name,
         postgresql_client=clients.PostgreSQL,

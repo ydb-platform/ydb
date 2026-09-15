@@ -55,7 +55,7 @@ BELONGS ya.make
 
 KEEP     BSD-2-Clause         8cedb6171c06f89f0e6eefd60e5f79d5
 BELONGS ya.make
-FILE_INCLUDE COPYRIGHT found in files: auxhelper.cc at line 14, auxhelper.cc at line 17, dwarf_eh.h at line 14, dwarf_eh.h at line 17, dynamic_cast.cc at line 14, dynamic_cast.cc at line 17, exception.cc at line 15, exception.cc at line 18, memory.cc at line 14, memory.cc at line 17, stdexcept.cc at line 14, stdexcept.cc at line 17, stdexcept.h at line 14, stdexcept.h at line 17, typeinfo.cc at line 14, typeinfo.cc at line 17, typeinfo.h at line 14, typeinfo.h at line 17
+FILE_INCLUDE COPYRIGHT found in files: auxhelper.cc at line 14, auxhelper.cc at line 17, dwarf_eh.h at line 14, dwarf_eh.h at line 17, dynamic_cast.cc at line 14, dynamic_cast.cc at line 17, exception.cc at line 15, exception.cc at line 18, memory.cc at line 14, memory.cc at line 17, noexception.cc at line 14, noexception.cc at line 17, stdexcept.cc at line 14, stdexcept.cc at line 17, stdexcept.h at line 14, stdexcept.h at line 17, typeinfo.cc at line 14, typeinfo.cc at line 17, typeinfo.h at line 14, typeinfo.h at line 17
     # list - just word, not file reference
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -69,6 +69,7 @@ FILE_INCLUDE COPYRIGHT found in files: auxhelper.cc at line 14, auxhelper.cc at 
         dynamic_cast.cc [4:24]
         exception.cc [5:25]
         memory.cc [4:24]
+        noexception.cc [4:24]
         stdexcept.cc [4:24]
         stdexcept.h [4:24]
         typeinfo.cc [4:24]

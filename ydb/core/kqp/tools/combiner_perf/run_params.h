@@ -2,6 +2,8 @@
 
 #include <util/system/defaults.h>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -40,6 +42,19 @@ struct TRunParams {
     bool MeasureReferenceMemory = false;
     bool AlwaysSubprocess = false;
     bool EnableVerification = true;
+
+    // Specific test params
+    std::string CombineVsTestColumnSet; // key/value column configuration for DqHashCombineVsWideCombine
+
+    std::string DqBlockFile;
+    std::string DqBlockGenerator;
+    std::vector<std::string> DqBlockColumns;
+    std::vector<std::string> DqBlockKeyColumns;
+    std::vector<std::string> DqBlockAggregations;
+    std::string DqBlockAstFile;
+
+    size_t JoinOverlap = 0; // Table generation params for joins
+    size_t JoinRightRows = 0;
 };
 
 }

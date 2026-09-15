@@ -10,20 +10,22 @@ namespace NKikimr::NArrow::NSSA {
 NJson::TJsonValue IResourceProcessor::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (Input.size()) {
-        result.InsertValue("i", JoinSeq(",", Input));
+        result.InsertValue("input_columns", JoinSeq(",", Input));
     }
     if (Output.size()) {
-        result.InsertValue("o", JoinSeq(",", Output));
+        result.InsertValue("output_columns", JoinSeq(",", Output));
     }
-    result.InsertValue("t", ::ToString(ProcessorType));
+    result.InsertValue("processor_type", ::ToString(ProcessorType));
+    result.InsertValue("is_aggregation", IsAggregation());
     auto internalJson = DoDebugJson();
     if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
-        result.InsertValue("p", std::move(internalJson));
+        result.InsertValue("extra_data", std::move(internalJson));
     }
     return result;
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("execute", GetProcessorType());
     return DoExecute(context, nodeContext);
 }
 

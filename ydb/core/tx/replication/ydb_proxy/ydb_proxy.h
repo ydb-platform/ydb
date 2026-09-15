@@ -11,6 +11,7 @@
 
 namespace NKikimrReplication {
     class TStaticCredentials;
+    class TIamCredentials;
 }
 
 namespace NKikimr::NReplication {
@@ -145,6 +146,7 @@ struct TEvYdbProxy {
         }
 
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+        FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \
@@ -156,6 +158,7 @@ struct TEvYdbProxy {
         PROXY_METHOD(ConsumerName);
         PROXY_METHOD(AppendTopics);
         PROXY_METHOD(MaxMemoryUsageBytes);
+        PROXY_METHOD(Decompress);
 
         #undef PROXY_METHOD
     };
@@ -163,7 +166,7 @@ struct TEvYdbProxy {
     struct TReadTopicSettings {
         using TSelf = TReadTopicSettings;
 
-        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // This option allows you to postpone the auto-commit of read messages. All previously
         // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
         FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
     };
@@ -224,17 +227,20 @@ struct TEvYdbProxy {
     struct TStartTopicReadingSessionResult {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
+            , CommittedOffset(event.GetCommittedOffset())
         {
         }
 
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset)
             : ReadSessionId(readSessionId)
+            , CommittedOffset(committedOffset)
         {
         }
 
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;
+        ui64 CommittedOffset;
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {
@@ -288,10 +294,12 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl = false, const TString& caCert = {});
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
     const NKikimrReplication::TStaticCredentials& credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert,
+    const NKikimrReplication::TIamCredentials& credentials);
 
 IActor* CreateLocalYdbProxy(const TString& database);
 

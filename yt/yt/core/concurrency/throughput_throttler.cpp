@@ -19,18 +19,6 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-bool WillOverflowMul(i64 lhs, i64 rhs)
-{
-    i64 result;
-    return __builtin_mul_overflow(lhs, rhs, &result);
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
 DECLARE_REFCOUNTED_STRUCT(TThrottlerRequest)
 
 struct TThrottlerRequest final
@@ -85,7 +73,7 @@ public:
 
         // Fast lane.
         if (amount == 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return DoThrottle(amount);
@@ -96,19 +84,20 @@ public:
         YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
-        // Fast lane (only).
+        // Fast lane.
         if (amount == 0) {
             return true;
         }
 
-        auto limit = Limit_.load();
-        if (limit >= 0) {
+        if (Limit_.load() >= 0) {
             while (true) {
                 TryUpdateAvailable();
+
                 auto available = Available_.load();
-                if ((limit > 0 && available < 0) || (limit == 0 && available <= 0)) {
+                if (available <= 0) {
                     return false;
                 }
+
                 if (Available_.compare_exchange_weak(available, available - amount)) {
                     break;
                 }
@@ -124,7 +113,7 @@ public:
         YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
-        // Fast lane (only).
+        // Fast lane.
         if (amount == 0) {
             return 0;
         }
@@ -132,11 +121,14 @@ public:
         if (Limit_.load() >= 0) {
             while (true) {
                 TryUpdateAvailable();
+
                 auto available = Available_.load();
-                if (available < 0) {
+                if (available <= 0) {
                     return 0;
                 }
-                i64 acquire = std::min(amount, available);
+
+                // Only an integer amount can be taken by the throttler.
+                auto acquire = std::min<i64>(amount, available);
                 if (Available_.compare_exchange_weak(available, available - acquire)) {
                     amount = acquire;
                     break;
@@ -153,14 +145,14 @@ public:
         YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
-        // Fast lane (only).
+        // Fast lane.
         if (amount == 0) {
             return;
         }
 
-        TryUpdateAvailable();
         if (Limit_.load() >= 0) {
-            Available_ -= amount;
+            TryUpdateAvailable();
+            IncreaseAvailable(-amount);
         }
 
         ValueCounter_.Increment(amount);
@@ -171,11 +163,16 @@ public:
         YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_VERIFY(amount >= 0);
 
+        // Fast lane.
         if (amount == 0) {
             return;
         }
 
-        Available_ += amount;
+        // This code is fragile, but it's hard to do anything about it.
+        if (Limit_.load() >= 0) {
+            IncreaseAvailable(amount);
+        }
+
         ReleaseCounter_.Increment(amount);
     }
 
@@ -183,14 +180,14 @@ public:
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        // Fast lane (only).
-        TryUpdateAvailable();
-
+        // Fast lane.
         if (Limit_.load() < 0) {
             return false;
         }
 
-        return Available_ <= 0;
+        TryUpdateAvailable();
+
+        return Available_.load() <= 0;
     }
 
     void Reconfigure(TThroughputThrottlerConfigPtr config) override
@@ -230,17 +227,22 @@ public:
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        // Fast lane (only).
-        return QueueTotalAmount_;
+        return QueueTotalAmount_.load();
     }
 
     TDuration GetEstimatedOverdraftDuration() const override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        auto queueTotalCount = QueueTotalAmount_.load();
         auto limit = Limit_.load();
-        if (queueTotalCount == 0 || limit <= 0) {
+        // NB: this can lead to dangling callbacks if return value is used
+        // as a delay for the delayed executor.
+        if (limit == 0) {
+            return TDuration::Max();
+        }
+
+        auto queueTotalCount = QueueTotalAmount_.load();
+        if (queueTotalCount == 0 || limit < 0) {
             return TDuration::Zero();
         }
 
@@ -260,6 +262,7 @@ public:
         return Available_.load();
     }
 
+    // Part of the ITestableReconfigurableThroughputThrottler.
     void SetLastUpdated(TInstant lastUpdated) override
     {
         LastUpdated_.store(lastUpdated);
@@ -275,7 +278,7 @@ private:
     NProfiling::TGauge LimitGauge_;
 
     std::atomic<TInstant> LastUpdated_ = TInstant::Zero();
-    std::atomic<i64> Available_ = 0;
+    std::atomic<double> Available_ = 0;
     std::atomic<i64> QueueTotalAmount_ = 0;
 
     //! Protects the section immediately following it.
@@ -287,13 +290,20 @@ private:
 
     std::queue<TThrottlerRequestPtr> Requests_;
 
+    // Sadly, atomic<double> does not support fetch_add operations.
+    void IncreaseAvailable(double amount)
+    {
+        auto current = Available_.load();
+        while (!Available_.compare_exchange_weak(current, current + amount));
+    }
+
     TFuture<void> DoThrottle(i64 amount)
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
         ValueCounter_.Increment(amount);
         if (Limit_.load() < 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         while (true) {
@@ -309,7 +319,7 @@ private:
             }
 
             if (Available_.compare_exchange_strong(available, available - amount)) {
-                return VoidFuture;
+                return OKFuture;
             }
         }
 
@@ -317,7 +327,7 @@ private:
         auto guard = Guard(SpinLock_);
 
         if (Limit_.load() < 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         // Enqueue request to be executed later.
@@ -328,9 +338,8 @@ private:
         {
             // Just install this trace context as the current, don't finish it.
             NTracing::TCurrentTraceContextGuard traceContextGuard(request->TraceContext);
-            YT_LOG_DEBUG(
-                "Started waiting for throttler (Amount: %v)",
-                amount);
+            YT_TLOG_DEBUG("Started waiting for throttler")
+                .With("Amount", amount);
         }
 
         request->Promise.OnCanceled(BIND_NO_PROPAGATE([weakRequest = MakeWeak(request), amount, this, weakThis = MakeWeak(this)] (const TError& error) {
@@ -346,7 +355,7 @@ private:
             NTracing::TTraceContextGuard traceContextGuard(request->TraceContext);
 
             request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
-                << error);
+                .With(error));
 
             // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
             auto this_ = weakThis.Lock();
@@ -355,10 +364,9 @@ private:
             }
 
             // NB: Cannot log any earlier, need this_ for this.
-            YT_LOG_DEBUG(
-                error,
-                "Canceled waiting for throttler (Amount: %v)",
-                amount);
+            YT_TLOG_DEBUG("Canceled waiting for throttler")
+                .With("Amount", amount)
+                .With(error);
 
             QueueTotalAmount_ -= amount;
             QueueSizeGauge_.Update(QueueTotalAmount_);
@@ -373,22 +381,10 @@ private:
         return request->Promise;
     }
 
-    static i64 GetDeltaAvailable(TInstant current, TInstant lastUpdated, double limit)
+    static double GetDeltaAvailable(TInstant current, TInstant lastUpdated, double limit)
     {
         auto timePassed = current - lastUpdated;
-
-        if (limit > 1) {
-            constexpr auto maxRepresentableMilliSeconds = static_cast<double>(TDuration::Max().MilliSeconds());
-            auto maxValidMilliSecondsPassed = maxRepresentableMilliSeconds / limit;
-
-            if (timePassed.MilliSeconds() > maxValidMilliSecondsPassed) {
-                // NB(coteeq): Actual timePassed will overflow multiplication below,
-                // so we have nothing better than to just shrink this duration.
-                timePassed = TDuration::MilliSeconds(maxValidMilliSecondsPassed);
-            }
-        }
-
-        auto deltaAvailable = static_cast<i64>(timePassed.MilliSeconds() * limit / 1000);
+        auto deltaAvailable = timePassed.SecondsFloat() * limit;
         YT_VERIFY(deltaAvailable >= 0);
 
         return deltaAvailable;
@@ -398,41 +394,40 @@ private:
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        // Slow lane (only).
+        // Slow lane.
         auto guard = Guard(SpinLock_);
 
         auto newLimit = limit.value_or(-1);
-        Limit_ = newLimit;
+        Limit_.store(newLimit);
         LimitGauge_.Update(newLimit);
-        Period_ = period;
+
+        Period_.store(period);
         TDelayedExecutor::CancelAndClear(UpdateCookie_);
+
         auto now = GetInstant();
-        if (limit && *limit > 0) {
-            YT_VERIFY(!WillOverflowMul(period.MilliSeconds(), *limit));
+        if (limit && newLimit > 0) {
             auto lastUpdated = LastUpdated_.load();
-            auto maxAvailable = period.MilliSeconds() * *limit / 1000;
-
+            auto maxAvailable = period.SecondsFloat() * newLimit;
             if (lastUpdated == TInstant::Zero()) {
-                Available_ = maxAvailable;
-                LastUpdated_ = now;
+                Available_.store(maxAvailable);
+                LastUpdated_.store(now);
             } else {
-                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
+                auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, newLimit);
+                auto available = Available_.load();
+                auto newAvailable = std::min(available + deltaAvailable, maxAvailable);
 
-                auto newAvailable = UnsignedSaturationArithmeticAdd(Available_.load(), deltaAvailable, maxAvailable);
-                YT_VERIFY(newAvailable <= maxAvailable);
                 if (newAvailable == maxAvailable) {
-                    LastUpdated_ = now;
+                    LastUpdated_.store(now);
                 } else {
-                    LastUpdated_ = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / *limit);
-                    // Just in case.
-                    LastUpdated_ = std::min(LastUpdated_.load(), now);
+                    LastUpdated_.store(lastUpdated + TDuration::Seconds(deltaAvailable / newLimit));
                 }
-                Available_ = newAvailable;
+                Available_.store(newAvailable);
             }
         } else {
-            Available_ = 0;
-            LastUpdated_ = now;
+            Available_.store(0);
+            LastUpdated_.store(now);
         }
+
         ProcessRequests(std::move(guard));
     }
 
@@ -463,7 +458,6 @@ private:
             return;
         }
 
-        auto period = Period_.load();
         auto current = GetInstant();
         auto lastUpdated = LastUpdated_.load();
 
@@ -475,14 +469,16 @@ private:
         // The delta computed above is zero if the limit is zero.
         YT_VERIFY(limit > 0);
 
-        current = lastUpdated + TDuration::MilliSeconds(deltaAvailable * 1000 / limit);
+        // Accounting for the loss of precision (if any).
+        current = lastUpdated + TDuration::Seconds(deltaAvailable / limit);
 
         if (LastUpdated_.compare_exchange_strong(lastUpdated, current)) {
+            auto period = Period_.load();
             auto available = Available_.load();
-            auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
+            auto throughputPerPeriod = period.SecondsFloat() * limit;
 
             while (true) {
-                auto newAvailable = UnsignedSaturationArithmeticAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
+                auto newAvailable = std::min(available + deltaAvailable, throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }
@@ -510,11 +506,7 @@ private:
         auto limit = Limit_.load();
         auto canSpend = [&] {
             auto available = Available_.load();
-            return
-                limit < 0 ||
-                // NB(coteeq): Do not spend tokens if limit is zero.
-                limit == 0 && available > 0 ||
-                limit > 0 && available >= 0;
+            return limit < 0 || available > 0;
         };
 
         while (!Requests_.empty() && canSpend()) {
@@ -529,15 +521,14 @@ private:
             NTracing::TTraceContextGuard traceGuard(request->TraceContext);
 
             auto waitTime = NProfiling::CpuDurationToDuration(NProfiling::GetCpuInstant() - request->StartTime);
-            YT_LOG_DEBUG(
-                "Finished waiting for throttler (Amount: %v, WaitTime: %v)",
-                request->Amount,
-                waitTime);
+            YT_TLOG_DEBUG("Finished waiting for throttler")
+                .With("Amount", request->Amount)
+                .With("WaitTime", waitTime);
 
             if (limit >= 0) {
-                Available_ -= request->Amount;
+                IncreaseAvailable(-request->Amount);
             }
-            QueueTotalAmount_ -= request->Amount;
+            QueueTotalAmount_.fetch_sub(request->Amount);
 
             QueueSizeGauge_.Update(QueueTotalAmount_);
             WaitTimer_.Record(waitTime);
@@ -570,13 +561,13 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const TString& name,
+    const std::string& name,
     TLogger logger,
     NProfiling::TProfiler profiler)
 {
     return CreateReconfigurableThroughputThrottler(
         std::move(config),
-        logger.WithTag("Throttler: %v", name),
+        logger.WithTag("Throttler", name),
         profiler.WithPrefix("/" + CamelCaseToUnderscoreCase(name)));
 }
 
@@ -598,7 +589,7 @@ public:
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool TryAcquire(i64 amount) override
@@ -703,7 +694,7 @@ IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler()
 }
 
 IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
-    const TString& name,
+    const std::string& name,
     NProfiling::TProfiler profiler)
 {
     profiler = profiler.WithPrefix("/" + CamelCaseToUnderscoreCase(name));
@@ -949,7 +940,7 @@ public:
             auto guard = Guard(Lock_);
 
             if (DoTryAcquire(amount)) {
-                return VoidFuture;
+                return OKFuture;
             }
 
             promise = NewPromise<void>();
@@ -959,10 +950,9 @@ public:
             IncomingRequests_.emplace_back(TIncomingRequest{amount, promise, incomingRequestId});
         }
 
-        YT_LOG_DEBUG(
-            "Enqueued a request to the prefetching throttler (Id: %v, Amount: %v)",
-            incomingRequestId,
-            amount);
+        YT_TLOG_DEBUG("Enqueued a request to the prefetching throttler")
+            .With("Id", incomingRequestId)
+            .With("Amount", amount);
 
         RequestUnderlyingIfNeeded();
 
@@ -1044,9 +1034,8 @@ public:
             Available_ += amount;
         }
 
-        YT_LOG_DEBUG(
-            "Released from prefetching throttler (Amount: %v)",
-            amount);
+        YT_TLOG_DEBUG("Released from prefetching throttler")
+            .With("Amount", amount);
     }
 
     bool IsOverdraft() override
@@ -1231,14 +1220,13 @@ private:
             prefetchAmount = PrefetchAmount_;
         }
 
-        YT_LOG_DEBUG(
-            "Request to the underlying throttler (Id: %v, UnderlyingAmount: %v, Balance: %v, Prefetch: %v, IncomingRps: %v, UnderlyingRps: %v)",
-            underlyingRequestId,
-            underlyingAmount,
-            balance,
-            prefetchAmount,
-            incomingRps,
-            underlyingRps);
+        YT_TLOG_DEBUG("Request to the underlying throttler")
+            .With("Id", underlyingRequestId)
+            .With("UnderlyingAmount", underlyingAmount)
+            .With("Balance", balance)
+            .With("Prefetch", prefetchAmount)
+            .With("IncomingRps", incomingRps)
+            .With("UnderlyingRps", underlyingRps);
 
         Underlying_->Throttle(underlyingAmount)
             .Subscribe(BIND(&TPrefetchingThrottler::OnThrottlingResponse, MakeWeak(this), underlyingAmount, underlyingRequestId));
@@ -1274,28 +1262,27 @@ private:
         }
         PrefetchAmount_ = std::clamp(PrefetchAmount_, Config_->MinPrefetchAmount, Config_->MaxPrefetchAmount);
 
-        YT_LOG_DEBUG(
-            "Recalculate the amount to prefetch from the underlying throttler (RequestsInWindow: %v, Window: %v, UnderlyingRps: %v, TargetRps: %v, PrefetchAmount: %v)",
-            UnderlyingRequests_.size(),
-            Config_->Window,
-            underlyingRps,
-            Config_->TargetRps,
-            PrefetchAmount_);
+        YT_TLOG_DEBUG("Recalculate the amount to prefetch from the underlying throttler")
+            .With("RequestsInWindow", UnderlyingRequests_.size())
+            .With("Window", Config_->Window)
+            .With("UnderlyingRps", underlyingRps)
+            .With("TargetRps", Config_->TargetRps)
+            .With("PrefetchAmount", PrefetchAmount_);
     }
 
     //! Handles a response from the underlying throttler.
     void OnThrottlingResponse(i64 available, i64 id, const TError& error)
     {
-        YT_LOG_DEBUG(
-            "Response from the underlying throttler (Id: %v, Amount: %v, Result: %v)",
-            id,
-            available,
-            error.IsOK());
+        YT_TLOG_DEBUG("Response from the underlying throttler")
+            .With("Id", id)
+            .With("Amount", available)
+            .With("Result", error.IsOK());
 
         if (error.IsOK()) {
             SatisfyIncomingRequests(available);
         } else {
-            YT_LOG_ERROR(error, "Error requesting the underlying throttler");
+            YT_TLOG_ERROR("Error requesting the underlying throttler")
+                .With(error);
             DropAllIncomingRequests(available, error);
         }
     }
@@ -1333,11 +1320,10 @@ private:
             // a recursive call to #SatisfyIncomingRequests when the corresponding #promise is set.
             // So that #promise should be set without holding the #Lock_.
             auto result = request.Promise.TrySet();
-            YT_LOG_DEBUG(
-                "Sent the response for the incoming request (Id: %v, Amount: %v, Result: %v)",
-                request.Id,
-                request.Amount,
-                result);
+            YT_TLOG_DEBUG("Sent the response for the incoming request")
+                .With("Id", request.Id)
+                .With("Amount", request.Amount)
+                .With("Result", result);
         }
     }
 
@@ -1362,10 +1348,9 @@ private:
 
         for (auto& request : fulfilled) {
             request.Promise.Set(error);
-            YT_LOG_DEBUG(
-                "Dropped the incoming request (Id: %v, Amount: %v)",
-                request.Id,
-                request.Amount);
+            YT_TLOG_DEBUG("Dropped the incoming request")
+                .With("Id", request.Id)
+                .With("Amount", request.Amount);
         }
     }
 
@@ -1389,18 +1374,14 @@ private:
 };
 
 IThroughputThrottlerPtr CreatePrefetchingThrottler(
-    const TPrefetchingThrottlerConfigPtr& config,
-    const IThroughputThrottlerPtr& underlying,
-    const TLogger& Logger)
+    TPrefetchingThrottlerConfigPtr config,
+    IThroughputThrottlerPtr underlying,
+    TLogger Logger)
 {
-    if (config->Enable) {
-        return New<TPrefetchingThrottler>(
-            config,
-            underlying,
-            Logger);
-    } else {
-        return underlying;
-    }
+    return New<TPrefetchingThrottler>(
+        std::move(config),
+        std::move(underlying),
+        std::move(Logger));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

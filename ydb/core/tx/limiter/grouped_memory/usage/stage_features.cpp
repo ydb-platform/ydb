@@ -4,24 +4,30 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GROUPED_MEMORY_LIMITER
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 TString TStageFeatures::DebugString() const {
     TStringBuilder result;
-    result << "name=" << Name << ";limit=" << Limit << ";";
+    result << "TStageFeatures{" << Endl
+           << "  name=" << Name << Endl
+           << "  limit=" << Limit << Endl;
     if (Owner) {
-        result << "owner=" << Owner->DebugString() << ";";
+        result << "  owner=" << Owner->DebugString() << Endl;
     }
+    result << "}";
     return result;
 }
 
-TStageFeatures::TStageFeatures(const TString& name, const ui64 limit, const std::optional<ui64>& hardLimit,
+TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit,
     const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
     : Name(name)
-    , Limit(limit)
+    , Limit(limit.value_or(DEFAULT_LIMIT))
     , HardLimit(hardLimit)
     , Owner(owner)
-    , Counters(counters) {
+    , Counters(counters)
+    , UseLimitFromConfig(limit.has_value()) {
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
@@ -36,6 +42,7 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
         auto* current = this;
         while (current) {
             current->Waiting.Sub(volume);
+            UpdateConsumption(current);
             if (current->Counters) {
                 current->Counters->Sub(volume, false);
             }
@@ -47,8 +54,12 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
                 if (current->Counters) {
                     current->Counters->OnCannotAllocate();
                 }
-                AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "cannot_allocate")(
-                    "limit", *current->HardLimit)("usage", current->Usage.Val())("delta", volume);
+                YDB_LOG_DEBUG("",
+                    {"name", current->Name},
+                    {"event", "cannot_allocate"},
+                    {"limit", *current->HardLimit},
+                    {"usage", current->Usage.Val()},
+                    {"delta", volume});
             }
             current = current->Owner.get();
         }
@@ -60,8 +71,12 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
         auto* current = this;
         while (current) {
             current->Usage.Add(volume);
-            AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "allocate")("usage", current->Usage.Val())(
-                "delta", volume);
+            UpdateConsumption(current);
+            YDB_LOG_DEBUG("",
+                {"name", current->Name},
+                {"event", "allocate"},
+                {"usage", current->Usage.Val()},
+                {"delta", volume});
             if (current->Counters) {
                 current->Counters->Add(volume, true);
             }
@@ -82,8 +97,12 @@ void TStageFeatures::Free(const ui64 volume, const bool allocated) {
         } else {
             current->Waiting.Sub(volume);
         }
-        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "free")("usage", current->Usage.Val())(
-            "delta", volume);
+        UpdateConsumption(current);
+        YDB_LOG_DEBUG("",
+            {"name", current->Name},
+            {"event", "free"},
+            {"usage", current->Usage.Val()},
+            {"delta", volume});
         current = current->Owner.get();
     }
 }
@@ -93,8 +112,14 @@ void TStageFeatures::UpdateVolume(const ui64 from, const ui64 to, const bool all
         Counters->Sub(from, allocated);
         Counters->Add(to, allocated);
     }
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", Name)("event", "update")("usage", Usage.Val())("waiting", Waiting.Val())(
-        "allocated", allocated)("from", from)("to", to);
+    YDB_LOG_DEBUG("",
+        {"name", Name},
+        {"event", "update"},
+        {"usage", Usage.Val()},
+        {"waiting", Waiting.Val()},
+        {"allocated", allocated},
+        {"from", from},
+        {"to", to});
     if (allocated) {
         Usage.Sub(from);
         Usage.Add(to);
@@ -106,6 +131,8 @@ void TStageFeatures::UpdateVolume(const ui64 from, const ui64 to, const bool all
     if (Owner) {
         Owner->UpdateVolume(from, to, allocated);
     }
+
+    UpdateConsumption(this);
 }
 
 bool TStageFeatures::IsAllocatable(const ui64 volume, const ui64 additional) const {
@@ -131,13 +158,60 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     if (Owner) {
         Owner->Add(volume, allocated);
     }
+
+    UpdateConsumption(this);
 }
 
-void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit, bool& isLimitIncreased) {
+
+void TStageFeatures::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
+    MemoryConsumptionUpdate = std::move(func);
+}
+
+void TStageFeatures::AttachOwner(const std::shared_ptr<TStageFeatures>& owner) {
+    if (Owner) {
+        return;
+    }
+    Owner = owner;
+}
+
+void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& counters) {
+    if (Counters) {
+        return;
+    }
+    Counters = counters;
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
+}
+
+void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {
+    if (UseLimitFromConfig) {
+        isLimitIncreased = false;
+        return;
+    }
+
     isLimitIncreased = limit > Limit;
 
     Limit = limit;
     HardLimit = hardLimit;
+
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
+}
+
+void TStageFeatures::UpdateConsumption(const TStageFeatures* current) const {
+    if (!current || !current->MemoryConsumptionUpdate) {
+        return;
+    }
+
+    current->MemoryConsumptionUpdate(current->Usage.Val());
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

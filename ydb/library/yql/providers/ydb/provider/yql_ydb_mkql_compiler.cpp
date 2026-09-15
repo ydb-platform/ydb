@@ -21,7 +21,7 @@ namespace {
 
 TRuntimeNode BuildYdbParseCall(TRuntimeNode input, TType* itemType, NCommon::TMkqlBuildContext& ctx)
 {
-    const auto flow = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFromYdb", {}, itemType), {input}));
+    const auto flow = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFromYdb", {}, itemType), {input}), {});
     const auto structType = static_cast<const TStructType*>(itemType);
     return ctx.ProgramBuilder.ExpandMap(flow,
         [&](TRuntimeNode item) {

@@ -40,18 +40,16 @@ union VoidPtr {
 // Chooses the best type for passing T as an argument.
 // Attempt to be close to SystemV AMD64 ABI. Objects with trivial copy ctor are
 // passed by value.
-template <typename T,
-          bool IsLValueReference = std::is_lvalue_reference<T>::value>
+template <typename T, bool IsLValueReference = std::is_lvalue_reference_v<T>>
 struct PassByValue : std::false_type {};
 
 template <typename T>
 struct PassByValue<T, /*IsLValueReference=*/false>
-    : std::integral_constant<bool,
-                             absl::is_trivially_copy_constructible<T>::value &&
-                                 absl::is_trivially_copy_assignable<
-                                     typename std::remove_cv<T>::type>::value &&
-                                 std::is_trivially_destructible<T>::value &&
-                                 sizeof(T) <= 2 * sizeof(void*)> {};
+    : std::bool_constant<
+          std::is_trivially_copy_constructible_v<T> &&
+          std::is_trivially_copy_assignable_v<std::remove_cv_t<T>> &&
+          std::is_trivially_destructible_v<T> &&
+          sizeof(T) <= 2 * sizeof(void*)> {};
 
 template <typename T>
 struct ForwardT : std::conditional<PassByValue<T>::value, T, T&&> {};
@@ -72,14 +70,52 @@ using Invoker = R (*)(VoidPtr, typename ForwardT<Args>::type...);
 // static_cast<R> handles the case the return type is void.
 template <typename Obj, typename R, typename... Args>
 R InvokeObject(VoidPtr ptr, typename ForwardT<Args>::type... args) {
-  auto o = static_cast<const Obj*>(ptr.obj);
-  return static_cast<R>(std::invoke(*o, std::forward<Args>(args)...));
+  using T = std::remove_reference_t<Obj>;
+  return static_cast<R>(std::invoke(
+      std::forward<Obj>(*const_cast<T*>(static_cast<const T*>(ptr.obj))),
+      std::forward<typename ForwardT<Args>::type>(args)...));
+}
+
+template <typename Obj, typename Fun, Fun F, typename R, typename... Args>
+R InvokeObject(VoidPtr ptr, typename ForwardT<Args>::type... args) {
+  using T = std::remove_reference_t<Obj>;
+  Obj&& obj =
+      std::forward<Obj>(*const_cast<T*>(static_cast<const T*>(ptr.obj)));
+  // Avoid std::invoke() since the callee is a known function at compile time
+  if constexpr (std::is_member_function_pointer_v<Fun>) {
+    return static_cast<R>((std::forward<Obj>(obj).*F)(
+        std::forward<typename ForwardT<Args>::type>(args)...));
+  } else {
+    return static_cast<R>(
+        F(std::forward<Obj>(obj),
+          std::forward<typename ForwardT<Args>::type>(args)...));
+  }
+}
+
+template <typename T, typename Fun, Fun F, typename R, typename... Args>
+R InvokePtr(VoidPtr ptr, typename ForwardT<Args>::type... args) {
+  T* obj = const_cast<T*>(static_cast<const T*>(ptr.obj));
+  // Avoid std::invoke() since the callee is a known function at compile time
+  if constexpr (std::is_member_function_pointer_v<Fun>) {
+    return static_cast<R>(
+        (obj->*F)(std::forward<typename ForwardT<Args>::type>(args)...));
+  } else {
+    return static_cast<R>(
+        F(obj, std::forward<typename ForwardT<Args>::type>(args)...));
+  }
 }
 
 template <typename Fun, typename R, typename... Args>
 R InvokeFunction(VoidPtr ptr, typename ForwardT<Args>::type... args) {
   auto f = reinterpret_cast<Fun>(ptr.fun);
-  return static_cast<R>(std::invoke(f, std::forward<Args>(args)...));
+  return static_cast<R>(
+      std::invoke(f, std::forward<typename ForwardT<Args>::type>(args)...));
+}
+
+template <typename Fun, Fun F, typename R, typename... Args>
+R InvokeFunction(VoidPtr, typename ForwardT<Args>::type... args) {
+  return static_cast<R>(
+      F(std::forward<typename ForwardT<Args>::type>(args)...));
 }
 
 template <typename Sig>
@@ -98,13 +134,13 @@ template <typename F>
 void AssertNonNull(const F&) {}
 
 template <typename F, typename C>
-void AssertNonNull(F C::*f) {
+void AssertNonNull(F C::* f) {
   assert(f != nullptr);
   (void)f;
 }
 
 template <bool C>
-using EnableIf = typename ::std::enable_if<C, int>::type;
+using EnableIf = typename ::std::enable_if_t<C, int>;
 
 }  // namespace functional_internal
 ABSL_NAMESPACE_END

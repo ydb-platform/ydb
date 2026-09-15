@@ -18,4 +18,10 @@ SRCS(
     library/python/cyson/cyson/unsigned_long.cpp
 )
 
+IF (PYTHON2)
+    CYTHON_FLAGS(-EPYTHON2=1)
+ELSE()
+    CYTHON_FLAGS(-EPYTHON2=0)
+ENDIF()
+
 END()

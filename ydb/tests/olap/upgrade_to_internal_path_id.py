@@ -1,102 +1,177 @@
+import logging
+
 import pytest
 import ydb
+from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
+logger = logging.getLogger(__name__)
 
 
 class TestUpgradeToInternalPathId:
     cluster = None
+    driver = None
     session = None
     partition_count = 17
-    num_rows = 1000
-    config = KikimrConfigGenerator(
-        use_in_memory_pdisks=False,
-        column_shard_config={"generate_internal_path_id": False}
-    )
+    num_rows = 500
+    config = None
 
     @pytest.fixture(autouse=True)
     def setup(self):
+        self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            use_in_memory_pdisks=False,
+            column_shard_config={
+                "generate_internal_path_id": False
+            }
+        )
+
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        self.session = ydb.QuerySessionPool(driver)
-        driver.wait(5, fail_fast=True)
+        self.driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+        self.session = ydb.QuerySessionPool(self.driver)
+        self.driver.wait(5, fail_fast=True)
 
         yield
 
-        self.session.stop()
+        self._close_client()
         self.cluster.stop()
+
+    def _close_client(self):
+        if self.session is not None:
+            self.session.stop()
+            self.session = None
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
 
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
+        self._close_client()
         self.cluster.update_configurator_and_restart(self.config)
-        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        self.session = ydb.QuerySessionPool(driver)
-        driver.wait(5, fail_fast=True)
 
-    def create_table_with_data(self, table_name):
-        self.session.execute_with_retries(f"""
+        driver_holder = {}
+
+        def driver_ready():
+            driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
+            try:
+                driver.wait(timeout=5, fail_fast=True)
+                driver_holder["driver"] = driver
+                return True
+            except Exception as exc:
+                logger.info("Driver not ready yet after cluster restart: %s", exc)
+                driver.stop()
+                return False
+
+        if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
+            raise AssertionError("Driver didn't become ready after cluster restart")
+
+        self.driver = driver_holder["driver"]
+        self.session = ydb.QuerySessionPool(self.driver)
+        self._wait_for_cluster_resources()
+
+    def _wait_for_cluster_resources(self, timeout_seconds=120):
+        def predicate():
+            try:
+                self.session.execute_with_retries(
+                    "SELECT 1",
+                    retry_settings=ydb.RetrySettings(max_retries=0),
+                )
+
+                return True
+            except ydb.issues.PreconditionFailed as ex:
+                if "Not enough resources" in ex.message:
+                    logger.info("Cluster resources not ready yet: %s", ex.message)
+                    return False
+                raise
+
+        if not wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=1):
+            raise AssertionError("Cluster resources didn't become available within timeout")
+
+    def _execute_with_retries(self, query):
+        try:
+            return self.session.execute_with_retries(query)
+        except ydb.issues.PreconditionFailed as ex:
+            if "Not enough resources" not in ex.message:
+                raise
+
+            logger.info("Query failed due to transient resource unavailability, retrying: %s", ex.message)
+            self._wait_for_cluster_resources()
+            return self.session.execute_with_retries(query)
+
+    def create_table_with_data(self, table_name, start_value):
+        self._execute_with_retries(f"""
                 CREATE TABLE `{table_name}` (
                     k Int32 NOT NULL,
                     v String,
                     PRIMARY KEY (k)
                 ) WITH (STORE = COLUMN, PARTITION_COUNT = {self.partition_count}    )
             """)
-        self.session.execute_with_retries(f"""
-            $keys = ListFromRange(0, {self.num_rows});
+
+        self._execute_with_retries(f"""
+            $keys = ListFromRange({start_value}, {start_value} + {self.num_rows});
             $rows = ListMap($keys, ($i)->(<|k:$i, v: "value_" || CAST($i as String)|>));
             INSERT INTO `{table_name}`
             SELECT * FROM AS_TABLE($rows);
             """)
 
-    def validate_table(self, table_name):
-        result = self.session.execute_with_retries(f"""
+    def validate_table(self, table_name, start_value):
+        result = self._execute_with_retries(f"""
             SELECT sum(k) AS c FROM `{table_name}`
         """)
-        assert result[0].rows[0]["c"] == self.num_rows * (self.num_rows - 1) / 2
+        assert result[0].rows[0]["c"] == (2 * start_value + self.num_rows - 1) * self.num_rows / 2
 
     def get_path_ids(self, table_name):
-        result = self.session.execute_with_retries(f"""
+        result = self._execute_with_retries(f"""
             SELECT TabletId, PathId, InternalPathId FROM `{table_name}/.sys/primary_index_granule_stats`
         """)
         rows = [row for result_set in result for row in result_set.rows]
-        result = {}
+        mapping = {}
         for row in rows:
-            internalPathId = row["InternalPathId"]
-            pathId = row["PathId"]
-            if internalPathId not in result:
-                result[internalPathId] = {}
-            if pathId not in result[internalPathId]:
-                result[internalPathId][pathId] = 0
-            result[internalPathId][pathId] += 1
-        return result
+            external_path_id = row["PathId"]
+            internal_path_id = row["InternalPathId"]
+            if external_path_id not in mapping:
+                mapping[external_path_id] = {}
+            if internal_path_id not in mapping[external_path_id]:
+                mapping[external_path_id][internal_path_id] = 0
+            mapping[external_path_id][internal_path_id] += 1
+        assert len(mapping) == 1
+        external_path_id = next(iter(mapping))
+        counted_internal_path_ids = mapping[external_path_id]
+        return (external_path_id, counted_internal_path_ids)
 
     def test(self):
-        self.create_table_with_data("table1")
-        self.validate_table("table1")
-        table1PathMapping = self.get_path_ids("table1")
-        assert len(table1PathMapping) == 1
-        table1InternalPathId = next(iter(table1PathMapping))
-        assert len(table1PathMapping[table1InternalPathId]) == 1
-        table1PathId = next(iter(table1PathMapping[table1InternalPathId]))
-        assert table1InternalPathId == table1PathId
-        assert table1PathMapping[table1InternalPathId][table1PathId] == self.partition_count
+        tables_path_mapping = []
+        max_external_path_id = 0
+        for i in range(4):
+            generate_internal_path_id = i % 2 == 1
+            logger.info(f"Iteration {i}, with generate_internal_path_id={generate_internal_path_id}")
+            self.restart_cluster(generate_internal_path_id=generate_internal_path_id)
+            for j in range(0, i):
+                existing_table_name = f"table{j}"
+                self.validate_table(existing_table_name, j)
+                assert j < len(tables_path_mapping)
+                assert self.get_path_ids(existing_table_name) == tables_path_mapping[j]
+            new_table_name = f"table{i}"
+            self.create_table_with_data(new_table_name, i)
+            self.validate_table(new_table_name, i)
+            assert len(tables_path_mapping) == i
+            path_mapping = self.get_path_ids(new_table_name)
+            tables_path_mapping.append(path_mapping)
+            logger.info(f"{i}, path_mapping: {path_mapping}")
 
-        # restart using another configuration
-        self.restart_cluster(generate_internal_path_id=True)
-        self.validate_table("table1")
-        assert table1PathMapping == self.get_path_ids("table1")
+            external_path_id, counted_internal_path_ids = path_mapping
+            assert external_path_id < 1_000_000_000
+            assert external_path_id > max_external_path_id
+            max_external_path_id = external_path_id
 
-        self.create_table_with_data("table2")
-        self.validate_table("table2")
-        table2PathMapping = self.get_path_ids("table2")
-        assert len(table2PathMapping) == self.partition_count
-        table2InternalPathId = next(iter(table2PathMapping))
-        assert table2InternalPathId not in table2PathMapping[table2InternalPathId]
-
-        # restart using the same configuration as before
-        self.restart_cluster(generate_internal_path_id=True)
-        self.validate_table("table1")
-        assert table1PathMapping == self.get_path_ids("table1")
-        self.validate_table("table2")
-        assert table2PathMapping == self.get_path_ids("table2")
+            if generate_internal_path_id:
+                assert len(counted_internal_path_ids) == self.partition_count
+                assert all([internal_path_id >= 1_000_000_000 for internal_path_id in counted_internal_path_ids.keys()])
+                assert all([count == 1 for count in counted_internal_path_ids.values()])
+            else:
+                assert len(counted_internal_path_ids) == 1
+                assert external_path_id in counted_internal_path_ids
+                assert counted_internal_path_ids[external_path_id] == self.partition_count

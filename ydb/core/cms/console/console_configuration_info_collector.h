@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h> 
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NConsole {
 

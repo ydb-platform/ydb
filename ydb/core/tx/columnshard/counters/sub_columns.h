@@ -29,7 +29,8 @@ private:
 
 public:
     TCategoryCommonCounters(const TCommonCountersOwner& base)
-        : TBase(base) {
+        : TBase(base)
+    {
         WriteBytes = TBase::GetDeriviative("Write/Bytes");
         ReadBytes = TBase::GetDeriviative("Read/Bytes");
         WriteCount = TBase::GetDeriviative("Write/Count");
@@ -70,7 +71,8 @@ public:
     TSubColumnCounters(const TCommonCountersOwner& base)
         : TBase(base)
         , Columns(std::make_shared<TCategoryCommonCounters>(base.CreateSubGroup("DataCategory", "Columns")))
-        , Others(std::make_shared<TCategoryCommonCounters>(base.CreateSubGroup("DataCategory", "Others"))) {
+        , Others(std::make_shared<TCategoryCommonCounters>(base.CreateSubGroup("DataCategory", "Others")))
+    {
     }
 };
 

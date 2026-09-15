@@ -1,0 +1,19 @@
+use plato;
+
+$udf = ($rows) -> {
+    $recordType = StreamItemType(TypeOf($rows));
+    $varType = VariantType(TupleType($recordType, $recordType));
+    RETURN Yql::Map($rows, ($r) -> {
+        RETURN IF(Coalesce(CAST($r.key AS Int32) > 100, false),
+            Variant($r, "0", $varType),
+            Variant($r, "1", $varType));
+    });
+};
+
+$i, $j = (PROCESS Input USING $udf(TableRows()));
+
+insert into Output1
+select * from $i;
+
+insert into Output2
+select * from $j;

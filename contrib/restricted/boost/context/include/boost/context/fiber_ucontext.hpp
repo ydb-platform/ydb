@@ -123,6 +123,11 @@ struct BOOST_CONTEXT_DECL fiber_activation_record {
     }
 
     virtual ~fiber_activation_record() {
+#ifdef __e2k__
+        // On the e2k arch makecontext() is a real syscall that allocates memory
+        // so ucontext_t objects should be freed
+        ::freecontext_e2k( & uctx);
+#endif
 #if defined(BOOST_USE_TSAN)
         if (destroy_tsan_fiber)
             __tsan_destroy_fiber(tsan_fiber);
@@ -312,7 +317,7 @@ static fiber_activation_record * create_fiber1( StackAlloc && salloc, Fn && fn) 
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( capture_t) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     capture_t * record = new ( storage) capture_t{
             sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // stack bottom
@@ -342,8 +347,21 @@ static fiber_activation_record * create_fiber1( StackAlloc && salloc, Fn && fn) 
                   std::uint32_t((integer >> 32) & 0xFFFFFFFF),
                   std::uint32_t(integer));
 #else
+#ifndef __e2k__
     ::makecontext(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>, 1,
                   record);
+#else
+    // On the e2k arch makecontext() allocates memory and thus may fail due to OOM
+    // We have to check for the returning value
+    int mc_ret = ::makecontext_e2k(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>,
+                                   1, record);
+    if (BOOST_UNLIKELY(mc_ret < 0)) {
+        record->~capture_t();
+        salloc.deallocate( sctx);
+        throw std::system_error(std::error_code(errno, std::system_category()),
+                                "makecontext_e2k() failed");
+    }
+#endif // __e2k__
 #endif
 #if defined(BOOST_USE_ASAN)
     record->stack_bottom = record->uctx.uc_stack.ss_sp;
@@ -363,7 +381,7 @@ static fiber_activation_record * create_fiber2( preallocated palloc, StackAlloc 
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( palloc.sp) - static_cast< uintptr_t >( sizeof( capture_t) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     capture_t * record = new ( storage) capture_t{
             palloc.sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // stack bottom
@@ -393,8 +411,21 @@ static fiber_activation_record * create_fiber2( preallocated palloc, StackAlloc 
                   std::uint32_t((integer >> 32) & 0xFFFFFFFF),
                   std::uint32_t(integer));
 #else
+#ifndef __e2k__
     ::makecontext(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>, 1,
                   record);
+#else
+    // On the e2k arch makecontext() allocates memory and thus may fail due to OOM
+    // We have to check for the returning value
+    int mc_ret = ::makecontext_e2k(&record->uctx, (void (*)()) & fiber_entry_func<capture_t>,
+                                   1, record);
+    if (BOOST_UNLIKELY(mc_ret < 0)) {
+        record->~capture_t();
+        salloc.deallocate( palloc.sctx);
+        throw std::system_error(std::error_code(errno, std::system_category()),
+                                "makecontext_e2k() failed");
+    }
+#endif // __e2k__
 #endif
 #if defined(BOOST_USE_ASAN)
     record->stack_bottom = record->uctx.uc_stack.ss_sp;

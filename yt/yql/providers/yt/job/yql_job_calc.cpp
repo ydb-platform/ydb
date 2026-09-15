@@ -38,6 +38,11 @@ void TYqlCalcJob::Load(IInputStream& stream) {
     ::Load(&stream, UseResultYson_);
 }
 
+void TYqlCalcJob::Do(const NYT::TRawJobContext& jobContext) {
+    DoImpl(jobContext.GetInputFile(), jobContext.GetOutputFileList());
+    Finish();
+}
+
 void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) {
     NYT::TTableReader<NYT::TNode> reader(MakeIntrusive<NYT::TNodeTableReader>(MakeIntrusive<NYT::TJobReader>(inHandle)));
     NYT::TTableWriter<NYT::TNode> writer(MakeIntrusive<NYT::TNodeTableWriter>(MakeHolder<NYT::TJobWriter>(outHandles)));
@@ -45,7 +50,9 @@ void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     Init();
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,Env.Get(),
-        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get(), LogProvider.Get());
+        RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), nullptr, SecureParamsProvider.Get(), LogProvider.Get(),
+        LangVer, RuntimeSettings,
+        BridgeMode, BridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess ? TString("./udf_bridge") : TString());
 
     std::function<void(const NUdf::TUnboxedValuePod&, TType*, TVector<ui32>*)> flush;
     if (UseResultYson_) {
@@ -98,6 +105,12 @@ void TYqlCalcJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
             }
         } else {
             flush(value, outType, nullptr);
+        }
+
+        value = {};
+        graph->Invalidate();
+        if (auto pos = graph->GetNotConsumedLinear()) {
+            UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
         }
     }
 }

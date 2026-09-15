@@ -37,12 +37,12 @@ public:
     public:
         TTxBase(const TString& name, TController* self)
             : TTransactionBase(self)
-            , LogPrefix(self, name)
+            , TxLogPrefix(CreateTabletLogPrefix(self, name))
         {
         }
 
     protected:
-        const TTabletLogPrefix LogPrefix;
+        const NActors::NStructuredLog::TStructuredMessage TxLogPrefix;
     };
 
 private:
@@ -64,9 +64,11 @@ private:
 
     // state functions
     STFUNC(StateInit);
+    STFUNC(StateDatabaseResolve);
     STFUNC(StateWork);
 
     void Cleanup(const TActorContext& ctx);
+    void SwitchToDatabaseResolve(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
     void Reset();
 
@@ -84,10 +86,13 @@ private:
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
+    void HandleDatabaseResolve(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -115,7 +120,10 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
+    void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
 
@@ -133,11 +141,16 @@ private:
     class TTxCreateDstResult;
     class TTxAlterDstResult;
     class TTxDropDstResult;
+    class TTxResolveDatabaseResult;
     class TTxResolveSecretResult;
+    class TTxResolveResourceIdResult;
     class TTxWorkerError;
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
+    class TTxRunWorker;
+    class TTxRemoveWorker;
+    class TTxCompleteWorkerSet;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -155,10 +168,15 @@ private:
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
 
     // other
     template <typename T>
@@ -182,18 +200,21 @@ private:
     void Remove(ui64 id);
 
 private:
-    const TTabletLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     THolder<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
 
     TSysParams SysParams;
     THashMap<ui64, TReplication::TPtr> Replications;
     THashMap<TPathId, TReplication::TPtr> ReplicationsByPathId;
+    THashMap<ui64, ui8> UnresolvedDatabaseReplications;
+    static constexpr ui8 ResolveDatabaseAttemptsLimit = 5;
 
     TActorId DiscoveryCache;
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;

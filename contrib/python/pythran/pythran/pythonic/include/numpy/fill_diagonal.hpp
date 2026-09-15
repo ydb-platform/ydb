@@ -9,7 +9,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::none_type fill_diagonal(E &&, typename std::decay<E>::type::dtype);
+  types::none_type fill_diagonal(E &&, typename std::decay_t<E>::dtype);
 
   DEFINE_FUNCTOR(pythonic::numpy, fill_diagonal)
 } // namespace numpy

@@ -9,7 +9,7 @@ This is a command line tool for manipulating Python wheel files, as defined in
 * Repack wheel archives
 * Add or remove tags in existing wheel archives
 
-.. _PEP 427: https://www.python.org/dev/peps/pep-0427/
+.. _PEP 427: https://peps.python.org/pep-0427/
 
 Historical note
 ---------------

@@ -1,3 +1,4 @@
+#include "helpers.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -272,11 +273,16 @@ class TSubscriberCombinationsTest: public NUnitTest::TTestBase {
     UNIT_TEST(CombinationsRootDomain);
     UNIT_TEST(MigratedPathRecreation);
     UNIT_TEST(CombinationsMigratedPath);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId1);
+    UNIT_TEST(PathIdLessThanBadRootSchemeshardId2);
     UNIT_TEST_SUITE_END();
 
     void CombinationsRootDomain();
     void MigratedPathRecreation();
     void CombinationsMigratedPath();
+    void PathIdLessThanImpl(ui64 badRootSchemeshardId);
+    void PathIdLessThanBadRootSchemeshardId1();
+    void PathIdLessThanBadRootSchemeshardId2();
 }; // TSubscriberCombinationsTest
 
 UNIT_TEST_SUITE_REGISTRATION(TSubscriberCombinationsTest);
@@ -319,7 +325,7 @@ void TSubscriberCombinationsTest::CombinationsRootDomain() {
                 UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
             }
 
             context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -343,7 +349,7 @@ void TSubscriberCombinationsTest::CombinationsRootDomain() {
                 UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
 
                 continue;
             }
@@ -396,7 +402,7 @@ void TSubscriberCombinationsTest::MigratedPathRecreation() {
         UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
         const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
         const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
     }
 
     context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -420,7 +426,7 @@ void TSubscriberCombinationsTest::MigratedPathRecreation() {
         UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
         const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
         const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
 
         return;
     }
@@ -467,7 +473,7 @@ void TSubscriberCombinationsTest::CombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
             }
 
             context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -491,7 +497,7 @@ void TSubscriberCombinationsTest::CombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
 
                 continue;
             }
@@ -521,6 +527,10 @@ NInternalEvents::TEvHandshakeResponse::TPtr HandshakeReplica(
     }
 
     return nullptr;
+}
+
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
 }
 
 ui32 CountReplicas(const TStateStorageInfo::TRingGroup& ringGroup) {
@@ -566,6 +576,35 @@ TVector<TActorId> GetReplicasRequiredForQuorum(const TVector<TStateStorageInfo::
     return requiredReplicas;
 }
 
+TStateStorageInfo::TRingGroup GetReplicaRingGroup(TActorId target, const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                if (replica == target) {
+                    return ringGroup;
+                }
+            }
+        }
+    }
+    UNIT_FAIL("Replica: " << target << " is not a part of any ring group.");
+    return {};
+}
+
+TActorId GetFirstParticipatingReplica(const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+    for (const auto& ringGroup : ringGroups) {
+        if (ShouldIgnore(ringGroup)) {
+            continue;
+        }
+        for (const auto& ring : ringGroup.Rings) {
+            for (const auto& replica : ring.Replicas) {
+                return replica;
+            }
+        }
+    }
+    UNIT_FAIL("All the replicas are ignored.");
+    return {};
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
@@ -602,12 +641,7 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
                     Cerr << "Sending path update to replica: " << replica << '\n';
                     runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, ++pathVersion)));
                     if (shouldIgnore) {
-                        // Every such check takes at least a minute!
-                        // Make sure that there are not many ignored replicas.
-                        UNIT_CHECK_GENERATED_EXCEPTION(
-                            runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10)),
-                            TEmptyEventQueueException
-                        );
+                        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TEvNotifyUpdate>(runtime, false, edge), 0);
                     } else {
                         const auto ev = runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10));
                         UNIT_ASSERT_VALUES_EQUAL_C(ev->Sender, subscriber, ev->ToString());
@@ -632,6 +666,49 @@ Y_UNIT_TEST_SUITE(TSubscriberSinglePathUpdateTest) {
 
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSinglePathUpdate({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
+    }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr TPathId PathId = TPathId(DomainId, 1);
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const TActorId replica = GetFirstParticipatingReplica(stateStorageInfo->RingGroups);
+        HandshakeReplica(runtime, replica, edge);
+        ui64 pathVersion = 1;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        {
+            const auto ev = runtime.GrabEdgeEvent<TEvNotifyUpdate>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Sender, subscriber, ev->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(Path, ev->Get()->Path);
+        }
+
+        auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+        newConfig->ClusterStateGeneration++;
+        runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+        ++pathVersion;
+        runtime.Send(replica, edge, GenerateUpdate(GenerateDescribe(Path, PathId, pathVersion)));
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TEvNotifyUpdate>(runtime, false, edge), 0);
     }
 }
 
@@ -678,7 +755,8 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
 
         {
             const auto replicaToKill = requiredReplicas[RandomNumber(requiredReplicas.size())];
-            Cerr << "Poisoning replica: " << replicaToKill << '\n';
+            const auto& ringGroup = GetReplicaRingGroup(replicaToKill, stateStorageInfo->RingGroups);
+            Cerr << "Poisoning replica: " << replicaToKill << " whose ring group state is: " << static_cast<int>(ringGroup.State) << '\n';
             runtime.Send(replicaToKill, edge, new TEvents::TEvPoisonPill());
 
             ++cookie;
@@ -702,9 +780,217 @@ Y_UNIT_TEST_SUITE(TSubscriberSyncQuorumTest) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = DISCONNECTED} });
     }
 
+    Y_UNIT_TEST(OneSynchronizedRingGroup) {
+        TestSyncQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} });
+    }
+
     Y_UNIT_TEST(OneWriteOnlyRingGroup) {
         TestSyncQuorum({ {.State = PRIMARY}, {.State = PRIMARY, .WriteOnly = true} });
     }
+
+    Y_UNIT_TEST(ReplicaConfigMismatch) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        const auto requiredReplicas = GetReplicasRequiredForQuorum(stateStorageInfo->RingGroups);
+        for (const auto& replica : stateStorageInfo->SelectAllReplicas()) {
+            if (!FindPtr(requiredReplicas, replica)) {
+                Cerr << "Poisoning replica: " << replica << '\n';
+                runtime.Send(replica, edge, new TEvents::TEvPoisonPill());
+            }
+        }
+
+        ui64 cookie = 12345;
+        {
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+        }
+
+        {
+            const auto replica = requiredReplicas[RandomNumber(requiredReplicas.size())];
+
+            auto newConfig = MakeIntrusive<TStateStorageInfo>(*stateStorageInfo);
+            newConfig->ClusterStateGeneration++;
+            Cerr << "Updating cluster state generation on replica: " << replica << '\n';
+            runtime.Send(replica, edge, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, newConfig));
+
+            ++cookie;
+            runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+            const auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, true, syncResponse->ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ReconfigurationWithDelayedSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+
+        // Send sync request: subscriber will queue it in DelayedSyncRequest since it cannot process syncs before finishing its initialization.
+        constexpr ui64 cookie = 12345;
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+
+        auto replicas = ResolveReplicas(runtime, Path);
+        runtime.Send(subscriber, edge, replicas->Release().Release());
+
+        // Now allow all notifications through so that initialization completes.
+        notificationBlocker.Stop().Unblock();
+
+        auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+
+        // No additional sync responses.
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+    }
+
+    Y_UNIT_TEST(ReconfigurationWithCurrentSyncRequest) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
+
+        const auto stateStorageInfo = GetStateStorageInfo(runtime);
+        const auto participatingReplicas = CountParticipatingReplicas(*stateStorageInfo);
+
+        constexpr int DomainId = 1;
+        constexpr const char* Path = "TestPath";
+        const TActorId edge = runtime.AllocateEdgeActor();
+
+        const TActorId subscriber = runtime.Register(CreateSchemeBoardSubscriber(edge, Path, DomainId));
+        TBlockEvents<NInternalEvents::TEvNotify> notificationBlocker(runtime, [&](const NInternalEvents::TEvNotify::TPtr& ev) {
+            return ev->Recipient == subscriber;
+        });
+        runtime.WaitFor("initial path lookups", [&]() {
+            return notificationBlocker.size() == participatingReplicas;
+        }, TDuration::Seconds(10));
+        notificationBlocker.Stop().Unblock();
+
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<NInternalEvents::TEvSyncVersionResponse> syncResponseBlocker(runtime, [&](const NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
+            return ev->Recipient == subscriber && ev->Cookie == cookie;
+        });
+        runtime.Send(new IEventHandle(subscriber, edge, new NInternalEvents::TEvSyncRequest(), 0, cookie));
+        runtime.WaitFor("some sync responses", [&]() {
+            return !syncResponseBlocker.empty();
+        }, TDuration::Seconds(10));
+        syncResponseBlocker.Unblock(1);
+
+        auto replicas = ResolveReplicas(runtime, Path);
+        runtime.Send(subscriber, edge, replicas->Release().Release());
+        syncResponseBlocker.Stop().Unblock();
+
+        auto syncResponse = runtime.GrabEdgeEvent<NInternalEvents::TEvSyncResponse>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Path, Path, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Cookie, cookie, syncResponse->ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(syncResponse->Get()->Partial, false, syncResponse->ToString());
+
+        // No additional sync responses.
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<NInternalEvents::TEvSyncResponse>(runtime, false, edge), 0);
+    }
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanImpl(ui64 badRootSchemeshardId) {
+    // Verify PathIdLessThan(DomainId, other.DomainId) branch in subscriber.cpp:
+    // on a misconfigured cluster the bad root schemeshard owner-id is numerically higher than
+    // the tenant schemeshard owner-id, so without the fix the TSS update would be dropped.
+
+    constexpr ui64 tenantSchemeshardId = 100ULL;
+    constexpr auto path = "/Root/Tenant/table";
+
+    // Subdomain roots have local-path-id 1; inner paths have local-path-id > 1.
+    const TPathId gssSubdomainId{badRootSchemeshardId, 2};
+    const TPathId gssPathId{badRootSchemeshardId, 5};
+    const TPathId tssSubdomainId{tenantSchemeshardId, 1};
+    const TPathId tssPathId{tenantSchemeshardId, 5};
+
+    auto context = CreateContext();
+    TVector<TActorId> replicas = ResolveReplicas(*context);
+    Y_ASSERT(replicas.size() >= 2);
+
+    // GSS populator on replica[0]
+    const TActorId gssPopulator = context->AllocateEdgeActor();
+    context->HandshakeReplica(replicas[0], gssPopulator, badRootSchemeshardId, 1);
+    context->CommitReplica(replicas[0], gssPopulator, badRootSchemeshardId, 1);
+
+    // TSS populator on replica[1]
+    const TActorId tssPopulator = context->AllocateEdgeActor();
+    context->HandshakeReplica(replicas[1], tssPopulator, tenantSchemeshardId, 1);
+    context->CommitReplica(replicas[1], tssPopulator, tenantSchemeshardId, 1);
+
+    const TActorId edge = context->AllocateEdgeActor();
+    context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyDelete>(edge, path);
+
+    // GSS update: inner path with bad subdomain ID.
+    context->Send(replicas[0], gssPopulator,
+        GenerateUpdate(GenerateDescribe(path, gssPathId, 1, gssSubdomainId), badRootSchemeshardId, 1));
+    {
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
+        UNIT_ASSERT(ev->Get());
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(gssPathId, ev->Get()->PathId);
+    }
+
+    // TSS update: inner path with tenant subdomain ID.
+    // PathIdLessThan(gssSubdomainId, tssSubdomainId) returns true (bad ID treated as lower)
+    // -> subscriber picks TSS update.
+    context->Send(replicas[1], tssPopulator,
+        GenerateUpdate(GenerateDescribe(path, tssPathId, 1, tssSubdomainId), tenantSchemeshardId, 1));
+    {
+        auto ev = context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(edge);
+        UNIT_ASSERT(ev->Get());
+        UNIT_ASSERT_VALUES_EQUAL(path, ev->Get()->Path);
+        UNIT_ASSERT_VALUES_EQUAL(tssPathId, ev->Get()->PathId);
+    }
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanBadRootSchemeshardId1() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_1);
+}
+
+void TSubscriberCombinationsTest::PathIdLessThanBadRootSchemeshardId2() {
+    PathIdLessThanImpl(BAD_ROOT_SCHEMESHARD_ID_2);
 }
 
 } // NSchemeBoard

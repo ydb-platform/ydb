@@ -11,11 +11,9 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   auto logspace(double start, double stop, long num, bool endpoint, double base)
-      -> decltype(functor::power()(base, functor::linspace()(start, stop, num,
-                                                             endpoint)))
+      -> decltype(functor::power()(base, functor::linspace()(start, stop, num, endpoint)))
   {
-    return functor::power()(base,
-                            functor::linspace()(start, stop, num, endpoint));
+    return functor::power()(base, functor::linspace()(start, stop, num, endpoint));
   }
 } // namespace numpy
 PYTHONIC_NS_END

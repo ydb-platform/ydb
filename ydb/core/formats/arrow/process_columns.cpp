@@ -1,6 +1,6 @@
 #include "process_columns.h"
 
-#include "common/adapter.h"
+#include <ydb/core/formats/arrow/common/adapter.h>
 
 #include <ydb/library/formats/arrow/modifier/schema.h>
 #include <ydb/library/formats/arrow/modifier/subset.h>

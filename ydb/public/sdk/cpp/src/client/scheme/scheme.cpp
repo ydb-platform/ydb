@@ -1,8 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
@@ -27,52 +27,6 @@ void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
     for (const auto& name : PermissionNames) {
         proto.add_permission_names(TStringType{name});
     }
-}
-
-TVirtualTimestamp::TVirtualTimestamp(uint64_t planStep, uint64_t txId)
-    : PlanStep(planStep)
-    , TxId(txId)
-{}
-
-TVirtualTimestamp::TVirtualTimestamp(const ::Ydb::VirtualTimestamp& proto)
-    : TVirtualTimestamp(proto.plan_step(), proto.tx_id())
-{}
-
-std::string TVirtualTimestamp::ToString() const {
-    TString result;
-    TStringOutput out(result);
-    Out(out);
-    return result;
-}
-
-void TVirtualTimestamp::Out(IOutputStream& out) const {
-    out << "{ plan_step: " << PlanStep
-      << ", tx_id: " << TxId
-      << " }";
-}
-
-bool TVirtualTimestamp::operator<(const TVirtualTimestamp& rhs) const {
-    return PlanStep < rhs.PlanStep && TxId < rhs.TxId;
-}
-
-bool TVirtualTimestamp::operator<=(const TVirtualTimestamp& rhs) const {
-    return PlanStep <= rhs.PlanStep && TxId <= rhs.TxId;
-}
-
-bool TVirtualTimestamp::operator>(const TVirtualTimestamp& rhs) const {
-    return PlanStep > rhs.PlanStep && TxId > rhs.TxId;
-}
-
-bool TVirtualTimestamp::operator>=(const TVirtualTimestamp& rhs) const {
-    return PlanStep >= rhs.PlanStep && TxId >= rhs.TxId;
-}
-
-bool TVirtualTimestamp::operator==(const TVirtualTimestamp& rhs) const {
-    return PlanStep == rhs.PlanStep && TxId == rhs.TxId;
-}
-
-bool TVirtualTimestamp::operator!=(const TVirtualTimestamp& rhs) const {
-    return !(*this == rhs);
 }
 
 static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) {
@@ -109,8 +63,16 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::View;
     case ::Ydb::Scheme::Entry::RESOURCE_POOL:
         return ESchemeEntryType::ResourcePool;
+    case ::Ydb::Scheme::Entry::BACKUP_COLLECTION:
+        return ESchemeEntryType::BackupCollection;
     case ::Ydb::Scheme::Entry::SYS_VIEW:
         return ESchemeEntryType::SysView;
+    case ::Ydb::Scheme::Entry::TRANSFER:
+        return ESchemeEntryType::Transfer;
+    case ::Ydb::Scheme::Entry::STREAMING_QUERY:
+        return ESchemeEntryType::StreamingQuery;
+    case ::Ydb::Scheme::Entry::SECRET:
+        return ESchemeEntryType::Secret;
     default:
         return ESchemeEntryType::Unknown;
     }
@@ -120,6 +82,7 @@ TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
     : Name(proto.name())
     , Owner(proto.owner())
     , Type(ConvertProtoEntryType(proto.type()))
+    , InterruptInheritance(proto.interrupt_permission_inheritance())
     , SizeBytes(proto.size_bytes())
     , CreatedAt(proto.created_at())
 {
@@ -144,6 +107,10 @@ void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request)
 }
 
 TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+    if (request.clear_permissions()) {
+        AddClearAcl();
+    }
+
     for (const auto& action : request.actions()) {
         switch (action.action_case()) {
             case Ydb::Scheme::PermissionsAction::kGrant:

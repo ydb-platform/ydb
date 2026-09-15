@@ -20,7 +20,7 @@ def allure_tag_sep(tag):
 
 
 def __is(kind, t):
-    return kind in [v for k, v in t.__dict__.items() if not k.startswith('__')]
+    return kind in [v for k, v in t.__dict__.items() if not k.startswith("__")]
 
 
 def parse_tag(tag, issue_pattern=None, link_pattern=None):
@@ -51,7 +51,7 @@ def parse_tag(tag, issue_pattern=None, link_pattern=None):
     """
     sep = allure_tag_sep(tag)
     schema, value = islice(chain(tag.split(sep, 1), [None]), 2)
-    prefix, kind, name = islice(chain(schema.split('.'), [None], [None]), 3)
+    prefix, kind, name = islice(chain(schema.split("."), [None], [None]), 3)
 
     if tag in [severity for severity in Severity]:
         return Label(name=LabelType.SEVERITY, value=tag)

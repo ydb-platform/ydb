@@ -70,7 +70,9 @@ namespace context {
 namespace detail {
 
 // manage_exception_state is a dummy struct unless we have specific support
-struct manage_exception_state {};
+struct manage_exception_state {
+    void from_forced_unwind() noexcept {}
+};
 
 } // namespace detail
 } // namespace context
@@ -87,10 +89,15 @@ struct __cxa_eh_globals {
 
 class manage_exception_state {
 public:
-    manage_exception_state() {
+    BOOST_NOINLINE manage_exception_state() {
         exception_state_ = *__cxa_get_globals();
     }
-    ~manage_exception_state() {
+    // Hack to account for the forced_unwind exception thrown in fiber_unwind
+    // that's run ontop before the destructor.
+    void from_forced_unwind() noexcept {
+        exception_state_.uncaughtExceptions += 1;
+    }
+    BOOST_NOINLINE ~manage_exception_state() {
         *__cxa_get_globals() = exception_state_;
     }
 private:
@@ -123,7 +130,7 @@ template< typename Rec >
 transfer_t fiber_exit( transfer_t t) noexcept {
     Rec * rec = static_cast< Rec * >( t.data);
 #if BOOST_CONTEXT_SHADOW_STACK
-    // destory shadow stack
+    // destroy shadow stack
     std::size_t ss_size = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 16));
     long unsigned int ss_base = *((unsigned long*)(reinterpret_cast< uintptr_t >( rec)- 8));
     munmap((void *)ss_base, ss_size);
@@ -220,7 +227,7 @@ fcontext_t create_fiber1( StackAlloc && salloc, Fn && fn) {
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     Record * record = new ( storage) Record{
             sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top
@@ -262,7 +269,7 @@ fcontext_t create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( palloc.sp) - static_cast< uintptr_t >( sizeof( Record) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context-stack
+    // placwment new for control structure on context-stack
     Record * record = new ( storage) Record{
             palloc.sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // 64byte gab between control structure and stack top
@@ -344,6 +351,8 @@ public:
 
     ~fiber() {
         if ( BOOST_UNLIKELY( nullptr != fctx_) ) {
+            detail::manage_exception_state exstate;
+            boost::ignore_unused(exstate);
             detail::ontop_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
                     detail::exchange( fctx_, nullptr),
@@ -374,13 +383,18 @@ public:
         BOOST_ASSERT( nullptr != fctx_);
         detail::manage_exception_state exstate;
         boost::ignore_unused(exstate);
-        return { detail::jump_fcontext(
+        try {
+            return { detail::jump_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
-                    detail::exchange( fctx_, nullptr),
+                        detail::exchange( fctx_, nullptr),
 #else
-                    std::exchange( fctx_, nullptr),
+                        std::exchange( fctx_, nullptr),
 #endif
-                    nullptr).fctx };
+                        nullptr).fctx };
+        } catch ( detail::forced_unwind const& ) {
+            exstate.from_forced_unwind();
+            throw;
+        }
     }
 
     template< typename Fn >
@@ -389,14 +403,19 @@ public:
         detail::manage_exception_state exstate;
         boost::ignore_unused(exstate);
         auto p = std::forward< Fn >( fn);
-        return { detail::ontop_fcontext(
+        try {
+            return { detail::ontop_fcontext(
 #if defined(BOOST_NO_CXX14_STD_EXCHANGE)
-                    detail::exchange( fctx_, nullptr),
+                        detail::exchange( fctx_, nullptr),
 #else
-                    std::exchange( fctx_, nullptr),
+                        std::exchange( fctx_, nullptr),
 #endif
-                    & p,
-                    detail::fiber_ontop< fiber, decltype(p) >).fctx };
+                        & p,
+                        detail::fiber_ontop< fiber, decltype(p) >).fctx };
+        } catch ( detail::forced_unwind const& ) {
+            exstate.from_forced_unwind();
+            throw;
+        }
     }
 
     explicit operator bool() const noexcept {

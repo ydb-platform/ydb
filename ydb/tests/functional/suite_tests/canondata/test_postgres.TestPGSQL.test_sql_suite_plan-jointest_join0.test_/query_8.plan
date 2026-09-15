@@ -47,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                        "Node Type": "Aggregate-LeftJoin (Map)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -68,7 +68,7 @@
                                                         "ExternalPlanNodeId": 8
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 12,
@@ -90,14 +90,11 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                         "ReadColumns": [
+                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                            "unique2 (-\u221e, +\u221e)",
                                                                             "hundred",
                                                                             "ten",
-                                                                            "thousand",
-                                                                            "unique2"
-                                                                        ],
-                                                                        "ReadRanges": [
-                                                                            "unique1 (-\u221e, +\u221e)",
-                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                            "thousand"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",
@@ -119,7 +116,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
+                                                        "Node Type": "InnerJoin (Map)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "t2.thousand = t3.unique2",
@@ -131,7 +128,7 @@
                                                                         "ExternalPlanNodeId": 3
                                                                     }
                                                                 ],
-                                                                "Name": "InnerJoin (MapJoin)"
+                                                                "Name": "InnerJoin (Map)"
                                                             },
                                                             {
                                                                 "Inputs": [
@@ -162,14 +159,11 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
+                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                            "unique2 (-\u221e, +\u221e)",
                                                                                             "hundred",
                                                                                             "ten",
-                                                                                            "thousand",
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "unique1 (-\u221e, +\u221e)",
-                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                            "thousand"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",
@@ -202,14 +196,11 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
+                                                                                            "unique1 (-\u221e, +\u221e)",
+                                                                                            "unique2 (-\u221e, +\u221e)",
                                                                                             "hundred",
                                                                                             "ten",
-                                                                                            "thousand",
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
-                                                                                            "unique1 (-\u221e, +\u221e)",
-                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                            "thousand"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",

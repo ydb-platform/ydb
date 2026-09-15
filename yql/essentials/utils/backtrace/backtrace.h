@@ -11,15 +11,14 @@ class IOutputStream;
 
 void EnableKikimrBacktraceFormat();
 
-namespace NYql {
-
-namespace NBacktrace {
+namespace NYql::NBacktrace {
 const int Limit = 400;
 
 void RegisterKikimrFatalActions();
 void AddAfterFatalCallback(const std::function<void(int)>& after);
 void AddBeforeFatalCallback(const std::function<void(int)>& before);
 void EnableKikimrSymbolize();
+void DisableBacktraceUnwinding();
 
 void KikimrBackTrace();
 void KikimrBackTraceFormatImpl(IOutputStream*);
@@ -29,6 +28,4 @@ void SetModulesMapping(const THashMap<TString, TString>& mapping);
 
 TString Symbolize(const TString& input, const THashMap<TString, TString>& mapping);
 
-} /* namespace Backtrace */
-
-} /* namespace NYql */
+} // namespace NYql::NBacktrace

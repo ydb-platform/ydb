@@ -135,7 +135,7 @@ struct AggregationMethodOneNumber
 
     // Insert the key from the hash table into columns.
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const Key & key, const std::vector<ColPtr> & key_columns, const Sizes & /*key_sizes*/)
+    static void insertKeyIntoColumns(const Key & key, const std::vector<ColPtr> & key_columns, const Sizes & /*key_sizes*/, const std::vector<arrow::Type::type>& /*typeIds*/)
     {
         insertSameSizeNumber(*key_columns[0], key);
     }
@@ -162,7 +162,7 @@ struct AggregationMethodString
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
 
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &)
+    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &, const std::vector<arrow::Type::type>& /*typeIds*/)
     {
         insertString(*key_columns[0], key);
     }
@@ -189,7 +189,7 @@ struct AggregationMethodStringNoCache
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
 
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &)
+    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &, const std::vector<arrow::Type::type>& /*typeIds*/)
     {
         insertString(*key_columns[0], key);
     }
@@ -216,7 +216,7 @@ struct AggregationMethodFixedString
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
 
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &)
+    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &, const std::vector<arrow::Type::type>& /*typeIds*/)
     {
         insertFixedString(*key_columns[0], key);
     }
@@ -242,7 +242,7 @@ struct AggregationMethodFixedStringNoCache
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
 
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &)
+    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &, const std::vector<arrow::Type::type>& /*typeIds*/)
     {
         insertFixedString(*key_columns[0], key);
     }
@@ -280,7 +280,7 @@ struct AggregationMethodKeysFixed
     }
 #endif
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const Key & key, const std::vector<ColPtr> & key_columns, const Sizes & key_sizes)
+    static void insertKeyIntoColumns(const Key & key, const std::vector<ColPtr> & key_columns, const Sizes & key_sizes, const std::vector<arrow::Type::type>& typeIds)
     {
         size_t keys_count = key_columns.size();
 
@@ -306,7 +306,7 @@ struct AggregationMethodKeysFixed
                 }
             }
 
-            insertData(observed_column, StringRef(key_data, key_sizes[i]));
+            insertData(observed_column, StringRef(key_data, key_sizes[i]), typeIds[i]);
             key_data += key_sizes[i];
         }
     }
@@ -337,11 +337,14 @@ struct AggregationMethodSerialized
     std::optional<Sizes> shuffleKeyColumns(std::vector<IColumn *> &, const Sizes &) { return {}; }
 
     template <typename ColPtr>
-    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &)
+    static void insertKeyIntoColumns(const StringRef & key, const std::vector<ColPtr> & key_columns, const Sizes &, const std::vector<arrow::Type::type>& typeIds)
     {
         const auto * pos = key.data;
-        for (auto & column : key_columns)
-            pos = deserializeAndInsertFromArena(*column, pos);
+        ui32 idx = 0;
+        for (auto& column : key_columns) {
+            pos = deserializeAndInsertFromArena(*column, pos, typeIds[idx]);
+            ++idx;
+        }
     }
 };
 

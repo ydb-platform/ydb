@@ -1,40 +1,58 @@
-__version__ = "3.9.5"
+__version__ = "3.12.15"
 
 from typing import TYPE_CHECKING, Tuple
 
 from . import hdrs as hdrs
 from .client import (
-    BaseConnector as BaseConnector,
-    ClientConnectionError as ClientConnectionError,
-    ClientConnectorCertificateError as ClientConnectorCertificateError,
-    ClientConnectorError as ClientConnectorError,
-    ClientConnectorSSLError as ClientConnectorSSLError,
-    ClientError as ClientError,
-    ClientHttpProxyError as ClientHttpProxyError,
-    ClientOSError as ClientOSError,
-    ClientPayloadError as ClientPayloadError,
-    ClientProxyConnectionError as ClientProxyConnectionError,
-    ClientRequest as ClientRequest,
-    ClientResponse as ClientResponse,
-    ClientResponseError as ClientResponseError,
-    ClientSession as ClientSession,
-    ClientSSLError as ClientSSLError,
-    ClientTimeout as ClientTimeout,
-    ClientWebSocketResponse as ClientWebSocketResponse,
-    ContentTypeError as ContentTypeError,
-    Fingerprint as Fingerprint,
-    InvalidURL as InvalidURL,
-    NamedPipeConnector as NamedPipeConnector,
-    RequestInfo as RequestInfo,
-    ServerConnectionError as ServerConnectionError,
-    ServerDisconnectedError as ServerDisconnectedError,
-    ServerFingerprintMismatch as ServerFingerprintMismatch,
-    ServerTimeoutError as ServerTimeoutError,
-    TCPConnector as TCPConnector,
-    TooManyRedirects as TooManyRedirects,
-    UnixConnector as UnixConnector,
-    WSServerHandshakeError as WSServerHandshakeError,
-    request as request,
+    BaseConnector,
+    ClientConnectionError,
+    ClientConnectionResetError,
+    ClientConnectorCertificateError,
+    ClientConnectorDNSError,
+    ClientConnectorError,
+    ClientConnectorSSLError,
+    ClientError,
+    ClientHttpProxyError,
+    ClientOSError,
+    ClientPayloadError,
+    ClientProxyConnectionError,
+    ClientRequest,
+    ClientResponse,
+    ClientResponseError,
+    ClientSession,
+    ClientSSLError,
+    ClientTimeout,
+    ClientWebSocketResponse,
+    ClientWSTimeout,
+    ConnectionTimeoutError,
+    ContentTypeError,
+    Fingerprint,
+    InvalidURL,
+    InvalidUrlClientError,
+    InvalidUrlRedirectClientError,
+    NamedPipeConnector,
+    NonHttpUrlClientError,
+    NonHttpUrlRedirectClientError,
+    RedirectClientError,
+    RequestInfo,
+    ServerConnectionError,
+    ServerDisconnectedError,
+    ServerFingerprintMismatch,
+    ServerTimeoutError,
+    SocketTimeoutError,
+    TCPConnector,
+    TooManyRedirects,
+    UnixConnector,
+    WSMessageTypeError,
+    WSServerHandshakeError,
+    request,
+)
+from .client_middleware_digest_auth import DigestAuthMiddleware
+from .client_middlewares import ClientHandlerType, ClientMiddlewareType
+from .compression_utils import set_zlib_backend
+from .connector import (
+    AddrInfoType as AddrInfoType,
+    SocketFactoryType as SocketFactoryType,
 )
 from .cookiejar import CookieJar as CookieJar, DummyCookieJar as DummyCookieJar
 from .formdata import FormData as FormData
@@ -99,6 +117,7 @@ from .tracing import (
     TraceRequestChunkSentParams as TraceRequestChunkSentParams,
     TraceRequestEndParams as TraceRequestEndParams,
     TraceRequestExceptionParams as TraceRequestExceptionParams,
+    TraceRequestHeadersSentParams as TraceRequestHeadersSentParams,
     TraceRequestRedirectParams as TraceRequestRedirectParams,
     TraceRequestStartParams as TraceRequestStartParams,
     TraceResponseChunkReceivedParams as TraceResponseChunkReceivedParams,
@@ -114,9 +133,12 @@ if TYPE_CHECKING:
 __all__: Tuple[str, ...] = (
     "hdrs",
     # client
+    "AddrInfoType",
     "BaseConnector",
     "ClientConnectionError",
+    "ClientConnectionResetError",
     "ClientConnectorCertificateError",
+    "ClientConnectorDNSError",
     "ClientConnectorError",
     "ClientConnectorSSLError",
     "ClientError",
@@ -131,20 +153,33 @@ __all__: Tuple[str, ...] = (
     "ClientSession",
     "ClientTimeout",
     "ClientWebSocketResponse",
+    "ClientWSTimeout",
+    "ConnectionTimeoutError",
     "ContentTypeError",
     "Fingerprint",
+    "FlowControlDataQueue",
     "InvalidURL",
+    "InvalidUrlClientError",
+    "InvalidUrlRedirectClientError",
+    "NonHttpUrlClientError",
+    "NonHttpUrlRedirectClientError",
+    "RedirectClientError",
     "RequestInfo",
     "ServerConnectionError",
     "ServerDisconnectedError",
     "ServerFingerprintMismatch",
     "ServerTimeoutError",
+    "SocketFactoryType",
+    "SocketTimeoutError",
     "TCPConnector",
     "TooManyRedirects",
     "UnixConnector",
     "NamedPipeConnector",
     "WSServerHandshakeError",
     "request",
+    # client_middleware
+    "ClientMiddlewareType",
+    "ClientHandlerType",
     # cookiejar
     "CookieJar",
     "DummyCookieJar",
@@ -153,7 +188,9 @@ __all__: Tuple[str, ...] = (
     # helpers
     "BasicAuth",
     "ChainMapProxy",
+    "DigestAuthMiddleware",
     "ETag",
+    "set_zlib_backend",
     # http
     "HttpVersion",
     "HttpVersion10",
@@ -194,7 +231,6 @@ __all__: Tuple[str, ...] = (
     "DataQueue",
     "EMPTY_PAYLOAD",
     "EofStream",
-    "FlowControlDataQueue",
     "StreamReader",
     # tracing
     "TraceConfig",
@@ -210,17 +246,19 @@ __all__: Tuple[str, ...] = (
     "TraceRequestChunkSentParams",
     "TraceRequestEndParams",
     "TraceRequestExceptionParams",
+    "TraceRequestHeadersSentParams",
     "TraceRequestRedirectParams",
     "TraceRequestStartParams",
     "TraceResponseChunkReceivedParams",
     # workers (imported lazily with __getattr__)
     "GunicornUVLoopWebWorker",
     "GunicornWebWorker",
+    "WSMessageTypeError",
 )
 
 
 def __dir__() -> Tuple[str, ...]:
-    return __all__ + ("__author__", "__doc__")
+    return __all__ + ("__doc__",)
 
 
 def __getattr__(name: str) -> object:

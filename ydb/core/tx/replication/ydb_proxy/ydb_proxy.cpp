@@ -1,20 +1,21 @@
 #include "partition_end_watcher.h"
 #include "ydb_proxy.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/base/appdata.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
 
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace NKikimr::NReplication {
 
@@ -42,6 +43,7 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
 void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
     out << "{"
         << " ReadSessionId: " << ReadSessionId
+        << " CommittedOffset: " << CommittedOffset
     << " }";
 }
 
@@ -70,16 +72,7 @@ protected:
             }
         };
 
-        struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {
-            const TActorId Sender;
-            const ui64 Cookie;
-
-            explicit TEvTopicEventReady(const TActorId& sender, ui64 cookie)
-                : Sender(sender)
-                , Cookie(cookie)
-            {
-            }
-        };
+        struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {};
 
     }; // TEvPrivate
 
@@ -188,7 +181,12 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
-        WaitEvent(ev->Sender, ev->Cookie);
+
+        Y_ABORT_UNLESS(!ReadRequest);
+        ReadRequest.emplace(ev->Sender, ev->Cookie);
+        if (!WaitingEvent) {
+            WaitEvent();
+        }
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
@@ -199,53 +197,68 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         Y_UNUSED(consumerName);
         Y_UNUSED(settings);
 
-        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, Client);
     }
 
-    void WaitEvent(const TActorId& sender, ui64 cookie) {
+    void WaitEvent() {
+        Y_ABORT_UNLESS(!WaitingEvent);
+        WaitingEvent = true;
+
         auto request = MakeRequest(SelfId());
-        auto cb = [request, sender, cookie](const NThreading::TFuture<void>&) {
+        auto cb = [request](const NThreading::TFuture<void>&) {
             if (auto r = request.lock()) {
-                r->Complete(new TEvPrivate::TEvTopicEventReady(sender, cookie));
+                r->Complete(new TEvPrivate::TEvTopicEventReady());
             }
         };
 
         Session->WaitEvent().Subscribe(std::move(cb));
     }
 
-    void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
+    void ContinueWaiting() {
+        if (!SessionStarted || ReadRequest) {
+            WaitEvent();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvTopicEventReady::TPtr&) {
+        WaitingEvent = false;
         auto event = Session->GetEvent(false);
         if (!event) {
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            return ContinueWaiting();
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
-            Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            Send(Client, new TEvYdbProxy::TEvStartTopicReadingSession(*x));
+            SessionStarted = true;
+            return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            SessionStarted = false;
+            return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.SetEvent(std::move(*x), ev->Get()->Sender);
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            PartitionEndWatcher.SetEvent(std::move(*x), Client);
+            return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             PartitionEndWatcher.UpdatePendingCommittedOffset(*x);
             if (AutoCommit) {
                 DeferredCommit.Add(*x);
             }
-            return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
+            Y_ABORT_UNLESS(ReadRequest);
+            const auto [sender, cookie] = *ReadRequest;
+            ReadRequest.reset();
+            return (void)Send(sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
-            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, ev->Get()->Sender);
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, Client);
+            return ContinueWaiting();
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
-            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
+            return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
             auto status = TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(x->DebugString())});
-            return Leave(ev->Get()->Sender, std::move(status));
+            return Leave(Client, std::move(status));
         } else if (auto* x = std::get_if<TSessionClosedEvent>(&*event)) {
-            return Leave(ev->Get()->Sender, std::move(*x));
+            return Leave(Client, std::move(*x));
         } else {
             Y_ABORT("Unexpected event");
         }
@@ -262,8 +275,9 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
 public:
-    explicit TTopicReader(const std::shared_ptr<IReadSession>& session, bool autoCommit)
+    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit)
         : TBaseProxyActor(&TThis::StateWork)
+        , Client(client)
         , Session(session)
         , AutoCommit(autoCommit)
         , PartitionEndWatcher(this)
@@ -272,6 +286,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvBootstrap, WaitEvent);
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -282,10 +297,15 @@ public:
     }
 
 private:
+    const TActorId Client;
     std::shared_ptr<IReadSession> Session;
     const bool AutoCommit;
+
     TDeferredCommit DeferredCommit;
     TPartitionEndWatcher PartitionEndWatcher;
+    std::optional<std::pair<TActorId, ui64>> ReadRequest;
+    bool WaitingEvent = false;
+    bool SessionStarted = false;
 
 }; // TTopicReader
 
@@ -308,6 +328,9 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         }
         if (base.CredentialsProviderFactory_) {
             derived.CredentialsProviderFactory(*base.CredentialsProviderFactory_);
+        }
+        if (base.SslCredentials_) {
+            derived.SslCredentials_ = base.SslCredentials_;
         }
 
         return derived;
@@ -438,7 +461,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto args = std::move(ev->Get()->GetArgs());
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
         auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
-        auto reader = RegisterWithSameMailbox(new TTopicReader(session, settings.AutoCommit_));
+        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_));
+        Send(reader, new TEvents::TEvBootstrap());
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }
 
@@ -446,32 +470,49 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         Call<TEvYdbProxy::TEvCommitOffsetResponse>(ev, &TTopicClient::CommitOffset);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl) {
+    static TCommonClientSettings BaseSettings(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
         return TCommonClientSettings()
             .DiscoveryEndpoint(endpoint)
             .DiscoveryMode(EDiscoveryMode::Async)
             .Database(database)
-            .SslCredentials(ssl);
+            .SslCredentials(TSslCredentials(ssl, caCert));
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-        return MakeSettings(endpoint, database, ssl)
-            .AuthToken(token);
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings) {
+        return settings;
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-        return MakeSettings(endpoint, database, ssl)
-            .CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TString& token) {
+        return settings.AuthToken(token);
+    }
+
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TStaticCredentials& credentials) {
+        return settings.CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
                 .User = credentials.GetUser(),
                 .Password = credentials.GetPassword(),
             }));
     }
 
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TIamCredentials& credentials) {
+        const auto& serviceControl = AppData()->ReplicationConfig.GetIamServiceControl();
+
+        TIamServiceParams iamParams;
+        iamParams.SystemServiceAccountCredentials = CreateIamCredentialsProviderFactory();
+        iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.ServiceId = serviceControl.GetServiceId();
+        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+        iamParams.ResourceType = serviceControl.GetResourceType();
+        iamParams.ResourceId = credentials.GetResourceId();
+        iamParams.TargetServiceAccountId = credentials.GetServiceAccountId();
+
+        return settings.CredentialsProviderFactory(CreateIamServiceCredentialsProviderFactory(iamParams));
+    }
+
 public:
     template <typename... Args>
-    explicit TYdbProxy(Args&&... args)
+    explicit TYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, Args&&... args)
         : TBaseProxyActor(&TThis::StateWork)
-        , CommonSettings(MakeSettings(std::forward<Args>(args)...))
+        , CommonSettings(MakeSettings(BaseSettings(endpoint, database, ssl, caCert), std::forward<Args>(args)...))
     {
     }
 
@@ -513,16 +554,20 @@ private:
 
 }; // TYdbProxy
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl) {
-    return new TYdbProxy(endpoint, database, ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert) {
+    return new TYdbProxy(endpoint, database, ssl, caCert);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-    return new TYdbProxy(endpoint, database, ssl, token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TString& token) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, token);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
-    return new TYdbProxy(endpoint, database, ssl, credentials);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TStaticCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
+}
+
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TIamCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
 }
 
 }

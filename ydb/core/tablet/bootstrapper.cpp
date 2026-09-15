@@ -6,6 +6,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -13,6 +14,8 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <ydb/core/protos/bootstrapper.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOOTSTRAPPER
 
 namespace NKikimr {
 
@@ -188,15 +191,32 @@ private:
     void BeginNewCycle() {
         ++RoundCounter;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", begin new cycle (lookup in state storage)");
+        YDB_LOG_DEBUG("Beginning lookup cycle in state storage",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
+        if (AppData()->BridgeModeEnabled && !AppData()->SuppressBridgeModeBootstrapperLogic) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+        } else {
+            BeginLookup();
+        }
+
+        Become(&TThis::StateLookup);
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        if (ev->Get()->BridgeInfo && !ev->Get()->BridgeInfo->SelfNodePile->IsPrimary) {
+            Schedule(GetSleepDuration(), new TEvents::TEvWakeup(RoundCounter));
+        } else {
+            BeginLookup();
+        }
+    }
+
+    void BeginLookup() {
         // We shouldn't start a new cycle with a connected leader pipe
         Y_ABORT_UNLESS(!KnownLeaderPipe);
 
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvLookup(TabletInfo->TabletID, 0), IEventHandle::FlagTrackDelivery);
-        Become(&TThis::StateLookup);
     }
 
     void HandleUnknown(TEvBootstrapper::TEvWatch::TPtr& ev) {
@@ -210,9 +230,11 @@ private:
     void HandleLookup(TEvStateStorage::TEvInfo::TPtr& ev) {
         auto* msg = ev->Get();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", lookup: " << msg->Status << ", leader: " << msg->CurrentLeader);
+        YDB_LOG_DEBUG("State storage lookup result",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"lookupStatus", msg->Status},
+            {"leaderNodeId", msg->CurrentLeader});
 
         switch (msg->Status) {
             case NKikimrProto::OK: {
@@ -237,9 +259,10 @@ private:
             default: {
                 // We have unavailable storage storage, sleep and retry
                 auto sleepDuration = GetSleepDuration();
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                    "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-                    << ", state storage unavailable, sleeping for " << sleepDuration);
+                YDB_LOG_DEBUG("State storage unavailable, sleeping",
+                    {"tabletId", TabletInfo->TabletID},
+                    {"tabletType", GetTabletTypeName()},
+                    {"sleepDuration", sleepDuration});
                 Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
                 return;
             }
@@ -261,9 +284,10 @@ private:
 
         auto* msg = ev->Get();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", connect: " << msg->Status);
+        YDB_LOG_DEBUG("Connect to leader result",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"connectStatus", msg->Status});
 
         if (msg->Status != NKikimrProto::OK) {
             // Current leader unavailable, begin new round
@@ -272,9 +296,9 @@ private:
             return;
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", connected to leader, waiting");
+        YDB_LOG_INFO("Connected to leader, waiting",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         // We have connected to leader, wait until it disconnects
         WatchedBy.emplace();
@@ -298,9 +322,9 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", disconnected");
+        YDB_LOG_DEBUG("Disconnected from leader",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         KnownLeaderPipe = {};
         NotifyWatchers();
@@ -325,9 +349,10 @@ private:
         }
 
         SelfSeed = GenerateSeed();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet:" << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", begin new round, seed: " << SelfSeed);
+        YDB_LOG_INFO("Beginning new round",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"seed", SelfSeed});
 
         const ui64 tabletId = TabletInfo->TabletID;
 
@@ -382,9 +407,11 @@ private:
 
     void HandleFree(TEvents::TEvUndelivered::TPtr& ev) {
         const ui64 round = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", undelivered from " << ev->Sender << ", round " << round);
+        YDB_LOG_DEBUG("Undelivered message",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"sender", ev->Sender},
+            {"round", round});
 
         if (round != RoundCounter)
             return;
@@ -398,9 +425,11 @@ private:
     void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", disconnected from " << node << ", round " << round);
+        YDB_LOG_DEBUG("Node disconnected",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"nodeId", node},
+            {"round", round});
 
         if (round != RoundCounter)
             return;
@@ -423,9 +452,11 @@ private:
             return true;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", apply alien " << alien.NodeId() << " state: " << GetStateName(state));
+        YDB_LOG_DEBUG("Applying alien",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"nodeId", alien.NodeId()},
+            {"state", GetStateName(state)});
 
         if (alienEntry.State == TRound::EAlienState::Wait) {
             Y_ABORT_UNLESS(Round->Waiting-- > 0);
@@ -494,9 +525,10 @@ private:
 
         if (winner != SelfId().NodeId()) {
             auto sleepDuration = GetSleepDuration();
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-                << ", lost round, wait for " << sleepDuration);
+            YDB_LOG_DEBUG("Lost round, waiting",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()},
+                {"sleepDuration", sleepDuration});
 
             Round.reset();
             Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
@@ -546,10 +578,13 @@ private:
         }
 
         auto sleepDuration = Min(GetSleepDuration(), BootDelayedUntil - now);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet:" << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", " << online << "/" << total << " nodes online (need " << quorum << ")"
-            << ", wait for " << sleepDuration);
+        YDB_LOG_DEBUG("Round result summary",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"onlineCount", online},
+            {"totalCount", total},
+            {"quorumCount", quorum},
+            {"sleepDuration", sleepDuration});
 
         Round.reset();
         Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
@@ -566,9 +601,11 @@ private:
      * - Begins a new cycle when notified or disconnected
      */
     void BecomeWatch(const TActorId& watchOn, bool owner) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", become watch on node " << watchOn.NodeId() << (owner ? " (owner)" : ""));
+        YDB_LOG_INFO("Watching node",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"watchNodeId", watchOn.NodeId()},
+            {"isOwner", (owner ? true : false)});
 
         Watching.emplace(watchOn, owner);
         WatchedBy.emplace();
@@ -596,9 +633,9 @@ private:
 
     void BootFollower() {
         if (BootstrapperInfo->StartFollowers && !FollowerActorID) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-                << ", boot follower");
+            YDB_LOG_NOTICE("Booting follower tablet",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()});
             TTabletSetupInfo* x = BootstrapperInfo->SetupInfo.Get();
             FollowerActorID = x->Follower(TabletInfo.Get(),
                 SelfId(), TActivationContext::ActorContextFor(SelfId()),
@@ -638,9 +675,11 @@ private:
     void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", disconnected from " << node << ", round " << round);
+        YDB_LOG_DEBUG("Node disconnected",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()},
+            {"nodeId", node},
+            {"round", round});
 
         if (round != RoundCounter)
             return;
@@ -675,9 +714,9 @@ private:
     void Boot() {
         Y_ABORT_UNLESS(!LookOnActorID);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-            << ", boot");
+        YDB_LOG_NOTICE("Booting tablet",
+            {"tabletId", TabletInfo->TabletID},
+            {"tabletType", GetTabletTypeName()});
 
         if (FollowerActorID) {
             LookOnActorID = FollowerActorID;
@@ -710,9 +749,9 @@ private:
 
     void Handle(TEvTablet::TEvTabletDead::TPtr& ev) {
         if (ev->Sender == LookOnActorID) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "tablet: " << TabletInfo->TabletID << ", type: " << GetTabletTypeName()
-                << ", tablet dead");
+            YDB_LOG_INFO("Tablet dead",
+                {"tabletId", TabletInfo->TabletID},
+                {"tabletType", GetTabletTypeName()});
 
             LookOnActorID = {};
             NotifyWatchers();
@@ -852,6 +891,7 @@ public:
             hFunc(TEvents::TEvWakeup, HandleLookup);
             cFunc(TEvents::TSystem::PoisonPill, HandlePoison); // => die
             cFunc(TEvBootstrapper::EvStandBy, Standby);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         }
     }
 

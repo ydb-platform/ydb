@@ -1,0 +1,13 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+message TYtHttpClientConfig {
+    optional uint32 TimeoutMs = 1 [default = 5000];
+    optional uint32 MaxRetries = 2 [default = 3];
+
+    optional uint32 MinDelayMs = 3 [default = 2000];
+    optional uint32 MinLongRetryDelayMs = 4 [default = 4000];
+    optional double Scale = 5 [default = 2];
+    optional uint32 MaxDelayMs = 6 [default = 8000];
+    optional uint32 MaxTotalDelayTimeMs = 7 [default = 16000];
+}

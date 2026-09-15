@@ -59,3 +59,15 @@ Used base breakpad image and included:
 - ydb cli binary
 - ydbd server strip'ed binary baked with build type `Release`
 - debug symbols for ydbd binary
+
+### Dstool
+
+Image with ydb-dstool app
+
+```bash
+ya package --docker ydb/deploy/docker/dstool/pkg.json
+```
+
+Used base image and included:
+- ydb-dstool app binary
+

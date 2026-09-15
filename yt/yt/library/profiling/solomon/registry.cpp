@@ -1,8 +1,15 @@
 #include "registry.h"
 
-#include "sensor.h"
+#include "config.h"
 
-#include <yt/yt/library/profiling/percpu.h>
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
+#include <yt/yt/library/profiling/simple_sensor_impl.h>
+
+#ifdef __linux__
+#include <yt/yt/library/profiling/rseq_sensor_impl.h>
+
+#include <library/cpp/yt/rseq/rseq.h>
+#endif
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -16,233 +23,291 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The rseq-backed hot sensors are Linux-only (rseq_sensor_impl.h); off Linux the
+// alias is a dummy (never instantiated -- the rseq branch is compiled out below).
+#ifdef __linux__
+using TPortableRseqCounter = TRseqCounter;
+using TPortableRseqTimeCounter = TRseqTimeCounter;
+using TPortableRseqGauge = TRseqGauge;
+#else
+using TPortableRseqCounter = TPerCpuCounter;
+using TPortableRseqTimeCounter = TPerCpuTimeCounter;
+using TPortableRseqGauge = TPerCpuGauge;
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSolomonRegistry::TSolomonRegistry() = default;
+
+void TSolomonRegistry::Configure(const TSolomonRegistryConfigPtr& config)
+{
+    // Use the rseq fast path only when it is both requested and supported in this process: a
+    // runtime probe confirms the cached thread-pointer offset is stable across threads -- not
+    // so when our __rseq_abi lands in a dlopen'd module's dynamically allocated TLS.
+    bool enabled = config->EnableRseq;
+#ifdef __linux__
+    enabled = enabled && NRseq::IsPerCpuFastPathSupported();
+#else
+    enabled = false;
+#endif
+    RseqEnabled_.store(enabled, std::memory_order::relaxed);
+}
+
+bool TSolomonRegistry::IsRseqEnabled() const
+{
+    return RseqEnabled_.load(std::memory_order::relaxed);
+}
 
 template <class TBase, class TSimple, class TPerCpu, class TFn>
 TIntrusivePtr<TBase> SelectImpl(bool hot, const TFn& fn)
 {
-    if (!hot) {
-        auto counter = New<TSimple>();
-        fn(counter);
-        return counter;
-    } else {
-        auto counter = New<TPerCpu>();
-        fn(counter);
-        return counter;
-    }
+    auto sensor = [&] () -> TIntrusivePtr<TBase> {
+        if (!hot) {
+            return New<TSimple>();
+        }
+        return New<TPerCpu>();
+    }();
+    fn(sensor);
+    return sensor;
+}
+
+// Like SelectImpl, but the hot sensor is chosen at construction time between the rseq fast
+// path (when enabled and available) and the atomic sharded fallback. The choice is made
+// once per sensor here, so the hot Increment/Update path carries no dispatch.
+template <class TBase, class TSimple, class TSharded, class TRseq, class TFn>
+TIntrusivePtr<TBase> SelectFastImpl(bool hot, bool rseqEnabled, const TFn& fn)
+{
+    auto sensor = [&] () -> TIntrusivePtr<TBase> {
+        if (!hot) {
+            return New<TSimple>();
+        }
+#ifdef __linux__
+        if (rseqEnabled) {
+            // The rseq sensors fold their per-CPU shard array into the object allocation
+            // (NewWithExtraSpace), so they are built via a factory rather than New.
+            return TRseq::Create();
+        }
+#else
+        Y_UNUSED(rseqEnabled);
+#endif
+        return New<TSharded>();
+    }();
+    fn(sensor);
+    return sensor;
 }
 
 ICounterPtr TSolomonRegistry::RegisterCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<ICounter, TSimpleCounter, TPerCpuCounter>(options.Hot, [&, this] (const auto& counter) {
-        DoRegister([this, name, tags, options = std::move(options), counter] {
+    return SelectFastImpl<ICounter, TSimpleCounter, TPerCpuCounter, TPortableRseqCounter>(options.Hot, IsRseqEnabled(), [&, this] (const auto& counter) {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
             auto reader = [ptr = counter.Get()] {
                 return ptr->GetValue();
             };
 
             auto set = FindSet(name, options);
-            set->AddCounter(New<TCounterState>(counter, reader, Tags_.Encode(tags), tags));
+            set->AddCounter(New<TCounterState>(counter, reader, EncodeTagSet(tags)));
         });
     });
 }
 
 ITimeCounterPtr TSolomonRegistry::RegisterTimeCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<ITimeCounter, TSimpleTimeCounter, TPerCpuTimeCounter>(
+    return SelectFastImpl<ITimeCounter, TSimpleTimeCounter, TPerCpuTimeCounter, TPortableRseqTimeCounter>(
         options.Hot,
+        IsRseqEnabled(),
         [&, this] (const auto& counter) {
-            DoRegister([this, name, tags, options = std::move(options), counter] {
+            DoRegister([this, name = std::string(name), tags, options = std::move(options), counter] {
                 auto set = FindSet(name, options);
-                set->AddTimeCounter(New<TTimeCounterState>(counter, Tags_.Encode(tags), tags));
+                set->AddTimeCounter(New<TTimeCounterState>(counter, EncodeTagSet(tags)));
             });
         });
 }
 
 IGaugePtr TSolomonRegistry::RegisterGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
-    return SelectImpl<IGauge, TSimpleGauge, TPerCpuGauge>(options.Hot, [&, this] (const auto& gauge) {
+    return SelectFastImpl<IGauge, TSimpleGauge, TPerCpuGauge, TPortableRseqGauge>(options.Hot, IsRseqEnabled(), [&, this] (const auto& gauge) {
         if (options.DisableDefault) {
             gauge->Update(std::numeric_limits<double>::quiet_NaN());
         }
 
-        DoRegister([this, name, tags, options = std::move(options), gauge] {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
             auto reader = [ptr = gauge.Get()] {
                 return ptr->GetValue();
             };
 
             auto set = FindSet(name, options);
-            set->AddGauge(New<TGaugeState>(gauge, reader, Tags_.Encode(tags), tags));
+            set->AddGauge(New<TGaugeState>(gauge, reader, EncodeTagSet(tags)));
         });
     });
 }
 
 ITimeGaugePtr TSolomonRegistry::RegisterTimeGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleTimeGauge>();
 
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto reader = [ptr = gauge.Get()] {
             return ptr->GetValue().SecondsFloat();
         };
 
         auto set = FindSet(name, options);
-        set->AddGauge(New<TGaugeState>(gauge, reader, Tags_.Encode(tags), tags));
+        set->AddGauge(New<TGaugeState>(gauge, reader, EncodeTagSet(tags)));
     });
 
     return gauge;
 }
 
 ISummaryPtr TSolomonRegistry::RegisterSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ISummary, TSimpleSummary<double>, TPerCpuSummary<double>>(options.Hot, [&, this] (const auto& summary) {
-        DoRegister([this, name, tags, options = std::move(options), summary] {
+        DoRegister([this, name = std::string(name), tags, options = std::move(options), summary] {
             auto set = FindSet(name, options);
-            set->AddSummary(New<TSummaryState>(summary, Tags_.Encode(tags), tags));
+            set->AddSummary(New<TSummaryState>(summary, EncodeTagSet(tags)));
         });
     });
 }
 
 IGaugePtr TSolomonRegistry::RegisterGaugeSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleGauge>();
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto set = FindSet(name, options);
-        set->AddSummary(New<TSummaryState>(gauge, Tags_.Encode(tags), tags));
+        set->AddSummary(New<TSummaryState>(gauge, EncodeTagSet(tags)));
     });
 
     return gauge;
 }
 
 ITimeGaugePtr TSolomonRegistry::RegisterTimeGaugeSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto gauge = New<TSimpleTimeGauge>();
-    DoRegister([this, name, tags, options = std::move(options), gauge] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), gauge] {
         auto set = FindSet(name, options);
-        set->AddTimerSummary(New<TTimerSummaryState>(gauge, Tags_.Encode(tags), tags));
+        set->AddTimerSummary(New<TTimerSummaryState>(gauge, EncodeTagSet(tags)));
     });
 
     return gauge;
 }
 
 ITimerPtr TSolomonRegistry::RegisterTimerSummary(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     return SelectImpl<ITimer, TSimpleSummary<TDuration>, TPerCpuSummary<TDuration>>(
         options.Hot,
         [&, this] (const auto& timer) {
-            DoRegister([this, name, tags, options = std::move(options), timer] {
+            DoRegister([this, name = std::string(name), tags, options = std::move(options), timer] {
                 auto set = FindSet(name, options);
-                set->AddTimerSummary(New<TTimerSummaryState>(timer, Tags_.Encode(tags), tags));
+                set->AddTimerSummary(New<TTimerSummaryState>(timer, EncodeTagSet(tags)));
             });
         });
 }
 
 ITimerPtr TSolomonRegistry::RegisterTimeHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
-        set->AddTimeHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
+        set->AddTimeHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
     return hist;
 }
 
 IHistogramPtr TSolomonRegistry::RegisterGaugeHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
-        set->AddGaugeHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
+        set->AddGaugeHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
     return hist;
 }
 
 IHistogramPtr TSolomonRegistry::RegisterRateHistogram(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options)
 {
     auto hist = New<THistogram>(options);
-    DoRegister([this, name, tags, options = std::move(options), hist] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), hist] {
         auto set = FindSet(name, options);
-        set->AddRateHistogram(New<THistogramState>(hist, Tags_.Encode(tags), tags));
+        set->AddRateHistogram(New<THistogramState>(hist, EncodeTagSet(tags)));
     });
     return hist;
 }
 
 void TSolomonRegistry::RegisterFuncCounter(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
     std::function<i64()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), weakOwner = MakeWeak(owner), reader] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), weakOwner = MakeWeak(owner), reader] {
         auto set = FindSet(name, options);
-        set->AddCounter(New<TCounterState>(std::move(weakOwner), reader, Tags_.Encode(tags), tags));
+        set->AddCounter(New<TCounterState>(std::move(weakOwner), reader, EncodeTagSet(tags)));
     });
 }
 
 void TSolomonRegistry::RegisterFuncGauge(
-    const std::string& name,
+    TStringBuf name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
     std::function<double()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), reader, weakOwner = MakeWeak(owner)] {
+    DoRegister([this, name = std::string(name), tags, options = std::move(options), reader, weakOwner = MakeWeak(owner)] {
         auto set = FindSet(name, options);
-        set->AddGauge(New<TGaugeState>(std::move(weakOwner), reader, Tags_.Encode(tags), tags));
+        set->AddGauge(New<TGaugeState>(std::move(weakOwner), reader, EncodeTagSet(tags)));
     });
 }
 
 void TSolomonRegistry::RegisterProducer(
-    const std::string& prefix,
+    TStringBuf prefix,
     const TTagSet& tags,
     TSensorOptions options,
     const ISensorProducerPtr& producer)
 {
-    DoRegister([this, prefix, tags, options = std::move(options), weakProducer = MakeWeak(producer)] {
+    DoRegister([this, prefix = std::string(prefix), tags, options = std::move(options), weakProducer = MakeWeak(producer)] {
         Producers_.AddProducer(New<TProducerState>(prefix, tags, options, std::move(weakProducer)));
     });
 }
 
 void TSolomonRegistry::RenameDynamicTag(
     const TDynamicTagPtr& tag,
-    const std::string& name,
-    const std::string& value)
+    TStringBuf name,
+    TStringBuf value)
 {
-    DoRegister([this, tag, name, value] {
-        auto tagId = Tags_.Encode(TTag{name, value});
+    DoRegister([this, tag, name = std::string(name), value = std::string(value)] {
+        auto tagId = TagRegistry_.Encode(TTag{name, value});
 
         for (auto& [name, sensorSet] : Sensors_) {
             sensorSet.RenameDynamicTag(tag, tagId);
@@ -260,7 +325,7 @@ i64 TSolomonRegistry::GetNextIteration() const
     return Iteration_;
 }
 
-void TSolomonRegistry::SetGridFactor(std::function<int(const std::string&)> gridFactor)
+void TSolomonRegistry::SetGridFactor(std::function<int(TStringBuf)> gridFactor)
 {
     GridFactor_ = gridFactor;
 }
@@ -281,7 +346,7 @@ void TSolomonRegistry::SetProducerCollectionBatchSize(int batchSize)
 
 void TSolomonRegistry::SetLabelSanitizationPolicy(ELabelSanitizationPolicy LabelSanitizationPolicy)
 {
-    Tags_.SetLabelSanitizationPolicy(LabelSanitizationPolicy);
+    TagRegistry_.SetLabelSanitizationPolicy(LabelSanitizationPolicy);
 }
 
 int TSolomonRegistry::GetWindowSize() const
@@ -333,7 +398,7 @@ void TSolomonRegistry::SetDynamicTags(std::vector<TTag> dynamicTags)
     std::swap(DynamicTags_, dynamicTags);
 }
 
-std::vector<TTag> TSolomonRegistry::GetDynamicTags()
+std::vector<TTag> TSolomonRegistry::GetDynamicTags() const
 {
     auto guard = Guard(DynamicTagsLock_);
     return DynamicTags_;
@@ -354,7 +419,7 @@ void TSolomonRegistry::ProcessRegistrations()
 
         fn();
 
-        TagCount_.Update(Tags_.GetSize());
+        TagCount_.Update(TagRegistry_.GetSize());
     });
 }
 
@@ -382,9 +447,9 @@ void TSolomonRegistry::Collect(IInvokerPtr offloadInvoker)
         offloadFutures.push_back(future);
     }
 
-    // Use blocking Get(), because we want to lock current thread while data structure is updating.
+    // Use BlockingGet(), because we want to lock current thread while data structure is updating.
     for (const auto& future : offloadFutures) {
-        future.Get();
+        future.BlockingGet();
     }
 
     ProjectionCount_.Update(*projectionCount);
@@ -404,7 +469,7 @@ void TSolomonRegistry::ReadSensors(
             DynamicTags_.end());
     }
 
-    TTagWriter tagWriter(Tags_, consumer);
+    TTagWriter tagWriter(TagRegistry_, consumer);
     for (const auto& [name, set] : Sensors_) {
         if (readOptions.SensorFilter && !readOptions.SensorFilter(name)) {
             continue;
@@ -417,7 +482,7 @@ void TSolomonRegistry::ReadSensors(
 }
 
 void TSolomonRegistry::ReadRecentSensorValues(
-    const std::string& name,
+    TStringBuf name,
     const TTagList& tags,
     const TReadOptions& options,
     TFluentAny fluent) const
@@ -431,7 +496,7 @@ void TSolomonRegistry::ReadRecentSensorValues(
     if (it == Sensors_.end()) {
         THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
             "No such sensor")
-                << TErrorAttribute("name", name);
+                .With("name", name);
     }
 
     const auto& sensorSet = it->second;
@@ -446,7 +511,7 @@ void TSolomonRegistry::ReadRecentSensorValues(
             DynamicTags_.end());
     }
 
-    auto encodedTagIds = Tags_.TryEncode(tags);
+    auto encodedTagIds = TagRegistry_.TryEncode(tags);
     std::optional<TTagIdList> tagIds = TTagIdList{};
     for (int i = 0; i < std::ssize(encodedTagIds); ++i) {
         if (encodedTagIds[i]) {
@@ -467,21 +532,21 @@ void TSolomonRegistry::ReadRecentSensorValues(
     int valuesRead = 0;
     if (tagIds) {
         std::sort(tagIds->begin(), tagIds->end());
-        valuesRead = sensorSet.ReadSensorValues(*tagIds, index, readOptions, Tags_, fluent);
+        valuesRead = sensorSet.ReadSensorValues(*tagIds, index, readOptions, TagRegistry_, fluent);
     }
 
     if (!readOptions.ReadAllProjections) {
         if (valuesRead == 0) {
             THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
                 "Projection not found for sensor")
-                    << TErrorAttribute("name", name)
-                    << TErrorAttribute("tags", tags);
+                    .With("name", name)
+                    .With("tags", tags);
         } else if (valuesRead > 1) {
             THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError,
                 "More than one projection found for sensor")
-                    << TErrorAttribute("name", name)
-                    << TErrorAttribute("tags", tags)
-                    << TErrorAttribute("values_read", valuesRead);
+                    .With("name", name)
+                    .With("tags", tags)
+                    .With("values_read", valuesRead);
         }
     } else if (valuesRead == 0) {
         fluent.BeginList().EndList();
@@ -497,12 +562,12 @@ std::vector<TSensorInfo> TSolomonRegistry::ListSensors() const
     return list;
 }
 
-const TTagRegistry& TSolomonRegistry::GetTags() const
+const TTagRegistry& TSolomonRegistry::GetTagRegistry() const
 {
-    return Tags_;
+    return TagRegistry_;
 }
 
-TSensorSet* TSolomonRegistry::FindSet(const std::string& name, const TSensorOptions& options)
+TSensorSet* TSolomonRegistry::FindSet(TStringBuf name, const TSensorOptions& options)
 {
     if (auto it = Sensors_.find(name); it != Sensors_.end()) {
         it->second.ValidateOptions(options);
@@ -520,17 +585,27 @@ TSensorSet* TSolomonRegistry::FindSet(const std::string& name, const TSensorOpti
     }
 }
 
-NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
+NProto::TSensorDump TSolomonRegistry::DumpSensors(TTagSet customTagSet)
 {
+    TTagIdList extraTags;
     {
         auto guard = Guard(DynamicTagsLock_);
+
         for (const auto& [key, value] : DynamicTags_) {
-            extraTags.push_back(Tags_.Encode(std::pair(key, value)));
+            extraTags.push_back(TagRegistry_.Encode(std::pair(key, value)));
         }
     }
 
+    std::vector<TTagIdList> customProjections;
+    EncodeTagSet(customTagSet).Range([&] (auto tagIds) {
+        for (auto tag : extraTags) {
+            tagIds.push_back(tag);
+        }
+        customProjections.push_back(std::move(tagIds));
+    });
+
     NProto::TSensorDump dump;
-    Tags_.DumpTags(&dump);
+    TagRegistry_.DumpTags(&dump);
 
     for (const auto& [name, set] : Sensors_) {
         if (!set.GetError().IsOK()) {
@@ -540,7 +615,7 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
         auto* cube = dump.add_cubes();
         cube->set_name(ToProto(name));
 
-        set.DumpCube(cube, extraTags);
+        set.DumpCube(cube, customProjections);
     }
 
     return dump;
@@ -548,19 +623,16 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
 
 NProto::TSensorDump TSolomonRegistry::DumpSensors()
 {
-    return DumpSensors({});
+    return DumpSensors(TTagSet{});
 }
 
-NProto::TSensorDump TSolomonRegistry::DumpSensors(const std::optional<std::string>& host, const THashMap<std::string, std::string>& instanceTags)
+TTagIdSet TSolomonRegistry::EncodeTagSet(const TTagSet& tags)
 {
-    std::vector<TTagId> extraTags;
-    if (host) {
-        extraTags.push_back(Tags_.Encode(std::pair("host", *host)));
+    auto tagSet = tags;
+    for (const auto& [dynamicTag, _] : tagSet.DynamicTags()) {
+        tagSet.ApplyDynamicTag(dynamicTag);
     }
-    for (const auto& [key, value] : instanceTags) {
-        extraTags.push_back(Tags_.Encode(std::pair(key, value)));
-    }
-    return DumpSensors(extraTags);
+    return TTagIdSet(tagSet, TagRegistry_.Encode(tagSet));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

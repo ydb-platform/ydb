@@ -4,7 +4,6 @@
 // For the sake of sane code completion.
 #include "writer_starving_rw_spin_lock.h"
 #endif
-#undef WRITER_STARVING_RW_SPIN_LOCK_INL_H_
 
 #include "spin_wait.h"
 
@@ -18,6 +17,14 @@ inline void TWriterStarvingRWSpinLock::AcquireReader() noexcept
         return;
     }
     AcquireReaderSlow();
+}
+
+inline void TWriterStarvingRWSpinLock::AcquireReaderForkFriendly() noexcept
+{
+    if (TryAcquireReaderForkFriendly()) {
+        return;
+    }
+    AcquireReaderForkFriendlySlow();
 }
 
 inline void TWriterStarvingRWSpinLock::ReleaseReader() noexcept
@@ -77,12 +84,24 @@ inline bool TWriterStarvingRWSpinLock::TryAndTryAcquireReader() noexcept
     return TryAcquireReader();
 }
 
+inline bool TWriterStarvingRWSpinLock::TryAcquireReaderForkFriendly() noexcept
+{
+    auto oldValue = Value_.load(std::memory_order::relaxed);
+    if ((oldValue & WriterMask) != 0) {
+        return false;
+    }
+    auto newValue = oldValue + ReaderDelta;
+
+    bool acquired = Value_.compare_exchange_weak(oldValue, newValue, std::memory_order::acquire);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
+    return acquired;
+}
+
 inline bool TWriterStarvingRWSpinLock::TryAcquireWriter() noexcept
 {
     auto expected = UnlockedValue;
-
     bool acquired =  Value_.compare_exchange_weak(expected, WriterMask, std::memory_order::acquire);
-    NDetail::RecordSpinLockAcquired(acquired);
+    NDetail::MaybeRecordSpinLockAcquired(acquired);
     return acquired;
 }
 

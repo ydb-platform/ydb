@@ -2,6 +2,7 @@
 
 #include <util/system/defaults.h>
 #include <util/stream/str.h>
+#include <util/generic/constant_evaluation.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -224,7 +225,7 @@ bool TryFromStringImpl(const TChar* data, size_t len, T& result);
 /**
  * @param data Source string buffer pointer
  * @param len Source string length, in characters
- * @param result Place to store conversion result value.
+ * @param[out] result Place to store conversion result value.
  * If conversion error occurs, no value stored in @c result
  * @return @c true in case of successful conversion, @c false otherwise
  **/
@@ -272,8 +273,8 @@ inline bool TryFromString(const TUtf16String& s, T& result) {
     return TryFromString<T>(s.data(), s.size(), result);
 }
 
-template <class T, class TChar>
-inline TMaybe<T> TryFromString(TBasicStringBuf<TChar> s) {
+template <class T, class TChar, class TTraits>
+inline TMaybe<T> TryFromString(std::basic_string_view<TChar, TTraits> s) {
     TMaybe<T> result{NMaybe::TInPlace{}};
     if (!TryFromString<T>(s, *result)) {
         result.Clear();
@@ -416,15 +417,11 @@ public:
     template <std::enable_if_t<std::is_integral<T>::value, bool> = true>
     explicit constexpr TIntStringBuf(T t) {
         Size_ = Convert(t, Buf_, sizeof(Buf_));
-#if __cplusplus >= 202002L // is_constant_evaluated is not supported by CUDA yet
-        if (std::is_constant_evaluated()) {
-#endif
+        if (IsConstantEvaluated()) {
             // Init the rest of the array,
             // otherwise constexpr copy and move constructors don't work due to uninitialized data access
             std::fill(Buf_ + Size_, Buf_ + sizeof(Buf_), '\0');
-#if __cplusplus >= 202002L
         }
-#endif
     }
 
     constexpr operator TStringBuf() const noexcept {

@@ -4,15 +4,21 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 
+#include <ydb/core/util/backoff.h>
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
         TBlobDepot* const Self;
+        // WrapperId is always the per-node router service id managed by NodeWarden
+        // (acquired via TEvNodeWardenAcquireBlobDepotS3Router on Init, released on
+        // TerminateAllActors). All S3 traffic is forwarded through the router.
         TActorId WrapperId;
         TActorId UploaderId;
         TString BasePath;
         TString Bucket;
 
+        bool Enabled = false;
         bool SyncMode = false;
         bool AsyncMode = false;
 
@@ -38,11 +44,41 @@ namespace NKikimr::NBlobDepot {
         ui64 GetTotalS3TrashObjects() const { return TotalS3TrashObjects; }
         ui64 GetTotalS3TrashSize() const { return TotalS3TrashSize; }
 
+        void OnDataLoaded();
+
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TTxPrepareWriteS3;
         friend class TBlobDepot;
 
         TS3Locator AllocateS3Locator(ui32 len);
+
+        // Throttling state for S3 SlowDown responses on agent put requests. Puts are issued by agents (one per
+        // node), but throttling is centralized at the tablet by postponing TEvPrepareWriteS3Result.
+        static constexpr ui32 SuccessesPerWriteConcurrencyStepUp = 3;
+
+        TBackoff PutBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic PutThrottleUntil;
+        bool PutWakeupScheduled = false;
+        ui32 CurrentMaxWritesInFlight = 32;
+        ui32 ConsecutiveSuccessfulWriteBatches = 0;
+        ui32 S3WritesInFlight = 0;
+        std::deque<TEvBlobDepot::TEvPrepareWriteS3::TPtr> PendingPrepareWrites;
+
+        ui32 MaxWritesInFlight() const { return S3ControlLimit(Self->S3MaxWritesInFlight); }
+
+        void ApplyMaxWritesInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxWritesInFlight, Self->S3MaxWritesInFlight)) {
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] =
+                    CurrentMaxWritesInFlight;
+            }
+        }
+
+        void HandlePrepareWriteS3(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+        void NotifyPutSlowDown();
+        void HandlePutThrottleWakeup();
+        void RunPendingPrepareWritesIfPossible();
+        void OnS3WriteInFlightAdded(ui32 count);
+        void OnS3WriteInFlightRemoved(bool success);
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;
@@ -63,17 +99,35 @@ namespace NKikimr::NBlobDepot {
         class TTxDeleteTrashS3;
         struct TEvDeleteResult;
 
-        static constexpr ui32 MaxDeletesInFlight = 3;
-        static constexpr size_t MaxObjectsToDeleteAtOnce = 10;
+        static constexpr ui32 SuccessesPerConcurrencyStepUp = 3;
 
-        std::deque<TS3Locator> DeleteQueue; // items we are definitely going to delete (must be present in TrashS3)
+        // items we are definitely going to delete (must be present in TrashS3)
+        std::deque<TS3Locator> DeleteQueue;
         THashSet<TActorId> ActiveDeleters;
         ui32 NumDeleteTxInFlight = 0;
         ui64 TotalS3TrashObjects = 0;
         ui64 TotalS3TrashSize = 0;
 
+        // Throttling state for S3 SlowDown responses on delete requests.
+        TBackoff DeleteBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
+        TMonotonic DeleteThrottleUntil;
+        bool DeleteWakeupScheduled = false;
+        ui32 CurrentMaxDeletesInFlight = 3;
+        ui32 ConsecutiveSuccessfulDeleteBatches = 0;
+
+        ui32 MaxDeletesInFlight() const { return S3ControlLimit(Self->S3MaxDeletesInFlight); }
+        ui32 MaxObjectsToDeleteAtOnce() const { return S3ControlLimit(Self->S3MaxObjectsToDeleteAtOnce); }
+
+        void ApplyMaxDeletesInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxDeletesInFlight, Self->S3MaxDeletesInFlight)) {
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] =
+                    CurrentMaxDeletesInFlight;
+            }
+        }
+
         void RunDeletersIfNeeded();
         void HandleDeleter(TAutoPtr<IEventHandle> ev);
+        void HandleDeleteThrottleWakeup();
     };
 
 } // NKikimr::NBlobDepot

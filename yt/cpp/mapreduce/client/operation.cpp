@@ -783,7 +783,8 @@ void BuildUserJobFluently(
             .EndList()
         .Item("start_queue_consumer_registration_manager").Value(false)
         .Item("enable_rpc_proxy_in_job_proxy").Value(userJobSpec.EnableRpcProxyInJobProxy_)
-        .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
+        .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr())
+        .Item("enable_debug_command_line_arguments").Value(preparer.ShouldEnableDebugCommandLineArguments());
 }
 
 struct TNirvanaContext
@@ -2290,7 +2291,7 @@ public:
     }
 
     const TOperationId& GetId() const;
-    TString GetWebInterfaceUrl() const;
+    TString GetWebInterfaceUrl(const TClientPtr& client) const;
 
     void OnPrepared();
     void SetDelayedStartFunction(std::function<TOperationId()> start);
@@ -2309,6 +2310,8 @@ public:
     TMaybe<TYtError> GetError();
     TJobStatistics GetJobStatistics();
     TMaybe<TOperationBriefProgress> GetBriefProgress();
+    TMaybe<THashMap<TString, TYtError>> GetAlerts();
+
     void AbortOperation();
     void CompleteOperation();
     void SuspendOperation(const TSuspendOperationOptions& options);
@@ -2328,7 +2331,13 @@ public:
 private:
     void OnStarted(const TOperationId& operationId);
 
-    void UpdateAttributesAndCall(bool needJobStatistics, std::function<void(const TOperationAttributes&)> func);
+    struct TUpdateAttributesOptions
+    {
+        bool NeedJobStatistics = false;
+        bool NeedAlerts = false;
+    };
+
+    void UpdateAttributesAndCall(const TUpdateAttributesOptions& options, std::function<void(const TOperationAttributes&)> func);
 
     void SyncFinishOperationImpl(const TOperationAttributes&);
     static void* SyncFinishOperationProc(void* );
@@ -2425,10 +2434,10 @@ const TOperationId& TOperation::TOperationImpl::GetId() const
     return *Id_;
 }
 
-TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
+TString TOperation::TOperationImpl::GetWebInterfaceUrl(const TClientPtr& client) const
 {
     ValidateOperationStarted();
-    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_);
+    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_, client);
 }
 
 void TOperation::TOperationImpl::OnPrepared()
@@ -2494,7 +2503,7 @@ TString TOperation::TOperationImpl::GetStatus()
         }
     }
     TMaybe<TString> state;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         state = attributes.State;
     });
 
@@ -2556,7 +2565,7 @@ EOperationBriefState TOperation::TOperationImpl::GetBriefState()
 {
     ValidateOperationStarted();
     EOperationBriefState result = EOperationBriefState::InProgress;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.BriefState,
             "get_operation for operation %s has not returned \"state\" field",
             GetGuidAsString(*Id_).data());
@@ -2569,7 +2578,7 @@ TMaybe<TYtError> TOperation::TOperationImpl::GetError()
 {
     ValidateOperationStarted();
     TMaybe<TYtError> result;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.Result);
         result = attributes.Result->Error;
     });
@@ -2580,7 +2589,7 @@ TJobStatistics TOperation::TOperationImpl::GetJobStatistics()
 {
     ValidateOperationStarted();
     TJobStatistics result;
-    UpdateAttributesAndCall(true, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {.NeedJobStatistics = true}, [&] (const TOperationAttributes& attributes) {
         if (attributes.Progress) {
             result = attributes.Progress->JobStatistics;
         }
@@ -2594,13 +2603,23 @@ TMaybe<TOperationBriefProgress> TOperation::TOperationImpl::GetBriefProgress()
     {
         auto g = Guard(Lock_);
         if (CompletePromise_.Defined()) {
-            // Poller do this job for us
+            // Poller do this job for us.
             return Attributes_.BriefProgress;
         }
     }
     TMaybe<TOperationBriefProgress> result;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         result = attributes.BriefProgress;
+    });
+    return result;
+}
+
+TMaybe<THashMap<TString, TYtError>> TOperation::TOperationImpl::GetAlerts()
+{
+    ValidateOperationStarted();
+    TMaybe<THashMap<TString, TYtError>> result;
+    UpdateAttributesAndCall(/*options*/ {.NeedAlerts = true}, [&] (const TOperationAttributes& attributes) {
+        result = attributes.Alerts;
     });
     return result;
 }
@@ -2665,14 +2684,14 @@ void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
 }
 
 void TOperation::TOperationImpl::UpdateAttributesAndCall(
-    bool needJobStatistics,
+    const TUpdateAttributesOptions& options,
     std::function<void(const TOperationAttributes&)> func)
 {
     {
         auto g = Guard(Lock_);
         if (Attributes_.BriefState
             && *Attributes_.BriefState != EOperationBriefState::InProgress
-            && (!needJobStatistics || Attributes_.Progress))
+            && (!options.NeedJobStatistics || Attributes_.Progress))
         {
             func(Attributes_);
             return;
@@ -2685,8 +2704,11 @@ void TOperation::TOperationImpl::UpdateAttributesAndCall(
         .Add(EOperationAttribute::BriefProgress);
     // To avoid overloading Cypress, we only request the progress attribute as needed,
     // typically when the user asks for job statistics.
-    if (needJobStatistics) {
+    if (options.NeedJobStatistics) {
         filter.Add(EOperationAttribute::Progress);
+    }
+    if (options.NeedAlerts) {
+        filter.Add(EOperationAttribute::Alerts);
     }
 
     auto attributes = RequestWithRetry<TOperationAttributes>(
@@ -2833,9 +2855,12 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
             // so we call `GetJobStatistics' in order to get it from server
             // and cache inside object.
             GetJobStatistics();
-        } catch (const TErrorResponse& ) {
+        } catch (const std::exception& e) {
             // But if for any reason we failed to get attributes
             // we complete operation using what we have.
+            YT_LOG_ERROR("Failed to get job statistics for operation %v: %v",
+                *Id_,
+                e.what());
             auto g = Guard(Lock_);
             Attributes_ = attributes;
         }
@@ -2913,7 +2938,7 @@ const TOperationId& TOperation::GetId() const
 
 TString TOperation::GetWebInterfaceUrl() const
 {
-    return Impl_->GetWebInterfaceUrl();
+    return Impl_->GetWebInterfaceUrl(Client_);
 }
 
 void TOperation::OnPrepared()
@@ -2989,6 +3014,11 @@ TJobStatistics TOperation::GetJobStatistics()
 TMaybe<TOperationBriefProgress> TOperation::GetBriefProgress()
 {
     return Impl_->GetBriefProgress();
+}
+
+TMaybe<THashMap<TString, TYtError>> TOperation::GetAlerts()
+{
+    return Impl_->GetAlerts();
 }
 
 void TOperation::AbortOperation()

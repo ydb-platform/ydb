@@ -7,7 +7,7 @@ from .isdict_containingvalue import has_value
 from .isin import is_in
 from .issequence_containing import has_item, has_items
 from .issequence_containinginanyorder import contains_inanyorder
-from .issequence_containinginorder import contains
+from .issequence_containinginorder import contains, contains_exactly
 from .issequence_onlycontaining import only_contains
 from .is_empty import empty
 

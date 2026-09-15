@@ -1,0 +1,265 @@
+#pragma once
+
+#include "public.h"
+
+#include "restore_request.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
+
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
+
+#include <ydb/library/actors/wilson/wilson_span.h>
+
+#include <functional>
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDBGReadBlocksResponse
+{
+    NProto::TError Error;
+};
+
+struct TDBGWriteBlocksResponse
+{
+    NProto::TError Error;
+};
+
+struct TDBGWriteBlocksToManyPBuffersResponse
+{
+    struct TSinglePersistentBufferResult
+    {
+        THostIndex HostIndex = InvalidHostIndex;
+        NProto::TError Error;
+    };
+
+    TVector<TSinglePersistentBufferResult> Responses;
+};
+
+struct TDBGFlushResponse
+{
+    TVector<NProto::TError> Errors;
+};
+
+struct TDBGEraseResponse
+{
+    NProto::TError Error;
+};
+
+struct TDBGRestoreResponse
+{
+    struct TRestoreMeta
+    {
+        TPBufferKey PBufferKey;
+        TBlockRange16 Range;
+        THostIndex HostIndex = InvalidHostIndex;
+    };
+
+    NProto::TError Error;
+    TVector<TRestoreMeta> Meta;
+};
+
+struct TListPBufferMeta
+{
+    ui32 VChunkIndex = 0;
+    TPBufferKey PBufferKey;
+    TBlockRange16 Range;
+};
+
+using TListPBufferMetaVector = TVector<TListPBufferMeta>;
+
+struct TListPBufferResponse
+{
+    NProto::TError Error;
+    TListPBufferMetaVector Meta;
+};
+
+struct TAggregatedListPBufferResponse
+{
+    NProto::TError Error;
+    TMap<THostIndex, TListPBufferMetaVector> Meta;
+};
+
+struct TDBGDumpResponse
+{
+    size_t DirectBlockGroupIndex = 0;
+    TString Dump;
+
+    struct TVChunkDump
+    {
+        TVChunkConfig VChunkConfig;
+        TString Dump;
+    };
+
+    TVector<TVChunkDump> Dumps;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Abstract base interface for DirectBlockGroup implementations
+class IDirectBlockGroup
+{
+public:
+    virtual ~IDirectBlockGroup() = default;
+
+    virtual void Register(TVChunkWeakPtr vChunk) = 0;
+
+    virtual TExecutorPtr GetExecutor() = 0;
+
+    virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
+    {
+        return {};
+    }
+
+    // The tablet generation this DBG was created with. New records are
+    // minted under it; restored records keep the generation they were
+    // written in.
+    virtual ui32 GetTabletGeneration() const = 0;
+
+    virtual IOraclePtr GetOracle() = 0;
+
+    virtual void Schedule(TDuration delay, TCallback callback) = 0;
+
+    virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(
+        const NWilson::TTraceId& traceId,
+        TStringBuf name) = 0;
+
+    // Starts the DBG and returns a future that resolves when the locked-session
+    // quorum is reached for the first time. Intended only to gate the
+    // synchronous start.
+    virtual NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) = 0;
+
+    virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
+        ui32 vChunkIndex,
+        THostIndex hostIndex,
+        TBlockRange16 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
+        ui32 vChunkIndex,
+        THostIndex hostIndex,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        THostIndex hostIndex,
+        TBlockRange16 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
+        ui32 vChunkIndex,
+        THostIndex hostIndex,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId) = 0;
+
+    using TWriteBlocksToManyPBuffersCallback =
+        std::function<void(TDBGWriteBlocksToManyPBuffersResponse)>;
+
+    virtual void WriteBlocksToManyPBuffers(
+        ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
+        THostMask hostIndexes,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        TDuration replyTimeout,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) = 0;
+
+    // Batch operation to flush a list of PBuffer entries. It can be executed in
+    // two modes - when the source and destination are the same host, and when
+    // the source and destination hosts are different. In this case, the
+    // operation is performed in pull mode, when the destination host downloads
+    // entries from PBuffer and write it to DDisk to self.
+    virtual NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
+        ui32 vChunkIndex,
+        THostIndex pbufferHostIndex,   // source host
+        THostIndex ddiskHostIndex,     // destination host
+        const TVector<TPBufferSegment>& segments,
+        const NWilson::TTraceId& traceId) = 0;
+
+    // Batch operation to erase a list of PBuffer entries.
+    virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
+        THostIndex hostIndex,
+        const TEraseSegments& segments,
+        const NWilson::TTraceId& traceId) = 0;
+
+    // The bound is an lsn within the current tablet generation; the PBuffer
+    // side additionally drops every record of the previous generations.
+    virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
+
+    // The lowest record id that must be preserved across all vchunks of this
+    // DirectBlockGroup. Used to compute the tablet-wide cleanup watermark.
+    // Resolves on the executor thread. nullopt means nothing is inflight here.
+    virtual NThreading::TFuture<std::optional<TPBufferKey>>
+    GatherSafeBarrierForErase() = 0;
+
+    // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
+    virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
+        ui32 vChunkIndex) = 0;
+
+    // Query persistent buffer from Node.
+    virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
+        THostIndex hostIndex) = 0;
+
+    virtual void OnAddHostSucceeded(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
+
+    // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
+    // by all DirectBlockGroups. Returns the delay before the operation may
+    // start. Zero means it may start immediately or throttling is disabled.
+    [[nodiscard]] virtual TDuration TakeCopyRangeBudget(ui64 byteCount) = 0;
+
+    // Translate host index to NodeId.
+    [[nodiscard]] virtual ui32 GetNodeId(THostIndex host) const = 0;
+
+    // Query dump for DirectBlockGroup and VChunks.
+    virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
+
+    // Sums (and optionally lists) vchunk stats on the executor thread.
+    virtual NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
+        EVChunkStatsDetail detail) const = 0;
+};
+
+using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

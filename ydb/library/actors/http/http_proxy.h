@@ -1,12 +1,13 @@
 #pragma once
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/dns/cache.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
@@ -15,6 +16,8 @@
 #include "http_proxy_ssl.h"
 
 namespace NHttp {
+
+using namespace NActors;
 
 const ui32 DEFAULT_MAX_RECYCLED_REQUESTS_COUNT = 1000;
 
@@ -58,6 +61,9 @@ struct TEvHttpProxy {
         EvHttpOutgoingDataChunk,
         EvSubscribeForCancel,
         EvRequestCancelled,
+        EvHttpOutgoingResponseProgress,
+        EvHttpDumpStateRequest,
+        EvHttpDumpStateResponse,
         EvEnd
     };
 
@@ -71,10 +77,14 @@ struct TEvHttpProxy {
         TString CertificateFile;
         TString PrivateKeyFile;
         TString SslCertificatePem;
+        TString CaFile;
+        bool ClientCertificateRequired = false;
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
         TDuration InactivityTimeout = TDuration::Minutes(2);
+        bool AllowHttp2 = false; // enable HTTP/2 support on this port
+        TIntrusivePtr<TSocketDescriptor> PreboundSocket;
 
         TEvAddListeningPort() = default;
 
@@ -111,6 +121,7 @@ struct TEvHttpProxy {
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
         TString UserToken; // built and serialized
+        TString Database; // raw extracted from request; empty if not specified
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))
@@ -121,6 +132,7 @@ struct TEvHttpProxy {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
         bool AllowConnectionReuse = false;
+        bool UseHttp2 = false;
         std::vector<TString> StreamContentTypes;
 
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request)
@@ -181,6 +193,11 @@ struct TEvHttpProxy {
 
     struct TEvHttpOutgoingResponse : NActors::TEventLocal<TEvHttpOutgoingResponse, EvHttpOutgoingResponse> {
         THttpOutgoingResponsePtr Response;
+        ui64 ProgressNotificationBytes = 0;
+        // If set to a non-zero value, enables progress notifications.
+        // Progress notifications will be sent approximately every N bytes (where N is this value).
+        // Notifications are sent to the sender of the TEvHttpOutgoingResponse event with the original cookie.
+        // The field value of 0 (default) disables progress notifications.
 
         TEvHttpOutgoingResponse(THttpOutgoingResponsePtr response)
             : Response(std::move(response))
@@ -197,6 +214,29 @@ struct TEvHttpProxy {
 
         TEvHttpOutgoingDataChunk(const TString& error)
             : Error(error)
+        {}
+    };
+
+    struct TEvHttpOutgoingResponseProgress : NActors::TEventLocal<TEvHttpOutgoingResponseProgress, EvHttpOutgoingResponseProgress> {
+        ui64 Bytes = 0;
+        ui64 DataChunks = 0;
+
+        TEvHttpOutgoingResponseProgress(ui64 bytes, ui64 dataChunks)
+            : Bytes(bytes)
+            , DataChunks(dataChunks)
+        {}
+    };
+
+    struct TEvHttpDumpStateRequest : NActors::TEventLocal<TEvHttpDumpStateRequest, EvHttpDumpStateRequest> {
+    };
+
+    struct TEvHttpDumpStateResponse : NActors::TEventLocal<TEvHttpDumpStateResponse, EvHttpDumpStateResponse> {
+        TString Body;
+        TString ContentType;
+
+        TEvHttpDumpStateResponse(TString body, TString contentType = "application/json")
+            : Body(std::move(body))
+            , ContentType(std::move(contentType))
         {}
     };
 
@@ -322,14 +362,23 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
     TRateLimiter RateLimiter;
     TDuration InactivityTimeout;
+    bool AllowHttp2 = false;
 
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)
     {}
 };
 
+struct TUrlHandler {
+    THashMap<TString, TActorId> Handlers;
+
+    void RegisterHandler(const TString& url, const TActorId& handler);
+    TActorId GetHandler(const TString& url) const;
+};
+
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
+TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, TIpPort port);
 NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event);
 NActors::IActor* CreateIncomingConnectionActor(
         std::shared_ptr<TPrivateEndpointInfo> endpoint,

@@ -34,8 +34,6 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
         TTopicSdkTestSetup CreateSetupForSplitMerge(const std::string& testCaseName) {
             NKikimrConfig::TFeatureFlags ff;
-            ff.SetEnableTopicSplitMerge(true);
-            ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
             auto settings = TTopicSdkTestSetup::MakeServerSettings();
             settings.SetFeatureFlags(ff);
             auto setup = TTopicSdkTestSetup(testCaseName, settings, false);
@@ -305,7 +303,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             UNIT_ASSERT(writeSession->Write(NPQ::NTest::Msg("message_1.1", 2)));
 
-            std::uint64_t txId = 1006;
+            ui64 txId = 1006;
             NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
 
             UNIT_ASSERT(writeSession->Write(NPQ::NTest::Msg("message_1.2", 3)));

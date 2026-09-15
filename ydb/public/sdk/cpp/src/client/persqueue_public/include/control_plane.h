@@ -15,7 +15,7 @@ namespace NYdb::inline Dev {
 }
 
 namespace NYdb::inline Dev::NPersQueue {
-    
+
 enum class EFormat {
     BASE = 1,
 };
@@ -42,6 +42,53 @@ private:
     Ydb::PersQueue::V1::Credentials Credentials_;
 };
 
+struct TSharedConsumerDeadLetterPolicySettings {
+    using TSelf = TSharedConsumerDeadLetterPolicySettings;
+
+    enum class EAction {
+        Unspecified = 0,
+        Move = 1,
+        Delete = 2,
+    };
+
+    FLUENT_SETTING_DEFAULT(bool, Enabled, false);
+    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 0);
+    FLUENT_SETTING(std::string, DeadLetterQueue);
+    FLUENT_SETTING_DEFAULT(EAction, Action, EAction::Unspecified);
+
+    bool GetEnabled() const { return Enabled_; }
+    ui32 GetMaxProcessingAttempts() const { return MaxProcessingAttempts_; }
+    const std::string& GetDeadLetterQueue() const { return DeadLetterQueue_; }
+    EAction GetAction() const { return Action_; }
+
+    TSelf& DeleteAction() {
+        Action_ = EAction::Delete;
+        return *this;
+    }
+
+    TSelf& MoveAction(const std::string& deadLetterQueue) {
+        Action_ = EAction::Move;
+        DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+};
+
+struct TSharedConsumerSettings {
+    using TSelf = TSharedConsumerSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageWaitTime, TDuration::Zero());
+    FLUENT_SETTING_DEFAULT(TDuration, ReceiveMessageDelay, TDuration::Zero());
+    FLUENT_SETTING(TSharedConsumerDeadLetterPolicySettings, DeadLetterPolicy);
+
+    bool GetKeepMessagesOrder() const { return KeepMessagesOrder_; }
+    TDuration GetDefaultProcessingTimeout() const { return DefaultProcessingTimeout_; }
+    TDuration GetReceiveMessageWaitTime() const { return ReceiveMessageWaitTime_; }
+    TDuration GetReceiveMessageDelay() const { return ReceiveMessageDelay_; }
+    const TSharedConsumerDeadLetterPolicySettings& GetDeadLetterPolicy() const { return DeadLetterPolicy_; }
+};
+
 
 // Result for describe resource request.
 struct TDescribeTopicResult : public TStatus {
@@ -57,6 +104,7 @@ struct TDescribeTopicResult : public TStatus {
 
             GETTER(std::string, ConsumerName);
             GETTER(bool, Important);
+            GETTER(TDuration, AvailabilityPeriod);
             GETTER(TInstant, StartingMessageTimestamp);
             GETTER(EFormat, SupportedFormat);
             const std::vector<ECodec>& SupportedCodecs() const {
@@ -64,15 +112,18 @@ struct TDescribeTopicResult : public TStatus {
             }
             GETTER(ui32, Version);
             GETTER(std::string, ServiceType);
+            const std::optional<TSharedConsumerSettings>& SharedConsumer() const { return SharedConsumer_; }
 
         private:
             std::string ConsumerName_;
             bool Important_;
+            TDuration AvailabilityPeriod_;
             TInstant StartingMessageTimestamp_;
             EFormat SupportedFormat_;
             std::vector<ECodec> SupportedCodecs_;
             ui32 Version_;
             std::string ServiceType_;
+            std::optional<TSharedConsumerSettings> SharedConsumer_;
         };
 
         struct TRemoteMirrorRule {
@@ -111,6 +162,8 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(std::optional<ui32>, AbcId);
         GETTER(std::optional<std::string>, AbcSlug);
         GETTER(std::optional<std::string>, FederationAccount);
+        GETTER(std::optional<ui32>, MetricsLevel);
+        GETTER(std::optional<std::string>, AdvancedMonitoringSettings);
 
         const std::vector<TReadRule>& ReadRules() const {
             return ReadRules_;
@@ -144,6 +197,8 @@ struct TDescribeTopicResult : public TStatus {
         std::optional<ui32> AbcId_;
         std::optional<std::string> AbcSlug_;
         std::string FederationAccount_;
+        std::optional<ui32> MetricsLevel_;
+        std::optional<std::string> AdvancedMonitoringSettings_;
 
         std::optional<uint64_t> MaxPartitionsCount_;
         std::optional<TDuration> StabilizationWindow_;
@@ -177,16 +232,21 @@ struct TReadRuleSettings {
     using TSelf = TReadRuleSettings;
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
+    FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
     FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
     FLUENT_SETTING_DEFAULT(std::vector<ECodec>, SupportedCodecs, GetDefaultCodecs());
 
     FLUENT_SETTING_DEFAULT(ui32, Version, 0);
     FLUENT_SETTING(std::string, ServiceType);
+    FLUENT_SETTING_OPTIONAL(TSharedConsumerSettings, SharedConsumer);
+
+    const std::optional<TSharedConsumerSettings>& GetSharedConsumer() const { return SharedConsumer_; }
 
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
         Important_ = settings.Important();
+        AvailabilityPeriod_ = settings.AvailabilityPeriod();
         StartingMessageTimestamp_ = settings.StartingMessageTimestamp();
         SupportedFormat_ = settings.SupportedFormat();
         SupportedCodecs_.clear();
@@ -195,6 +255,10 @@ struct TReadRuleSettings {
         }
         Version_ = settings.Version();
         ServiceType_ = settings.ServiceType();
+        SharedConsumer_.reset();
+        if (const auto& sharedConsumer = settings.SharedConsumer()) {
+            SharedConsumer_ = sharedConsumer;
+        }
         return *this;
     }
 
@@ -247,10 +311,18 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_OPTIONAL(ui32, AbcId);
     FLUENT_SETTING_OPTIONAL(std::string, AbcSlug);
     FLUENT_SETTING_OPTIONAL(std::string, FederationAccount);
+    FLUENT_SETTING_OPTIONAL(ui32, MetricsLevel);
+    FLUENT_SETTING_OPTIONAL(std::string, AdvancedMonitoringSettings);
 
     //TODO: FLUENT_SETTING_VECTOR
     FLUENT_SETTING_DEFAULT(std::vector<TReadRuleSettings>, ReadRules, {});
     FLUENT_SETTING_OPTIONAL(TRemoteMirrorRuleSettings, RemoteMirrorRule);
+
+    FLUENT_SETTING_OPTIONAL(uint64_t, MaxPartitionsCount);
+    FLUENT_SETTING_OPTIONAL(TDuration, StabilizationWindow);
+    FLUENT_SETTING_OPTIONAL(uint64_t, UpUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(uint64_t, DownUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(Ydb::PersQueue::V1::AutoPartitioningStrategy, AutoPartitioningStrategy);
 
     TSelf& SetSettings(const TDescribeTopicResult::TTopicSettings& settings) {
 
@@ -271,6 +343,8 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         AbcId_ = settings.AbcId();
         AbcSlug_ = settings.AbcSlug();
         FederationAccount_ = settings.FederationAccount();
+        MetricsLevel_ = settings.MetricsLevel();
+        AdvancedMonitoringSettings_ = settings.AdvancedMonitoringSettings();
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {
             ReadRules_.push_back({});
@@ -288,13 +362,6 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
 
         return static_cast<TDerived&>(*this);
     }
-
-private:
-    std::optional<uint64_t> MaxPartitionsCount_;
-    std::optional<TDuration> StabilizationWindow_;
-    std::optional<uint64_t> UpUtilizationPercent_;
-    std::optional<uint64_t> DownUtilizationPercent_;
-    std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
 };
 
 

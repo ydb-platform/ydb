@@ -6,6 +6,9 @@
 #include <yt/yt/client/table_client/chunk_stripe_statistics.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/constrained_schema.h>
+
+#include <yt/yt/client/tablet_client/index_info.h>
 
 #include <yt/yt/client/chaos_client/replication_card.h>
 
@@ -33,10 +36,12 @@ struct TTableReaderOptions
 {
     bool Unordered = false;
     bool OmitInaccessibleColumns = false;
+    bool OmitInaccessibleRows = false;
     bool EnableTableIndex = false;
     bool EnableRowIndex = false;
     bool EnableRangeIndex = false;
     bool EnableTabletIndex = false;
+    bool EnableAnyUnpacking = true;
     NTableClient::TTableReaderConfigPtr Config;
 };
 
@@ -104,6 +109,7 @@ struct TReshardTableOptions
     std::optional<bool> EnableSlicing;
     std::optional<double> SlicingAccuracy;
     std::vector<i64> TrimmedRowCounts;
+    std::vector<i64> CumulativeDataWeights;
 };
 
 struct TReshardTableAutomaticOptions
@@ -121,10 +127,13 @@ struct TAlterTableOptions
 {
     std::optional<NTableClient::TTableSchema> Schema;
     std::optional<NTableClient::TMasterTableSchemaId> SchemaId;
+    std::optional<NTableClient::TConstrainedTableSchema> ConstrainedSchema;
+    std::optional<NTableClient::TColumnNameToConstraintMap> Constraints;
     std::optional<bool> Dynamic;
     std::optional<NTabletClient::TTableReplicaId> UpstreamReplicaId;
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;
     std::optional<NChaosClient::TReplicationProgress> ReplicationProgress;
+    std::optional<NTransactionClient::TTimestamp> ClipTimestamp;
 };
 
 struct TTrimTableOptions
@@ -278,6 +287,40 @@ struct TUpdateChaosTableReplicaProgressOptions
     bool Force;
 };
 
+DECLARE_REFCOUNTED_STRUCT(TCreateSecondaryIndex);
+
+struct TCreateSecondaryIndex
+    : public NYTree::TYsonStruct
+{
+    NTabletClient::ESecondaryIndexKind Kind;
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence Correspondence;
+    std::optional<std::string> Predicate;
+    std::optional<NTabletClient::TUnfoldedColumns> UnfoldedColumns;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
+
+    REGISTER_YSON_STRUCT(TCreateSecondaryIndex);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TCreateSecondaryIndex)
+
+DECLARE_REFCOUNTED_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+struct TProgressSecondaryIndexCorrespondence
+    : public NYTree::TYsonStruct
+{
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence NewCorrespondence;
+
+    REGISTER_YSON_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TProgressSecondaryIndexCorrespondence)
+
 struct TAlterReplicationCardOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -286,6 +329,9 @@ struct TAlterReplicationCardOptions
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
     NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
+    TCreateSecondaryIndexPtr CreateSecondaryIndex;
+    NChaosClient::TReplicationCardId DestroySecondaryIndex;
+    TProgressSecondaryIndexCorrespondencePtr ProgressSecondaryIndexCorrespondence;
 };
 
 struct TGetReplicationCardOptions
@@ -303,6 +349,7 @@ struct TGetColumnarStatisticsOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode = NTableClient::EColumnarStatisticsFetcherMode::FromNodes;
     bool EnableEarlyFinish = true;
+    bool EnableReadSizeEstimation = false;
 };
 
 struct TPartitionTablesOptions
@@ -313,19 +360,19 @@ struct TPartitionTablesOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NChunkClient::TChunkSliceFetcherConfigPtr ChunkSliceFetcherConfig;
     NTableClient::ETablePartitionMode PartitionMode = NTableClient::ETablePartitionMode::Unordered;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+    //! Whether to include node descriptors in the cookie (effective only when EnableCookies is true).
+    //! Increases cookie size but likely reduces read latency with ReadTablePartition.
+    bool FetchCookieNodeDescriptors = false;
 
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool = true;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInUnorderedPool = true;
+    bool OmitInaccessibleRows = false;
 };
 
 struct TReadTablePartitionOptions
@@ -500,6 +547,18 @@ struct ITableClient
      */
     virtual TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
         const TTablePartitionCookiePtr& cookie,
+        const TReadTablePartitionOptions& options = {}) = 0;
+
+    /// Creates table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTableReader(
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options = {}) = 0;
+
+    /// Creates partition table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
         const TReadTablePartitionOptions& options = {}) = 0;
 };
 

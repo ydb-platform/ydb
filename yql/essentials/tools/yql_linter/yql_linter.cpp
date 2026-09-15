@@ -1,4 +1,6 @@
 #include <yql/essentials/public/fastcheck/linter.h>
+#include <yql/essentials/public/fastcheck/utils.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 #include <yql/essentials/utils/tty.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -9,7 +11,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/file.h>
 
-int Run(int argc, char* argv[]) {
+int Run(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
@@ -21,31 +23,31 @@ int Run(int argc, char* argv[]) {
     TString clusterModeStr = "Many";
     TString clusterSystem;
     NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
+    TString customUdf;
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
     opts.AddLongOption("list-checks", "list all enabled checks and exit").NoArgument();
     opts.AddLongOption("checks", "comma-separated list of globs with optional '-' prefix").StoreResult(&checks);
-    opts.AddLongOption('C', "cluster", "cluster to service mapping").RequiredArgument("name@service")
-        .KVHandler([&](TString cluster, TString provider) {
-            if (cluster.empty() || provider.empty()) {
-                throw yexception() << "Incorrect service mapping, expected form cluster@provider, e.g. plato@yt";
-            }
-            clusterMapping[cluster] = provider;
-        }, '@');
+    opts.AddLongOption('C', "cluster", "cluster to service mapping").RequiredArgument("name@service").KVHandler([&](TString cluster, TString provider) {
+        if (cluster.empty() || provider.empty()) {
+            throw yexception() << "Incorrect service mapping, expected form cluster@provider, e.g. plato@yt";
+        }
+        clusterMapping[cluster] = provider;
+    }, '@');
 
     opts.AddLongOption('m', "mode", "query mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EMode>()).StoreResult(&modeStr);
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
     opts.AddLongOption("cluster-mode", "cluster mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EClusterMode>()).StoreResult(&clusterModeStr);
     opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
+    opts.AddLongOption("custom-udf", "JSON file with allowed UDFs").StoreResult(&customUdf);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
-    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([&](const TString& str) {
-            if (!NYql::ParseLangVersion(str, langver)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
+        if (!NYql::ParseLangVersion(str, langver)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -90,10 +92,18 @@ int Run(int argc, char* argv[]) {
     checkReq.Program = queryString;
     checkReq.Syntax = NYql::NFastCheck::ESyntax::YQL;
     checkReq.ClusterMapping = clusterMapping;
-    checkReq.Mode =  FromString<NYql::NFastCheck::EMode>(modeStr);
-    checkReq.Syntax =  FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
+    checkReq.Mode = FromString<NYql::NFastCheck::EMode>(modeStr);
+    checkReq.Syntax = FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
     checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
     checkReq.ClusterSystem = clusterSystem;
+    std::unique_ptr<NYql::IUdfMeta> udfMeta;
+    if (customUdf) {
+        TFileInput filterFile(customUdf);
+        auto content = filterFile.ReadAll();
+        udfMeta = NYql::NFastCheck::LoadUdfMeta(content);
+        checkReq.UdfMeta = udfMeta.get();
+    }
+
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);
     for (const auto& c : checkResp.Checks) {
         if (!c.Success) {
@@ -123,7 +133,7 @@ int Run(int argc, char* argv[]) {
     return errors;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {

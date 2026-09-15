@@ -5,6 +5,7 @@
 namespace NYT::NKafka {
 
 using namespace NBus;
+using namespace NBus::NTcp;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -105,9 +106,9 @@ public:
         return PacketSize_;
     }
 
-    TSharedRefArray GrabMessage() const override
+    TSharedRefArray GrabMessage() override
     {
-        return TSharedRefArray(Message_);
+        return TSharedRefArray(std::move(Message_));
     }
 
 private:

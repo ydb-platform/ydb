@@ -1,6 +1,8 @@
 #include "mkql_computation_node_ut.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <arrow/compute/exec_internal.h>
 #include <arrow/array/builder_primitive.h>
@@ -15,7 +17,7 @@ BEGIN_SIMPLE_ARROW_UDF(TInc, i32(i32)) {
     return NYql::NUdf::TUnboxedValuePod(arg + 1);
 }
 
-struct TIncKernelExec : public NYql::NUdf::TUnaryKernelExec<TIncKernelExec> {
+struct TIncKernelExec: public NYql::NUdf::TUnaryKernelExec<TIncKernelExec> {
     template <typename TSink>
     static void Process(const NYql::NUdf::IValueBuilder* valueBuilder, NYql::NUdf::TBlockItem arg, const TSink& sink) {
         Y_UNUSED(valueBuilder);
@@ -26,191 +28,157 @@ struct TIncKernelExec : public NYql::NUdf::TUnaryKernelExec<TIncKernelExec> {
 END_SIMPLE_ARROW_UDF(TInc, TIncKernelExec::Do);
 
 SIMPLE_MODULE(TBlockUTModule,
-    TInc
-)
+              TInc)
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
-    arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
-        const std::vector<arrow::Datum>& argDatums, arrow::compute::ExecContext& execContext) {
-        const auto& kernel = kernelNode->GetArrowKernel();
-        arrow::compute::KernelContext kernelContext(&execContext);
-        std::unique_ptr<arrow::compute::KernelState> state;
-        if (kernel.init) {
-            state = ARROW_RESULT(kernel.init(&kernelContext, { &kernel, kernelNode->GetArgsDesc(), nullptr }));
-            kernelContext.SetState(state.get());
-        }
-
-        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-        ARROW_OK(executor->Init(&kernelContext, { &kernel, kernelNode->GetArgsDesc(), nullptr }));
-        auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
-        ARROW_OK(executor->Execute(argDatums, listener.get()));
-        return executor->WrapResults(argDatums, listener->values());
+arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
+                              const std::vector<arrow::Datum>& argDatums, arrow::compute::ExecContext& execContext) {
+    const auto& kernel = kernelNode->GetArrowKernel();
+    arrow::compute::KernelContext kernelContext(&execContext);
+    std::unique_ptr<arrow::compute::KernelState> state;
+    if (kernel.init) {
+        state = ARROW_RESULT(kernel.init(&kernelContext, {&kernel, kernelNode->GetArgsDesc(), nullptr}));
+        kernelContext.SetState(state.get());
     }
 
-    void ExecuteAllKernels(std::vector<arrow::Datum>& datums, const TArrowKernelsTopology* topology, arrow::compute::ExecContext& execContext) {
-        for (ui32 i = 0; i < topology->Items.size(); ++i) {
-            std::vector<arrow::Datum> argDatums;
-            argDatums.reserve(topology->Items[i].Inputs.size());
-            for (auto j : topology->Items[i].Inputs) {
-                argDatums.emplace_back(datums[j]);
-            }
+    auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+    ARROW_OK(executor->Init(&kernelContext, {&kernel, kernelNode->GetArgsDesc(), nullptr}));
+    auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
+    ARROW_OK(executor->Execute(argDatums, listener.get()));
+    return executor->WrapResults(argDatums, listener->values());
+}
 
-            arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
-            datums[i + topology->InputArgsCount] = output;
-        }
-    }
-
-    // Hand-made variant using WideFromBlocks (in order to test ListToBlocks by well-tested nodes rather than actual ListFromBlocks)
-    TRuntimeNode ListFromBlocks(TProgramBuilder& pb, TRuntimeNode blockList) {
-        const auto wideBlocksStream = pb.FromFlow(pb.ExpandMap(pb.ToFlow(blockList), [&](TRuntimeNode item) -> TRuntimeNode::TList {
-            return {
-                pb.Member(item, "key"),
-                pb.Member(item, "value"),
-                pb.Member(item, NYql::BlockLengthColumnName)
-            };
-        }));
-
-        return pb.ForwardList(pb.NarrowMap(pb.ToFlow(pb.WideFromBlocks(wideBlocksStream)), [&](TRuntimeNode::TList items) -> TRuntimeNode {
-            return pb.NewStruct({
-                {"key", items[0]},
-                {"value", items[1]}
-            });
-        }));
-    }
-
-    // Hand-made variant using WideToBlocks (in order to test ListFromBlocks by well-tested nodes rather than actual ListToBlocks)
-    TRuntimeNode ListToBlocks(TProgramBuilder& pb, TRuntimeNode list) {
-        const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList {
-            return {
-                pb.Member(item, "key"),
-                pb.Member(item, "value")
-            };
-        })));
-
-        return pb.Collect(pb.NarrowMap(pb.ToFlow(wideBlocksStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
-            return pb.NewStruct({
-                {"key", items[0]},
-                {"value", items[1]},
-                {NYql::BlockLengthColumnName, items[2]}
-            });
-        }));
-    }
-
-    using TListTransformer = std::function<TRuntimeNode(TProgramBuilder&, TRuntimeNode)>;
-
-    void DoTestListToAndFromBlocks(TSetup<false>& setup, TListTransformer listToBlocksImpl, TListTransformer listFromBlocksImpl) {
-        constexpr size_t TEST_SIZE = 1 << 16;
-        const TString hugeString(128, '1');
-
-        TProgramBuilder& pb = *setup.PgmBuilder;
-
-        const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-        const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-
-        const auto structType = pb.NewStructType({
-            {"key", ui64Type},
-            {"value", strType},
-        });
-
-        TVector<TRuntimeNode> listItems;
-        for (size_t i = 0; i < TEST_SIZE; i++) {
-            const auto str = hugeString + ToString(i);
-            listItems.push_back(pb.NewStruct({
-                {"key", pb.NewDataLiteral<ui64>(i)},
-                // Huge string is used to make less rows fit into one block (in order to test output slicing)
-                {"value", pb.NewDataLiteral<NUdf::EDataSlot::String>(str)},
-            }));
+void ExecuteAllKernels(std::vector<arrow::Datum>& datums, const TArrowKernelsTopology* topology, arrow::compute::ExecContext& execContext) {
+    for (ui32 i = 0; i < topology->Items.size(); ++i) {
+        std::vector<arrow::Datum> argDatums;
+        argDatums.reserve(topology->Items[i].Inputs.size());
+        for (auto j : topology->Items[i].Inputs) {
+            argDatums.emplace_back(datums[j]);
         }
 
-        const auto list = pb.NewList(structType, listItems);
-        const auto blockList = listToBlocksImpl(pb, list);
-
-        const auto graph = setup.BuildGraph(listFromBlocksImpl(pb, blockList));
-        const auto iterator = graph->GetValue().GetListIterator();
-
-        NUdf::TUnboxedValue structValue;
-        for (size_t i = 0; i < TEST_SIZE; i++) {
-            const auto str = hugeString + ToString(i);
-            UNIT_ASSERT(iterator.Next(structValue));
-
-            const auto key = structValue.GetElement(0);
-            UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
-            const auto value = structValue.GetElement(1);
-            UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
-        }
-
-        UNIT_ASSERT(!iterator.Next(structValue));
-        UNIT_ASSERT(!iterator.Next(structValue));
+        arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
+        datums[i + topology->InputArgsCount] = output;
     }
 }
+
+// Hand-made variant using WideFromBlocks (in order to test ListToBlocks by well-tested nodes rather than actual ListFromBlocks)
+TRuntimeNode ListFromBlocks(TProgramBuilder& pb, TRuntimeNode blockList) {
+    const auto wideBlocksStream = pb.FromFlow(pb.ExpandMap(pb.ToFlow(blockList, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        return {
+            pb.Member(item, "key"),
+            pb.Member(item, "value"),
+            pb.Member(item, NYql::BlockLengthColumnName)};
+    }));
+
+    return pb.ForwardList(pb.NarrowMap(pb.ToFlow(pb.WideFromBlocks(wideBlocksStream), {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+        return pb.NewStruct({{"key", items[0]},
+                             {"value", items[1]}});
+    }));
+}
+
+// Hand-made variant using WideToBlocks (in order to test ListFromBlocks by well-tested nodes rather than actual ListToBlocks)
+TRuntimeNode ListToBlocks(TProgramBuilder& pb, TRuntimeNode list) {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(pb.ExpandMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+        return {
+            pb.Member(item, "key"),
+            pb.Member(item, "value")};
+    })));
+
+    return pb.Collect(pb.NarrowMap(pb.ToFlow(wideBlocksStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+        return pb.NewStruct({{"key", items[0]},
+                             {"value", items[1]},
+                             {NYql::BlockLengthColumnName, items[2]}});
+    }));
+}
+
+using TListTransformer = std::function<TRuntimeNode(TProgramBuilder&, TRuntimeNode)>;
+
+void DoTestListToAndFromBlocks(TSetup<false>& setup, TListTransformer listToBlocksImpl, TListTransformer listFromBlocksImpl) {
+    constexpr size_t TEST_SIZE = 1 << 16;
+    const TString hugeString(128, '1');
+
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    using TKeyValueStruct = NTest::TStructType<
+        NTest::TStructMember<"key", ui64>,
+        NTest::TStructMember<"value", TStringBuf>>;
+
+    TVector<TString> strings;
+    strings.reserve(TEST_SIZE);
+    TVector<TKeyValueStruct> listItems;
+    listItems.reserve(TEST_SIZE);
+    for (size_t i = 0; i < TEST_SIZE; i++) {
+        strings.push_back(hugeString + ToString(i));
+        // Huge string is used to make less rows fit into one block (in order to test output slicing)
+        listItems.push_back(TKeyValueStruct{std::make_tuple(
+            NTest::TStructMember<"key", ui64>{ui64(i)},
+            NTest::TStructMember<"value", TStringBuf>{TStringBuf(strings.back())})});
+    }
+
+    const auto list = NTest::ConvertValueToLiteralNode(pb, listItems);
+    const auto blockList = listToBlocksImpl(pb, list);
+
+    const auto graph = setup.BuildGraph(listFromBlocksImpl(pb, blockList));
+
+    TVector<TKeyValueStruct> expected;
+    expected.reserve(TEST_SIZE);
+    for (size_t i = 0; i < TEST_SIZE; i++) {
+        expected.push_back(TKeyValueStruct{std::make_tuple(
+            NTest::TStructMember<"key", ui64>{ui64(i)},
+            NTest::TStructMember<"value", TStringBuf>{TStringBuf(strings[i])})});
+    }
+
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
+}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlocksTest) {
 Y_UNIT_TEST_LLVM(TestEmpty) {
     TSetup<LLVM> setup;
     auto& pb = *setup.PgmBuilder;
 
-    const auto type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto list = pb.NewEmptyList(type);
-    const auto sourceFlow = pb.ToFlow(list);
+    const auto sourceFlow = pb.ToFlow(list, {});
     const auto flowAfterBlocks = pb.FromBlocks(pb.ToBlocks(sourceFlow));
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{});
 }
 
 Y_UNIT_TEST_LLVM(TestSimple) {
-    static const size_t dataCount = 1000;
+    static const size_t DataCount = 1000;
     TSetup<LLVM> setup;
     auto& pb = *setup.PgmBuilder;
 
-    TRuntimeNode::TList data;
-    data.reserve(dataCount);
-    for (ui64 i = 0ULL; i < dataCount; ++i) {
-        data.push_back(pb.NewDataLiteral(i));
-    }
-    const auto type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto list = pb.NewList(type, data);
-    const auto sourceFlow = pb.ToFlow(list);
+    TVector<ui64> data(DataCount);
+    std::iota(data.begin(), data.end(), 0ULL);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, data);
+    const auto sourceFlow = pb.ToFlow(list, {});
     const auto flowAfterBlocks = pb.FromBlocks(pb.ToBlocks(sourceFlow));
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
 
-    for (size_t i = 0; i < dataCount; ++i) {
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), i);
-    }
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    TVector<ui64> expected(DataCount);
+    std::iota(expected.begin(), expected.end(), 0ULL);
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
 }
 
 Y_UNIT_TEST_LLVM(TestWideToBlocks) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3});
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)), {});
     const auto narrowBlocksFlow = pb.NarrowMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });
@@ -218,20 +186,7 @@ Y_UNIT_TEST_LLVM(TestWideToBlocks) {
     const auto pgmReturn = pb.ForwardList(narrowFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 20);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{10, 20, 30});
 }
 
 Y_UNIT_TEST(TestListToBlocks) {
@@ -239,9 +194,8 @@ Y_UNIT_TEST(TestListToBlocks) {
 
     DoTestListToAndFromBlocks(
         setup,
-        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
-        ListFromBlocks
-    );
+        [](TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
+        ListFromBlocks);
 }
 
 Y_UNIT_TEST(TestListToBlocksMultiUsage) {
@@ -250,105 +204,80 @@ Y_UNIT_TEST(TestListToBlocksMultiUsage) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    using TKeyValueStruct = NTest::TStructType<
+        NTest::TStructMember<"key", ui64>,
+        NTest::TStructMember<"value", TStringBuf>>;
 
-    const auto structType = pb.NewStructType({
-        {"key", ui64Type},
-        {"value", strType},
-    });
-
-    TVector<TRuntimeNode> listItems;
+    TVector<TString> strings;
+    strings.reserve(TEST_SIZE);
+    TVector<TKeyValueStruct> listItems;
+    listItems.reserve(TEST_SIZE);
     for (size_t i = 0; i < TEST_SIZE; i++) {
-        const auto str = ToString(i);
-        listItems.push_back(pb.NewStruct({
-            {"key", pb.NewDataLiteral<ui64>(i)},
-            {"value", pb.NewDataLiteral<NUdf::EDataSlot::String>(str)},
-        }));
+        strings.push_back(ToString(i));
+        listItems.push_back(TKeyValueStruct{std::make_tuple(
+            NTest::TStructMember<"key", ui64>{ui64(i)},
+            NTest::TStructMember<"value", TStringBuf>{TStringBuf(strings.back())})});
     }
 
-    const auto list = pb.NewList(structType, listItems);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, listItems);
     const auto blockList1 = pb.ListToBlocks(list);
     const auto blockList2 = pb.ListToBlocks(list);
 
     const auto result = pb.Zip({ListFromBlocks(pb, blockList1), ListFromBlocks(pb, blockList2)});
 
     const auto graph = setup.BuildGraph(result);
-    const auto iterator = graph->GetValue().GetListIterator();
 
-    NUdf::TUnboxedValue tupleValue;
+    using TPairStruct = std::tuple<TKeyValueStruct, TKeyValueStruct>;
+    TVector<TPairStruct> expected;
+    expected.reserve(TEST_SIZE);
     for (size_t i = 0; i < TEST_SIZE; i++) {
-        const auto str = ToString(i);
-        UNIT_ASSERT(iterator.Next(tupleValue));
-
-        auto structValue = tupleValue.GetElement(0);
-        auto key = structValue.GetElement(0);
-        UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
-        auto value = structValue.GetElement(1);
-        UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
-
-        structValue = tupleValue.GetElement(1);
-        key = structValue.GetElement(0);
-        UNIT_ASSERT_VALUES_EQUAL(key.Get<ui64>(), i);
-        value = structValue.GetElement(1);
-        UNIT_ASSERT_VALUES_EQUAL(std::string_view(value.AsStringRef()), str);
+        TKeyValueStruct kv{std::make_tuple(
+            NTest::TStructMember<"key", ui64>{ui64(i)},
+            NTest::TStructMember<"value", TStringBuf>{TStringBuf(strings[i])})};
+        expected.push_back(TPairStruct{kv, kv});
     }
 
-    UNIT_ASSERT(!iterator.Next(tupleValue));
-    UNIT_ASSERT(!iterator.Next(tupleValue));
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
 }
 
 namespace {
-template<bool LLVM>
+template <bool LLVM>
 void TestChunked(bool withBlockExpand) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type   = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto stringType = pb.NewDataType(NUdf::EDataSlot::String);
-    const auto utf8Type   = pb.NewDataType(NUdf::EDataSlot::Utf8);
-
-    const auto tupleType = pb.NewTupleType({ui64Type, boolType, stringType, utf8Type});
+    const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>>(pb);
 
     TRuntimeNode::TList items;
     const size_t bigStrSize = 1024 * 1024 + 100;
     const size_t smallStrSize = 256 * 1024;
     for (size_t i = 0; i < 20; ++i) {
-
         if (i % 2 == 0) {
             std::string big(bigStrSize, '0' + i);
             std::string small(smallStrSize, 'A' + i);
 
-            items.push_back(pb.NewTuple(tupleType, { pb.NewDataLiteral<ui64>(i), pb.NewDataLiteral<bool>(true),
-                                                     pb.NewDataLiteral<NUdf::EDataSlot::String>(big),
-                                                     pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(small),
-                                                     }));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
+                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TString(small)}}));
         } else {
-            items.push_back(pb.NewTuple(tupleType, { pb.NewDataLiteral<ui64>(i), pb.NewDataLiteral<bool>(false),
-                                                     pb.NewDataLiteral<NUdf::EDataSlot::String>(""),
-                                                     pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(""),
-                                                     }));
-
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
+                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}}));
         }
     }
 
     const auto list = pb.NewList(tupleType, std::move(items));
 
-    auto node = pb.ToFlow(list);
+    auto node = pb.ToFlow(list, {});
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)};
     });
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
     if (withBlockExpand) {
-        node = pb.BlockExpandChunked(node);
-        // WideTakeBlocks won't work on chunked blocks
-        node = pb.WideTakeBlocks(node, pb.NewDataLiteral<ui64>(19));
-        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
+        node = pb.WideTakeBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
+        node = pb.ToFlow(pb.WideFromBlocks(node), {});
     } else {
         // WideFromBlocks should support chunked blocks
-        node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
-        node = pb.Take(node, pb.NewDataLiteral<ui64>(19));
+        node = pb.ToFlow(pb.WideFromBlocks(node), {});
+        node = pb.Take(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
     }
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewTuple(tupleType, {items[0], items[1], items[2], items[3]});
@@ -356,35 +285,25 @@ void TestChunked(bool withBlockExpand) {
 
     const auto pgmReturn = pb.ForwardList(node);
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
 
+    using TRow = std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>;
+    TVector<TString> storedBig;
+    TVector<TString> storedSmall;
+    storedBig.reserve(10);
+    storedSmall.reserve(10);
+    TVector<TRow> expected;
+    expected.reserve(19);
     for (size_t i = 0; i < 19; ++i) {
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        ui64 num = item.GetElement(0).Get<ui64>();
-        bool bl = item.GetElement(1).Get<bool>();
-        auto strVal = item.GetElement(2);
-        auto utf8Val = item.GetElement(3);
-        std::string_view str = strVal.AsStringRef();
-        std::string_view utf8 = utf8Val.AsStringRef();
-
-        UNIT_ASSERT_VALUES_EQUAL(num, i);
-        UNIT_ASSERT_VALUES_EQUAL(bl, i % 2 == 0);
         if (i % 2 == 0) {
-            std::string big(bigStrSize, '0' + i);
-            std::string small(smallStrSize, 'A' + i);
-            UNIT_ASSERT_VALUES_EQUAL(str, big);
-            UNIT_ASSERT_VALUES_EQUAL(utf8, small);
+            storedBig.push_back(TString(bigStrSize, '0' + i));
+            storedSmall.push_back(TString(smallStrSize, 'A' + i));
+            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TString(storedSmall.back())}});
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(str.size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(utf8.size(), 0);
+            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}});
         }
     }
 
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
-
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
 }
 
 } // namespace
@@ -403,8 +322,7 @@ Y_UNIT_TEST(TestScalar) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
-    auto dataLiteral = pb.NewDataLiteral<ui64>(testValue);
-    const auto dataAfterBlocks = pb.AsScalar(dataLiteral);
+    const auto dataAfterBlocks = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(testValue)));
 
     const auto graph = setup.BuildGraph(dataAfterBlocks);
     const auto value = graph->GetValue();
@@ -412,7 +330,7 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
-template<auto Type, typename ArrowType>
+template <auto Type, typename ArrowType>
 void TestContainerForStringType() {
     TSetup<false> setup;
     auto dataLiteral = setup.PgmBuilder->NewDataLiteral<Type>("\"Just a string\"");
@@ -437,220 +355,124 @@ Y_UNIT_TEST_LLVM(TestReplicateScalar) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto valueType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+    const auto valueType = NTest::ConvertToMinikqlType<ui32>(pb);
 
-    const auto scalarValue = pb.AsScalar(pb.NewDataLiteral<ui32>(value));
-    const auto scalarCount = pb.AsScalar(pb.NewDataLiteral<ui64>(count));
+    const auto scalarValue = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui32(value)));
+    const auto scalarCount = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(count)));
 
     const auto replicated = pb.ReplicateScalar(scalarValue, scalarCount);
 
     const auto replicatedType = pb.NewBlockType(valueType, TBlockType::EShape::Many);
 
-    const auto listOfReplicated = pb.NewList(replicatedType, { replicated });
+    const auto listOfReplicated = pb.NewList(replicatedType, {replicated});
 
-    const auto flowOfReplicated = pb.ToFlow(listOfReplicated);
+    const auto flowOfReplicated = pb.ToFlow(listOfReplicated, {});
 
     const auto flowAfterBlocks = pb.FromBlocks(flowOfReplicated);
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    for (size_t i = 0; i < count; ++i) {
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui32>(), value);
-    }
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>(count, ui32(value)));
 }
 
 Y_UNIT_TEST_LLVM(TestBlockFunc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
+    const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3});
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(wideFlow));
+    const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64BlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 11);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 22);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 33);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{11, 22, 33});
 }
 
 Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
-    const auto tupleType = pb.NewTupleType({optionalUi64Type, optionalUi64Type});
-    const auto emptyOptionalUi64 = pb.NewEmptyOptional(optionalUi64Type);
+    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true);
     const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
 
-    const auto data1 = pb.NewTuple(tupleType, {
-        pb.NewOptional(pb.NewDataLiteral<ui64>(1)),
-        emptyOptionalUi64
-    });
-    const auto data2 = pb.NewTuple(tupleType, {
-        emptyOptionalUi64,
-        pb.NewOptional(pb.NewDataLiteral<ui64>(20))
-    });
-    const auto data3 = pb.NewTuple(tupleType, {
-        emptyOptionalUi64,
-        emptyOptionalUi64
-    });
-    const auto data4 = pb.NewTuple(tupleType, {
-        pb.NewOptional(pb.NewDataLiteral<ui64>(10)),
-        pb.NewOptional(pb.NewDataLiteral<ui64>(20))
-    });
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
-    const auto flow = pb.ToFlow(list);
+    using TOptPair = std::tuple<TMaybe<ui64>, TMaybe<ui64>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TOptPair>{
+                                                               {TMaybe<ui64>(1), TMaybe<ui64>{}},
+                                                               {TMaybe<ui64>{}, TMaybe<ui64>(20)},
+                                                               {TMaybe<ui64>{}, TMaybe<ui64>{}},
+                                                               {TMaybe<ui64>(10), TMaybe<ui64>(20)},
+                                                           });
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto sumWideFlow = pb.WideMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(wideFlow));
+    const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64OptBlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(sumWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<ui64>>{TMaybe<ui64>{}, TMaybe<ui64>{}, TMaybe<ui64>{}, TMaybe<ui64>(30)});
 }
 
 Y_UNIT_TEST_LLVM(TestBlockFuncWithNullableScalar) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
+    const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, /*optional=*/true);
     const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
-    const auto emptyOptionalUi64 = pb.NewEmptyOptional(optionalUi64Type);
 
-    const auto list = pb.NewList(optionalUi64Type, {
-        pb.NewOptional(pb.NewDataLiteral<ui64>(10)),
-        pb.NewOptional(pb.NewDataLiteral<ui64>(20)),
-        pb.NewOptional(pb.NewDataLiteral<ui64>(30))
-    });
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<ui64>>{TMaybe<ui64>(10), TMaybe<ui64>(20), TMaybe<ui64>(30)});
+    const auto flow = pb.ToFlow(list, {});
     const auto blocksFlow = pb.ToBlocks(flow);
 
     THolder<IComputationGraph> graph;
-    auto map = [&](const TProgramBuilder::TUnaryLambda& func) {
+    auto buildAndCheck = [&](const TProgramBuilder::TUnaryLambda& func, const TVector<TMaybe<ui64>>& expected) {
         const auto pgmReturn = pb.Collect(pb.FromBlocks(pb.Map(blocksFlow, func)));
         graph = setup.BuildGraph(pgmReturn);
-        return graph->GetValue().GetListIterator();
+        AssertUnboxedValueElementEqual(graph->GetValue(), expected);
     };
 
     {
-        const auto scalar = pb.AsScalar(emptyOptionalUi64);
-        auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
+        const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>{}));
+        buildAndCheck([&](TRuntimeNode item) -> TRuntimeNode {
             return {pb.BlockFunc("Add", ui64OptBlockType, {scalar, item})};
-        });
-
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        },
+                      {TMaybe<ui64>{}, TMaybe<ui64>{}, TMaybe<ui64>{}});
     }
 
     {
-        const auto scalar = pb.AsScalar(emptyOptionalUi64);
-        auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
+        const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, TMaybe<ui64>{}));
+        buildAndCheck([&](TRuntimeNode item) -> TRuntimeNode {
             return {pb.BlockFunc("Add", ui64OptBlockType, {item, scalar})};
-        });
-
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        },
+                      {TMaybe<ui64>{}, TMaybe<ui64>{}, TMaybe<ui64>{}});
     }
 
     {
-        const auto scalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
-        auto iterator = map([&](TRuntimeNode item) -> TRuntimeNode {
+        const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(100)));
+        buildAndCheck([&](TRuntimeNode item) -> TRuntimeNode {
             return {pb.BlockFunc("Add", ui64OptBlockType, {item, scalar})};
-        });
-
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 110);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 120);
-
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 130);
-
-        UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT(!iterator.Next(item));
+        },
+                      {TMaybe<ui64>(110), TMaybe<ui64>(120), TMaybe<ui64>(130)});
     }
 }
 
@@ -658,75 +480,40 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithScalar) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
-    const auto data1 = pb.NewDataLiteral<ui64>(10);
-    const auto data2 = pb.NewDataLiteral<ui64>(20);
-    const auto data3 = pb.NewDataLiteral<ui64>(30);
-    const auto rightScalar = pb.AsScalar(pb.NewDataLiteral<ui64>(100));
-    const auto leftScalar = pb.AsScalar(pb.NewDataLiteral<ui64>(1000));
+    const auto rightScalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(100)));
+    const auto leftScalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(1000)));
 
-    const auto list = pb.NewList(ui64Type, {data1, data2, data3});
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui64>{10, 20, 30});
+    const auto flow = pb.ToFlow(list, {});
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto sumBlocksFlow = pb.Map(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode {
-        return {pb.BlockFunc("Add", ui64BlockType, { leftScalar, {pb.BlockFunc("Add", ui64BlockType, { item, rightScalar } )}})};
+        return {pb.BlockFunc("Add", ui64BlockType, {leftScalar, {pb.BlockFunc("Add", ui64BlockType, {item, rightScalar})}})};
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumBlocksFlow));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1110);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1120);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1130);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{1110, 1120, 1130});
 }
 
 Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-
-    const auto data1 = pb.NewDataLiteral<ui64>(10);
-    const auto data2 = pb.NewDataLiteral<ui64>(20);
-    const auto data3 = pb.NewDataLiteral<ui64>(30);
-
-    const auto list = pb.NewList(ui64Type, {data1, data2, data3});
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui64>{10, 20, 30});
+    const auto flow = pb.ToFlow(list, {});
 
     const auto blocksFlow = pb.ToBlocks(flow);
-    const auto wideFlow = pb.ExpandMap(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item, pb.AsScalar(pb.NewDataLiteral<ui64>(3ULL))}; });
-    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideFlow)));
+    const auto wideFlow = pb.ExpandMap(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item, pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(3ULL)))}; });
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideFlow)), {});
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
 
     const auto pgmReturn = pb.Collect(narrowFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 20);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{10, 20, 30});
 }
 
 Y_UNIT_TEST(TestListFromBlocks) {
@@ -735,29 +522,21 @@ Y_UNIT_TEST(TestListFromBlocks) {
     DoTestListToAndFromBlocks(
         setup,
         ListToBlocks,
-        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); }
-    );
+        [](TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); });
 }
 
 Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<ui64>(10)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<ui64>(20)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<ui64>(30)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3});
-    const auto flow = pb.ToFlow(list);
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)));
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)), {});
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)), {});
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });
@@ -765,20 +544,7 @@ Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
     const auto pgmReturn = pb.ForwardList(narrowFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 20);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{10, 20, 30});
 }
 
 Y_UNIT_TEST(TestListToAndFromBlocks) {
@@ -786,26 +552,25 @@ Y_UNIT_TEST(TestListToAndFromBlocks) {
 
     DoTestListToAndFromBlocks(
         setup,
-        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
-        [] (TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); }
-    );
+        [](TProgramBuilder& pb, TRuntimeNode list) { return pb.ListToBlocks(list); },
+        [](TProgramBuilder& pb, TRuntimeNode list) { return pb.ListFromBlocks(list); });
 }
-}
+} // Y_UNIT_TEST_SUITE(TMiniKQLBlocksTest)
 
 Y_UNIT_TEST_SUITE(TMiniKQLDirectKernelTest) {
 Y_UNIT_TEST(Simple) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto boolType = NTest::ConvertToMinikqlType<bool>(pb);
+    const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto boolBlocksType = pb.NewBlockType(boolType, TBlockType::EShape::Many);
     const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
     const auto arg1 = pb.Arg(boolBlocksType);
     const auto arg2 = pb.Arg(ui64BlocksType);
     const auto arg3 = pb.Arg(ui64BlocksType);
     const auto ifNode = pb.BlockIf(arg1, arg2, arg3);
-    const auto eqNode = pb.BlockFunc("Equals", boolBlocksType, { ifNode, arg2 });
+    const auto eqNode = pb.BlockFunc("Equals", boolBlocksType, {ifNode, arg2});
 
     const auto graph = setup.BuildGraph(eqNode, {arg1.GetNode(), arg2.GetNode(), arg3.GetNode()});
     const auto topology = graph->GetKernelsTopology();
@@ -824,7 +589,8 @@ Y_UNIT_TEST(Simple) {
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
         arrow::UInt8Builder builder1(execContext.memory_pool());
-        arrow::UInt64Builder builder2(execContext.memory_pool()), builder3(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder3(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         ARROW_OK(builder3.Reserve(blockSize));
@@ -858,9 +624,9 @@ Y_UNIT_TEST(WithScalars) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
-    const auto scalar = pb.AsScalar(pb.NewDataLiteral(false));
+    const auto scalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, /*simpleNode=*/false));
     const auto arg1 = pb.Arg(ui64BlocksType);
     const auto arg2 = pb.Arg(ui64BlocksType);
     const auto ifNode = pb.BlockIf(scalar, arg1, arg2);
@@ -881,7 +647,8 @@ Y_UNIT_TEST(WithScalars) {
     const size_t blockSize = 100000;
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder1(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -908,22 +675,21 @@ Y_UNIT_TEST(WithScalars) {
 
 Y_UNIT_TEST(Udf) {
     TVector<TUdfModuleInfo> modules;
-    modules.emplace_back(TUdfModuleInfo{"", "BlockUT", new TBlockUTModule()});
+    modules.emplace_back(TUdfModuleInfo{.LibraryPath = "", .ModuleName = "BlockUT", .Module = new TBlockUTModule()});
     TSetup<false> setup(GetTestFactory(), std::move(modules));
 
     auto& pb = *setup.PgmBuilder;
 
-    const auto i32Type = pb.NewDataType(NUdf::TDataType<i32>::Id);
+    const auto i32Type = NTest::ConvertToMinikqlType<i32>(pb);
     const auto i32BlocksType = pb.NewBlockType(i32Type, TBlockType::EShape::Many);
     const auto arg1 = pb.Arg(i32BlocksType);
-    const auto userType = pb.NewTupleType({
-        pb.NewTupleType({i32BlocksType}),
-        pb.NewEmptyStructType(),
-        pb.NewEmptyTupleType()});
-    const auto udf = pb.Udf("BlockUT.Inc_BlocksImpl", pb.NewVoid(), userType);
+    const auto userType = pb.NewTupleType({pb.NewTupleType({i32BlocksType}),
+                                           pb.NewEmptyStructType(),
+                                           pb.NewEmptyTupleType()});
+    const auto udf = pb.Udf("BlockUT.Inc_BlocksImpl", NTest::ConvertValueToLiteralNode(pb, NTest::TSingularVoid{}), userType);
     const auto apply = pb.Apply(udf, {arg1});
 
-    const auto graph = setup.BuildGraph(apply, {arg1.GetNode() });
+    const auto graph = setup.BuildGraph(apply, {arg1.GetNode()});
     const auto topology = graph->GetKernelsTopology();
     UNIT_ASSERT(topology);
     UNIT_ASSERT_VALUES_EQUAL(topology->InputArgsCount, 1);
@@ -960,11 +726,11 @@ Y_UNIT_TEST(ScalarApply) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
-    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64Type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
     const auto arg1 = pb.Arg(ui64BlocksType);
     const auto arg2 = pb.Arg(ui64BlocksType);
-    const auto scalarApply = pb.ScalarApply({arg1,arg2}, [&](auto args){
+    const auto scalarApply = pb.ScalarApply({arg1, arg2}, [&](auto args) {
         return pb.Add(args[0], args[1]);
     });
 
@@ -981,7 +747,8 @@ Y_UNIT_TEST(ScalarApply) {
     const size_t blockSize = 100000;
     std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow::UInt64Builder builder1(execContext.memory_pool());
+        arrow::UInt64Builder builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -1006,7 +773,6 @@ Y_UNIT_TEST(ScalarApply) {
     }
 }
 
-}
+} // Y_UNIT_TEST_SUITE(TMiniKQLDirectKernelTest)
 
-}
-}
+} // namespace NKikimr::NMiniKQL

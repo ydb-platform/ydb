@@ -98,7 +98,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, sortedOutput, flatMap.Pos(),
-        outItemType, ctx, State_, flatMap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, flatMap.Ref().GetConstraintSet());
 
     auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, flatMap.Pos());
     if (TCoOrderedFlatMap::Match(flatMap.Raw()) || sortedOutput) {
@@ -172,7 +172,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     auto mapper = cleanup.Cast().Ptr();
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = NPrivate::ConvertOutTablesWithSortAware(mapper, sortedOutput, lmap.Pos(),
-        outItemType, ctx, State_, lmap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, lmap.Ref().GetConstraintSet());
 
     const bool useFlow = State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW);
 
@@ -392,7 +392,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
             .Done();
     }
 
-    TYtOutTableInfo combineOut(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo combineOut(outItemType, GetNativeYtTypeCompatibility(*cluster, *State_->Configuration));
 
     return Build<TYtOutput>(ctx, combineByKey.Pos())
         .Operation<TYtMap>()
@@ -409,4 +409,115 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         .Done();
 }
 
-}  // namespace NYql
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
+    const auto ytMap = node.Cast<TYtMap>();
+    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
+
+    {
+        static const char optName[] = "KeepPruneKeysOnInputTables";
+        if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+            // Try remove PruneKeys over Input table
+            const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
+
+            if (pruneKeys) {
+                bool skipPruneKeys = true;
+                if (pruneKeys.Cast().Input().Ptr() != ytMapInput) {
+                    skipPruneKeys = false;
+                } else if (auto maybePruneAdjacentKeys = pruneKeys.Cast().Maybe<TCoPruneAdjacentKeys>(); maybePruneAdjacentKeys) {
+                    auto pruneAdjacentKeys = maybePruneAdjacentKeys.Cast();
+                    // We cannot remove added unique\distinct constraints added for pruneAdjacentKeys, so we cannot remove pruneAdjacentKeys
+                    if (pruneAdjacentKeys.Input().Ptr()->GetConstraintSet() != pruneAdjacentKeys.Ptr()->GetConstraintSet()) {
+                        skipPruneKeys = false;
+                    }
+                }
+
+                if (skipPruneKeys) {
+                    auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
+                    return Build<TYtMap>(ctx, node.Pos())
+                        .InitFrom(ytMap)
+                        .Mapper(identityLambda)
+                    .Done();
+                }
+            }
+        }
+    }
+
+    const auto flatMap = ytMap.Mapper().Body().Maybe<TCoFlatMapBase>();
+    if (!flatMap) {
+        return node;
+    }
+
+    auto flatMapInput = flatMap.Cast().Input().Ptr();
+
+    auto maybePruneKeys = flatMap.Cast().Input().Maybe<TCoPruneKeysBase>();
+    if (maybePruneKeys) {
+        flatMapInput = maybePruneKeys.Cast().Input().Ptr();
+    }
+
+    if (flatMapInput != ytMapInput) {
+        return node;
+    }
+
+    auto flatMapLambda = flatMap.Cast().Lambda();
+    if (!IsFilterFlatMap(flatMapLambda)) {
+        return node;
+    }
+
+    auto row = flatMapLambda.Args().Arg(0).Ptr();
+    auto predicate = flatMapLambda.Body().Ref().ChildPtr(TCoConditionalValueBase::idx_Predicate);
+
+    TNodeSet banned;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (TYtOutput::Match(node.Get())) {
+            // Prevent ReplaceUnessentials to go deeper than current operation
+            banned.insert(node.Get());
+            return false;
+        }
+        return true;
+    });
+
+    auto newPredicate = ReplaceUnessentials(predicate, row, banned, ctx);
+    if (newPredicate == predicate) {
+        return node;
+    }
+
+    auto newFilter = ctx.ChangeChild(flatMapLambda.Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPredicate));
+    auto newFlatMapLambda = ctx.ChangeChild(flatMapLambda.Ref(), TCoLambda::idx_Body, std::move(newFilter));
+
+    auto newInputLambda = MakeIdentityLambda(node.Pos(), ctx);
+    if (maybePruneKeys) {
+        auto pruneKeys = maybePruneKeys.Cast();
+        newInputLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param({"stream"})
+                .Callable(TCoPruneAdjacentKeys::Match(pruneKeys.Raw()) ? "PruneAdjacentKeys" : "PruneKeys")
+                    .Arg(0, "stream")
+                    .Add(1, pruneKeys.Extractor().Ptr())
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    return Build<TYtMap>(ctx, node.Pos())
+        .InitFrom(ytMap)
+        .Mapper<TCoLambda>()
+            .Args({"stream"})
+            .Body<TCoFlatMapBase>()
+                .CallableName(flatMap.Ref().Content())
+                .Input<TExprApplier>()
+                    .Apply(TCoLambda(newInputLambda))
+                    .With(0, "stream")
+                .Build()
+                .Lambda<TCoLambda>()
+                    .Args({"item"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(newFlatMapLambda))
+                        .With(0, "item")
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
+}
+
+} // namespace NYql

@@ -1,0 +1,5 @@
+/* multirun can not */
+USE plato;
+
+select * from Input
+limit 5 offset 10;

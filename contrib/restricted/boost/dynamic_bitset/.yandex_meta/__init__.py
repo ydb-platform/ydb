@@ -9,7 +9,7 @@ def post_install(self):
 boost_dynamic_bitset = NixSourceProject(
     nixattr="boost_dynamic_bitset",
     arcdir=boost.make_arcdir("dynamic_bitset"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

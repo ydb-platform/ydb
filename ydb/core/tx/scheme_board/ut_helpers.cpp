@@ -24,6 +24,16 @@ TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& run
     return result->Get()->Info;
 }
 
+TEvStateStorage::TEvResolveReplicasList::TPtr ResolveReplicas(TTestActorRuntime& runtime, const TString& path) {
+    const TActorId recipient = MakeStateStorageProxyID();
+    const TActorId edge = runtime.AllocateEdgeActor();
+    runtime.Send(recipient, edge, new TEvStateStorage::TEvResolveSchemeBoard(path));
+
+    auto result = runtime.GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
+    UNIT_ASSERT(result);
+    return result;
+}
+
 NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
     const TString& path,
     TPathId pathId,

@@ -1,5 +1,8 @@
 #include "event_pb.h"
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
         TString res;
@@ -55,63 +58,122 @@ namespace NActors {
         return true;
     }
 
-    void TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
-        Y_ABORT_UNLESS(size <= SizeRemain);
-        SizeRemain -= size;
+    void TCoroutineChunkSerializer::Produce(const void* data, ssize_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
+        Y_ABORT_UNLESS(size < 0 || static_cast<size_t>(size) <= TotalSizeRemain);
+        TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
-        if (!Chunks.empty()) {
-            auto& last = Chunks.back();
-            if (last.first + last.second == data) {
-                last.second += size; // just extend the last buffer
-                return;
+        if (LastChunk.Buf + LastChunk.Size == data && LastChunk.MemRegion == memRegion) {
+            Y_ABORT_UNLESS(size > 0 || static_cast<size_t>(-size) <= LastChunk.Size);
+            LastChunk.Size += size;
+            if (LastChunk.Size == 0) {
+                Chunks.pop_back();
+                LastChunk = Chunks.empty() ? TChunk{nullptr, 0, nullptr} : Chunks.back();
+            } else {
+                Chunks.back().Size += size;
             }
+            return;
         }
 
-        Chunks.emplace_back(static_cast<const char*>(data), size);
+        Y_ABORT_UNLESS(size > 0);
+
+        LastChunk = Chunks.emplace_back(TChunk{
+            .Buf = static_cast<const char*>(data),
+            .Size = static_cast<size_t>(size),
+            .MemRegion = memRegion,
+        });
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
+        return WriteAliasedRawImpl(data, size, nullptr);
+    }
+
+    bool TCoroutineChunkSerializer::WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
         Y_ABORT_UNLESS(size >= 0);
-        NSan::CheckMemIsInitialized(data, size);
-        while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
-                const void *produce = data;
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second)) {
-                    memcpy(BufferPtr, data, bytesToAppend);
-                    produce = BufferPtr;
-                    BufferPtr += bytesToAppend;
+
+        if (Y_UNLIKELY(memRegion || AliasedMode == EAliasedMode::CopyToBuffer)) { 
+            while (size) {
+                const bool copyAliased = !memRegion && AliasedMode == EAliasedMode::CopyToBuffer;
+                const size_t bytesToAppend = copyAliased
+                    ? Min<size_t>(size, TotalSizeRemain, Buffer.size())
+                    : Min<size_t>(size, TotalSizeRemain);
+                if (bytesToAppend) {
+                    const void *produce = data;
+                    const NInterconnect::NRdma::TMemRegion* producedMemRegion = memRegion;
+                    const bool canGlue = !Chunks.empty() &&
+                        Chunks.back().Buf + Chunks.back().Size == data &&
+                        Chunks.back().MemRegion == memRegion;
+                    if (!memRegion && (copyAliased ||
+                            ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
+                                !canGlue &&
+                                Buffer.size() >= bytesToAppend))) {
+                        Y_ABORT_UNLESS(Buffer.size() >= bytesToAppend);
+                        memcpy(Buffer.data(), data, bytesToAppend);
+                        produce = Buffer.data();
+                        Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
+                        producedMemRegion = nullptr;
+                    }
+                    Produce(produce, bytesToAppend, producedMemRegion);
+                    data = static_cast<const char*>(data) + bytesToAppend;
+                    size -= bytesToAppend;
+                } else {
+                    InnerContext.SwitchTo(BufFeedContext);
+                    if (CancelFlag || AbortFlag) {
+                        return false;
+                    }
                 }
-                Produce(produce, bytesToAppend);
-                data = static_cast<const char*>(data) + bytesToAppend;
-                size -= bytesToAppend;
-            } else {
-                InnerContext.SwitchTo(BufFeedContext);
-                if (CancelFlag || AbortFlag) {
-                    return false;
+            }
+        } else { // pass-through copy, no memRegion
+            while (size) {
+                if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain)) {
+                    const void *produce = data;
+                    // if the data is on the same cache line, we better copy it to the buffer
+                    if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 && Buffer.size() >= bytesToAppend) {
+                        memcpy(Buffer.data(), data, bytesToAppend);
+                        produce = Buffer.data();
+                        Buffer = {Buffer.data() + bytesToAppend, Buffer.size() - bytesToAppend};
+                    }
+                    Produce(produce, bytesToAppend, nullptr);
+                    data = static_cast<const char*>(data) + bytesToAppend;
+                    size -= bytesToAppend;
+                } else {
+                    InnerContext.SwitchTo(BufFeedContext);
+                    if (CancelFlag || AbortFlag) {
+                        return false;
+                    }
                 }
             }
         }
+
         return true;
     }
 
     bool TCoroutineChunkSerializer::Next(void** data, int* size) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
-        if (!SizeRemain) {
+
+        // number of bytes we can allocate right now
+        size_t maxBytes = Min(Buffer.size(), TotalSizeRemain);
+
+        if (!maxBytes) {
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
                 return false;
             }
+
+            // recalculate actual value as it has changed
+            maxBytes = Min(Buffer.size(), TotalSizeRemain);
         }
-        Y_ABORT_UNLESS(SizeRemain);
-        *data = BufferPtr;
-        *size = SizeRemain;
-        BufferPtr += SizeRemain;
-        Produce(*data, *size);
+
+        Y_ABORT_UNLESS(maxBytes);
+        *data = Buffer.data();
+        *size = maxBytes;
+        Buffer = Buffer.SubSpan(maxBytes, Max<size_t>());
+        Produce(*data, *size, nullptr);
         return true;
     }
 
@@ -119,19 +181,11 @@ namespace NActors {
         if (!count) {
             return;
         }
-        Y_ABORT_UNLESS(count > 0);
-        Y_ABORT_UNLESS(!Chunks.empty());
-        TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.second);
-        Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
-            buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
-        buf.second -= count;
-        if (!buf.second) {
-            Chunks.pop_back();
-        }
-        BufferPtr -= count;
-        SizeRemain += count;
-        TotalSerializedDataSize -= count;
+        Produce(Buffer.data(), -count, nullptr);
+        Buffer = {
+            Buffer.data() - count,
+            Buffer.size() + count,
+        };
     }
 
     void TCoroutineChunkSerializer::Resume() {
@@ -143,7 +197,9 @@ namespace NActors {
 
     bool TCoroutineChunkSerializer::WriteRope(const TRope *rope) {
         for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
-            if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
+            const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+            if (!WriteAliasedRawImpl(iter.ContiguousData(), iter.ContiguousSize(),
+                    memRegion.Empty() ? nullptr : memRegion.GetMemRegion())) {
                 return false;
             }
         }
@@ -154,25 +210,72 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
-    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size) {
+    bool TCoroutineChunkSerializer::WriteCord(const y_absl::Cord& cord) {
+        if (WithCord) {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                if (!WriteAliasedRawImpl(chunk.data(), chunk.size(), nullptr)) {
+                    return false;
+                }
+            }
+            // retain ownership of the cord
+            Cords.push_back(cord);
+        } else {
+            for (const y_absl::string_view& chunk : cord.Chunks()) {
+                const char *chunkData = chunk.data();
+                size_t chunkSize = chunk.size();
+                while (chunkSize) {
+                    void *buffer;
+                    int bufferSize;
+                    if (!Next(&buffer, &bufferSize)) {
+                        return false;
+                    }
+                    size_t numBytesToCopy = Min<size_t>(chunkSize, bufferSize);
+                    memcpy(buffer, chunkData, numBytesToCopy);
+                    chunkData += numBytesToCopy;
+                    chunkSize -= numBytesToCopy;
+                    buffer = (char*)buffer + numBytesToCopy;
+                    bufferSize -= numBytesToCopy;
+                    BackUp(bufferSize);
+                }
+            }
+        }
+        return true;
+    }
+
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode) {
+        TMutableContiguousSpan buffer(static_cast<char*>(data), size);
+        return FeedBuf(&buffer, size, aliasedMode);
+    }
+
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(TMutableContiguousSpan *buffer,
+            size_t totalSize, EAliasedMode aliasedMode) {
         // fill in base params
-        BufferPtr = static_cast<char*>(data);
-        SizeRemain = size;
-        Y_DEBUG_ABORT_UNLESS(size);
+        Buffer = *buffer;
+        TotalSizeRemain = totalSize;
+        Y_DEBUG_ABORT_UNLESS(TotalSizeRemain);
 
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
         Chunks.clear();
+        LastChunk = {nullptr, 0, nullptr};
+        AliasedMode = aliasedMode;
+        Y_ABORT_UNLESS(Cords.empty());
         Resume();
 
+        Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&
+            Buffer.data() + Buffer.size() <= buffer->data() + buffer->size());
+        *buffer = Buffer;
         return Chunks;
     }
 
-    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event) {
+    void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes, bool withCord) {
         Y_ABORT_UNLESS(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
+        WithCachedSizes = withCachedSizes;
+        WithCord = withCord;
     }
 
     void TCoroutineChunkSerializer::Abort() {
@@ -185,6 +288,7 @@ namespace NActors {
         while (!CancelFlag) {
             Y_ABORT_UNLESS(Event);
             SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
+            CodedOutputStream.reset();
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);
@@ -264,26 +368,9 @@ namespace NActors {
         return res;
     }
 
-    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
-        // serialize payload first
+    template<typename TCb>
+    bool SerializeHeaderCommon(const TVector<TRope>& payload, TCb& append) {
         if (payload) {
-            void *data;
-            int size = 0;
-            auto append = [&](const char *p, size_t len) {
-                while (len) {
-                    if (size) {
-                        const size_t numBytesToCopy = std::min<size_t>(size, len);
-                        memcpy(data, p, numBytesToCopy);
-                        data = static_cast<char*>(data) + numBytesToCopy;
-                        size -= numBytesToCopy;
-                        p += numBytesToCopy;
-                        len -= numBytesToCopy;
-                    } else if (!chunker->Next(&data, &size)) {
-                        return false;
-                    }
-                }
-                return true;
-            };
             auto appendNumber = [&](size_t number) {
                 char buf[MaxNumberBytes];
                 return append(buf, SerializeNumber(number, buf));
@@ -299,19 +386,79 @@ namespace NActors {
                     return false;
                 }
             }
-            if (size) {
-                chunker->BackUp(std::exchange(size, 0));
-            }
-            for (const TRope& rope : payload) {
-                if (!chunker->WriteRope(&rope)) {
-                    return false;
-                }
-            }
         }
 
         return true;
     }
 
+    bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload) {
+        // serialize payload first
+        void *data;
+        int size = 0;
+        auto append = [&](const char *p, size_t len) {
+            while (len) {
+                if (size) {
+                    const size_t numBytesToCopy = std::min<size_t>(size, len);
+                    memcpy(data, p, numBytesToCopy);
+                    data = static_cast<char*>(data) + numBytesToCopy;
+                    size -= numBytesToCopy;
+                    p += numBytesToCopy;
+                    len -= numBytesToCopy;
+                } else if (!chunker->Next(&data, &size)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        if (!SerializeHeaderCommon(payload, append)) {
+            return false;
+        }
+        if (size) {
+            chunker->BackUp(std::exchange(size, 0));
+        }
+        for (const TRope& rope : payload) {
+            if (!chunker->WriteRope(&rope)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, IRcBufAllocator* allocator) {
+        TRope result;
+        auto sz = CalculateSerializedHeaderSizeImpl(payload);
+        if (sz) {
+            TRcBuf headerBuf = allocator->AllocRcBuf(sz, 0, 0);
+            if (!headerBuf) {
+                return {};
+            }
+            char* data = headerBuf.GetDataMut();
+            auto append = [&data](const char *p, size_t len) {
+                std::memcpy(data, p, len);
+                data += len;
+                return true;
+            };
+            SerializeHeaderCommon(payload, append);
+            result.Insert(result.End(), std::move(headerBuf));
+
+            for (const TRope& rope : payload) {
+                result.Insert(result.End(), TRope(rope));
+            }
+        }
+
+        {
+            ui32 size = msg.ByteSizeLong();
+            TRcBuf recordsSerializedBuf = allocator->AllocRcBuf(size, 0, 0);
+            if (!recordsSerializedBuf) {
+                return {};
+            }
+            bool serializationDone = msg.SerializePartialToArray(recordsSerializedBuf.GetDataMut(), size);
+            Y_ABORT_UNLESS(serializationDone);
+            result.Insert(result.End(), std::move(recordsSerializedBuf));
+        }
+
+        return result;
+    }
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize)
     {
@@ -361,54 +508,76 @@ namespace NActors {
         }
     }
 
-    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
-        ssize_t result = recordSize;
-        if (result >= 0 && payload) {
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload) {
+        ui32 result = 0;
+        if (payload) {
             ++result; // marker
             char buf[MaxNumberBytes];
             result += SerializeNumber(payload.size(), buf);
-            size_t totalPayloadSize = 0;
             for (const TRope& rope : payload) {
                 size_t ropeSize = rope.GetSize();
-                totalPayloadSize += ropeSize;
                 result += SerializeNumber(ropeSize, buf);
             }
-            result += totalPayloadSize;
         }
         return result;
     }
 
-    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize) {
-            TEventSerializationInfo info;
-            info.IsExtendedFormat = static_cast<bool>(payload);
+    ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
+        ssize_t result = recordSize;
+        if (result >= 0 && payload) {
+            result += CalculateSerializedHeaderSizeImpl(payload);
+            for (const TRope& rope : payload) {
+                result += rope.GetSize();
+            }
+        }
+        return result;
+    }
 
-            if (allowExternalDataChannel) {
-                if (payload) {
-                    char temp[MaxNumberBytes];
-                    size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
-                    for (const TRope& rope : payload) {
-                        headerLen += SerializeNumber(rope.size(), temp);
-                    }
-                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
-                    for (const TRope& rope : payload) {
-                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
-                    }
+    bool IsRdma(const TRope &rope) {
+        for (auto it = rope.Begin(); it != rope.End(); ++it) {
+            if (!it.GetChunk().IsRdma()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel,
+            const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment, size_t payloadHeaderSize) {
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0);
+
+        TEventSerializationInfo info;
+        info.IsExtendedFormat = static_cast<bool>(payload);
+
+        if (allowExternalDataChannel) {
+            if (payload) {
+                char temp[MaxNumberBytes];
+                size_t headerLen = 1 + SerializeNumber(payload.size(), temp);
+                for (const TRope& rope : payload) {
+                    headerLen += SerializeNumber(rope.size(), temp);
                 }
+                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true /*IsInline*/, false /*IsRdma*/});
 
-                const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
-
-#ifndef NDEBUG
-                size_t total = 0;
-                for (const auto& section : info.Sections) {
-                    total += section.Size;
+                for (const TRope& rope : payload) {
+                    info.Sections.push_back(TEventSectionInfo{payloadHeaderSize, rope.size(), 0, payloadAlignment, false /*IsInline*/, IsRdma(rope)});
                 }
-                size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
-                Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
-                    << " byteSize# " << byteSize << " payload.size# " << payload.size());
-#endif
             }
 
-            return info;
+            const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true /*IsInline*/, false /*IsRdma*/}); // protobuf itself
+
+#ifndef NDEBUG
+            size_t total = 0;
+            for (const auto& section : info.Sections) {
+                total += section.Size;
+            }
+            size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
+            Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
+                << " byteSize# " << byteSize << " payload.size# " << payload.size());
+#endif
         }
+
+        return info;
+    }
 }

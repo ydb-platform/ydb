@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatabaseRequest::TPtr& ev)
@@ -22,9 +24,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
     const FederatedQuery::Internal::ComputeDatabaseInternal& request = event.Request;
     const int byteSize = request.ByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", request.id())
-        << "CreateDatabaseRequest: "
-        << request.DebugString());
+    YDB_LOG_TRACE("Dump logPrefix, createDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", request.id())},
+        {"createDatabaseRequest", request.DebugString()});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);
@@ -33,9 +35,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [=, this](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [tablePathPrefix=YdbConnection->TablePathPrefix, scope, request](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
@@ -43,7 +45,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
             return make_pair(TString{}, NYdb::TParamsBuilder{}.Build()); // already exists
         }
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateDatabase");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "CreateDatabase");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("internal", request.SerializeAsString());
         writeQueryBuilder.AddText(
@@ -86,8 +88,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const auto byteSize = event.GetByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
-        << "DescribeDatabaseRequest");
+    YDB_LOG_TRACE("DescribeDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeDatabase");
     queryBuilder.AddString("scope", scope);
@@ -99,20 +101,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
         }
 
         FederatedQuery::Internal::ComputeDatabaseInternal result;
         if (!result.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
         }
 
         return result;
@@ -146,8 +148,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const auto byteSize = event.GetByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
-        << "ModifyDatabaseRequest");
+    YDB_LOG_TRACE("ModifyDatabaseRequest",
+        {"logPrefix", MakeLogPrefix(scope, "internal", scope)});
     
     // only write part
     if (event.LastAccessAt) {
@@ -190,20 +192,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [=, this, synchronized = ev->Get()->Synchronized, workloadManagerSynchronized = ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [synchronized=ev->Get()->Synchronized, workloadManagerSynchronized=ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common, scope, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
         }
 
         FederatedQuery::Internal::ComputeDatabaseInternal result;
         if (!result.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
         }
 
         if (synchronized) {
@@ -214,7 +216,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
             result.set_workload_manager_synchronized(*workloadManagerSynchronized);
         }
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyDatabase(write)");
         writeQueryBuilder.AddString("internal", result.SerializeAsString());
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddText(

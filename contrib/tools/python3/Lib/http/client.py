@@ -111,6 +111,18 @@ responses = {v: v.phrase for v in http.HTTPStatus.__members__.values()}
 _MAXLINE = 65536
 _MAXHEADERS = 100
 
+# maximal number of interim (1xx) responses tolerated before the final
+# response.  Real servers send at most a few; without a bound, a server
+# streaming "100 Continue" responses would hang getresponse() forever.
+# A socket timeout cannot detect that as data keeps arriving within every
+# timeout window.
+_MAXINTERIMRESPONSES = 100
+
+# Data larger than this will be read in chunks, to prevent extreme
+# overallocation.
+_MIN_READ_BUF_SIZE = 1 << 20
+
+
 # Header name/value ABNF (http://tools.ietf.org/html/rfc7230#section-3.2)
 #
 # VCHAR          = %x21-7E
@@ -230,7 +242,7 @@ def _read_headers(fp):
 
 def _parse_header_lines(header_lines, _class=HTTPMessage):
     """
-    Parses only RFC2822 headers from header lines.
+    Parses only RFC 5322 headers from header lines.
 
     email Parser wants to see strings rather than bytes.
     But a TextIOWrapper around self.rfile would buffer too many bytes
@@ -243,7 +255,7 @@ def _parse_header_lines(header_lines, _class=HTTPMessage):
     return email.parser.Parser(_class=_class).parsestr(hstring)
 
 def parse_headers(fp, _class=HTTPMessage):
-    """Parses only RFC2822 headers from a file pointer."""
+    """Parses only RFC 5322 headers from a file pointer."""
 
     headers = _read_headers(fp)
     return _parse_header_lines(headers, _class)
@@ -327,7 +339,7 @@ class HTTPResponse(io.BufferedIOBase):
             return
 
         # read until we get a non-100 response
-        while True:
+        for _ in range(_MAXINTERIMRESPONSES):
             version, status, reason = self._read_status()
             if status != CONTINUE:
                 break
@@ -336,6 +348,9 @@ class HTTPResponse(io.BufferedIOBase):
             if self.debuglevel > 0:
                 print("headers:", skipped_headers)
             del skipped_headers
+        else:
+            raise HTTPException(
+                f"got more than {_MAXINTERIMRESPONSES} interim responses")
 
         self.code = self.status = status
         self.reason = reason.strip()
@@ -553,6 +568,7 @@ class HTTPResponse(io.BufferedIOBase):
     def _read_and_discard_trailer(self):
         # read and discard trailer up to the CRLF terminator
         ### note: we shouldn't have any trailers!
+        trailers_read = 0
         while True:
             line = self.fp.readline(_MAXLINE + 1)
             if len(line) > _MAXLINE:
@@ -563,6 +579,14 @@ class HTTPResponse(io.BufferedIOBase):
                 break
             if line in (b'\r\n', b'\n', b''):
                 break
+            # Bound the trailer count just as response headers are bounded.
+            # A server streaming trailer lines forever would otherwise hang
+            # the client; a socket timeout cannot detect that as data keeps
+            # arriving within every timeout window.
+            trailers_read += 1
+            if trailers_read > _MAXHEADERS:
+                raise HTTPException(
+                    f"got more than {_MAXHEADERS} trailers")
 
     def _get_chunk_left(self):
         # return self.chunk_left, reading a new chunk if necessary.
@@ -639,10 +663,25 @@ class HTTPResponse(io.BufferedIOBase):
         reading. If the bytes are truly not available (due to EOF), then the
         IncompleteRead exception can be used to detect the problem.
         """
-        data = self.fp.read(amt)
-        if len(data) < amt:
-            raise IncompleteRead(data, amt-len(data))
-        return data
+        cursize = min(amt, _MIN_READ_BUF_SIZE)
+        data = self.fp.read(cursize)
+        if len(data) >= amt:
+            return data
+        if len(data) < cursize:
+            raise IncompleteRead(data, amt - len(data))
+
+        data = io.BytesIO(data)
+        data.seek(0, 2)
+        while True:
+            # This is a geometric increase in read size (never more than
+            # doubling out the current length of data per loop iteration).
+            delta = min(cursize, amt - cursize)
+            data.write(self.fp.read(delta))
+            if data.tell() >= amt:
+                return data.getvalue()
+            cursize += delta
+            if data.tell() < cursize:
+                raise IncompleteRead(data.getvalue(), amt - data.tell())
 
     def _safe_readinto(self, b):
         """Same as _safe_read, but for reading into a buffer."""
@@ -952,13 +991,22 @@ class HTTPConnection:
         return ip
 
     def _tunnel(self):
+        if _contains_disallowed_url_pchar_re.search(self._tunnel_host):
+            raise ValueError('Tunnel host can\'t contain control characters %r'
+                             % (self._tunnel_host,))
         connect = b"CONNECT %s:%d %s\r\n" % (
             self._wrap_ipv6(self._tunnel_host.encode("idna")),
             self._tunnel_port,
             self._http_vsn_str.encode("ascii"))
         headers = [connect]
         for header, value in self._tunnel_headers.items():
-            headers.append(f"{header}: {value}\r\n".encode("latin-1"))
+            header_bytes = header.encode("latin-1")
+            value_bytes = value.encode("latin-1")
+            if not _is_legal_header_name(header_bytes):
+                raise ValueError('Invalid header name %r' % (header_bytes,))
+            if _is_illegal_header_value(value_bytes):
+                raise ValueError('Invalid header value %r' % (value_bytes,))
+            headers.append(b"%s: %s\r\n" % (header_bytes, value_bytes))
         headers.append(b"\r\n")
         # Making a single send() call instead of one per line encourages
         # the host OS to use a more optimal packet size instead of

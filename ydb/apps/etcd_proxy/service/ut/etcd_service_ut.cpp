@@ -1,6 +1,8 @@
 #include "../etcd_base_init.h"
 #include "../etcd_shared.h"
+#include "../etcd_gate.h"
 #include "../etcd_grpc.h"
+#include "../etcd_lease.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
@@ -74,8 +76,9 @@ public:
         config.SetDatabase("/Root");
         const auto driver = NYdb::TDriver(config);
         stuff->Client = std::make_unique<NYdb::NQuery::TQueryClient>(driver);
-        stuff->Revision.store(1LL);
-        stuff->Lease.store(1LL);
+
+        GetRuntime()->Register(BuildMainGate({}, stuff));
+        GetRuntime()->Register(BuildHolderHouse({}, stuff));
     }
 
     ui16 GetPort() {
@@ -101,18 +104,23 @@ private:
     ui16 GRpcPort_;
 };
 
-void MakeTables(auto &channel) {
-    const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
-    Ydb::Query::ExecuteQueryRequest request;
-    request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
-    request.mutable_query_content()->set_text(NEtcd::GetCreateTablesSQL(std::string("PRAGMA TablePathPrefix='/Root';\n")));
-
+void Execute(const std::string &query, const std::unique_ptr<Ydb::Query::V1::QueryService::Stub> &service) {
     grpc::ClientContext executeCtx;
     Ydb::Query::ExecuteQueryResponsePart response;
-    auto reader = stub->ExecuteQuery(&executeCtx, request);
-    while (reader->Read(&response)) {
+
+    Ydb::Query::ExecuteQueryRequest request;
+    request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+    request.mutable_query_content()->set_text(query);
+    for (const auto reader = service->ExecuteQuery(&executeCtx, request); reader->Read(&response);) {
         UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
     }
+}
+
+void MakeTables(auto &channel) {
+    const auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
+    const std::string prefix("PRAGMA TablePathPrefix='/Root';\n");
+    Execute(NEtcd::GetCreateTablesSQL(prefix), stub);
+    Execute(NEtcd::GetInitializeTablesSQL(prefix), stub);
 }
 
 void MakeSimpleTest(std::function<void(const std::unique_ptr<etcdserverpb::KV::Stub>&)> etcd)

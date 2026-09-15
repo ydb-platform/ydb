@@ -29,8 +29,45 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "LeftJoin (MapJoin)",
+                                        "Node Type": "TopSort-LeftJoin (Map)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "row.name"
+                                            },
                                             {
                                                 "Condition": "c.a = ss.a.code",
                                                 "Inputs": [
@@ -41,7 +78,7 @@
                                                         "ExternalPlanNodeId": 8
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (MapJoin)"
+                                                "Name": "LeftJoin (Map)"
                                             }
                                         ],
                                         "PlanNodeId": 10,
@@ -54,11 +91,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/c",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)"
+                                                            "name (-\u221e, +\u221e)",
+                                                            "a"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -76,7 +110,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "LeftJoin (MapJoin)",
+                                                        "Node Type": "LeftJoin (Map)",
                                                         "Operators": [
                                                             {
                                                                 "Condition": "a.code = b_grp.a",
@@ -88,7 +122,7 @@
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (MapJoin)"
+                                                                "Name": "LeftJoin (Map)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 7,
@@ -101,9 +135,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/a",
                                                                         "ReadColumns": [
-                                                                            "code"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "code (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -137,7 +168,7 @@
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
-                                                                                "HashFunc": "HashV1",
+                                                                                "HashFunc": "HashV2",
                                                                                 "KeyColumns": [
                                                                                     "a"
                                                                                 ],
@@ -170,9 +201,6 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/b",
                                                                                                         "ReadColumns": [
-                                                                                                            "a"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
                                                                                                             "a (-\u221e, +\u221e)",
                                                                                                             "num (-\u221e, +\u221e)"
                                                                                                         ],

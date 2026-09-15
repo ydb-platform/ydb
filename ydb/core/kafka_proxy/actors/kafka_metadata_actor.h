@@ -3,8 +3,8 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -12,9 +12,15 @@
 
 namespace NKafka {
 
+    struct TTopicNameToIndex {
+        TString TopicName;
+        ui32 TopicIndex;
+    };
+
 TActorId MakeKafkaDiscoveryCacheID();
 
-class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
+class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor>
+                         , public TKafkaExceptionHandler<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
                         const TActorId& discoveryCacheActor)
@@ -27,6 +33,10 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     using TEvLocationResponse = NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse;
@@ -47,9 +57,11 @@ private:
     void AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response,
                           const TVector<TNodeInfo*>& nodes);
     void AddTopicError(TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode);
+    void ApplyPendingTopicResponses();
     void RespondIfRequired(const NActors::TActorContext& ctx);
     void AddProxyNodeToBrokers();
     void AddBroker(ui64 nodeId, const TString& host, ui64 port);
+    void EnsureBrokersAndController();
     void RequestICNodeCache();
     void ProcessTopicsFromRequest();
     void SendDiscoveryRequest();
@@ -58,38 +70,52 @@ private:
 
     void AddTopic(const TString& topic, ui64 index);
 
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const NActors::TActorContext& ctx);
+    void RespondWithTimeout(const NActors::TActorContext& ctx);
+    void CancelRequestTimeout();
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLocationResponse, HandleLocationResponse);
-            HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, HandleNodesResponse);
             hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
             hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
+            HFunc(TEvKafka::TEvResponse, Handle);
+            HFunc(TEvents::TEvWakeup, HandleWakeup);
         }
     }
 
-    TString LogPrefix() const;
+
+    NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
+    static constexpr TDuration RequestTimeout = TDuration::Seconds(30);
+
     const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
     const bool WithProxy;
 
     ui64 PendingResponses = 0;
+    ui64 InflyCreateTopics = 0;
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
-    THashSet<ui64> AllClusterNodes;
+    THashSet<ui64> AddedBrokerNodes;
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
+    TActorId TimeoutTimerActorId;
     bool NeedAllNodes = false;
     bool HaveError = false;
-    bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
+    TSet<TString> TopicСreationAttempts;
+    TMap<TActorId, TTopicNameToIndex> CreateTopicRequests;
 
-    THashMap<ui64, TNodeInfo> Nodes;
+    void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx);
+
+    TMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
     THashSet<ui64> HaveBrokers;
 

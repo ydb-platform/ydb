@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <util/system/env.h>
+#include <library/cpp/yt/system/env.h>
 
 namespace NYT::NCrypto {
 
@@ -16,30 +16,35 @@ void TPemBlobConfig::Register(TRegistrar registrar)
         .Optional();
 
     registrar.Postprocessor([] (TThis* config) {
-        if (!!config->EnvironmentVariable + !!config->FileName + !!config->Value != 1) {
-            THROW_ERROR_EXCEPTION("Must specify one of \"environment_variable\", \"file_name\", or \"value\"");
-        }
+        THROW_ERROR_EXCEPTION_IF(config->Value && config->FileName,
+            "Cannot specify both \"value\" and \"file_name\"");
+        THROW_ERROR_EXCEPTION_UNLESS(config->EnvironmentVariable || config->FileName || config->Value,
+            "Must specify at least one of \"environment_variable\", \"file_name\", or \"value\"");
     });
 }
 
-TPemBlobConfigPtr TPemBlobConfig::CreateFileReference(const TString& fileName)
+TPemBlobConfigPtr TPemBlobConfig::CreateFileReference(const std::string& fileName)
 {
     auto config = New<TPemBlobConfig>();
     config->FileName = fileName;
     return config;
 }
 
-TString TPemBlobConfig::LoadBlob() const
+std::string TPemBlobConfig::LoadBlob(TCertificatePathResolver pathResolver) const
 {
     if (EnvironmentVariable) {
-        return GetEnv(*EnvironmentVariable);
-    } else if (FileName) {
-        return TFileInput(*FileName).ReadAll();
-    } else if (Value) {
-        return *Value;
-    } else {
-        THROW_ERROR_EXCEPTION("Neither \"environment_variable\" nor \"file_name\" nor \"value\" is given");
+        if (auto value = TryGetEnvValue(*EnvironmentVariable)) {
+            return *std::move(value);
+        }
     }
+    if (Value) {
+        return *Value;
+    }
+    if (FileName) {
+        auto filePath = pathResolver ? pathResolver(*FileName) : *FileName;
+        return TFileInput(filePath).ReadAll();
+    }
+    THROW_ERROR_EXCEPTION("Cannot load environment variable %Qv", EnvironmentVariable);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,6 +77,8 @@ void TSslContextConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("ssl_configuration_commands", &TThis::SslConfigurationCommands)
         .Optional();
+    registrar.Parameter("insecure_skip_verify", &TThis::InsecureSkipVerify)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

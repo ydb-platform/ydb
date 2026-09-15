@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
         const std::vector<TString> data = { "1", "2", "3" };
 
-        auto future = CaSetup->AsyncOutputPromises.ResumeExecution.GetFuture();
+        auto future = CaSetup->AsyncOutputPromises->ResumeExecution.GetFuture();
         AsyncOutputWrite(data);
         auto result = PQReadUntil(topicName, 3);
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         InitAsyncOutput(topicName);
 
         const std::vector<TString> data = { "1" };
-        auto future = CaSetup->AsyncOutputPromises.Issue.GetFuture();
+        auto future = CaSetup->AsyncOutputPromises->Issue.GetFuture();
         AsyncOutputWrite(data);
 
         UNIT_ASSERT(future.Wait(WaitTimeout));
@@ -78,6 +78,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         PQCreateStream(topicName);
 
         TSinkState state1;
+        NDqProto::TCheckpoint checkpoint;
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
@@ -86,8 +87,8 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
             setup.AsyncOutputWrite(data1);
 
             const std::vector<TString> data2 = { "2", "3" };
-            auto checkpoint = CreateCheckpoint();
-            auto future = setup.CaSetup->AsyncOutputPromises.StateSaved.GetFuture();
+            checkpoint = CreateCheckpoint();
+            auto future = setup.CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
             setup.AsyncOutputWrite(data2, checkpoint);
 
             UNIT_ASSERT(future.Wait(WaitTimeout));
@@ -97,7 +98,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
-            setup.LoadSink(state1);
+            setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data3 = { "4", "5" };
             setup.AsyncOutputWrite(data3);
@@ -110,7 +111,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
         {
             TPqIoTestFixture setup;
             setup.InitAsyncOutput(topicName);
-            setup.LoadSink(state1);
+            setup.LoadSink(state1, checkpoint);
 
             const std::vector<TString> data4 = { "4", "5" };
             setup.AsyncOutputWrite(data4); // This write should be deduplicated
@@ -131,7 +132,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
 
             const std::vector<TString> data = {};
             auto checkpoint = CreateCheckpoint();
-            auto future = CaSetup->AsyncOutputPromises.StateSaved.GetFuture();
+            auto future = CaSetup->AsyncOutputPromises->StateSaved.GetFuture();
             AsyncOutputWrite(data, checkpoint);
 
             UNIT_ASSERT(future.Wait(WaitTimeout));

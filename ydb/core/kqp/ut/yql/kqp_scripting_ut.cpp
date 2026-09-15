@@ -124,34 +124,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(UnsafeTimestampCast) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("0");
-
-        TKikimrRunner kikimr({setting});
-        TScriptingClient client(kikimr.GetDriver());
-
-        auto result = client.ExecuteYqlScript(Q_(R"(
-            CREATE TABLE `/Root/TsTest` (
-                Key Timestamp,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-            COMMIT;
-
-            UPSERT INTO `/Root/TsTest`
-            SELECT * FROM `/Root/KeyValue`;
-        )")).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = client.ExecuteYqlScript(Q1_(R"(
-            UPSERT INTO `/Root/TsTest`
-            SELECT * FROM `/Root/KeyValue`;
-        )")).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(ScanQuery) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
@@ -371,9 +343,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetQueryLimitBytes(200);
 
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetWithSampleTables(false));
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
@@ -687,7 +657,11 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
     }
 
     void DoStreamExecuteYqlScriptScanTimeoutBruteForce(bool clientTimeout, bool operationTimeout) {
-        TKikimrRunner kikimr;
+        auto logSettings = TTestLogSettings()
+            .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_SESSION, NLog::EPriority::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_PROXY, NLog::EPriority::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_DEBUG);
+        TKikimrRunner kikimr(TKikimrSettings().SetLogSettings(std::move(logSettings)));
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         TScriptingClient client(kikimr.GetDriver());
@@ -1238,53 +1212,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         CompareYson(R"([
             [[1];["Value21"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(ExecuteYqlScriptPg) {
-        TKikimrRunner kikimr;
-
-        auto settings = TExecuteYqlRequestSettings()
-            .Syntax(Ydb::Query::SYNTAX_PG);
-
-        TScriptingClient client(kikimr.GetDriver());
-        auto result = client.ExecuteYqlScript(R"(
-            SELECT * FROM (VALUES
-                (1::int8, 'one'),
-                (2::int8, 'two'),
-                (3::int8, 'three')
-            ) AS t;
-        )", settings).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            ["1";"one"];
-            ["2";"two"];
-            ["3";"three"]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    Y_UNIT_TEST(StreamExecuteYqlScriptPg) {
-        TKikimrRunner kikimr;
-
-        auto settings = TExecuteYqlRequestSettings()
-            .Syntax(Ydb::Query::SYNTAX_PG);
-
-        TScriptingClient client(kikimr.GetDriver());
-
-        auto result = client.StreamExecuteYqlScript(R"(
-            SELECT * FROM (VALUES
-                (1::int8, 'one'),
-                (2::int8, 'two'),
-                (3::int8, 'three')
-            ) AS t;
-        )", settings).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([[
-            ["1";"one"];
-            ["2";"two"];
-            ["3";"three"]
-        ]])", StreamResultToYson(result));
     }
 }
 

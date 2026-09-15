@@ -12,10 +12,6 @@ ELSE()
         typing.py
         type_base.py
     )
-
-    PEERDIR(
-        contrib/python/six
-    )
 ENDIF()
 
 END()

@@ -2,10 +2,9 @@
 #include "checker_secret.h"
 #include "manager.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
-#include <util/string/vector.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_SECRET
 
 namespace NKikimr::NMetadata::NSecret {
 
@@ -14,20 +13,26 @@ private:
     THashMap<TString, TString> SecretNameToOwner;
 
     static Ydb::Table::ExecuteDataQueryRequest BuildRequest(std::vector<TSecretId> secrets) {
-        std::vector<TString> secretNameLiterals;
-        for (const auto& id : secrets) {
-            secretNameLiterals.push_back(TStringBuilder() << '"' << id.GetSecretId() << '"');
-        }
-
         Ydb::Table::ExecuteDataQueryRequest request;
+        request.mutable_query_cache_policy()->set_keep_in_cache(true);
         TStringBuilder sb;
+        sb << "--!syntax_v1\n";
+        sb << "DECLARE $secretNames AS List<Utf8>;" << Endl;
         sb << "SELECT " + TSecret::TDecoder::SecretId + ", " + TSecret::TDecoder::OwnerUserId + ", " + TSecret::TDecoder::Value << Endl;
         sb << "FROM `" + TSecret::GetBehaviour()->GetStorageTablePath() + "`" << Endl;
         sb << "VIEW index_by_secret_id" << Endl;
-        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN (" + JoinStrings(secretNameLiterals.begin(), secretNameLiterals.end(), ", ") + ")"
-           << Endl;
-        AFL_DEBUG(NKikimrServices::METADATA_SECRET)("event", "build_precondition")("sql", sb);
+        sb << "WHERE " + TSecret::TDecoder::SecretId + " IN $secretNames" << Endl;
+        YDB_LOG_DEBUG("Dump event, sql",
+            {"event", "build_precondition"},
+            {"sql", sb});
         request.mutable_query()->set_yql_text(sb);
+
+        Ydb::TypedValue secretNamesParam;
+        for (const auto& id : secrets) {
+            *secretNamesParam.mutable_value()->add_items() = NInternal::TYDBValue::Utf8(id.GetSecretId());
+        }
+        secretNamesParam.mutable_type()->mutable_list_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+        (*request.mutable_parameters())["$secretNames"] = secretNamesParam;
         return request;
     }
 
@@ -113,8 +118,7 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     } else {
         result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetExternalData().GetUserToken()->GetUserSID()));
     }
-    const TString secretName{settings.GetObjectId()};
-    for (auto&& c : secretName) {
+    for (auto&& c : settings.GetObjectId()) {
         if (c >= '0' && c <= '9') {
             continue;
         }
@@ -129,15 +133,8 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         }
         return TConclusionStatus::Fail("incorrect character for secret id: '" + TString(c) + "'");
     }
-
-    const bool requireDbPrefixInSecretName = HasAppData() ? AppData()->FeatureFlags.GetRequireDbPrefixInSecretName() : false;
-    const TStringBuf databaseName{ExtractBase(context.GetExternalData().GetDatabase())};
-    if (requireDbPrefixInSecretName && !secretName.StartsWith(databaseName)) {
-        return TConclusionStatus::Fail(TStringBuilder{} << "Secret name " << secretName << " must start with database name " << databaseName);
-    }
-
     {
-        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(secretName));
+        result.SetColumn(TSecret::TDecoder::SecretId, NInternal::TYDBValue::Utf8(settings.GetObjectId()));
     }
     {
         auto fValue = settings.GetFeaturesExtractor().Extract(TSecret::TDecoder::Value);

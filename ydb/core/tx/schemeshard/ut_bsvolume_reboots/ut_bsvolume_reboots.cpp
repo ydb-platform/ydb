@@ -256,8 +256,14 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
     Y_UNIT_TEST(SimultaneousCreateDropNbs) { //+
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+
             {
                 TInactiveZone inactive(activeZone);
+
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
                                     "PlanResolution: 50 "
                                     "Coordinators: 1 "
@@ -273,6 +279,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
                                     "  Kind: \"storage-pool-number-2\""
                                     "}");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                expectedDomainPaths += 1;
             }
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -289,6 +297,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
 
+            expectedDomainPaths -= 1;
+
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
@@ -296,7 +306,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                                    {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(0)});
             }
         });

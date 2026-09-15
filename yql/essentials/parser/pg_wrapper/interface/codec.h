@@ -10,13 +10,13 @@ namespace NMiniKQL {
 
 class TPgType;
 
-} // NMiniKQL
-} // NKikimr
+} // namespace NMiniKQL
+} // namespace NKikimr
 
 namespace NYql {
 namespace NResult {
 class TYsonResultWriter;
-}
+} // namespace NResult
 
 namespace NCommon {
 
@@ -35,7 +35,7 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
 TString PgValueCoerce(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId, i32 typMod, TMaybe<TString>* error);
 
 void WriteYsonValuePg(NResult::TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
-    const TVector<ui32>* structPositions);
+                      const TVector<ui32>* structPositions);
 
 void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
 

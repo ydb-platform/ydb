@@ -5,4 +5,4 @@ namespace NSQLTranslationV1 {
 
 NSQLTranslation::TLexerFactoryPtr MakeAntlr4LexerFactory();
 
-}
+} // namespace NSQLTranslationV1

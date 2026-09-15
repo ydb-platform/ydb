@@ -1,0 +1,6 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+
+select a.*, row_number() over () as rn from plato.Input as a;

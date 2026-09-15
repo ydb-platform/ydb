@@ -10,6 +10,8 @@ As with other binary operators, if the data on either side is `NULL`, the result
 
 Don't confuse this operator with a logical "or": in SQL, it's denoted by the `OR` keyword. It's also not worth doing concatenation using `+`.
 
+There is a similar function for this operator [Concat](../builtins/basic.md#concat), which supports an arbitrary number of arguments.
+
 #### Examples
 
 ```yql
@@ -75,6 +77,20 @@ WHERE key LIKE 'foo%bar';
 The operators `+`, `-`, `*`, `/`, `%` are defined for [primitive data types](../types/primitive.md) that are variations of numbers.
 
 For the Decimal data type, bankers rounding is used (to the nearest even integer).
+
+{% note info %}
+
+Starting from language version [2026.02](../changelog/2026.02.md), arithmetic operators support operands with different `Decimal(N, M)` types. Both operands are implicitly converted to a common Decimal type.
+
+This conversion is possible only if a common `Decimal` type exists for the operand types. For example, `Decimal(35, 0)` and `Decimal(35, 35)` have no common type: it would need to store both 35 digits before and 35 digits after the decimal point, while the maximum `Decimal` precision is 35.
+
+```yql
+-- `sum` has type `Decimal(11, 3)` and value `20`
+SELECT
+    Decimal("10", 10, 3) + Decimal("10", 10, 2) AS sum;
+```
+
+{% endnote %}
 
 #### Examples
 
@@ -545,6 +561,3 @@ FROM my_table AS t;
 SELECT
   Sample::ReturnsStruct().member;
 ```
-
-
-

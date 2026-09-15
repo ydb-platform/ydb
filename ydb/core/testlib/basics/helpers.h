@@ -23,6 +23,7 @@ namespace NFake {
         ui64 DiskSize = 0;
         bool FormatDisk = true;
         TString DiskPath;
+        std::optional<TDuration> EventDispatchTimeout;
     };
 
     struct INode {
@@ -43,8 +44,10 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize);
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize, ui32 ringGroups = 1);
     TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup);
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups,
+                                                           const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
     TStateStorageSetupper CreateDefaultStateStorageSetupper();
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -59,27 +62,27 @@ namespace NFake {
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
-            const TIntrusivePtr<NKikimr::TControlBoard>& icb);
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb, const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb);
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
                             NFake::INode *factory = nullptr, NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 
-    ///
-    class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {
+    class TStrandedPDiskSubsystem final : public IPDiskSubsystem {
         TTestActorRuntime &Runtime;
     public:
-        TStrandedPDiskServiceFactory(TTestActorRuntime &runtime)
-            : Runtime(runtime)
+        TStrandedPDiskSubsystem(TTestActorRuntime* runtime)
+            : Runtime(*runtime)
         {}
 
-        void Create(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
+        void Start(const TActorContext &ctx, ui32 pDiskID, const TIntrusivePtr<TPDiskConfig> &cfg,
             const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) override;
 
-        virtual ~TStrandedPDiskServiceFactory()
-        {}
     };
+
+    // Configure before runtime initialization; replace any earlier PDisk subsystem registration.
+    void SetupPDiskSubsystem(TTestActorRuntime* runtime, bool stranded = true);
 
     TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);
 

@@ -166,7 +166,6 @@ simdjson_warn_unused error_code dom_parser_implementation::parse(const uint8_t *
   if (error) { return error; }
   return stage2(_doc);
 }
-
 } // namespace westmere
 } // namespace simdjson
 

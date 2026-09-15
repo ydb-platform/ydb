@@ -67,6 +67,8 @@ struct TEvYdbCompute {
 
         EvCreateResourcePoolResponse,
 
+        EvUpdateAclResponse,
+
         EvEnd
     };
 
@@ -227,12 +229,14 @@ struct TEvYdbCompute {
                                  const TString& scope,
                                  const TString& basePath,
                                  const TString& path,
-                                 const NFq::NConfig::TYdbStorageConfig& executionConnection)
+                                 const NFq::NConfig::TYdbStorageConfig& executionConnection,
+                                 const TString& sharedFolderId = {})
             : CloudId(cloudId)
             , Scope(scope)
             , BasePath(basePath)
             , Path(path)
             , ExecutionConnection(executionConnection)
+            , SharedFolderId(sharedFolderId)
         {}
 
         TString CloudId;
@@ -240,6 +244,7 @@ struct TEvYdbCompute {
         TString BasePath;
         TString Path;
         NFq::NConfig::TYdbStorageConfig ExecutionConnection;
+        TString SharedFolderId;
     };
 
     struct TEvCreateDatabaseResponse : public NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {
@@ -259,6 +264,10 @@ struct TEvYdbCompute {
     };
 
     struct TEvListDatabasesRequest : public NActors::TEventLocal<TEvListDatabasesRequest, EvListDatabasesRequest> {
+        explicit TEvListDatabasesRequest(const TString& database)
+            : Database(database)
+        {}
+        TString Database;
     };
 
     struct TEvListDatabasesResponse : public NActors::TEventLocal<TEvListDatabasesResponse, EvListDatabasesResponse> {
@@ -515,6 +524,14 @@ struct TEvYdbCompute {
 
     struct TEvCreateResourcePoolResponse : public NActors::TEventLocal<TEvCreateResourcePoolResponse, EvCreateResourcePoolResponse> {
         TEvCreateResourcePoolResponse(NYdb::TStatus status)
+            : Status(std::move(status))
+        {}
+
+        NYdb::TStatus Status;
+    };
+
+    struct TEvUpdateAclResponse : public NActors::TEventLocal<TEvUpdateAclResponse, EvUpdateAclResponse> {
+        TEvUpdateAclResponse(NYdb::TStatus status)
             : Status(std::move(status))
         {}
 

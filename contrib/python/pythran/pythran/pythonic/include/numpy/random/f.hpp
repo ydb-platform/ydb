@@ -14,9 +14,8 @@ namespace numpy
     template <class pS>
     types::ndarray<double, pS> f(double dfnum, double dfden, pS const &shape);
 
-    auto f(double dfnum, double dfden,
-           long size) -> decltype(f(dfnum, dfden,
-                                    types::array_tuple<long, 1>{{size}}));
+    auto f(double dfnum, double dfden, long size)
+        -> decltype(f(dfnum, dfden, types::array_tuple<long, 1>{{size}}));
 
     double f(double dfnum, double dfden, types::none_type size = {});
 

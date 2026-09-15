@@ -67,4 +67,4 @@ To specify custom users, groups, and access rights to be created during the init
 
 ## Skipping initial security configuration {#skip-initial-security}
 
-You can skip initial security configuration by setting the [`security_config.disable_builtin_security`](../reference/configuration/index.md#domains-config) parameter to `true`.
+You can skip initial security configuration by setting the [`security_config.disable_builtin_security`](../reference/configuration/domains_config.md#domains-config) parameter to `true`.

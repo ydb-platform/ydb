@@ -68,6 +68,11 @@ class TestCRTTransferManager(unittest.TestCase):
     def setUp(self):
         self.region = 'us-west-2'
         self.bucket = "test_bucket"
+        self.s3express_bucket = 's3expressbucket--usw2-az5--x-s3'
+        self.mrap_accesspoint = (
+            'arn:aws:s3::123456789012:accesspoint/mfzwi23gnjvgw.mrap'
+        )
+        self.mrap_bucket = 'mfzwi23gnjvgw.mrap'
         self.key = "test_key"
         self.expected_content = b'my content'
         self.expected_download_content = b'new content'
@@ -76,7 +81,13 @@ class TestCRTTransferManager(unittest.TestCase):
             'myfile', self.expected_content, mode='wb'
         )
         self.expected_path = "/" + self.bucket + "/" + self.key
-        self.expected_host = "s3.%s.amazonaws.com" % (self.region)
+        self.expected_host = f"s3.{self.region}.amazonaws.com"
+        self.expected_s3express_host = f'{self.s3express_bucket}.s3express-usw2-az5.us-west-2.amazonaws.com'
+        self.expected_s3express_path = f'/{self.key}'
+        self.expected_mrap_host = (
+            f'{self.mrap_bucket}.accesspoint.s3-global.amazonaws.com'
+        )
+        self.expected_mrap_path = f"/{self.key}"
         self.s3_request = mock.Mock(awscrt.s3.S3Request)
         self.s3_crt_client = mock.Mock(awscrt.s3.S3Client)
         self.s3_crt_client.make_request.side_effect = (
@@ -105,6 +116,7 @@ class TestCRTTransferManager(unittest.TestCase):
         expected_body_content=None,
         expected_content_length=None,
         expected_missing_headers=None,
+        expected_extra_headers=None,
     ):
         if expected_host is None:
             expected_host = self.expected_host
@@ -127,12 +139,58 @@ class TestCRTTransferManager(unittest.TestCase):
                 crt_http_request.headers.get('Content-Length'),
                 str(expected_content_length),
             )
+        header_names = [
+            header[0].lower() for header in crt_http_request.headers
+        ]
         if expected_missing_headers is not None:
-            header_names = [
-                header[0].lower() for header in crt_http_request.headers
-            ]
             for expected_missing_header in expected_missing_headers:
                 self.assertNotIn(expected_missing_header.lower(), header_names)
+        if expected_extra_headers is not None:
+            for header, value in expected_extra_headers.items():
+                self.assertEqual(crt_http_request.headers.get(header), value)
+
+    def _assert_expected_s3express_request(
+        self, make_request_kwargs, expected_http_method='GET'
+    ):
+        self._assert_expected_crt_http_request(
+            make_request_kwargs["request"],
+            expected_host=self.expected_s3express_host,
+            expected_path=self.expected_s3express_path,
+            expected_http_method=expected_http_method,
+        )
+        self.assertIn('signing_config', make_request_kwargs)
+        self.assertEqual(
+            make_request_kwargs['signing_config'].algorithm,
+            awscrt.auth.AwsSigningAlgorithm.V4_S3EXPRESS,
+        )
+        self.assertFalse(
+            make_request_kwargs['signing_config'].use_double_uri_encode,
+        )
+        self.assertFalse(
+            make_request_kwargs['signing_config'].should_normalize_uri_path,
+        )
+
+    def _assert_expected_mrap_request(
+        self, make_request_kwargs, expected_http_method='GET'
+    ):
+        self._assert_expected_crt_http_request(
+            make_request_kwargs["request"],
+            expected_host=self.expected_mrap_host,
+            expected_path=self.expected_mrap_path,
+            expected_http_method=expected_http_method,
+        )
+        self.assertIn('signing_config', make_request_kwargs)
+        self.assertEqual(
+            make_request_kwargs['signing_config'].algorithm,
+            awscrt.auth.AwsSigningAlgorithm.V4_ASYMMETRIC,
+        )
+        self.assertEqual(make_request_kwargs['signing_config'].region, "*")
+        self.assertFalse(
+            make_request_kwargs['signing_config'].use_double_uri_encode,
+        )
+        self.assertFalse(
+            make_request_kwargs['signing_config'].should_normalize_uri_path,
+        )
 
     def _assert_subscribers_called(self, expected_future=None):
         self.assertTrue(self.record_subscriber.on_queued_called)
@@ -355,6 +413,87 @@ class TestCRTTransferManager(unittest.TestCase):
                 [self.record_subscriber],
             )
 
+    def test_upload_throws_error_for_unsupported_arg(self):
+        with self.assertRaisesRegex(
+            ValueError, "Invalid extra_args key 'ContentMD5'"
+        ):
+            self.transfer_manager.upload(
+                self.filename,
+                self.bucket,
+                self.key,
+                {'ContentMD5': '938c2cc0dcc05f2b68c4287040cfcf71'},
+                [self.record_subscriber],
+            )
+
+    def test_upload_throws_error_on_s3_object_lambda_resource(self):
+        s3_object_lambda_arn = (
+            'arn:aws:s3-object-lambda:us-west-2:123456789012:'
+            'accesspoint:my-accesspoint'
+        )
+        with self.assertRaisesRegex(ValueError, 'methods do not support'):
+            self.transfer_manager.upload(
+                self.filename, s3_object_lambda_arn, self.key
+            )
+
+    def test_upload_with_s3express(self):
+        future = self.transfer_manager.upload(
+            self.filename,
+            self.s3express_bucket,
+            self.key,
+            {},
+            [self.record_subscriber],
+        )
+        future.result()
+        self._assert_expected_s3express_request(
+            self.s3_crt_client.make_request.call_args[1],
+            expected_http_method='PUT',
+        )
+
+    def test_upload_with_mrap(self):
+        future = self.transfer_manager.upload(
+            self.filename,
+            self.mrap_accesspoint,
+            self.key,
+            {},
+            [self.record_subscriber],
+        )
+        future.result()
+        self._assert_expected_mrap_request(
+            self.s3_crt_client.make_request.call_args[1],
+            expected_http_method='PUT',
+        )
+
+    def test_upload_with_full_checksum(self):
+        future = self.transfer_manager.upload(
+            self.filename,
+            self.bucket,
+            self.key,
+            {"ChecksumCRC32": "abc123"},
+            [self.record_subscriber],
+        )
+        future.result()
+
+        callargs_kwargs = self.s3_crt_client.make_request.call_args[1]
+        self.assertEqual(
+            callargs_kwargs,
+            {
+                'request': mock.ANY,
+                'type': awscrt.s3.S3RequestType.PUT_OBJECT,
+                'send_filepath': self.filename,
+                'on_progress': mock.ANY,
+                'on_done': mock.ANY,
+                'checksum_config': None,
+            },
+        )
+        self._assert_expected_crt_http_request(
+            callargs_kwargs["request"],
+            expected_http_method='PUT',
+            expected_content_length=len(self.expected_content),
+            expected_missing_headers=['Content-MD5'],
+            expected_extra_headers={"x-amz-checksum-crc32": "abc123"},
+        )
+        self._assert_subscribers_called(future)
+
     def test_download(self):
         future = self.transfer_manager.download(
             self.bucket, self.key, self.filename, {}, [self.record_subscriber]
@@ -457,6 +596,46 @@ class TestCRTTransferManager(unittest.TestCase):
             underlying_stream.getvalue(), self.expected_download_content
         )
 
+    def test_download_throws_error_for_unsupported_arg(self):
+        with self.assertRaisesRegex(
+            ValueError, "Invalid extra_args key 'Range'"
+        ):
+            self.transfer_manager.download(
+                self.bucket,
+                self.key,
+                self.filename,
+                {'Range': 'bytes:0-1023'},
+                [self.record_subscriber],
+            )
+
+    def test_download_with_s3express(self):
+        future = self.transfer_manager.download(
+            self.s3express_bucket,
+            self.key,
+            self.filename,
+            {},
+            [self.record_subscriber],
+        )
+        future.result()
+        self._assert_expected_s3express_request(
+            self.s3_crt_client.make_request.call_args[1],
+            expected_http_method='GET',
+        )
+
+    def test_download_with_mrap(self):
+        future = self.transfer_manager.download(
+            self.mrap_accesspoint,
+            self.key,
+            self.filename,
+            {},
+            [self.record_subscriber],
+        )
+        future.result()
+        self._assert_expected_mrap_request(
+            self.s3_crt_client.make_request.call_args[1],
+            expected_http_method='GET',
+        )
+
     def test_delete(self):
         future = self.transfer_manager.delete(
             self.bucket, self.key, {}, [self.record_subscriber]
@@ -469,6 +648,7 @@ class TestCRTTransferManager(unittest.TestCase):
             {
                 'request': mock.ANY,
                 'type': awscrt.s3.S3RequestType.DEFAULT,
+                'operation_name': "DeleteObject",
                 'on_progress': mock.ANY,
                 'on_done': mock.ANY,
             },
@@ -479,6 +659,27 @@ class TestCRTTransferManager(unittest.TestCase):
             expected_content_length=0,
         )
         self._assert_subscribers_called(future)
+
+    def test_delete_throws_error_for_unsupported_arg(self):
+        with self.assertRaisesRegex(
+            ValueError, "Invalid extra_args key 'BypassGovernanceRetention'"
+        ):
+            self.transfer_manager.delete(
+                self.bucket,
+                self.key,
+                {'BypassGovernanceRetention': True},
+                [self.record_subscriber],
+            )
+
+    def test_delete_with_s3express(self):
+        future = self.transfer_manager.delete(
+            self.s3express_bucket, self.key, {}, [self.record_subscriber]
+        )
+        future.result()
+        self._assert_expected_s3express_request(
+            self.s3_crt_client.make_request.call_args[1],
+            expected_http_method='DELETE',
+        )
 
     def test_blocks_when_max_requests_processes_reached(self):
         self.s3_crt_client.make_request.return_value = self.s3_request

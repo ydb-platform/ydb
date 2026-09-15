@@ -1,4 +1,3 @@
-/* postgres can not */
 $list = YQL::@@
 (AddMember (AddMember (Struct) 'query (String 'QUERY)) 'result (String 'RESULT))
 @@;

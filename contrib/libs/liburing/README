@@ -75,6 +75,14 @@ Building liburing
 
 See './configure --help' for more information about build config options.
 
+Out-of-source builds are also supported, keeping the source tree clean, and
+allowing you to have different configurations side-by-side:
+
+    mkdir build && cd build
+    ../configure
+    make -j$(nproc)
+    sudo make install
+
 
 FFI support
 -----------

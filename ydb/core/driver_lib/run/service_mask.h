@@ -68,7 +68,6 @@ union TBasicKikimrServicesMask {
         bool EnableScanConveyor : 1;
         bool EnableCompConveyor : 1;
         bool EnableInsertConveyor : 1;
-        bool EnableLocalPgWire:1;
         bool EnableKafkaProxy:1;
         bool EnableIcNodeCacheService:1;
         bool EnableMemoryTracker:1;
@@ -82,6 +81,13 @@ union TBasicKikimrServicesMask {
         bool EnableAwsService:1;
         bool EnableCompPriorities : 1;
         bool EnableGeneralCachePortionsMetadata: 1;
+        bool EnableGeneralCacheColumnData: 1;
+        bool EnableOverloadManager : 1;
+        bool EnableCountersInfoProvider : 1;
+        bool EnableNBSService : 1;
+        bool EnableUdfStore : 1;
+        bool EnableWorkloadManagerService : 1;
+        bool EnableCsFlowControlManager : 1;
     };
 
     struct {
@@ -112,6 +118,7 @@ union TBasicKikimrServicesMask {
         EnableViewerService = true;
         EnableMeteringWriter = true;
         EnableProfiler = true;
+        EnableStateStorageService = true;
     }
 
     void SetTinyMode() {

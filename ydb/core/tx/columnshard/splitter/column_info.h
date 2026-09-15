@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -29,7 +30,8 @@ protected:
 
 public:
     TSplittedEntity(const ui32 entityId)
-        : EntityId(entityId) {
+        : EntityId(entityId)
+    {
         AFL_VERIFY(EntityId);
     }
 
@@ -74,7 +76,8 @@ public:
         }
 
         TEntityChunk(TSplittedEntity* entity)
-            : Entity(entity) {
+            : Entity(entity)
+        {
         }
 
         ui32 GetEntityId() const {
@@ -120,8 +123,11 @@ public:
             const ui32 sizeLimit, const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema,
             const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) {
             const ui32 entityId = bigChunk->GetEntityId();
-            NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("entity_id", entityId)(
-                "size", bigChunk->GetPackedSize())("limit", sizeLimit)("r_count", bigChunk->GetRecordsCountVerified());
+            YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+                {"entityId", entityId},
+                {"size", bigChunk->GetPackedSize()},
+                {"limit", sizeLimit},
+                {"rCount", bigChunk->GetRecordsCountVerified()});
             const auto predSplit = [sizeLimit, entityId, schema, counters](const std::shared_ptr<IPortionDataChunk>& chunkToSplit) {
                 AFL_VERIFY(chunkToSplit->IsSplittable());
                 counters->BySizeSplitter.OnTrashSerialized(chunkToSplit->GetPackedSize());
@@ -136,8 +142,10 @@ public:
                     splittedSizes.emplace_back(i->GetPackedSize());
                     splittedRecords.emplace_back(i->GetRecordsCountVerified());
                 }
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("sizes", JoinSeq(",", sizes))("s_splitted", JoinSeq(",", splittedSizes))(
-                    "r_splitted", JoinSeq(",", splittedRecords));
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"sizes", JoinSeq(",", sizes)},
+                    {"sSplitted", JoinSeq(",", splittedSizes)},
+                    {"rSplitted", JoinSeq(",", splittedRecords)});
                 return result;
             };
             std::deque<std::shared_ptr<IPortionDataChunk>> dqParts;
@@ -168,14 +176,17 @@ public:
 
     public:
         TBlobChunk() = default;
+
         TBlobChunk(std::vector<TBlobChunk>&& chunks) {
             for (auto&& i : chunks) {
                 Merge(std::move(i));
             }
         }
+
         TBlobChunk(TEntityChunk&& chunk) {
             AddChunk(std::move(chunk));
         }
+
         TEntityChunk ExtractChunk(const ui32 id) {
             auto it = Entities.find(id);
             AFL_VERIFY(it != Entities.end());
@@ -206,7 +217,8 @@ public:
         }
 
         bool TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize,
-            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, ui32& internalSplitsCount);
+            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+            ui32& internalSplitsCount);
 
         const THashMap<ui32, TEntityChunk>& GetEntities() const {
             return Entities;
@@ -254,7 +266,8 @@ public:
             Small.reserve(count);
         }
 
-        TNormalizedBlobChunks(const ui32 minSize, const ui32 maxSize, const ui32 tolerance, const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        TNormalizedBlobChunks(const ui32 minSize, const ui32 maxSize, const ui32 tolerance,
+            const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
             ui32& internalSplitsCount)
             : MinSize(minSize)
             , MaxSize(maxSize)

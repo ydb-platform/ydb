@@ -13,7 +13,8 @@ struct TActorFactory : public IActorFactory {
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NConfig::TRowDispatcherConfig& config,
+        const TRowDispatcherSettings& config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NActors::TActorId rowDispatcherActorId,
         NActors::TActorId compileServiceActorId,
         ui32 partitionId,
@@ -21,8 +22,9 @@ struct TActorFactory : public IActorFactory {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
-        ui64 maxBufferSize) const override {
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
+        ui64 maxBufferSize,
+        bool enableStreamingQueriesCounters) const override {
 
         auto actorPtr = NFq::NewTopicSession(
             readGroup,
@@ -30,6 +32,7 @@ struct TActorFactory : public IActorFactory {
             endpoint,
             database,
             config,
+            functionRegistry,
             rowDispatcherActorId,
             compileServiceActorId,
             partitionId,
@@ -38,7 +41,8 @@ struct TActorFactory : public IActorFactory {
             counters,
             countersRoot,
             pqGateway,
-            maxBufferSize
+            maxBufferSize,
+            enableStreamingQueriesCounters
         );
         return NActors::TActivationContext::Register(actorPtr.release(), {}, NActors::TMailboxType::HTSwap, Max<ui32>());
     }

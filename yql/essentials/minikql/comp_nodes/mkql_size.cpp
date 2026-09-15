@@ -1,50 +1,55 @@
 #include "mkql_size.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 extern "C" void DeleteString(void* strData);
 
-template<size_t Size>
-class TSizePrimitiveTypeWrapper : public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
-    typedef TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> TBaseComputation;
+template <size_t Size>
+class TSizePrimitiveTypeWrapper: public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
+    using TBaseComputation = TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>>;
+
 public:
-    TSizePrimitiveTypeWrapper(IComputationNode* data)
+    explicit TSizePrimitiveTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         return value ? NUdf::TUnboxedValuePod(ui32(Size)) : NUdf::TUnboxedValuePod();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
-        const uint64_t init[] = {Size, 0x100000000000000ULL};
-        const auto size = ConstantInt::get(value->getType(), APInt(128, 2, init));
+        const std::array<uint64_t, 2> init = {Size, 0x100000000000000ULL};
+        const auto size = ConstantInt::get(value->getType(), APInt(128, init));
         return SelectInst::Create(IsEmpty(value, block, context), value, size, "size", block);
     }
 #endif
 };
 
-template<bool IsOptional>
-class TSizeWrapper : public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> TBaseComputation;
+template <bool IsOptional>
+class TSizeWrapper: public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
+    using TBaseComputation = TMutableCodegeneratorNode<TSizeWrapper<IsOptional>>;
+
 public:
     TSizeWrapper(TComputationMutables& mutables, IComputationNode* data)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Data(data)
-    {}
+        , Data_(data)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& data = Data->GetValue(ctx);
+        const auto& data = Data_->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
@@ -54,17 +59,17 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto data = GetNodeValue(this->Data, ctx, block);
+        const auto data = GetNodeValue(this->Data_, ctx, block);
 
         const auto type = Type::getInt8Ty(context);
         const auto embType = FixedVectorType::get(type, 16);
         const auto cast = CastInst::Create(Instruction::BitCast, data, embType, "cast", block);
 
-        const auto mark = ExtractElementInst::Create(cast, {ConstantInt::get(type, 15)}, "mark", block);
-        const auto bsize = ExtractElementInst::Create(cast, {ConstantInt::get(type, 14)}, "bsize", block);
+        const auto mark = ExtractElementInst::Create(cast, ConstantInt::get(type, 15), "mark", block);
+        const auto bsize = ExtractElementInst::Create(cast, ConstantInt::get(type, 14), "bsize", block);
 
         const auto emb = BasicBlock::Create(context, "emb", ctx.Func);
         const auto str = BasicBlock::Create(context, "str", ctx.Func);
@@ -91,7 +96,7 @@ public:
             const auto type32 = Type::getInt32Ty(context);
             const auto strType = FixedVectorType::get(type32, 4);
             const auto four = CastInst::Create(Instruction::BitCast, data, strType, "four", block);
-            const auto ssize = ExtractElementInst::Create(four, {ConstantInt::get(type, 2)}, "ssize", block);
+            const auto ssize = ExtractElementInst::Create(four, ConstantInt::get(type, 2), "ssize", block);
             const auto full = SetterFor<ui32>(ssize, context, block);
 
             const auto half = CastInst::Create(Instruction::Trunc, data, Type::getInt64Ty(context), "half", block);
@@ -107,7 +112,7 @@ public:
 
             block = free;
 
-            const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, false);
+            const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, /*isVarArg=*/false);
             const auto name = "DeleteString";
             ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString));
             const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
@@ -122,13 +127,13 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
-    IComputationNode* const Data;
+    IComputationNode* const Data_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -137,22 +142,22 @@ IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryCon
 
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
 
-    switch(dataType->GetSchemeType()) {
-#define MAKE_PRIMITIVE_TYPE_SIZE(type, layout) \
-        case NUdf::TDataType<type>::Id: \
-            if (isOptional) \
-                return new TSizePrimitiveTypeWrapper<sizeof(layout)>(data); \
-            else \
-                return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(ui32(sizeof(layout))));
+    switch (dataType->GetSchemeType()) {
+#define MAKE_PRIMITIVE_TYPE_SIZE(type, layout)                          \
+    case NUdf::TDataType<type>::Id:                                     \
+        if (isOptional)                                                 \
+            return new TSizePrimitiveTypeWrapper<sizeof(layout)>(data); \
+        else                                                            \
+            return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(ui32(sizeof(layout))));
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_SIZE)
 #undef MAKE_PRIMITIVE_TYPE_SIZE
     }
 
-    if (isOptional)
+    if (isOptional) {
         return new TSizeWrapper<true>(ctx.Mutables, data);
-    else
+    } else {
         return new TSizeWrapper<false>(ctx.Mutables, data);
+    }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

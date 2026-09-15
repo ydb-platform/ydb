@@ -78,7 +78,7 @@ TEST(TQueryBuilderTest, TotalsAfterHaving)
         "(x) "
         "FROM [//t] "
         "GROUP BY (x - 1) "
-        "HAVING (group_expr > 42) "
+        "HAVING group_expr > 42 "
         "WITH TOTALS");
 }
 

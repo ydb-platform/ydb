@@ -82,6 +82,10 @@ public:
     TString operator() (EQueryId id) const;
     TString GetMatchQueueAttributesQuery() const;
 
+    const TString& GetQueueTablesFolder() const {
+        return QueueTablesFolder_;
+    }
+
 private:
     const char* GetStateKeys() const;
     const char* GetDlqStateKeys() const;

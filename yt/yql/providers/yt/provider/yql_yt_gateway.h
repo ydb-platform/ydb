@@ -4,15 +4,21 @@
 #include "yql_yt_table_desc.h"
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
+#include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yt/yql/providers/yt/lib/temp_files/temp_files.h>
+#include <yt/yql/providers/yt/lib/yt_token_resolver/yt_token_resolver.h>
+
 #include <yql/providers/stat/uploader/yql_stat_uploader.h>
 
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
@@ -104,10 +110,14 @@ public:
         OPTION_FIELD(TString, UserName)
         OPTION_FIELD(TOperationProgressWriter, ProgressWriter)
         OPTION_FIELD(TYqlOperationOptions, OperationOptions)
+        OPTION_FIELD(TCredentials::TPtr, Credentials)
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
         OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
+        OPTION_FIELD_DEFAULT(TQContext, QContext, {})
+        OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
+        OPTION_FIELD(TSecureTmpStatePtr, UseSecureTmp)
     };
 
     //////////////////////////////////////////////////////////////
@@ -145,6 +155,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD_DEFAULT(bool, Abort, false)
         OPTION_FIELD_DEFAULT(bool, DetachSnapshotTxs, false)
+        OPTION_FIELD_DEFAULT(bool, CommitDumpTxs, false)
     };
 
     struct TFinalizeResult : public NCommon::TOperationResult {
@@ -249,10 +260,14 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -360,9 +375,14 @@ public:
         OPTION_FIELD(TString, UsedCluster)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
+        OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -387,10 +407,15 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
+        OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
     struct TRunResult : public NCommon::TOperationResult {
@@ -412,6 +437,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD_DEFAULT(TSet<TString>, SecurityTags, {})
     };
 
@@ -434,9 +460,13 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TCalcResult : public NCommon::TOperationResult {
@@ -458,6 +488,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
     };
 
     struct TPublishResult : public NCommon::TOperationResult {
@@ -653,6 +684,115 @@ public:
         OPTION_FIELD(bool, IsTemp)
     };
 
+    struct TSnapshotLayersOptions : public TCommonOptions {
+        using TSelf = TSnapshotLayersOptions;
+
+        TSnapshotLayersOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TString>, Layers)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TLayersSnapshotResult : public NCommon::TOperationResult {
+        TVector<std::pair<TString, ui64>> Data;
+    };
+
+    struct TDumpOptions : public TCommonOptions {
+        using TSelf = TDumpOptions;
+
+        struct TEntry {
+            TString SrcPath;
+            TString DstPath;
+        };
+
+        using TEntries = TVector<TEntry>;
+        using TEntriesPerCluster = THashMap<TString, TEntries>;
+
+        TDumpOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TEntriesPerCluster, Entries);
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TDumpResult : public NCommon::TOperationResult {
+    };
+
+    struct TDownloadTableOptions : public TCommonOptions {
+        using TSelf = TDownloadTableOptions;
+
+        TDownloadTableOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        struct TSamplingConfig {
+            double SamplingPercent;
+            ui64 SamplingSeed;
+            bool IsSystemSampling;
+        };
+
+        struct TYtTableOptions {
+            bool IsTemporary;
+            bool IsAnonymous;
+            ui32 Epoch;
+        };
+
+        struct TRemoteYtTable {
+            NYT::TRichYPath RichPath;
+            TYtTableOptions TableOptions;
+            NYT::TNode Format;
+        };
+
+        using TStructColumns = THashMap<TString, ui32>;
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TVector<TRemoteYtTable>, Tables)
+        OPTION_FIELD(TStructColumns, StructColumns)
+        OPTION_FIELD(TMaybe<TSamplingConfig>, SamplingConfig)
+        OPTION_FIELD(bool, ForceLocalTableContent)
+        OPTION_FIELD(TMaybe<ui32>, PublicId)
+        OPTION_FIELD(TString, UniqueId)
+        OPTION_FIELD(TTempFiles::TPtr, TmpFiles)
+        OPTION_FIELD(ETableContentDeliveryMode, DeliveryMode);
+    };
+
+    struct TDownloadTableResult: public NCommon::TOperationResult {
+        TVector<NYT::TRichYPath> RemoteFiles;
+        TVector<TString> LocalFiles;
+    };
+
+    struct TFileWithMd5 {
+        TString Path;
+        TString Md5;
+        TMaybe<TString> RemotePath;
+        TMaybe<TString> RemoteTx;
+    };
+
+    struct TUploadFilesToCacheOptions : public TCommonOptions {
+        using TSelf = TUploadFilesToCacheOptions;
+
+        TUploadFilesToCacheOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TFileWithMd5>, Files)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TUploadFilesToCacheResult: public NCommon::TOperationResult {
+        TVector<TFileWithMd5> Files;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -680,7 +820,7 @@ public:
 
     virtual NThreading::TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) = 0;
 
-    virtual NThreading::TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const = 0;
+    virtual NThreading::TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) = 0;
     virtual NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) = 0 ;
 
     virtual NThreading::TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) = 0;
@@ -691,6 +831,8 @@ public:
 
     virtual NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) = 0;
 
+    virtual NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) = 0;
+
     virtual NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) = 0;
     virtual TPathStatResult TryPathStat(TPathStatOptions&& options) = 0;
 
@@ -698,6 +840,7 @@ public:
 
     virtual TString GetDefaultClusterName() const = 0;
     virtual TString GetClusterServer(const TString& cluster) const = 0;
+    virtual TString GetClusterYtName(const TString& cluster) const = 0;
     virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
 
@@ -714,10 +857,17 @@ public:
 
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 
-    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
+    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const = 0;
 
     virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
 
+    virtual NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) = 0;
+
+    virtual IYtTokenResolver::TPtr GetYtTokenResolver() const = 0;
+
+    virtual NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) = 0;
 };
 
 }

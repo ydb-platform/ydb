@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/tracing/public.h>
 
+#include <library/cpp/yt/logging/public.h>
+
 namespace NYT::NBacktraceIntrospector {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,10 +19,10 @@ struct TThreadIntrospectionInfo
 {
     NThreading::TThreadId ThreadId;
     NConcurrency::TFiberId FiberId;
-    TString ThreadName;
+    std::string ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    std::string TraceLoggingTag;
+    NLogging::TLoggingTagListPayload TraceLoggingTags;
     std::vector<const void*> Backtrace;
 };
 
@@ -38,10 +40,10 @@ struct TFiberIntrospectionInfo
     //! |InvalidThreadId| is fiber is not running.
     NThreading::TThreadId ThreadId;
     //! Empty if fiber is not running.
-    TString ThreadName;
+    std::string ThreadName;
     NTracing::TTraceId TraceId;
     //! Empty if no trace context is known.
-    std::string TraceLoggingTag;
+    NLogging::TLoggingTagListPayload TraceLoggingTags;
     std::vector<const void*> Backtrace;
 };
 
@@ -49,8 +51,8 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& infos);
-TString FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>& infos);
+std::string FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>& infos);
+std::string FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>& infos);
 
 ////////////////////////////////////////////////////////////////////////////////
 

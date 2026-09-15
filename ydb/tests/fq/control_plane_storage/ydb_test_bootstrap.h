@@ -6,13 +6,13 @@
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/init/init.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
@@ -101,8 +101,7 @@ struct TTestBootstrap {
     TTestBootstrap(std::string tablePrefix, const NConfig::TControlPlaneStorageConfig& config = {})
         : Config(config)
     {
-        SetupSignalActions();
-        EnableYDBBacktraceFormat();
+        NTestUtils::SetupSignalHandlers();
 
         Cerr << "Netstat: " << Exec("netstat --all --program") << Endl;
         Cerr << "Process stat: " << Exec("ps aux") << Endl;

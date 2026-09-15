@@ -67,18 +67,17 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     }
 
     if (!multiInput) {
-        const ui64 nativeTypeFlags = State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES)
-            ? GetNativeYtTypeFlags(*inputItemType->Cast<TStructExprType>())
-            : 0ul;
+        const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(*cluster, *State_->Configuration);
+        const ui64 nativeTypeFlags = GetNativeYtTypeFlags(*inputItemType->Cast<TStructExprType>()) & nativeTypeCompatibility;
 
         TMaybe<NYT::TNode> firstNativeType;
         if (!inputPaths.empty()) {
             firstNativeType = inputPaths.front()->GetNativeYtType();
         }
 
-        forceMapper = forceMapper || AnyOf(inputPaths, [nativeTypeFlags, firstNativeType] (const TYtPathInfo::TPtr& path) {
-            return nativeTypeFlags != path->GetNativeYtTypeFlags()
-                || firstNativeType != path->GetNativeYtType();
+        forceMapper = forceMapper || AnyOf(inputPaths, [firstNativeType, nativeTypeFlags] (const TYtPathInfo::TPtr& path) {
+            return firstNativeType != path->GetNativeYtType()
+                || nativeTypeFlags != path->GetNativeYtTypeFlags();
         });
     }
 
@@ -199,10 +198,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     bool useReduceFlow = State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW);
     bool useMapFlow = useReduceFlow;
 
-    const bool newPartsByKeys = bool(partByKey.Maybe<TCoPartitionsByKeys>());
+    const bool isPartitions = bool(partByKey.Maybe<TCoPartitionsByKeys>());
+    const bool isLPartitions = bool(partByKey.Maybe<TCoLPartitionsByKeys>());
 
     // Convert reduce output to stream
-    if (newPartsByKeys) {
+    if (isPartitions || isLPartitions) {
         if (useSystemColumns) {
             TNodeSet nodesToOptimize;
             TProcessedNodesSet processedNodes;
@@ -593,13 +593,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
                     .Build()
                 .Build()
                 .Done().Ptr();
+        } else if (State_->Types->DirectRowDependsOn) {
+            groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
+                .Args({"key", "item"})
+                .Body<TYtIsKeySwitch>()
+                    .Row<TCoDependsOn>()
+                        .Input("item")
+                    .Build()
+                .Build()
+                .Done().Ptr();
         } else {
             groupSwitch = Build<TCoLambda>(ctx, handlerLambda.Pos())
                 .Args({"key", "item"})
                 .Body<TYtIsKeySwitch>()
-                    .DependsOn()
-                        .Input("item")
-                    .Build()
+                    .Row("item")
                 .Build()
                 .Done().Ptr();
         }
@@ -717,7 +724,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         }
     }
 
-    auto reducer = newPartsByKeys ?
+    auto reducer = isPartitions ?
         MakeJobLambda<true>(handlerLambdaCleanup.Cast(), useReduceFlow, ctx):
         MakeJobLambda<false>(handlerLambdaCleanup.Cast(), useReduceFlow, ctx);
 
@@ -736,7 +743,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx))
             .Output()
-                .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+                .Add(ConvertOutTables(node.Pos(), outItemType, *cluster, ctx, State_, &partByKey.Ref().GetConstraintSet()))
             .Build()
             .Settings(settingsBuilder.Done())
             .Reducer(reducer)
@@ -787,7 +794,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
                     .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
                     .Output()
-                        .Add(ConvertOutTables(node.Pos(), mapOutputType ? mapOutputType : inputItemType, ctx, State_))
+                        .Add(ConvertOutTables(node.Pos(), mapOutputType ? mapOutputType : inputItemType, *cluster, ctx, State_))
                     .Build()
                     .Settings(GetFlowSettings(node.Pos(), *State_, ctx))
                     .Mapper(MakeJobLambda<false>(mapper.Cast<TCoLambda>(), useMapFlow, ctx))
@@ -811,7 +818,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
                     .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, opts.MakeUnordered(unordered)))
                     .Output()
-                        .Add(ConvertOutTables(node.Pos(), inputItemType, ctx, State_))
+                        .Add(ConvertOutTables(node.Pos(), inputItemType, *cluster, ctx, State_))
                     .Build()
                     .Settings()
                         .Add()
@@ -836,7 +843,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
                     .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
                     .Output()
-                        .Add(ConvertOutTables(node.Pos(), mapOutputType, ctx, State_))
+                        .Add(ConvertOutTables(node.Pos(), mapOutputType, *cluster, ctx, State_))
                     .Build()
                     .Settings(GetFlowSettings(node.Pos(), *State_, ctx))
                     .Mapper(MakeJobLambda<false>(mapper.Cast<TCoLambda>(), useMapFlow, ctx))
@@ -865,7 +872,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
             .Output()
-                .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+                .Add(ConvertOutTables(node.Pos(), outItemType, *cluster, ctx, State_, &partByKey.Ref().GetConstraintSet()))
             .Build()
             .Settings(settingsBuilder.Done())
             .Mapper(reducer)
@@ -881,7 +888,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
         .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
         .Output()
-            .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
+            .Add(ConvertOutTables(node.Pos(), outItemType, *cluster, ctx, State_, &partByKey.Ref().GetConstraintSet()))
         .Build()
         .Settings(settingsBuilder.Done())
         .Mapper(mapper)
@@ -890,4 +897,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     return WrapOp(mapReduce, ctx);
 }
 
-}  // namespace NYql
+} // namespace NYql

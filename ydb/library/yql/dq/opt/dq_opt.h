@@ -38,6 +38,7 @@ inline bool IsDqCompletePureExpr(const NNodes::TExprBase& node, bool isPrecomput
 
 bool IsDqSelfContainedExpr(const NNodes::TExprBase& node);
 bool IsDqDependsOnStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
+bool IsDqDependsOnOtherStage(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage);
 bool IsDqDependsOnStageOutput(const NNodes::TExprBase& node, const NNodes::TDqStageBase& stage, ui32 outputIndex);
 
 bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqStageBase& stage);
@@ -45,5 +46,12 @@ bool CanPushDqExpr(const NNodes::TExprBase& expr, const NNodes::TDqConnection& c
 
 IDqOptimization* GetDqOptCallback(const NNodes::TExprBase& providerCall, const TTypeAnnotationContext& typeAnnCtx);
 
+// This struct represents an options for scalar aggregations rules.
+struct TBuildAggregationResultStageOptions {
+    bool IsEnabled{true};
+    bool ApplyForDqPhyPrecompute{true};
+};
+bool IsSuitableToBuildScalarPrecompute(const NNodes::TExprBase& node, const TParentsMap& parentsMap, bool allowStageMultiUsage,
+                                       const TBuildAggregationResultStageOptions& options);
 
 } // namespace NYql::NDq

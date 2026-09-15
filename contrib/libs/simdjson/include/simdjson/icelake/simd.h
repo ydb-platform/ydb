@@ -77,7 +77,6 @@ namespace simd {
     friend simdjson_really_inline uint64_t operator==(const simd8<T> lhs, const simd8<T> rhs) {
       return _mm512_cmpeq_epi8_mask(lhs, rhs);
     }
-
     static const int SIZE = sizeof(base<T>::value);
 
     template<int N=1>
@@ -323,6 +322,7 @@ namespace simd {
     static constexpr int NUM_CHUNKS = 64 / sizeof(simd8<T>);
     static_assert(NUM_CHUNKS == 1, "Icelake kernel should use one register per 64-byte block.");
     const simd8<T> chunks[NUM_CHUNKS];
+    template<int idx> simd8<uint8_t> get() const { return idx < NUM_CHUNKS ? chunks[idx] : simd8<T>(); }
 
     simd8x64(const simd8x64<T>& o) = delete; // no copy allowed
     simd8x64<T>& operator=(const simd8<T>& other) = delete; // no assignment allowed

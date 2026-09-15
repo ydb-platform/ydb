@@ -1,7 +1,11 @@
 #pragma once
 
+#include "backup_mock.h"
+
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/cgiparam/cgiparam.h>
+
+#include <atomic>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
@@ -11,12 +15,14 @@ namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
 
-class TS3Mock: public THttpServer::ICallBack {
+class TS3Mock: public TBackupMock, public THttpServer::ICallBack {
 public:
     struct TSettings {
         THttpServer::TOptions HttpOptions;
         bool CorruptETags;
         bool RejectUploadParts;
+        TString PartialReadPath;
+        ui32 PartialReadFailures;
 
         TSettings();
         explicit TSettings(ui16 port);
@@ -24,6 +30,7 @@ public:
         TSettings& WithHttpOptions(const THttpServer::TOptions& opts);
         TSettings& WithCorruptETags(bool value);
         TSettings& WithRejectUploadParts(bool value);
+        TSettings& WithPartialReadFailure(TString path, ui32 count = 1);
 
     }; // TSettings
 
@@ -66,16 +73,25 @@ public:
     explicit TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings = {});
     explicit TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings = {});
 
-    TClientRequest* CreateClient();
+    TClientRequest* CreateClient() override;
     bool Start();
     const char* GetError();
 
-    const THashMap<TString, TString>& GetData() const { return Data; }
-    THashMap<TString, TString>& GetData() { return Data; }
+    const THashMap<TString, TString>& GetData() const override { return Data; }
+    THashMap<TString, TString>& GetData() override { return Data; }
+
+    ui32 GetPartialReadRequestCount() const { return PartialReadRequestCount.load(); }
+    ui32 GetPartialReadFailureCount() const { return PartialReadFailureCount.load(); }
 
 private:
+    bool ShouldFailPartialRead(TStringBuf path);
+
     const TSettings Settings;
     THashMap<TString, TString> Data;
+
+    std::atomic<ui32> PartialReadFailuresLeft;
+    std::atomic<ui32> PartialReadRequestCount = 0;
+    std::atomic<ui32> PartialReadFailureCount = 0;
 
     int NextUploadId = 1;
     THashMap<std::pair<TString, TString>, TVector<TString>> MultipartUploads;

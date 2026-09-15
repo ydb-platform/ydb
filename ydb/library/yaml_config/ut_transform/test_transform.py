@@ -54,6 +54,9 @@ class TestYamlConfigTransformations(object):
     def cleanup_errors(self, errors):
         errors = re.sub(r'address -> 0x[a-zA-Z0-9]+', 'address -> REDACTED', errors)
         errors = re.sub(r'uncaught exception 0x[a-fA-F0-9]+', 'uncaught exception REDACTED', errors)
+        # Redact source line numbers so the golden results don't break on every
+        # unrelated edit that shifts lines in the referenced source file.
+        errors = re.sub(r'(\.(?:cpp|cc|cxx|h|hpp)):\d+', r'\1:LINE', errors)
         return errors
 
     def execute_test(self, data, binary, args=[]):

@@ -43,8 +43,8 @@ private:
     };
 
     bool IsAllowedMonitoringTagValueChar(unsigned char c) const;
-    TSanitizeParameters ScanForSanitize(const std::string& value) const;
-    std::string SanitizeMonitoringTagValue(const std::string& value, int resultingLength) const;
+    TSanitizeParameters ScanForSanitize(TStringBuf value) const;
+    std::string SanitizeMonitoringTagValue(TStringBuf value, int resultingLength) const;
     TTag SanitizeMonitoringTag(const TTag& tag, int resultingLength) const;
 
     template <class TTagPerfect>
@@ -83,6 +83,6 @@ private:
 
 } // namespace NYT::NProfiling
 
-#define TAG_REGISTRY_INL_H
+#define TAG_REGISTRY_INL_H_
 #include "tag_registry-inl.h"
-#undef TAG_REGISTRY_INL_H
+#undef TAG_REGISTRY_INL_H_

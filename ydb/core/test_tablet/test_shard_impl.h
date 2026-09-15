@@ -36,6 +36,8 @@ namespace NKikimr::NTestShard {
         TTestShard(const TActorId& tablet, TTabletStorageInfo *info)
             : TKeyValueFlat(tablet, info)
         {
+            SetActivityType(ActorActivityType());
+
             using TKeyValueCounters = TProtobufTabletCounters<
                 NKeyValue::ESimpleCounters_descriptor,
                 NKeyValue::ECumulativeCounters_descriptor,
@@ -62,7 +64,6 @@ namespace NKikimr::NTestShard {
         }
 
         bool HandleHook(STFUNC_SIG) override {
-            SetActivityType(NKikimrServices::TActivity::TEST_SHARD_ACTOR);
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvControlRequest, Handle);
                 HFunc(TEvSwitchMode, Handle);

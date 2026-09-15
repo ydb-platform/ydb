@@ -1,5 +1,6 @@
 #include "grpc_service.h"
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>

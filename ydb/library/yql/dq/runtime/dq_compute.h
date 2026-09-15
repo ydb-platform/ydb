@@ -8,7 +8,7 @@ class TDqComputeContextBase : private TNonCopyable {
 public:
     virtual ~TDqComputeContextBase() = default;
 
-    bool* InputConsumed = nullptr;
+    ui64* InputsConsumed = nullptr;
     TInstant* StartTs = nullptr;
 };
 

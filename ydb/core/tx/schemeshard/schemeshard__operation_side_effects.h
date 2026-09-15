@@ -56,6 +56,7 @@ private:
     THashSet<TOperationId> DoneOperations;
     THashSet<TTxId> DoneTransactions;
     THashSet<TShardIdx> ToDeleteShards;
+    THashSet<TShardIdx> ToDeleteSystemShards;  // temporary: special case for deleting tenant's system shards
     TDeque<TDependence> Dependencies;
     TDeque<TPathStateRec> ReleasePathStateRecs;
     THashSet<TPathId> TenantsToUpdate;
@@ -66,6 +67,11 @@ private:
     TDeque<TBarrierRec> Barriers;
     THashMap<TActorId, TVector<TPathId>> TempDirsToMakeState;
     THashMap<TActorId, TVector<TPathId>> TempDirsToRemoveState;
+
+    // Per-item done events staged in ApplyOnExecute, sent in ApplyOnComplete.
+    // Fields: <FullBackupId, DstPathId, Success>
+    using TFullBackupItemDoneRec = std::tuple<ui64, TPathId, bool>;
+    TVector<TFullBackupItemDoneRec> PendingFullBackupItemDone;
 
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
@@ -124,6 +130,7 @@ public:
     void PublishAndWaitPublication(TOperationId opId, TPathId pathId);
 
     void DeleteShard(TShardIdx idx);
+    void DeleteSystemShard(TShardIdx idx);
 
     void ToProgress(TIndexBuildId id);
 
@@ -134,7 +141,7 @@ public:
     void Barrier(TOperationId opId, TString barrierName);
 
 private:
-    bool CheckDecouplingProposes(TString& errExpl) const;
+    bool CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const;
     void ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx);
     void DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx);
     void DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx);
@@ -153,6 +160,7 @@ private:
 
     void DoRegisterRelations(TSchemeShard* ss, const TActorContext& ctx);
     void DoTriggerDeleteShards(TSchemeShard* ss, const TActorContext &ctx);
+    void DoTriggerDeleteSystemShards(TSchemeShard *ss, const TActorContext &ctx);
 
     void DoReleasePathState(TSchemeShard* ss, const TActorContext &ctx);
     void DoDoneParts(TSchemeShard* ss, const TActorContext& ctx);
@@ -163,6 +171,7 @@ private:
     void DoActivateOps(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void DoPersistDeleteSystemShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
 
     void DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx);
     void DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext &ctx);
@@ -177,6 +186,8 @@ private:
 
     void DoSetBarriers(TSchemeShard* ss, const TActorContext& ctx);
     void DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+
+    void DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx);
 };
 
 }

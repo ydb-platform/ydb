@@ -3,7 +3,7 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView {
 
@@ -89,13 +91,30 @@ public:
             insert({TSchema::UserSID::ColumnId, [] (const TNodeInfo& info, ui32) {   // 14
                 return TCell(info.GetUserSID().data(), info.GetUserSID().size());
             }});
+
+            insert({TSchema::WmPoolId::ColumnId, [] (const TNodeInfo& info, ui32) {   // 17
+                return info.HasWmPoolId() ? TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size()) : TCell();
+            }});
+
+            // Columns 18/19/20 are deprecated and always NULL, reserved for a future removal.
+            insert({TSchema::WmState::ColumnId,     [] (const TNodeInfo&, ui32) { return TCell(); }});  // 18
+            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo&, ui32) { return TCell(); }});  // 19
+            insert({TSchema::WmExitTime::ColumnId,  [] (const TNodeInfo&, ui32) { return TCell(); }});  // 20
+
+            insert({TSchema::TraceId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 21
+                return info.HasTraceId() ? TCell(info.GetTraceId().data(), info.GetTraceId().size()) : TCell();
+            }});
+
+            insert({TSchema::WmClassifiedBy::ColumnId, [] (const TNodeInfo& info, ui32) {  // 22
+                return info.HasWmClassifiedBy() ? TCell(info.GetWmClassifiedBy().data(), info.GetWmClassifiedBy().size()) : TCell();
+            }});
         }
     };
 
     TSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
@@ -135,8 +154,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvListSessionsResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TSessionsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TSessionsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -170,12 +189,13 @@ private:
             return;
         }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
 
-        if (!PendingNodes.empty() && !PendingRequest)  {
+        if (!PendingNodes.empty() && !PendingRequest) {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
@@ -197,8 +217,9 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("TSessionsScan::StartScan: sending list sessions request to node",
+                {"nodeId", nodeId},
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -206,6 +227,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
@@ -227,8 +249,8 @@ private:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListSessionsRequest) {
             ui32 nodeId = ev->Cookie;
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+            YDB_LOG_INFO("TSessionsScan::Undelivered: list sessions response undelivered",
+                {"nodeId", nodeId});
             StartScan();
         }
     }
@@ -296,10 +318,10 @@ private:
 };
 
 THolder<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSessionsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TSessionsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

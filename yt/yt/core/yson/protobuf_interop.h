@@ -4,11 +4,13 @@
 
 #include "protobuf_interop_options.h"
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+#include <yt/yt/core/ytree/yson_schema_options.h>
 
 #include <library/cpp/yt/misc/variant.h>
 
@@ -43,7 +45,7 @@ const TProtobufEnumType* ReflectProtobufEnumType(const ::google::protobuf::EnumD
 const ::google::protobuf::Descriptor* UnreflectProtobufMessageType(const TProtobufMessageType* type);
 
 //! Extracts the underlying ::google::protobuf::EnumDescriptor from a reflected instance.
-const ::google::protobuf::EnumDescriptor* UnreflectProtobufMessageType(const TProtobufEnumType* type);
+const ::google::protobuf::EnumDescriptor* UnreflectProtobufEnumType(const TProtobufEnumType* type);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -144,9 +146,6 @@ const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr int UnknownYsonFieldNumber = 3005;
-
-
 //! Creates a YSON consumer that converts IYsonConsumer calls into
 //! a byte sequence in protobuf wire format.
 /*!
@@ -229,17 +228,34 @@ void RegisterCustomProtobufConverter(
     const TProtobufMessageConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type) \
-    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>());
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>(); \
+    })
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type) \
-    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>());
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>(); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TProtobufMessageBytesFieldConverter
 {
     std::function<void(IYsonConsumer* consumer, TStringBuf bytes)> Serializer;
+    // TODO(babenko): migrate to std::string
     std::function<void(TString* bytes, const NYTree::INodePtr& node)> Deserializer;
+};
+
+struct TProtobufIntFieldConverter
+{
+    std::function<void(IYsonConsumer* consumer, i64 value)> Serializer;
+    std::function<void(i64* value, const NYTree::INodePtr& node)> Deserializer;
+};
+
+struct TProtobufUintFieldConverter
+{
+    std::function<void(IYsonConsumer* consumer, ui64 value)> Serializer;
+    std::function<void(ui64* value, const NYTree::INodePtr& node)> Deserializer;
 };
 
 //! This method is called during static initialization and not assumed to be called during runtime.
@@ -248,8 +264,18 @@ void RegisterCustomProtobufBytesFieldConverter(
     int fieldNumber,
     const TProtobufMessageBytesFieldConverter& converter);
 
+void RegisterCustomProtobufIntFieldConverter(
+    const google::protobuf::Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufIntFieldConverter& serializer);
+
+void RegisterCustomProtobufUIntFieldConverter(
+    const google::protobuf::Descriptor* descriptor,
+    int fieldNumber,
+    const TProtobufUintFieldConverter& serializer);
+
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
-    YT_STATIC_INITIALIZER(                                                                                       \
+    YT_STATIC_INITIALIZER({                                                                                      \
         ::NYT::NYson::AddProtobufConverterRegisterAction([] {                                                    \
             const auto* descriptor = ProtoType::default_instance().GetDescriptor();                              \
             ::NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                         \
@@ -264,16 +290,17 @@ void RegisterCustomProtobufBytesFieldConverter(
                 ToBytes(bytes, value);                                                                           \
             };                                                                                                   \
             ::NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);         \
-        }));
+        });                                                                                                      \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     EUnknownYsonFieldsMode unknownFieldsMode);
 
-TString YsonStringToProto(
+std::string YsonStringToProto(
     const TYsonString& ysonString,
     const TProtobufMessageType* payloadType,
     TProtobufWriterOptions options);
@@ -287,11 +314,25 @@ void SetProtobufInteropConfig(TProtobufInteropConfigPtr config);
 
 //! Returns type v3 schema for protobuf message type.
 //! Note: Recursive types (message has field with self type) are not supported.
-void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, const NYTree::TYsonStructWriteSchemaOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYson
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT {
+
+// Generic formatter for protobuf enums. Formats strings for valid values and
+// raw numbers otherwise. Placed under NYT namespace to work with all enums under NYT with ADL.
+template <CArcadiaEnum TProtobufEnum>
+    requires google::protobuf::is_proto_enum<TProtobufEnum>::value
+void FormatValue(TStringBuilderBase* builder, TProtobufEnum enumValue, TStringBuf format);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT
 
 #define PROTOBUF_INTEROP_INL_H_
 #include "protobuf_interop-inl.h"

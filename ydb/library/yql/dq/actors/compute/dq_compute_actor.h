@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -14,23 +15,15 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <util/generic/bitops.h>
 
 namespace NYql {
 namespace NDq {
 
-struct TEvDqCompute {
+namespace TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
+    struct TEvNodeState : public NActors::TEventPB<TEvNodeState, NDqProto::TEvNodeState, TDqComputeEvents::EvNodeState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
-
-    struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
-        TEvResumeExecution(EResumeSource source)
-            : Source(source)
-        { }
-
-        TEvResumeExecution() = default;
-
-        EResumeSource Source = EResumeSource::Default;
-    };
 
     struct TEvChannelsInfo : public NActors::TEventPB<TEvChannelsInfo, NDqProto::TEvChannelsInfo,
         TDqComputeEvents::EvChannelsInfo> {};
@@ -202,6 +195,18 @@ struct TEvDqCompute {
         const TIssues Issues;
         const ui64 Generation;
     };
+
+    struct TEvChannelDiscoveryV2 : public NActors::TEventPB<TEvChannelDiscoveryV2, NDqProto::TEvChannelDiscoveryV2,
+        TDqComputeEvents::EvChannelDiscoveryV2> {};
+
+    struct TEvChannelDataV2 : public NActors::TEventPB<TEvChannelDataV2, NDqProto::TEvChannelDataV2,
+        TDqComputeEvents::EvChannelDataV2> {};
+
+    struct TEvChannelAckV2 : public NActors::TEventPB<TEvChannelAckV2, NDqProto::TEvChannelAckV2,
+        TDqComputeEvents::EvChannelAckV2> {};
+
+    struct TEvChannelUpdateV2 : public NActors::TEventPB<TEvChannelUpdateV2, NDqProto::TEvChannelUpdateV2,
+        TDqComputeEvents::EvChannelUpdateV2> {};
 };
 
 struct TDqExecutionSettings {
@@ -242,12 +247,6 @@ struct TComputeRuntimeSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     TMaybe<TReportStatsSettings> ReportStatsSettings;
 
-    // see kqp_rm.h
-    // 0 - disable extra memory allocation
-    // 1 - allocate via memory pool ScanQuery
-    // 2 - allocate via memory pool DataQuery
-    ui32 ExtraMemoryAllocationPool = 0;
-
     bool FailOnUndelivery = true;
     bool UseSpilling = false;
 
@@ -277,6 +276,8 @@ struct TComputeRuntimeSettings {
     inline TCollectStatsLevel GetCollectStatsLevel() const {
         return StatsModeToCollectStatsLevel(StatsMode);
     }
+
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 };
 
 struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
@@ -285,15 +286,20 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         : Limit(limit), Guarantee(guarantee), Step(step), Quota(quota) {
         Y_ABORT_UNLESS(Limit >= Guarantee);
         Y_ABORT_UNLESS(Limit >= Quota);
-        Y_ABORT_UNLESS((Step ^ ~Step) + 1 == 0);
+        Y_ABORT_UNLESS(IsPowerOf2(Step), "the allocation step must be a power of two"); // it is used as an alignment mask
         MaxMemorySize = Limit;
     }
 
-    bool AllocateQuota(ui64 memorySize) override {
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
         if (Quota + memorySize > Limit) {
             ui64 delta = Quota + memorySize - Limit;
             ui64 alignMask = Step - 1;
             delta = (delta + alignMask) & ~alignMask;
+
+            // optional growth must not push the parent over its target: refuse in advance, do not ask
+            if (isOptional && GetExtraMemoryAvailability() < static_cast<i64>(delta)) {
+                return false;
+            }
 
             if (!AllocateExtraQuota(delta)) {
                 return false;
@@ -309,8 +315,8 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return false;
+    i64 GetMemoryAvailability() const override {
+        return CombineMemoryAvailability(static_cast<i64>(Limit - Quota), GetExtraMemoryAvailability());
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -344,29 +350,17 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     virtual void FreeExtraQuota(ui64) {
     }
 
+    // How much more the parent could grant (same sign semantics as GetMemoryAvailability).
+    // Default 0 mirrors AllocateExtraQuota() == false: never over target, nothing beyond Limit.
+    virtual i64 GetExtraMemoryAvailability() const {
+        return 0;
+    }
+
     ui64 Limit;     // current consumption (Quota + leftover from allocation chunk)
     ui64 Guarantee; // do not free memory below this value even if Quota == 0
     ui64 Step;      // allocation chunk size
     ui64 Quota;     // current value
     ui64 MaxMemorySize; // usage peak for statistics
-};
-
-struct TChainedQuotaManager : public TGuaranteeQuotaManager {
-
-    TChainedQuotaManager(IMemoryQuotaManager::TPtr extraQuotaManager, ui64 limit, ui64 guarantee, ui64 step = 1_MB, ui64 quota = 0)
-    : TGuaranteeQuotaManager(limit, guarantee, step, quota)
-    , ExtraQuotaManager(extraQuotaManager) {
-    }
-
-    bool AllocateExtraQuota(ui64 memorySize) override {
-        return ExtraQuotaManager->AllocateQuota(memorySize);
-    }
-
-    void FreeExtraQuota(ui64 memorySize) override {
-        ExtraQuotaManager->FreeQuota(memorySize);
-    }
-
-    IMemoryQuotaManager::TPtr ExtraQuotaManager;
 };
 
 struct TComputeMemoryLimits {
@@ -383,6 +377,11 @@ struct TComputeMemoryLimits {
     TMaybe<size_t> BufferPageAllocSize;
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
+
+    // Bind the compute actor memory quota to the memory hungry operators (DqHashCombine, DqHashAggregate,
+    // DqBlockHashJoin), see IDqOperatorMemoryQuota. Off: operators use the allocator heuristics only.
+    bool EnableOperatorMemoryQuota = false;
 };
 
 using TTaskRunnerFactory = std::function<

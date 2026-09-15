@@ -1,5 +1,3 @@
 #include "events.h"
 
-namespace NKikimr::NOlap::NExport::NEvents {
-
-}
+namespace NKikimr::NOlap::NExport::NEvents {}

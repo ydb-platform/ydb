@@ -17,8 +17,7 @@ namespace numpy
   namespace wrapper
   {
     template <class T>
-    auto angle_in_rad(T const &t) -> decltype(std::atan2(std::imag(t),
-                                                         std::real(t)));
+    auto angle_in_rad(T const &t) -> decltype(std::atan2(std::imag(t), std::real(t)));
   }
 #define NUMPY_NARY_FUNC_NAME angle_in_rad
 #define NUMPY_NARY_FUNC_SYM wrapper::angle_in_rad

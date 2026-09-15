@@ -3,26 +3,23 @@
 #include "yql_yt_native.h"
 #include "yql_yt_session.h"
 
-#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
 #include <yt/yql/providers/yt/gateway/lib/query_cache.h>
 #include <yt/yql/providers/yt/gateway/lib/user_files.h>
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <yt/yql/providers/yt/provider/yql_yt_table.h>
-
-#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <yql/essentials/core/yql_user_data.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <library/cpp/yson/node/node.h>
+#include <library/cpp/retry/retry.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 
@@ -40,63 +37,20 @@ namespace NYql {
 
 namespace NNative {
 
-struct TInputInfo {
-    TInputInfo() = default;
-    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0);
-
-    TString Name;
-    NYT::TRichYPath Path;
-    TString Cluster;
-    bool Temp = false;
-    bool Dynamic = false;
-    bool Strict = true;
-    ui64 Records = 0;
-    ui64 DataSize = 0;
-    NYT::TNode Spec;
-    NYT::TNode QB2Premapper;
-    ui32 Group = 0;
-    bool Lookup = false;
-    TString ErasureCodec;
-    TString CompressionCode;
-    TString PrimaryMedium;
-    NYT::TNode Media;
-};
-
-struct TOutputInfo {
-    TOutputInfo() = default;
-    TOutputInfo(const TString& name, const TString& path, const NYT::TNode& codecSpec, const NYT::TNode& attrSpec,
-        const NYT::TSortColumns& sortedBy, NYT::TNode columnGroups)
-        : Name(name)
-        , Path(path)
-        , Spec(codecSpec)
-        , AttrSpec(attrSpec)
-        , SortedBy(sortedBy)
-        , ColumnGroups(std::move(columnGroups))
-    {
-    }
-    TString Name;
-    TString Path;
-    NYT::TNode Spec;
-    NYT::TNode AttrSpec;
-    NYT::TSortColumns SortedBy;
-    NYT::TNode ColumnGroups;
-};
-
-class TExecContextBase: public TThrRefBase {
+class TExecContextBase: public TExecContextBaseSimple {
 protected:
-    TExecContextBase(const TYtNativeServices& services,
+    TExecContextBase(
+        const IYtGateway::TPtr& gateway,
+        const TYtNativeServices::TPtr& services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper,
-        IMetricsRegistryPtr metrics);
+        std::shared_ptr<TYtUrlMapper> urlMapper,
+        IMetricsRegistryPtr metrics
+    );
 
 public:
-    TString GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const;
-    TString GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-
     TTransactionCache::TEntry::TPtr GetEntry() const {
         return Session_->TxCache_.GetEntry(YtServer_);
     }
@@ -111,59 +65,49 @@ public:
 
     TTransactionCache::TEntry::TPtr GetOrCreateEntry(const TYtSettings::TConstPtr& settings) const;
 
+    void ReportFullCaptureCacheHit() const;
+
 protected:
-    void MakeUserFiles(const TUserDataTable& userDataBlocks);
+    void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& OutputHash) override;
 
-    void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings);
-    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash);
-    void SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings);
-    void SetCacheItem(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash);
+    void FillRichPathForPullCaseInput(NYT::TRichYPath& path, TYtTableBaseInfo::TPtr tableInfo) override;
+    void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) override;
+    bool IsLocalChainTest() const override;
 
-    template <class TTableType>
-    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
-
-    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) const {
+    NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) {
         if (const auto& opTracker = Session_->OpTracker_) {
-            return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_);
+            return opTracker->MakeOperationWaiter(op, publicId, YtServer_, Cluster_, Session_->ProgressWriter_, Session_->StatWriter_,
+                [self = TIntrusivePtr<TExecContextBase>(this)] (NYT::TOperationId opId) {
+                    if (self->QueryCacheItem) {
+                        self->QueryCacheItem->SetOperationId(opId);
+                    }
+                }, false);
         }
         return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(yexception() << "Cannot run operations in session without operation tracker"));
     }
 
-    TString GetAuth(const TYtSettings::TConstPtr& config) const;
-    TMaybe<TString> GetImpersonationUser(const TYtSettings::TConstPtr& config) const;
-
     ui64 EstimateLLVMMem(size_t nodes, const TString& llvmOpt, const TYtSettings::TConstPtr& config) const;
 
     TExpressionResorceUsage ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput);
+
+    void DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const;
 
     NThreading::TFuture<NThreading::TAsyncSemaphore::TPtr> AcquireOperationLock() {
         return Session_->OperationSemaphore->AcquireAsync();
     }
 
 public:
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
-    TFileStoragePtr FileStorage_;
-    TYtGatewayConfigPtr Config_;
     ISecretMasker::TPtr SecretMasker;
-    TConfigClusters::TPtr Clusters_;
-    TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TSession::TPtr Session_;
-    TString Cluster_;
-    TString YtServer_;
-    TUserFiles::TPtr UserFiles_;
     TVector<std::pair<TString, TString>> CodeSnippets_;
-    std::pair<TString, TString> LogCtx_;
-    TVector<TInputInfo> InputTables_;
-    bool YamrInput = false;
-    TMaybe<TSampleParams> Sampling;
-    TVector<TOutputInfo> OutTables_;
     THolder<TYtQueryCacheItem> QueryCacheItem;
-    const TYtUrlMapper& UrlMapper_;
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
+    IYtAccessProvider::TPtr YtAccessProvider;
     TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
+    THashMap<TString, TString> JobFilesDumpPaths;  // yt job basename -> dump path
 };
 
 
@@ -173,15 +117,17 @@ public:
     using TPtr = ::TIntrusivePtr<TExecContext>;
     using TOptions = T;
 
-    TExecContext(const TYtNativeServices& services,
+    TExecContext(
+        const IYtGateway::TPtr& gateway,
+        const TYtNativeServices::TPtr services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         TOptions&& options,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper,
+        std::shared_ptr<TYtUrlMapper> urlMapper,
         IMetricsRegistryPtr metrics)
-        : TExecContextBase(services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
+        : TExecContextBase(gateway, services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
         , Options_(std::move(options))
     {
     }
@@ -195,7 +141,8 @@ public:
     }
 
     void SetOutput(NNodes::TYtOutSection output) {
-        TExecContextBase::SetOutput(output, Options_.Config(), Options_.OperationHash());
+        TExecContextBase::SetOutput(output, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     void SetSingleOutput(const TYtOutTableInfo& outTable) {
@@ -203,7 +150,8 @@ public:
     }
 
     void SetCacheItem(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs, const TString& tmpFolder) {
-        TExecContextBase::SetCacheItem(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash());
+        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash(),
+            Options_.OutputHash());
     }
 
     TExpressionResorceUsage ScanExtraResourceUsage(const TExprNode& node, bool withInput) {
@@ -248,8 +196,29 @@ public:
     [[nodiscard]]
     NThreading::TFuture<bool> LookupQueryCacheAsync() {
         if (QueryCacheItem) {
-            SetNodeExecProgress("Awaiting cache");
-            return QueryCacheItem->LookupAsync(Session_->Queue_);
+            YQL_ENSURE(Session_->UseSecureTmp_);
+
+            auto future = NThreading::MakeFuture();
+            if (Session_->UseSecureTmp_->load() && Options_.Config()->_SecureTmpRoot.Get(Cluster_)) {
+                auto logCtx = NYql::NLog::CurrentLogContextPath();
+                future = Session_->Async([this, logCtx] {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                    try {
+                        PrepareSecureTmpFolder();
+                        return NThreading::MakeFuture();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                        return NThreading::MakeErrorFuture<void>(std::current_exception());
+                    }
+                });
+            }
+
+            return future.Apply([this](const NThreading::TFuture<void>& f) {
+                f.GetValue();
+
+                SetNodeExecProgress("Awaiting cache");
+                return QueryCacheItem->LookupAsync(Session_->Queue_);
+            });
         }
         return NThreading::MakeFuture(false);
     }
@@ -283,6 +252,17 @@ public:
                     } catch (...) {
                         // Promise will be initialized with exception inside of TOperation::Start()
                     }
+                    if (self->Session_->FullCapture_) {
+                        try {
+                            auto attrs = op->GetAttributes(NYT::TGetOperationOptions().AttributeFilter(
+                                NYT::TOperationAttributeFilter().Add(NYT::EOperationAttribute::Spec)
+                            ));
+                            YQL_ENSURE(attrs.Spec.Defined());
+                            self->DumpFilesFromJob(*attrs.Spec, self->Options_.Config());
+                        } catch (const std::exception& e) {
+                            self->Session_->FullCapture_->ReportError(e);
+                        }
+                    }
                 }
             });
             // opFactory factory may contain locked resources. Explicitly wait preparation before destroying it
@@ -299,14 +279,153 @@ public:
                     unlock(f);
                     f.TryRethrow();
                 }
-                return queue->Async([unlock = std::move(unlock), f]() {
+                return TAsyncQueue::Async(queue, [unlock = std::move(unlock), f]() {
                     return unlock(f);
                 });
             });
         });
     }
 
+    void PrepareSecureTmpFolder() {
+        YQL_ENSURE(Session_->UseSecureTmp_);
+        if (!Session_->UseSecureTmp_->load() || !Options_.Config()->_SecureTmpRoot.Get(Cluster_)) {
+            return;
+        }
+
+        NThreading::TFuture<void> future;
+        with_lock(Session_->SecureTmpFolderPreparationsMutex_) {
+            auto& futureRef = Session_->SecureTmpFolderPreparationsByCluster_[Cluster_];
+            // Check for ongoing request for cluster
+            if (!futureRef.Initialized()) {
+                auto logCtx = NYql::NLog::CurrentLogContextPath();
+                futureRef = Session_->Async([this, logCtx] {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                    try {
+                        ExecPrepareSecureTmpFolder();
+                        return NThreading::MakeFuture();
+                    } catch (...) {
+                        YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                        return NThreading::MakeErrorFuture<void>(std::current_exception());
+                    }
+                });
+            }
+
+            future = futureRef;
+        }
+
+        future.GetValueSync();
+    }
+
     TOptions Options_;
+
+protected:
+    void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash, const TMaybe<TString>& outputHash
+    ) override {
+        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, settings, opHash, outputHash);
+        const bool testRun = Config_->GetLocalChainTest();
+        if (!testRun && !Hidden && settings->QueryCacheReportProgress.Get().GetOrElse(false)) {
+            if constexpr (NPrivate::THasPublicId<TOptions>::value) {
+                if (auto publicId = Options_.PublicId()) {
+                    QueryCacheItem->SetProgressData(Session_->OpTracker_, publicId, Session_->ProgressWriter_, Session_->StatWriter_);
+                }
+            }
+        }
+    }
+
+private:
+    void ExecPrepareSecureTmpFolder() {
+        YQL_ENSURE(!Session_->OperationOptions_.ProjectSlug, "Secure tmp for projects is not supported yet");
+
+        auto secureTmpPath = NYT::AddPathPrefix(
+            GetTablesTmpFolder(*Options_.Config(), Cluster_, Session_->UseSecureTmp_, Session_->OperationOptions_),
+            NYT::TConfig::Get()->Prefix
+        );
+
+        const auto waitForAclDelay = Options_.Config()->_SecureTmpWaitForAclDelay.Get();
+        const auto waitForAclMaxAttempts = Options_.Config()->_SecureTmpWaitForAclMaxAttempts.Get();
+        YQL_ENSURE(waitForAclDelay && waitForAclMaxAttempts);
+        const auto attributes = Options_.Config()->_SecureTmpAttributes.Get().GetOrElse(NYT::TNode::CreateMap());
+
+        auto entry = GetEntry();
+        entry->Client->Create(secureTmpPath, NYT::NT_MAP, NYT::TCreateOptions().IgnoreExisting(true).Attributes(attributes));
+
+        auto retryPolicy = IRetryPolicy<bool>::GetFixedIntervalPolicy(
+            /*retryClassFunction=*/ [](bool hasAccess) {
+                return hasAccess ? ERetryErrorClass::NoRetry : ERetryErrorClass::ShortRetry;
+            },
+            /*delay=*/ *waitForAclDelay,
+            /*longRetryDelay=*/ *waitForAclDelay,
+            /*maxRetries=*/ *waitForAclMaxAttempts,
+            /*maxTime=*/ TDuration::Max()
+        );
+
+        bool accessRequested = false;
+        bool hasAccess = DoWithRetryOnRetCode<bool>([&]() {
+            auto checkReadWrite = [&](const TString& user) {
+                auto read = entry->Client->CheckPermission(user, NYT::EPermission::Read, secureTmpPath);
+                auto write = entry->Client->CheckPermission(user, NYT::EPermission::Write, secureTmpPath);
+                return read.Action == NYT::ESecurityAction::Allow && write.Action == NYT::ESecurityAction::Allow;
+            };
+
+            YQL_ENSURE(Session_->OperationOptions_.AuthenticatedUser);
+            bool actualUserHasReadWrite = checkReadWrite(*Session_->OperationOptions_.AuthenticatedUser);
+            bool effectiveUserHasReadWrite = *Session_->OperationOptions_.AuthenticatedUser != entry->EffectiveUser
+                ? checkReadWrite(entry->EffectiveUser)
+                : true;
+            if (actualUserHasReadWrite && effectiveUserHasReadWrite) {
+                YQL_CLOG(INFO, ProviderYt) << "Using secure tmp folder " << secureTmpPath;
+                return true;
+            }
+
+            // Actual or effective user doesn't have permissions on secure tmp
+            if (!accessRequested) {
+                if constexpr (NPrivate::THasPublicId<TOptions>::value) {
+                    SetNodeExecProgress("Waiting for secure temporary folder");
+                }
+
+                TVector<NThreading::TFuture<void>> requests;
+                if (!actualUserHasReadWrite) {
+                    requests.push_back(RequestSecureTmpAccess(secureTmpPath, *Session_->OperationOptions_.AuthenticatedUser));
+                }
+                if (!effectiveUserHasReadWrite) {
+                    auto accessPeriod = Options_.Config()->_SecureTmpTokenUsersAccessPeriod.Get().GetOrElse(DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD);
+                    requests.push_back(RequestSecureTmpAccess(secureTmpPath, entry->EffectiveUser, accessPeriod));
+                }
+
+                NThreading::WaitAll(requests).GetValueSync();
+                YQL_CLOG(INFO, ProviderYt) << "Requested permissions for secure tmp folder";
+                accessRequested = true;
+            }
+
+            YQL_CLOG(INFO, ProviderYt) << "Waiting for secure tmp folder ACL";
+            return false;
+        }, retryPolicy);
+
+        if (!hasAccess) {
+            YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_SECURE_DATA_IN_COMMON_TMP)
+                << "Failed to create secure tmp folder on cluster " << Cluster_ << ". Aborting query to prevent sensitive data leak";
+        }
+    }
+
+    NThreading::TFuture<void> RequestSecureTmpAccess(const TString& path, const TString& identity, TMaybe<TDuration> period = {}) {
+        auto logCtx = NYql::NLog::CurrentLogContextPath();
+        return Session_->Async([this, logCtx, &path, &identity, period] {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+            try {
+                YQL_CLOG(INFO, ProviderYt) << "Requesting permissions for secure tmp ("
+                    << "path=" << path
+                    << ", identity=" << identity
+                    << ", period=" << (period ? period->ToString() : "inf")
+                    << ") for cluster " << Cluster_;
+                YtAccessProvider->RequestAccess(Clusters_->GetYtName(Cluster_), path, Session_->UserName_, EIdentityType::User, identity, period);
+                return NThreading::MakeFuture();
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                return NThreading::MakeErrorFuture<void>(std::current_exception());
+            }
+        });
+    }
 };
 
 } // NNative

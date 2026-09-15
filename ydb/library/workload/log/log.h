@@ -76,6 +76,7 @@ public:
         Upsert,
         BulkUpsert,
         Select,
+        Delete
     };
 
 private:
@@ -84,6 +85,7 @@ private:
     TQueryInfoList Upsert(TVector<TRow>&& rows) const;
     TQueryInfoList BulkUpsert(TVector<TRow>&& rows) const;
     TQueryInfoList Select() const;
+    TQueryInfoList Delete(TVector<TRow>&& rows) const;
 };
 
 } // namespace NLog

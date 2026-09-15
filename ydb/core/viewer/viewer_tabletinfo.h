@@ -78,7 +78,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     NKikimr::TSubDomainKey FilterTenantId;
 
 public:
-    TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonTabletInfo(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TJsonWhiteboardRequest(viewer, ev)
     {
         static TString prefix = "json/tabletinfo ";
@@ -89,8 +89,14 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        // node_id is normally validated by TBase::Bootstrap(), but this handler
+        // calls it at the very end. So the check is done up front.
+        if (TBase::IsStrictDatabaseOnlyRequest()) {
+            const auto nodeIds = GetNodeIdsFromParams();
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
+                return;
+            }
+        }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             TPathId domainRoot;
             if (AppData()) {
@@ -106,31 +112,15 @@ public:
                 FilterTenantId.second = pathId.LocalPathId;
             }
         }
-        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
-            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
-        } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
-            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
-        } else if (Database || SharedDatabase) {
-            RequestStateStorageEndpointsLookup(SharedDatabase ? SharedDatabase : Database);
-            Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
-            return;
-        }
-        CheckPath();
-    }
-
-    void CheckPath() {
-        BLOG_TRACE("CheckPath()");
-        const auto& params(Event->Get()->Request.GetParams());
-        ReplyWithDeadTabletsInfo = params.Has("path");
-        if (params.Has("path")) {
-            TBase::RequestSettings.Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-            IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), IsBase64Encode);
+        ReplyWithDeadTabletsInfo = Params.Has("path");
+        if (Params.Has("path")) {
+            IsBase64Encode = FromStringWithDefault<bool>(Params.Get("base64"), IsBase64Encode);
             NKikimrSchemeOp::TDescribeOptions options;
             options.SetReturnBoundaries(true);
             options.SetReturnIndexTableBoundaries(true);
             options.SetShowPrivateTable(true);
-            RequestTxProxyDescribe(params.Get("path"), options);
-            Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());
+            RequestTxProxyDescribe(Params.Get("path"), options);
+            Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();
         }
@@ -153,12 +143,6 @@ public:
             request->Record.MutableFilterTenantId()->SetPathId(FilterTenantId.GetPathId());
         }
         return request;
-    }
-
-    void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ev);
-        CheckPath();
-        RequestDone();
     }
 
     TString GetColumnValue(const TCell& cell, const NKikimrSchemeOp::TColumnDescription& type) {
@@ -363,8 +347,12 @@ public:
         }
         if (!Tablets.empty()) {
             TBase::Bootstrap();
-            for (auto tablet : Tablets) {
-                Request->Record.AddFilterTabletId(tablet.first);
+            // TBase::Bootstrap() may reply and pass away without building the request,
+            // for example when nothing is left to ask after filtering the nodes by database
+            if (!ReplySent) {
+                for (const auto& [tabletId, tabletType] : Tablets) {
+                    Request->Record.AddFilterTabletId(tabletId);
+                }
             }
         }
         RequestDone();
@@ -416,13 +404,6 @@ public:
             }
         }
         TBase::FilterResponse(response);
-    }
-
-    STATEFN(StateRequestedLookup) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvStateStorage::TEvBoardInfo, Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
     }
 
     STATEFN(StateRequestedDescribe) {

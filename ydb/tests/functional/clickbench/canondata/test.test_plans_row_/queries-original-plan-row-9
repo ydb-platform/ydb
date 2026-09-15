@@ -60,7 +60,7 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "HashFunc": "HashV1",
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "RegionID"
                                                         ],
@@ -87,6 +87,7 @@
                                                                 "Plans": [
                                                                     {
                                                                         "Node Type": "UnionAll",
+                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -98,17 +99,14 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/local/clickbench/plans/row/hits",
                                                                                         "ReadColumns": [
-                                                                                            "AdvEngineID",
-                                                                                            "RegionID",
-                                                                                            "ResolutionWidth",
-                                                                                            "UserID"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
                                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                                            "AdvEngineID",
+                                                                                            "RegionID",
+                                                                                            "ResolutionWidth"
                                                                                         ],
                                                                                         "Scan": "Parallel",
                                                                                         "Table": "clickbench/plans/row/hits"
@@ -125,6 +123,7 @@
                                                                     },
                                                                     {
                                                                         "Node Type": "UnionAll",
+                                                                        "Parallel": "True",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -156,7 +155,7 @@
                                                                                 "Plans": [
                                                                                     {
                                                                                         "CTE Name": "TableFullScan_9",
-                                                                                        "HashFunc": "HashV1",
+                                                                                        "HashFunc": "HashV2",
                                                                                         "KeyColumns": [
                                                                                             "RegionID",
                                                                                             "UserID"

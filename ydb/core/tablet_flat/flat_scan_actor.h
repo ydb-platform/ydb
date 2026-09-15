@@ -18,6 +18,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <util/generic/cast.h>
 
 namespace NKikimr {
@@ -55,6 +56,7 @@ namespace NOps {
             , Args(args)
             , Snapshot(std::move(snapshot))
             , MaxCyclesPerIteration(/* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100)
+            , ScanMemoryTag(NProfiling::MakeTag(TypeName(*Scan).c_str()))
         {
         }
 
@@ -162,9 +164,9 @@ namespace NOps {
                 Y_ENSURE(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
+                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
-                    PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
+                    PageCollections[slot] = new TPrivatePageCache::TPageCollection(std::move(pageCollection));
                     Y_ENSURE(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
@@ -188,8 +190,8 @@ namespace NOps {
             }
 
             void RunLoader() {
-                for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, req));
+                if (auto fetch = Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, std::move(fetch.PageCollection), std::move(fetch.Pages)));
                     ++ReadsLeft;
                 }
 
@@ -217,7 +219,8 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Pages);
+                Y_ENSURE(msg->Cookie == 0);
+                Loader->Save(std::move(msg->Pages));
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -238,7 +241,7 @@ namespace NOps {
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
-            TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
+            TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
             std::optional<NTable::TLoader> Loader;
@@ -390,7 +393,9 @@ namespace NOps {
             {
                 TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
+                NProfiling::TMemoryTagScope scope(ScanMemoryTag);
                 auto hello = Scan->Prepare(this, Subset.Scheme);
+                scope.Release();
 
                 Conf = hello.Conf;
 
@@ -443,7 +448,7 @@ namespace NOps {
         void SendStat(const TStatState& stat)
         {
             ui64 elapsedUs = 1000000. * NHPTimer::GetSeconds(stat.ElapsedCycles());
-
+            TotalCpuTimeUs += elapsedUs;
             SendToOwner(new TEvScanStat(elapsedUs, stat.Seen, stat.Skipped));
         }
 
@@ -474,22 +479,27 @@ namespace NOps {
                     processed = 0;
                 }
 
+                NProfiling::TMemoryTagScope scope(ScanMemoryTag);
                 const auto ready = Process();
+                scope.Release();
 
                 processed += stat.UpdateRows(Seen, Skipped);
 
                 if (ready == NTable::EReady::Gone) {
-                    Terminate(EStatus::Done);
                     stat.UpdateCycles();
                     SendStat(stat);
+                    Terminate(EStatus::Done);
                     return;
                 }
 
-                while (auto req = Cache->GrabFetches()) {
-                    if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
+                while (auto fetch = Cache->GetFetch()) {
+                    if (auto logl = Logger->Log(ELnLev::Debug)) {
+                        logl << NFmt::Do(*this) << " Fetches page collection " << fetch.PageCollection->Label()
+                            << " pages " << fetch.Pages.size()
+                            << " cookie " << fetch.Cookie;
+                    }
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, std::move(fetch.PageCollection), std::move(fetch.Pages), fetch.Cookie));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -498,9 +508,9 @@ namespace NOps {
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
                     if (ImplicitPageFault() == NTable::EReady::Gone) {
-                        Terminate(EStatus::Done);
                         stat.UpdateCycles();
                         SendStat(stat);
+                        Terminate(EStatus::Done);
                         return;
                     }
 
@@ -619,7 +629,7 @@ namespace NOps {
                 return Terminate(EStatus::StorageError);
             }
 
-            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
+            Cache->Save(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);
@@ -660,9 +670,11 @@ namespace NOps {
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
             IScan* scan = DetachScan();
+            NProfiling::TMemoryTagScope scope(ScanMemoryTag);
             auto prod = exc
                 ? scan->Finish(*exc)
                 : scan->Finish(status);
+            scope.Release();
 
             if (status != EStatus::Lost) {
                 auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
@@ -713,6 +725,11 @@ namespace NOps {
             Send(Owner, event.Release(), flags);
         }
 
+        ui64 GetTotalCpuTimeUs() const override
+        {
+            return TotalCpuTimeUs;
+        }
+
     private:
         struct TBlobQueueRequest {
             TActorId Sender;
@@ -742,6 +759,8 @@ namespace NOps {
 
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;
+        ui64 TotalCpuTimeUs = 0;
+        ui32 ScanMemoryTag = 0;
     };
 
 }

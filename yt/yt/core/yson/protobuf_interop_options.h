@@ -20,7 +20,7 @@ struct TResolveProtobufElementByYPathOptions
 struct TProtobufWriterOptions
 {
     //! Keep: all unknown fields found during YSON parsing
-    //! are translated into Protobuf unknown fields (each has number UnknownYsonFieldNumber
+    //! are translated into Protobuf unknown fields (each has number `unknown_yson_field_number`
     //! and is a key-value pair with field name being its key and YSON being the value).
     //!
     //! Skip: all unknown fields are silently skipped.
@@ -29,11 +29,11 @@ struct TProtobufWriterOptions
     //!
     //! Forward: current key/index is kept, the children are considered by resolver recursively.
     //! Forward in a scalar leaf is interpreted as a Fail.
-    using TUnknownYsonFieldModeResolver = std::function<EUnknownYsonFieldsMode(const NYPath::TYPath&)>;
+    using TUnknownYsonFieldModeResolver = std::function<EUnknownYsonFieldsMode(NYPath::TYPathBuf)>;
 
     static TUnknownYsonFieldModeResolver CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode mode);
 
-    TProtobufWriterOptions CreateChildOptions(const NYPath::TYPath& path) const;
+    TProtobufWriterOptions CreateChildOptions(NYPath::TYPathBuf path) const;
 
     TUnknownYsonFieldModeResolver UnknownYsonFieldModeResolver = CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Fail);
     //! If |true| then required fields not found in protobuf metadata are

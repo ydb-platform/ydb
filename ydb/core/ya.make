@@ -10,6 +10,7 @@ RECURSE(
     cms
     config
     control
+    counters_info
     debug
     debug_tools
     discovery
@@ -34,16 +35,17 @@ RECURSE(
     keyvalue
     kqp
     load_test
-    local_pgwire
+    local_indexes
+    local_proxy
     log_backend
     metering
     mind
     mon
     mon_alloc
     memory_controller
+    nbs
     node_whiteboard
     persqueue
-    pgproxy
     public_http
     quoter
     raw_socket

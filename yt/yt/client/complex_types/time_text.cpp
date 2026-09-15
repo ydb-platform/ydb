@@ -43,7 +43,7 @@ ui64 BinaryTimeFromText(TStringBuf data, ESimpleLogicalValueType valueType)
         instant = TInstant::ParseIso8601(data);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Could not parse date %Qv", data)
-            << ex;
+            .With(ex);
     }
     switch (valueType) {
         case ESimpleLogicalValueType::Date:

@@ -11,6 +11,11 @@ DEFINE_ENUM(EExecutionBackend,
     (WebAssembly)
 );
 
+DEFINE_ENUM(EOptimizationLevel,
+    (None)
+    (Default)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NCodegen

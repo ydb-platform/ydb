@@ -5,6 +5,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -39,6 +40,20 @@ namespace {
             }
         }
         return true;
+    }
+
+    void FillPermissionsField(
+        const NACLib::TACL& acl,
+        google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions
+    ) {
+        Y_ENSURE(permissions);
+        for (const auto& ace : acl.GetACE()) {
+            auto entry = permissions->Add();
+            entry->set_subject(ace.GetSID());
+            for (const auto& name : ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight())) {
+                entry->add_permission_names(name);
+            }
+        }
     }
 
 } // anonymous namespace
@@ -479,28 +494,28 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             break;
         case NUdf::TDataType<NUdf::TDate32>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
-            if (value.int32_value() >= NUdf::MAX_DATE32) {
+            if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date32 value";
             }
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<NUdf::TDatetime64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime64");
-            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+            if (value.int64_value() < NUdf::MIN_DATETIME64 || value.int64_value() > NUdf::MAX_DATETIME64) {
                 throw yexception() << "Invalid Datetime64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TTimestamp64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp64");
-            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+            if (value.int64_value() < NUdf::MIN_TIMESTAMP64 || value.int64_value() > NUdf::MAX_TIMESTAMP64) {
                 throw yexception() << "Invalid Timestamp64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TInterval64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval64");
-            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+            if (std::abs(value.int64_value()) > NUdf::MAX_INTERVAL64) {
                 throw yexception() << "Invalid Interval64 value";
             }
             res.SetInt64(value.int64_value());
@@ -813,32 +828,36 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
     }
 }
 
-void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-                                     NKikimrMiniKQL::TParams& output) {
-    output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto type = output.MutableType()->MutableStruct();
-    auto value = output.MutableValue();
-    for (const auto& p : input) {
-        auto typeMember = type->AddMember();
-        auto valueItem = value->AddStruct();
-        typeMember->SetName(p.first);
-        ConvertYdbTypeToMiniKQLType(p.second.type(), *typeMember->MutableType());
-        ConvertYdbValueToMiniKQLValue(p.second.type(), p.second.value(), *valueItem);
+void FillPermissionsFromAcl(
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to
+) {
+    Y_ENSURE(to);
+    const NACLib::TACL acl(from.GetACL());
+    FillPermissionsField(acl, to->mutable_permissions());
+    to->set_interrupt_permission_inheritance(acl.GetInterruptInheritance());
+
+    if (withEffectiveAcl) {
+        FillPermissionsField(NACLib::TACL(from.GetEffectiveACL()), to->mutable_effective_permissions());
     }
 }
 
-void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions>* permissions) {
-    const auto& securityObject = TSecurityObject(owner, acl, isContainer);
-    for (const auto& ace : securityObject.GetACL().GetACE()) {
-        auto entry = permissions->Add();
-        entry->set_subject(ace.GetSID());
-        auto str = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
-        for (auto n : str) {
-            entry->add_permission_names(n);
-        }
+void FillPermissionsFromAcl(
+    const NKikimrSchemeOp::TDirEntry& from,
+    const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to
+) {
+    Y_ENSURE(!withEffectiveAcl);
+    const NACLib::TACL acl(from.GetACL());
+    NProtoBuf::RepeatedPtrField<Ydb::Scheme::Permissions> toGrant;
+    FillPermissionsField(acl, &toGrant);
+    for (const auto& permission : toGrant) {
+        *to->mutable_actions()->Add()->mutable_grant() = permission;
     }
-
+    if (acl.GetInterruptInheritance()) {
+        to->set_interrupt_inheritance(true);
+    }
 }
 
 using namespace NACLib;
@@ -892,7 +911,7 @@ const TString& GetAclName(const TString& name) {
 } // namespace
 
 const THashMap<TString, TACLAttrs> AccessMap_  = {
-    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
+    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase) },
     { YDB_TABLES_MODIFY, TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
     { YDB_TABLES_READ, TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
     { YDB_GENERIC_LIST, EAccessRights::GenericList},
@@ -1023,9 +1042,7 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     timestamp.set_tx_id(from.GetCreateTxId());
 
     if (processAcl) {
-        const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
-        ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
-        ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
+        FillPermissionsFromAcl(from, /* withEffectiveAcl */ true, to);
     }
 }
 
@@ -1136,19 +1153,19 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         break;
 
     case NScheme::NTypeIds::Date32:
-        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        ok = cell.AsValue<i32>() >= NUdf::MIN_DATE32 && cell.AsValue<i32>() <= NUdf::MAX_DATE32;
         break;
 
     case NScheme::NTypeIds::Datetime64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_DATETIME64 && cell.AsValue<i64>() <= NUdf::MAX_DATETIME64;
         break;
 
     case NScheme::NTypeIds::Timestamp64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_TIMESTAMP64 && cell.AsValue<i64>() <= NUdf::MAX_TIMESTAMP64;
         break;
 
     case NScheme::NTypeIds::Interval64:
-        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        ok = std::abs(cell.AsValue<i64>()) <= NUdf::MAX_INTERVAL64;
         break;
 
     case NScheme::NTypeIds::Utf8:
@@ -1292,7 +1309,21 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
         break;
     }
-    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Decimal : {
+
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        ui8 precision = type.GetDecimalType().GetPrecision();
+        auto validate = NYql::NDecimal::FromHalfs(val.low_128(), val.high_128());
+        if (!NKikimr::NMiniKQL::IsValidDecimal(precision, validate)) {
+            err = "Invalid decimal value";
+            return false;
+        }
+
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
+        break;
+    }
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
         valInPool.first = val.low_128();
@@ -1411,16 +1442,16 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         vb.Interval(cell.AsValue<i64>());
         break;
     case EPrimitiveType::Date32:
-        vb.Date32(cell.AsValue<i32>());
+        vb.Date32(std::chrono::sys_time<TWideDays>(TWideDays(cell.AsValue<i32>())));
         break;
     case EPrimitiveType::Datetime64:
-        vb.Datetime64(cell.AsValue<i64>());
+        vb.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Timestamp64:
-        vb.Timestamp64(cell.AsValue<i64>());
+        vb.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Interval64:
-        vb.Interval64(cell.AsValue<i64>());
+        vb.Interval64(TWideMicroseconds(cell.AsValue<i64>()));
         break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());
@@ -1469,9 +1500,13 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     NACLib::TDiffACL diffACL;
+    diffACL.ClearAccess();
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
+        }
+        if (action.has_change_owner()) {
+            out.MutableModifyACL()->SetNewOwner(action.change_owner());
         }
     }
     out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());

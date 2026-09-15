@@ -33,31 +33,6 @@ enum class ERecursionTraits {
     BytesV2 = 3,
 };
 
-struct TProtoTypeConfig {
-    //! Имя сообщения.
-    TString MessageName;
-    //! Сериализованные метаданные.
-    TString Metadata;
-    //! Количество байт, которые надо отступить
-    //! от начала каждого блока данных.
-    ui32 SkipBytes = 0;
-    //! Формат сериализации proto-сообщений.
-    EProtoFormat ProtoFormat = PF_PROTOBIN;
-    //! Формат представление значений Enum.
-    EEnumFormat EnumFormat = EEnumFormat::Number;
-    //! Способ интерпретации рекурсивно определённых типов.
-    ERecursionTraits Recursion = ERecursionTraits::Fail;
-    //! Выдать бинарными строками, если SERIALIZATION_PROTOBUF.
-    //! Если SERIALIZATION_YT, то для рекурсивных структур поведение зависит от Recursion.
-    bool YtMode = false;
-    //! Заворачивать ли списочные типы в Optional.
-    bool OptionalLists = false;
-    //! Заполнять ли пустые Optional типы дефолтным значением (только для proto3).
-    bool SyntaxAware = false;
-    //! Использовать ли детерминированную сериализацию
-    bool Deterministic = false;
-};
-
 struct TProtoTypeConfigOptions {
     //! Количество байт, которые надо отступить
     //! от начала каждого блока данных.
@@ -112,6 +87,13 @@ struct TProtoTypeConfigOptions {
         SyntaxAware = value;
         return *this;
     }
+};
+
+struct TProtoTypeConfig: public TProtoTypeConfigOptions {
+    //! Имя сообщения.
+    TString MessageName;
+    //! Сериализованные метаданные.
+    TString Metadata;
 };
 
 TString GenerateProtobufTypeConfig(

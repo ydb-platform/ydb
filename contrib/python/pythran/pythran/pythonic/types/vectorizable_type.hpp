@@ -108,9 +108,8 @@ namespace types
     static const bool value =
         !std::is_same<O, operator_::functor::mod>::value &&
         (!std::is_same<O, operator_::functor::div>::value ||
-         utils::all_of<std::is_same<
-             Args, decltype(std::declval<O>()(
-                       std::declval<Args>()...))>::value...>::value) &&
+         utils::all_of<std::is_same<Args, decltype(std::declval<O>()(
+                                              std::declval<Args>()...))>::value...>::value) &&
         !std::is_same<O, numpy::functor::logaddexp2>::value &&
         // Return type for generic function should be generic
         !std::is_same<O, numpy::functor::angle_in_rad>::value &&
@@ -131,8 +130,7 @@ namespace types
         !std::is_same<O, numpy::functor::nextafter>::value &&
         !std::is_same<O, numpy::functor::spacing>::value &&
         // not supported for complex numbers
-        !(utils::any_of<
-              is_complex<typename dtype_of<Args>::type>::value...>::value &&
+        !(utils::any_of<is_complex<typename dtype_of<Args>::type>::value...>::value &&
           (std::is_same<O, numpy::functor::floor_divide>::value ||
            std::is_same<O, numpy::functor::maximum>::value ||
            std::is_same<O, builtins::pythran::functor::abssqr>::value ||
@@ -150,8 +148,7 @@ namespace types
         !std::is_same<O, numpy::functor::float32>::value &&
         !std::is_same<O, numpy::functor::float64>::value &&
         // not supported for integral numbers
-        !(utils::any_of<std::is_integral<
-              typename dtype_of<Args>::type>::value...>::value &&
+        !(utils::any_of<std::is_integral<typename dtype_of<Args>::type>::value...>::value &&
           (std::is_same<O, numpy::functor::floor_divide>::value ||
            std::is_same<O, numpy::functor::true_divide>::value ||
            std::is_same<O, numpy::functor::divide>::value ||

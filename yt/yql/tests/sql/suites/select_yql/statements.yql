@@ -1,0 +1,13 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM
+    plato.Input
+;
+
+SELECT
+    *
+FROM
+    plato.Input
+;

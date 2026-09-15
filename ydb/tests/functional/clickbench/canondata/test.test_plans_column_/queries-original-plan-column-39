@@ -89,7 +89,8 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
-                                                                        "HashFunc": "HashV1",
+                                                                        "Blocks": "True",
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "AdvEngineID",
                                                                             "Dst",
@@ -116,6 +117,7 @@
                                                                                         "Phase": "Intermediate"
                                                                                     },
                                                                                     {
+                                                                                        "Blocks": "True",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 2
@@ -130,6 +132,8 @@
                                                                                         "Name": "TableRangeScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
+                                                                                            "CounterID [62, 62]",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "AdvEngineID",
                                                                                             "IsRefresh",
                                                                                             "Referer",
@@ -137,11 +141,7 @@
                                                                                             "TraficSourceID",
                                                                                             "URL"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "CounterID [62, 62]",
-                                                                                            "EventDate [15887, 15917]"
-                                                                                        ],
-                                                                                        "ReadRangesExpectedSize": 1,
+                                                                                        "ReadRangesExpectedSize": "1",
                                                                                         "ReadRangesKeys": [
                                                                                             "CounterID",
                                                                                             "EventDate"

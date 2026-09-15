@@ -2,21 +2,21 @@
 
 #include <unordered_map>
 #include "events.h"
+#include "helpers.h"
 #include "partition_id.h"
 
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
-#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/inflight_limiter.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/util/ulid.h>
 
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
+
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -55,15 +55,16 @@ struct TTopicCounters {
 };
 
 
-class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
+class TPartitionActor : public NPQ::TBaseActor<TPartitionActor>
+                      , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPartitionActor>;
 private:
     static constexpr TDuration READ_TIMEOUT_DURATION = TDuration::Seconds(1);
 
     static constexpr TDuration WAIT_DATA = TDuration::Seconds(10);
     static constexpr TDuration PREWAIT_DATA = TDuration::Seconds(9);
+    static constexpr TDuration READ_METRICS_UPDATE_INTERVAL = TDuration::Seconds(10);
     static constexpr TDuration WAIT_DELTA = TDuration::MilliSeconds(500);
-
-    static constexpr ui64 INIT_COOKIE = Max<ui64>(); //some identifier
 
     static constexpr ui32 MAX_PIPE_RESTARTS = 100; //after 100 restarts without progress kill session
     static constexpr ui32 RESTART_PIPE_DELAY_MS = 100;
@@ -74,17 +75,28 @@ private:
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
-                     const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
+                     const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
-                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents);
+                     EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
+                     const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
-
+    bool OnUnhandledException(const std::exception& exc) override;
+    void CloseSessionAndDie(const TString& reason, PersQueue::ErrorCode::ErrorCode code,
+                            const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
+
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session},
+            {"tabletId", TabletID});
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -99,6 +111,7 @@ private:
             HFunc(TEvPQProxy::TEvGetStatus, Handle)
             HFunc(TEvPQProxy::TEvRestartPipe, Handle)
             HFunc(TEvPQProxy::TEvDirectReadAck, Handle)
+            HFunc(TEvPQProxy::TEvUpdateReadMetrics, Handle)
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -137,6 +150,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
@@ -158,11 +172,20 @@ private:
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
     void CommitDone(ui64 cookie, const TActorContext& ctx);
-    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
+    NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial, ui64 cookie) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const;
+
+    void HandleInit(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void HandleDirectReadRestoreSession(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TPersQueuePartitionResponse::TCmdPublishDirectReadResult& response, const TActorContext& ctx);
+    void Handle(const NKikimrClient::TCmdReadResult& response, const TActorContext& ctx);
+
+    bool CommitProcessingIsEnabled() const;
 
 private:
     const TActorId ParentId;
@@ -188,6 +211,7 @@ private:
     bool ClientVerifyReadOffset;
     ui64 CommittedOffset;
     ui64 WriteTimestampEstimateMs;
+    TMaybe<ui64> ClientMaxOffset;
 
     ui64 ReadIdToResponse;
     ui64 ReadIdCommitted;
@@ -215,6 +239,8 @@ private:
 
     TString ReadGuid; // empty if not reading
 
+    ui64 InitCookie = 1;
+
     std::set<ui64> WaitDataInfly;
     ui64 WaitDataCookie;
     bool WaitForData;
@@ -229,16 +255,16 @@ private:
     std::deque<std::pair<ui64, TCommitInfo>> CommitsInfly; //ReadId, Offset
     std::unordered_map<ui64, std::shared_ptr<TDistributedCommitHelper>> Kqps;
 
-    std::set<NPQ::TPartitionGraph::Node*> Parents;
+    const TTopicHolder::TPtr TopicHolder;
 
     TTopicCounters Counters;
 
-    bool CommitsDisabled;
     ui64 CommitCookie;
     NPersQueue::TTopicConverterPtr Topic;
     TString Database;
 
     bool DirectRead = false;
+    bool CanReadBatches = false;
 
     ui64 DirectReadId = 1;
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadResults;
@@ -248,6 +274,8 @@ private:
     std::set<ui64> DirectReadsToPublish;
     std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
+
+    NPQ::TInFlightController PartitionInFlightMemoryController;
 
     enum class EDirectReadRestoreStage {
         None,
@@ -259,12 +287,15 @@ private:
     ui64 RestoredDirectReadId = 0;
     EDirectReadRestoreStage DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
-    bool UseMigrationProtocol;
+    EProtocol Protocol;
 
     bool FirstRead;
     bool ReadingFinishedSent;
 
     std::unordered_set<ui64> NotCommitedToFinishParents;
+
+    inline bool IsPartitionDataReady() const;
+    inline bool IsNeedMorePartitionData() const;
 };
 
 

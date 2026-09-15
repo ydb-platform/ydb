@@ -1,5 +1,6 @@
 #include "kqp_rm_service.h"
 
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/domain.h>
@@ -16,11 +17,17 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <algorithm>
+#include <cmath>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
 
 namespace NKikimr {
 namespace NKqp {
@@ -29,32 +36,82 @@ namespace NRm {
 using namespace NActors;
 using namespace NResourceBroker;
 
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+static double NormalizePoolPercent(double percent) {
+    if (!std::isfinite(percent) || percent < 0) {
+        return -1;
+    }
+    return Min(percent, 100.0);
+}
 
-#define LOG_AS_SAFE(log) {if (ActorSystem) { log; }}
+// The rule of TTxState::MemoryPoolLimited, also needed before a TTxState exists (the cookie hand-out).
+// The percent must already be normalized.
+static bool IsMemoryPoolLimited(const TString& poolId, double memoryPoolPercent) {
+    return !poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID
+        && memoryPoolPercent > 0 && memoryPoolPercent < 100;
+}
 
-#define LOG_AS_C(stream) LOG_AS_SAFE(LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_D(stream) LOG_AS_SAFE(LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_I(stream) LOG_AS_SAFE(LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_E(stream) LOG_AS_SAFE(LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
-#define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+    const TString& database, bool collectBacktrace)
+    : TTxState(resourceManager, txId, now, poolId, memoryPoolPercent, database, collectBacktrace,
+        resourceManager->GetMemoryResourceCookies(database, poolId, NormalizePoolPercent(memoryPoolPercent)))
+{}
+
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+    const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies)
+    : ResourceManager(resourceManager)
+    , Counters(resourceManager->GetCounters())
+    , TxId(txId)
+    , CreatedAt(now)
+    , PoolId(poolId)
+    , MemoryPoolPercent(NormalizePoolPercent(memoryPoolPercent))
+    , Database(database)
+    , MemoryPoolLimited(IsMemoryPoolLimited(PoolId, MemoryPoolPercent))
+    , CollectBacktrace(collectBacktrace)
+    , TotalMemoryCookie(std::move(cookies.Total))
+    , PoolMemoryCookie(std::move(cookies.Pool))
+{}
+
+TTxState::~TTxState() {
+    ResourceManager->FinishTx(*this);
+    delete TxMaxAllocationBacktrace.load();
+}
 
 namespace {
 
 static constexpr double MYEPS = 1e-9;
 
+// Percents come from the config and the resource pool settings unchecked: anything outside [0, 100] would turn
+// into a negative double and wrap on the conversion to ui64, so they are clamped here, the one place they are
+// applied. Above 100 behaves as 100 (the spilling threshold at the limit itself), below 0 as 0.
+double ClampPercent(double percent) {
+    return std::clamp(percent, 0.0, 100.0);
+}
+
 ui64 OverPercentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * (100 - percent) + MYEPS;
+    return static_cast<double>(limit) / 100 * (100 - ClampPercent(percent)) + MYEPS;
 }
 
 ui64 Percentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * percent + MYEPS;
+    return static_cast<double>(limit) / 100 * ClampPercent(percent) + MYEPS;
+}
+
+struct TPoolSensors {
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
+
+    explicit operator bool() const {
+        return Limit != nullptr;
+    }
+};
+
+TPoolSensors MakePoolSensors(const TIntrusivePtr<TKqpCounters>& counters, const TString& database, const TString& poolId) {
+    auto group = counters->GetWorkloadManagerCounters()->GetSubgroup("pool", TStringBuilder() << database << '/' << poolId);
+    return TPoolSensors{
+        .Limit = group->GetCounter("MemoryLimit", false),
+        .Allocated = group->GetCounter("MemoryAllocated", false),
+        .DeniedRequests = group->GetCounter("MemoryDeniedRequests", true),
+    };
 }
 
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
@@ -73,6 +130,14 @@ public:
         return Limit > Used ? Limit - Used : 0;
     }
 
+    // Bytes left before the spilling threshold, negative when the threshold is exceeded. Negative whenever Used
+    // is past Limit - OverLimit, including a threshold equal to the limit (SpillingPercent = 100, OverLimit = 0)
+    // with Used above Limit after the limit was lowered under live usage; the former SpillingPercentReached flag
+    // compared the clamped Available() with OverLimit and stayed silent there.
+    i64 GetMemoryAvailability() const {
+        return static_cast<i64>(Limit) - static_cast<i64>(Used) - static_cast<i64>(OverLimit);
+    }
+
     bool Has(ui64 amount) const {
         return Available() >= amount;
     }
@@ -81,9 +146,34 @@ public:
         if (Available() >= value) {
             Used += value;
             UpdateCookie();
+            if (Sensors) {
+                Sensors.Allocated->Set(Used);
+            }
             return true;
         }
         return false;
+    }
+
+    bool HasSensors() const {
+        return static_cast<bool>(Sensors);
+    }
+
+    void AttachSensors(TPoolSensors sensors) {
+        Sensors = std::move(sensors);
+        Sensors.Limit->Set(Limit);
+        Sensors.Allocated->Set(Used);
+        Sensors.DeniedRequests->Add(DeniedRequests);
+    }
+
+    void RecordDenied() {
+        ++DeniedRequests;
+        if (Sensors) {
+            Sensors.DeniedRequests->Inc();
+        }
+    }
+
+    ui64 GetDeniedRequests() const {
+        return DeniedRequests;
     }
 
     TIntrusivePtr<TMemoryResourceCookie> GetSpillingCookie() const {
@@ -91,7 +181,7 @@ public:
     }
 
     void UpdateCookie() {
-        SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
+        SpillingCookie->MemoryAvailability.store(GetMemoryAvailability());
     }
 
     ui64 GetUsed() const {
@@ -106,11 +196,17 @@ public:
         }
 
         UpdateCookie();
+        if (Sensors) {
+            Sensors.Allocated->Set(Used);
+        }
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
-        if (abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && baseLimit == BaseLimit)
+        // std::fabs, not abs: unqualified abs may resolve to int abs(int) and truncate, and both percents are
+        // legitimately fractional (SpillingPercent in particular), so a sub-1.0 change must not compare equal
+        if (baseLimit == BaseLimit && std::fabs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && std::fabs(overPercent - OverPercent) < MYEPS) {
             return;
+        }
 
         BaseLimit = baseLimit;
         MemoryPoolPercent = memoryPoolPercent;
@@ -118,9 +214,28 @@ public:
         SetActualLimits();
     }
 
+    // A runtime SpillingPercent change: the spilling threshold moves, the limit stays
+    void SetOverPercent(double overPercent) {
+        SetNewLimit(BaseLimit, MemoryPoolPercent, overPercent);
+    }
+
+    // A new base (the node total of a pool): the limit follows, the share and the threshold percent stay
+    void SetBaseLimit(ui64 baseLimit) {
+        SetNewLimit(baseLimit, MemoryPoolPercent, OverPercent);
+    }
+
+    // The configured spilling percent, the node total is its one holder (see TKqpResourceManager::SetConfigValues)
+    double GetOverPercent() const {
+        return OverPercent;
+    }
+
     void SetActualLimits() {
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
+        UpdateCookie();
+        if (Sensors) {
+            Sensors.Limit->Set(Limit);
+        }
     }
 
     ui64 GetLimit() const {
@@ -138,8 +253,10 @@ private:
     ui64 Used;
     double MemoryPoolPercent;
     double OverPercent;
+    ui64 DeniedRequests = 0;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
+    TPoolSensors Sensors;
 };
 
 struct TEvPrivate {
@@ -147,12 +264,16 @@ struct TEvPrivate {
         EvPublishResources = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
+        EvWarmupDeadline,
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
     };
 
     struct TEvSchedulePublishResources : public TEventLocal<TEvSchedulePublishResources, EEv::EvSchedulePublishResources> {
+    };
+
+    struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
     };
 };
 
@@ -163,7 +284,6 @@ public:
         : Counters(counters)
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
-        , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
@@ -171,12 +291,12 @@ public:
         SetConfigValues(config);
     }
 
-    void Bootstrap(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
-        if (!Counters) {
-            Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters);
-        }
+    void Registered(NKikimrConfig::TTableServiceConfig::TResourceManager& config, TActorSystem* actorSystem, TActorId selfId) {
         ActorSystem = actorSystem;
         SelfId = selfId;
+        if (!Counters) {
+            Counters = MakeIntrusive<TKqpCounters>(AppData(ActorSystem)->Counters);
+        }
         UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
             config.GetKqpPatternCacheCompiledCapacityBytes(),
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
@@ -219,18 +339,32 @@ public:
         }
     }
 
-    void FreeExecutionUnits(ui32 cnt) {
-        if (cnt == 0) {
-            return;
+    TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) override {
+        TMemoryResourceCookies cookies;
+        with_lock (Lock) {
+            cookies.Total = TotalMemoryResource->GetSpillingCookie();
+            if (IsMemoryPoolLimited(poolId, memoryPoolPercent)) {
+                cookies.Pool = GetOrCreatePoolMemoryResource(TTxState::MakePoolId(database, poolId), memoryPoolPercent)->GetSpillingCookie();
+            }
         }
-
-        ExecutionUnitsResource.fetch_add(cnt);
+        return cookies;
     }
 
-    TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override
+    // Must be called under Lock. The pool resource is created on its first use with the percent of that tx.
+    // The limit of an existing pool is not touched here: it follows the txs that allocate from the pool
+    // (see AllocateResources), a tx that merely gets constructed must not move the threshold under the
+    // running ones.
+    TIntrusivePtr<TMemoryResource> GetOrCreatePoolMemoryResource(const std::pair<TString, TString>& poolKey, double memoryPoolPercent) {
+        auto [it, success] = MemoryNamedPools.emplace(poolKey, nullptr);
+        if (success) {
+            it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, TotalMemoryResource->GetOverPercent());
+        }
+        return it->second;
+    }
+
+    TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
-        const ui64 txId = tx->TxId;
-        const ui64 taskId = task->TaskId;
+        const ui64 txId = tx.TxId;
 
         TKqpRMAllocateResult result;
         if (resources.ExecutionUnits) {
@@ -242,28 +376,29 @@ public:
             }
         }
 
+        if (resources.ExternalMemory) {
+            ExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+        }
+
+        if (Y_UNLIKELY(resources.Memory == 0)) {
+            tx.Allocated(resources);
+            return result;
+        }
+
         Y_DEFER {
             if (!result) {
                 if (resources.ExecutionUnits) {
-                    FreeExecutionUnits(resources.ExecutionUnits);
+                    // return allocated resource to free pool
+                    ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
+                }
+                if (resources.ExternalMemory) {
+                    // decrease amount of external memory allocated
+                    ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
                 }
             }
         };
 
-        if (Y_UNLIKELY(resources.Memory == 0)) {
-            return result;
-        }
-
         bool hasScanQueryMemory = true;
-
-        bool isFirstAllocationRequest = (resources.ExecutionUnits > 0 && resources.MemoryPool == EKqpMemoryPool::DataQuery);
-        if (isFirstAllocationRequest) {
-            TKqpResourcesRequest newRequest = resources;
-            newRequest.MoveToFreeTier();
-            tx->Allocated(task, newRequest);
-            ExternalDataQueryMemory.fetch_add(newRequest.ExternalMemory);
-            return result;
-        }
 
         with_lock (Lock) {
             if (Y_UNLIKELY(!ResourceBroker)) {
@@ -274,33 +409,28 @@ public:
             }
 
             hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-            task->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
 
-            if (hasScanQueryMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
-                auto [it, success] = MemoryNamedPools.emplace(tx->MakePoolId(), nullptr);
-
-                if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx->MemoryPoolPercent, SpillingPercent.load());
-                } else {
-                    it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx->MemoryPoolPercent, SpillingPercent.load());
+            if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
+                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                // the pool limit follows the latest tx that allocates from the pool
+                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
+                if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
+                    poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
                 }
-
-                auto& poolMemory = it->second;
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
+                    poolMemory->RecordDenied();
                 }
-
-                task->PoolMemoryCookie = poolMemory->GetSpillingCookie();
             }
         }
 
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
-            tx->AckFailedMemoryAlloc(resources.Memory);
+            tx.AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
+                << ". " << tx.ToString();
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
@@ -311,16 +441,13 @@ public:
         Y_DEFER {
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
-                tx->AckFailedMemoryAlloc(resources.Memory);
+                tx.AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
-                    if (!tx->PoolId.empty()) {
-                        auto it = MemoryNamedPools.find(tx->MakePoolId());
+                    if (tx.HasMemoryPoolLimit()) {
+                        auto it = MemoryNamedPools.find(tx.MakePoolId());
                         if (it != MemoryNamedPools.end()) {
                             it->second->Release(resources.Memory);
-                            if (it->second->GetUsed() == 0) {
-                                MemoryNamedPools.erase(it);
-                            }
                         }
                     }
                 }
@@ -334,76 +461,86 @@ public:
         if (!allocated) {
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
-                << ". " << tx->ToString();
-            LOG_AS_N(reason);
+                << ". " << tx.ToString();
+            if (ActorSystem) {
+                YDB_LOG_NOTICE_CTX(*ActorSystem, "",
+                    {"reason", reason});
+            }
             result.SetError(NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY, reason);
             return result;
         }
 
-        tx->Allocated(task, resources);
-        if (!task->ResourceBrokerTaskId) {
-            task->ResourceBrokerTaskId = rbTaskId;
-        } else {
-            bool merged = ResourceBroker->MergeTasksInstant(task->ResourceBrokerTaskId, rbTaskId, SelfId);
+        tx.Allocated(resources);
+
+        ui64 currentRbTaskId = 0;
+        if (!tx.TxResourceBrokerTaskId.compare_exchange_strong(currentRbTaskId, rbTaskId)) {
+            bool merged = ResourceBroker->MergeTasksInstant(currentRbTaskId, rbTaskId, SelfId);
             Y_ABORT_UNLESS(merged);
         }
 
-        LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Allocated",
+                {"txId", txId},
+                {"taskId", taskId},
+                {"resources", resources});
+        }
         FireResourcesPublishing();
         return result;
     }
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task) override {
-        FreeResources(tx, task, task->FreeResourcesRequest());
-    }
+    void FreeResourcesImpl(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources, bool reduceResourceBrokerTask) {
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override {
+        auto released = tx.Released(resources);
+        Y_ABORT_UNLESS(released);
+
+        if (resources.Memory && reduceResourceBrokerTask) {
+            auto currentRbTaskId = tx.TxResourceBrokerTaskId.load();
+            Y_DEBUG_ABORT_UNLESS(currentRbTaskId);
+            bool reduced = ResourceBroker->ReduceTaskResourcesInstant(currentRbTaskId, {0, resources.Memory}, SelfId);
+            Y_DEBUG_ABORT_UNLESS(reduced);
+        }
+
         if (resources.ExecutionUnits) {
-            FreeExecutionUnits(resources.ExecutionUnits);
+            ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
         }
 
-        Y_ABORT_UNLESS(resources.Memory <= task->ScanQueryMemory);
-
-        if (resources.Memory > 0 && task->ResourceBrokerTaskId) {
-            if (resources.Memory == task->ScanQueryMemory) {
-                bool finished = ResourceBroker->FinishTaskInstant(
-                    TEvResourceBroker::TEvFinishTask(task->ResourceBrokerTaskId), SelfId);
-                Y_DEBUG_ABORT_UNLESS(finished);
-                task->ResourceBrokerTaskId = 0;
-            } else {
-                bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
-                    task->ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
-                Y_DEBUG_ABORT_UNLESS(reduced);
-            }
-        }
-
-        tx->Released(task, resources);
-        i64 prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-        Y_DEBUG_ABORT_UNLESS(prev >= 0);
+        auto prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        Y_DEBUG_ABORT_UNLESS(prev >= resources.ExternalMemory);
 
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
-                if (!tx->PoolId.empty()) {
-                    auto it = MemoryNamedPools.find(tx->MakePoolId());
+                if (tx.HasMemoryPoolLimit()) {
+                    auto it = MemoryNamedPools.find(tx.MakePoolId());
                     if (it != MemoryNamedPools.end()) {
                         it->second->Release(resources.Memory);
-
-                        if (it->second->GetUsed() == 0) {
-                            MemoryNamedPools.erase(it);
-                        }
                     }
                 }
             }
         }
 
-        LOG_AS_D("TxId: " << tx->TxId << ", taskId: " << task->TaskId
-            << ". Released resources, "
-            << "Memory: " << resources.Memory << ", "
-            << "Free Tier: " << resources.ExternalMemory << ", "
-            << "ExecutionUnits: " << resources.ExecutionUnits << ".");
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Released resources, Free",
+                {"txId", tx.TxId},
+                {"taskId", taskId},
+                {"memory", resources.Memory},
+                {"tier", resources.ExternalMemory},
+                {"executionUnits", resources.ExecutionUnits});
+        }
 
         FireResourcesPublishing();
+    }
+
+    void FreeResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
+        FreeResourcesImpl(tx, taskId, resources, true);
+    }
+
+    void FinishTx(TTxState& tx) override {
+        if (auto currentRbTaskId = tx.TxResourceBrokerTaskId.exchange(0); currentRbTaskId) {
+            bool finished = ResourceBroker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(currentRbTaskId), SelfId);
+            Y_DEBUG_ABORT_UNLESS(finished);
+        }
+        FreeResourcesImpl(tx, 0, tx.FreeResourcesRequest(), false);
     }
 
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
@@ -420,7 +557,9 @@ public:
     }
 
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
-        LOG_AS_D("Schedule Snapshot request");
+        if (ActorSystem) {
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule Snapshot request");
+        }
         std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
         with_lock (ResourceSnapshotState->Lock) {
             infos = ResourceSnapshotState->Snapshot;
@@ -432,13 +571,25 @@ public:
         callback(std::move(resources));
     }
 
+    bool GetInitialBoardSyncDone() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardSyncReceived;
+        }
+    }
+
+    TVector<ui32> GetInitialBoardNodeIds() const override {
+        with_lock (ResourceSnapshotState->Lock) {
+            return ResourceSnapshotState->InitialBoardNodeIds;
+        }
+    }
+
     TKqpLocalNodeResources GetLocalResources() const override {
         TKqpLocalNodeResources result;
-        result.Memory.fill(0);
 
         with_lock (Lock) {
             result.ExecutionUnits = ExecutionUnitsResource.load();
-            result.Memory[EKqpMemoryPool::ScanQuery] = TotalMemoryResource->Available();
+            result.Memory = TotalMemoryResource->Available();
+            result.ExternalMemory = ExternalDataQueryMemory.load();
         }
 
         return result;
@@ -459,23 +610,27 @@ public:
 
     void EstimateTaskResources(TTaskResourceEstimation& ret, const ui32 tasksCount) override
     {
-        ui64 totalChannels = std::max(tasksCount, (ui32)1) * std::max(ret.ChannelBuffersCount, (ui32)1);
-        ui64 optimalChannelBufferSizeEstimation = totalChannels * ChannelBufferSize.load();
-
-        optimalChannelBufferSizeEstimation = std::min(optimalChannelBufferSizeEstimation, MaxTotalChannelBuffersSize.load());
-
-        ret.ChannelBufferMemoryLimit = std::max(MinChannelBufferSize.load(), optimalChannelBufferSizeEstimation / totalChannels);
-
-        if (ret.HeavyProgram) {
-            ret.MkqlProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
-        } else {
-            ret.MkqlProgramMemoryLimit = MkqlLightProgramMemoryLimit.load() / std::max(tasksCount, (ui32)1);
-        }
-
-        ret.TotalMemoryLimit = ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
-            + ret.MkqlProgramMemoryLimit;
+        NKikimr::NKqp::EstimateTaskResources(ret, {
+            .ChannelBufferSize = ChannelBufferSize.load(),
+            .MinChannelBufferSize = MinChannelBufferSize.load(),
+            .MaxTotalChannelBuffersSize = MaxTotalChannelBuffersSize.load(),
+            .MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load(),
+            .MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load(),
+        }, tasksCount);
     }
 
+    // A new node total (the resource broker queue limit): every pool is a share of it, so the pools follow
+    void SetTotalMemoryLimit(ui64 limit) {
+        with_lock (Lock) {
+            TotalMemoryResource->SetNewLimit(limit, (double)100, TotalMemoryResource->GetOverPercent());
+            for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+                poolMemory->SetBaseLimit(TotalMemoryResource->GetLimit());
+            }
+        }
+    }
+
+    // Called under Lock from the config notification handler; the constructor calls it before anything else
+    // can see the resource manager
     void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
@@ -483,7 +638,12 @@ public:
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
-        SpillingPercent.store(config.GetSpillingPercent());
+        // the spilling thresholds of the node total and of every pool follow the new percent right away,
+        // the cookies of the running transactions with them; the node total is the holder of the percent
+        TotalMemoryResource->SetOverPercent(config.GetSpillingPercent());
+        for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+            poolMemory->SetOverPercent(TotalMemoryResource->GetOverPercent());
+        }
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
@@ -506,15 +666,36 @@ public:
     }
 
     void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
-        if (maxSizeBytes == 0) {
-            PatternCache.reset();
-            return;
-        }
+        std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> tmp;
+        with_lock(Lock) {
+            if (maxSizeBytes == 0) {
+                tmp.swap(PatternCache);
+                return;
+            }
 
-        NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
-        if (!PatternCache || PatternCache->GetConfiguration() != config) {
-            PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+            NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
+            if (!PatternCache) {
+                PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                return;
+            }
+
+            auto currentConfig = PatternCache->GetConfiguration();
+            if (currentConfig == config) {
+                return;
+            }
+
+            if (currentConfig.PatternAccessTimesBeforeTryToCompile == config.PatternAccessTimesBeforeTryToCompile) {
+                auto unguard = Unguard(Lock);
+                PatternCache->UpdateConfiguration(config);
+            } else {
+                tmp = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                tmp.swap(PatternCache);
+            }
         }
+    }
+
+    bool PoolSensorsEnabled() const {
+        return Counters && ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters();
     }
 
     TActorId SelfId;
@@ -536,9 +717,8 @@ public:
     // limits (guarded by Lock)
     std::atomic<i32> ExecutionUnitsResource;
     std::atomic<i32> ExecutionUnitsLimit;
-    std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
-    std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
     std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
     std::atomic<bool> PreferLocalDatacenterExecution = true;
@@ -556,6 +736,9 @@ public:
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
     TActorId ResourceInfoExchanger = TActorId();
 
+    // Pool resources are never erased, not even when their usage drops to zero: the transactions of a pool keep
+    // the spilling cookie attached at their construction (TTxState::PoolMemoryCookie, read lock-free), so the
+    // resource that updates it has to stay the same one for as long as the pool is in use.
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
 
@@ -581,22 +764,37 @@ public:
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId)
-        : Config(config)
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId,
+        TDuration warmupDeadline)
+        : NodeId(nodeId)
+        , Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , WarmupInProgress(warmupDeadline > TDuration::Zero())
+        , WarmupDeadline(warmupDeadline)
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
+    }
+
+    // Is called right after service registration
+    // and before any usual actor can try to get ResourceManager
+    void Registered(TActorSystem* sys, const TActorId& owner) override {
+        TActorBootstrapped::Registered(sys, owner);
+
+        ResourceManager->Registered(Config, sys, SelfId());
+
         with_lock (ResourceManagers.Lock) {
-            ResourceManagers.ByNodeId[nodeId] = ResourceManager;
-            ResourceManagers.Default = ResourceManager;
+            if (ResourceManagers.Default.expired()) { // There can be several managers in tests
+                ResourceManagers.Default = ResourceManager;
+            }
+            ResourceManagers.ByNodeId[NodeId] = ResourceManager;
         }
     }
 
     void Bootstrap() {
-        ResourceManager->Bootstrap(Config, TlsActivationContext->ActorSystem(), SelfId());
-
-        LOG_D("Start KqpResourceManagerActor at " << SelfId() << " with ResourceBroker at " << ResourceBrokerId);
+        YDB_LOG_DEBUG("Start KqpResourceManagerActor at with ResourceBroker",
+            {"selfId", SelfId()},
+            {"resourceBrokerId", ResourceBrokerId});
 
         // Subscribe for tenant changes
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
@@ -619,6 +817,12 @@ public:
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
+        if (WarmupInProgress) {
+            YDB_LOG_INFO("Warmup in progress, resource publishing delayed for up",
+                {"warmupDeadline", WarmupDeadline});
+            Schedule(WarmupDeadline, new TEvPrivate::TEvWarmupDeadline());
+        }
+
         Become(&TKqpResourceManagerActor::WorkState);
 
         AskSelfNodeInfo();
@@ -634,21 +838,22 @@ public:
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.SystemStateInfoSize() != 1)  {
-            LOG_D("Unexpected whiteboard info");
+            YDB_LOG_DEBUG("Unexpected whiteboard info");
             return;
         }
 
         const auto& info = record.GetSystemStateInfo(0);
         if (AppData()->UserPoolId >= info.PoolStatsSize()) {
-            LOG_D("Unexpected whiteboard info: pool size is smaller than user pool id"
-                << ", pool size: " << info.PoolStatsSize()
-                << ", user pool id: " << AppData()->UserPoolId);
+            YDB_LOG_DEBUG("Unexpected whiteboard info: pool size is smaller than user pool id pool user pool",
+                {"size", info.PoolStatsSize()},
+                {"id", AppData()->UserPoolId});
             return;
         }
 
         const auto& pool = info.GetPoolStats(AppData()->UserPoolId);
 
-        LOG_D("Received node white board pool stats: " << pool.usage());
+        YDB_LOG_DEBUG("Received node white board pool",
+            {"stats", pool.usage()});
         ProxyNodeResources.SetCpuUsage(pool.usage());
         ProxyNodeResources.SetThreads(pool.threads());
     }
@@ -666,6 +871,8 @@ private:
             hFunc(TEvTenantPool::TEvTenantPoolStatus, HandleWork);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleWork);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
+            hFunc(TEvKqpWarmupComplete, HandleWarmupComplete);
+            cFunc(TEvPrivate::EvWarmupDeadline, HandleWarmupDeadline);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -688,7 +895,9 @@ private:
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
         SendWhiteboardRequest();
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
-            LOG_I("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            YDB_LOG_INFO("Cannot start publishing usage for kqp_proxy",
+                {"tenants", AppData()->TenantName},
+                {"selfDataCenterId", SelfDataCenterId.value_or("empty")});
             return;
         }
         PublishResourceUsage("kqp_proxy");
@@ -696,16 +905,16 @@ private:
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
         if (!ev->Get()->QueueConfig) {
-            LOG_E(NLocalDb::KqpResourceManagerQueue << " not configured!");
+            YDB_LOG_ERROR("Resource broker queue is not configured",
+                {"queueName", NLocalDb::KqpResourceManagerQueue});
             return;
         }
         auto& queueConfig = *ev->Get()->QueueConfig;
 
         if (queueConfig.GetLimit().GetMemory() > 0) {
-            with_lock (ResourceManager->Lock) {
-                ResourceManager->TotalMemoryResource->SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, ResourceManager->SpillingPercent.load());
-            }
-            LOG_I("Total node memory for scan queries: " << queueConfig.GetLimit().GetMemory() << " bytes");
+            ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
+            YDB_LOG_INFO("Total node memory for scan bytes",
+                {"queries", queueConfig.GetLimit().GetMemory()});
         }
     }
 
@@ -738,7 +947,8 @@ private:
                 if (tenant.empty()) {
                     tenant = slot.GetAssignedTenant();
                 } else {
-                    LOG_E("Multiple tenants are served by the node: " << ev->Get()->Record.ShortDebugString());
+                    YDB_LOG_ERROR("Multiple tenants are served by the",
+                        {"node", ev->Get()->Record.ShortDebugString()});
                 }
             }
         }
@@ -750,13 +960,15 @@ private:
             WbState.DomainNotFound = true;
         }
 
-        LOG_I("Received tenant pool status, serving tenant: " << tenant << ", board: " << WbState.BoardPath);
+        YDB_LOG_INFO("Received tenant pool status, serving",
+            {"tenant", tenant},
+            {"board", WbState.BoardPath});
 
         PublishResourceUsage("tenant updated");
     }
 
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed for config changes");
+        YDB_LOG_DEBUG("Subscribed for config changes");
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -779,7 +991,8 @@ private:
         FORCE_VALUE(MinChannelBufferSize);
 #undef FORCE_VALUE
 
-        LOG_I("Updated table service config: " << config.DebugString());
+        YDB_LOG_INFO("Updated table service",
+            {"config", config.DebugString()});
 
         with_lock (ResourceManager->Lock) {
             i32 prev = ResourceManager->ExecutionUnitsLimit.load();
@@ -793,15 +1006,16 @@ private:
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher");
+                YDB_LOG_CRIT("Failed to deliver subscription request to config dispatcher");
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                YDB_LOG_ERROR("Failed to deliver config notification response");
                 break;
 
             default:
-                LOG_C("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                YDB_LOG_CRIT("Undelivered event with unexpected source",
+                    {"type", ev->Get()->SourceType});
                 break;
         }
     }
@@ -855,6 +1069,38 @@ private:
                     }
                  }
             } // PRE()
+
+            struct TPoolRow {
+                TString Database;
+                TString Pool;
+                ui64 Limit;
+                ui64 Used;
+                ui64 DeniedRequests;
+            };
+
+            TVector<TPoolRow> pools;
+            with_lock (ResourceManager->Lock) {
+                pools.reserve(ResourceManager->MemoryNamedPools.size());
+                for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                    pools.push_back({key.first, key.second, pool->GetLimit(), pool->GetUsed(), pool->GetDeniedRequests()});
+                }
+            }
+
+            if (!pools.empty()) {
+                str << "<h3>Memory Pools</h3>";
+                str << "<table border='1' cellpadding='4'>";
+                str << "<tr><th>Database</th><th>Pool</th><th>Limit</th><th>Allocated</th><th>DeniedRequests</th></tr>";
+                for (const auto& row : pools) {
+                    str << "<tr>"
+                        << "<td>" << EncodeHtmlPcdata(row.Database) << "</td>"
+                        << "<td>" << EncodeHtmlPcdata(row.Pool) << "</td>"
+                        << "<td>" << row.Limit << "</td>"
+                        << "<td>" << row.Used << "</td>"
+                        << "<td>" << row.DeniedRequests << "</td>"
+                        << "</tr>";
+                }
+                str << "</table>";
+            }
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
@@ -879,6 +1125,22 @@ private:
         return TStringBuilder() << "kqprm+" << database;
     }
 
+    void HandleWarmupComplete(TEvKqpWarmupComplete::TPtr&) {
+        if (WarmupInProgress) {
+            WarmupInProgress = false;
+            YDB_LOG_INFO("Warmup complete, starting resource publishing");
+            PublishResourceUsage("warmup_complete");
+        }
+    }
+
+    void HandleWarmupDeadline() {
+        if (WarmupInProgress) {
+            WarmupInProgress = false;
+            YDB_LOG_WARN("Warmup deadline exceeded, forcing resource publishing");
+            PublishResourceUsage("warmup_deadline");
+        }
+    }
+
     void PublishResourceUsage(TStringBuf reason) {
         const TDuration publishInterval = TDuration::Seconds(Config.GetPublishStatisticsIntervalSec());
         if (PublishResourcesScheduledAt) {
@@ -890,7 +1152,9 @@ private:
             PublishResourcesScheduledAt = *WbState.LastPublishTime + publishInterval;
 
             Schedule(*PublishResourcesScheduledAt - now, new TEvPrivate::TEvPublishResources);
-            LOG_D("Schedule publish at " << *PublishResourcesScheduledAt << ", after " << (*PublishResourcesScheduledAt - now));
+            YDB_LOG_DEBUG("Scheduled resource usage publish",
+                {"publishAt", *PublishResourcesScheduledAt},
+                {"delay", (*PublishResourcesScheduledAt - now)});
             return;
         }
 
@@ -910,23 +1174,37 @@ private:
                 }
             }
         } else {
-            LOG_D("Don't set KqpProxySharedResources");
+            YDB_LOG_DEBUG("Don't set KqpProxySharedResources");
         }
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
-        with_lock (ResourceManager->Lock) {
-            payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
-            payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
-            payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
 
-            payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+        if (WarmupInProgress) {
+            // Publish with zero compute resources during warmup to prevent other nodes
+            // from assigning compute tasks, while keeping discovery and gossip working
+            payload.SetAvailableComputeActors(0);
+            payload.SetTotalMemory(0);
+            payload.SetUsedMemory(0);
+            payload.SetExecutionUnits(0);
             auto* pool = payload.MutableMemory()->Add();
-            pool->SetPool(EKqpMemoryPool::ScanQuery);
-            pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            pool->SetPool(1); // legacy ScanQuery pool id
+            pool->SetAvailable(0);
+        } else {
+            with_lock (ResourceManager->Lock) {
+                payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy
+                payload.SetTotalMemory(ResourceManager->TotalMemoryResource->GetLimit()); // legacy
+                payload.SetUsedMemory(ResourceManager->TotalMemoryResource->GetLimit() - ResourceManager->TotalMemoryResource->Available()); // legacy
+
+                payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
+                auto* pool = payload.MutableMemory()->Add();
+                pool->SetPool(1); // legacy ScanQuery pool id
+                pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
+            }
         }
 
-        LOG_I("Send to publish resource usage for "
-            << "reason: " << reason
-            << ", payload: " << payload.ShortDebugString());
+        YDB_LOG_INFO("Sending resource usage to publish",
+            {"reason", reason},
+            {"warmupInProgress", WarmupInProgress},
+            {"payload", payload.ShortDebugString()});
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {
             Send(ResourceManager->ResourceInfoExchanger,
@@ -935,6 +1213,7 @@ private:
     }
 
 private:
+    const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 
     const TActorId ResourceBrokerId;
@@ -957,6 +1236,9 @@ private:
 
     std::optional<TInstant> PublishResourcesScheduledAt;
     std::optional<TString> SelfDataCenterId;
+
+    bool WarmupInProgress = false;
+    TDuration WarmupDeadline;
 };
 
 } // namespace NRm
@@ -964,9 +1246,9 @@ private:
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId)
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId, TDuration warmupDeadline)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId);
+    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
 }
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
@@ -984,7 +1266,7 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
 
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    auto rm = NRm::ResourceManagers.Default.lock();
+    std::shared_ptr<NRm::TKqpResourceManager> rm = NRm::ResourceManagers.Default.lock();
     if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
         return rm;
     }

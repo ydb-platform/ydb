@@ -16,35 +16,35 @@ constexpr ui32 IterationsCount = 100000000;
 #endif
 
 Y_UNIT_TEST_SUITE(TErrorTests) {
-    Y_UNIT_TEST(TestPgTry) {
-        Cout << "begin...\n";
-        TSimpleTimer timer;
-        volatile ui32 x = 0;
-        for (ui32 i = 0; i < IterationsCount; ++i) {
-            PG_TRY();
-            {
-                x += 1;
-            }
-            PG_CATCH();
-            {
-            }
-            PG_END_TRY();
+Y_UNIT_TEST(TestPgTry) {
+    Cout << "begin...\n";
+    TSimpleTimer timer;
+    volatile ui32 x = 0;
+    for (ui32 i = 0; i < IterationsCount; ++i) {
+        PG_TRY();
+        {
+            x += 1;
         }
-
-        Cout << "done, elapsed: " << timer.Get() << "\n";
+        PG_CATCH();
+        {
+        }
+        PG_END_TRY();
     }
 
-    Y_UNIT_TEST(TestCppTry) {
-        Cout << "begin...\n";
-        TSimpleTimer timer;
-        volatile ui32 x = 0;
-        for (ui32 i = 0; i < IterationsCount; ++i) {
-            try {
-                x += 1;
-            } catch (...) {
-            }
-        }
-
-        Cout << "done, elapsed: " << timer.Get() << "\n";
-    }
+    Cout << "done, elapsed: " << timer.Get() << "\n";
 }
+
+Y_UNIT_TEST(TestCppTry) {
+    Cout << "begin...\n";
+    TSimpleTimer timer;
+    volatile ui32 x = 0;
+    for (ui32 i = 0; i < IterationsCount; ++i) {
+        try {
+            x += 1;
+        } catch (...) {
+        }
+    }
+
+    Cout << "done, elapsed: " << timer.Get() << "\n";
+}
+} // Y_UNIT_TEST_SUITE(TErrorTests)

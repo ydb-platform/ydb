@@ -272,6 +272,12 @@ namespace orc {
     return *this;
   }
 
+  SearchArgumentBuilder& SearchArgumentBuilderImpl::maybe() {
+    TreeNode& parent = currTree_.front();
+    parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
+    return *this;
+  }
+
   /**
    * Recursively explore the tree to find the leaves that are still reachable
    * after optimizations.
@@ -309,7 +315,6 @@ namespace orc {
     // Perform BFS
     while (!nodes.empty()) {
       TreeNode& node = nodes.front();
-      nodes.pop_front();
 
       if (node->getOperator() == ExpressionTree::Operator::LEAF) {
         leaves.insert(node);
@@ -318,6 +323,7 @@ namespace orc {
           nodes.push_back(child);
         }
       }
+      nodes.pop_front();
     }
 
     // Update the leaf in place

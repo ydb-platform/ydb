@@ -1,7 +1,30 @@
+import sys
+
+
+# implementation of six.python_2_unicode_compatible method from:
+# https://github.com/benjaminp/six/blob/c8e394065cd541a16c040515dc0afb85cf22a7c3/six.py#L963
+def python_2_unicode_compatible(klass):
+    """
+    A class decorator that defines __unicode__ and __str__ methods under Python 2.
+    Under Python 3 it does nothing.
+
+    To support Python 2 and 3 with a single code base, define a __str__ method
+    returning text and apply this decorator to the class.
+    """
+    if sys.version_info[0] == 2:
+        if '__str__' not in klass.__dict__:
+            raise ValueError(
+                "@python_2_unicode_compatible cannot be applied "
+                "to %s because it doesn't define __str__()." % klass.__name__
+            )
+        klass.__unicode__ = klass.__str__
+        klass.__str__ = lambda self: self.__unicode__().encode('utf-8')
+    return klass
+
+
 def main():
     import importlib.abc
     import importlib.machinery
-    import sys
 
     class Finder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path, target=None):
@@ -16,11 +39,8 @@ def main():
     try:
         import yandex.type_info.type_base as ti_base
         import yandex.type_info.typing as ti_typing
-        import six
     except ImportError as e:
-        raise ImportError(
-            str(e) + ". Make sure that library/python/type_info is in your PEERDIR list"
-        )
+        raise ImportError(str(e) + ". Make sure that library/python/type_info is in your PEERDIR list")
 
     from yql import typing
 
@@ -39,7 +59,7 @@ def main():
 
     Stream = ti_typing._SingleArgumentGeneric("Stream")
 
-    @six.python_2_unicode_compatible
+    @python_2_unicode_compatible
     class GenericResourceAlias(ti_base.Type):
         REQUIRED_ATTRS = ti_base.Type.REQUIRED_ATTRS + ["tag"]
 
@@ -80,24 +100,28 @@ def main():
             arg_type = param.stop
             ti_base.validate_type(arg_type)
             if param.step is not None:
-               for x in param.step:
-                   if x != AutoMap:
-                       raise ValueError("Expected AutoMap as parameter flag but got: {}".format(ti_base._with_type(x)))
-                   flags.add(x)
+                for x in param.step:
+                    if x != AutoMap:
+                        raise ValueError("Expected AutoMap as parameter flag but got: {}".format(ti_base._with_type(x)))
+                    flags.add(x)
         else:
             ti_base.validate_type(arg_type)
         return (name, arg_type, flags)
 
-    @six.python_2_unicode_compatible
+    @python_2_unicode_compatible
     class GenericCallableAlias(ti_base.Type):
         def __str__(self):
-            return ("Callable<(" +
-                        ",".join(_format_arg(x) for x in self.args[:len(self.args)-self.optional_args]) +
-                        ("," if len(self.args) > self.optional_args and self.optional_args else "") +
-                        ("[" if self.optional_args else "") +
-                        ",".join(_format_arg(x) for x in self.args[len(self.args)-self.optional_args:]) +
-                        ("]" if self.optional_args else "") +
-                        ")->" + str(getattr(self, "return")) + ">")
+            return (
+                "Callable<("
+                + ",".join(_format_arg(x) for x in self.args[: len(self.args) - self.optional_args])
+                + ("," if len(self.args) > self.optional_args and self.optional_args else "")
+                + ("[" if self.optional_args else "")
+                + ",".join(_format_arg(x) for x in self.args[len(self.args) - self.optional_args :])
+                + ("]" if self.optional_args else "")
+                + ")->"
+                + str(getattr(self, "return"))
+                + ">"
+            )
 
         def to_yson_type(self):
             yson_repr = {
@@ -108,18 +132,28 @@ def main():
             }
             return yson_repr
 
-
     class GenericCallable(ti_base.Generic):
         def __getitem__(self, params):
-            if not isinstance(params, tuple) or len(params) < 2 or not isinstance(params[0], int) or not ti_typing.is_valid_type(params[1]):
-                raise ValueError("Expected at least two arguments (integer and type of return value) but got: {}".format(ti_base._with_type(params)))
+            if (
+                not isinstance(params, tuple)
+                or len(params) < 2
+                or not isinstance(params[0], int)
+                or not ti_typing.is_valid_type(params[1])
+            ):
+                raise ValueError(
+                    "Expected at least two arguments (integer and type of return value) but got: {}".format(
+                        ti_base._with_type(params)
+                    )
+                )
             args = []
             for param in params[2:]:
                 name, arg_type, flags = _extract_arg_info(param)
                 args.append((name, arg_type, flags))
 
             if params[0] < 0 or params[0] > len(args):
-                raise ValueError("Optional argument count - " + str(params[0]) + " out of range [0.." + str(len(args)) + "]")
+                raise ValueError(
+                    "Optional argument count - " + str(params[0]) + " out of range [0.." + str(len(args)) + "]"
+                )
 
             attrs = {
                 "optional_args": params[0],

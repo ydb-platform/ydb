@@ -11,29 +11,29 @@
 
 #include <algorithm>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 
 namespace {
 
-class TNextValueStringWrapper : public TMutableComputationNode<TNextValueStringWrapper> {
+class TNextValueStringWrapper: public TMutableComputationNode<TNextValueStringWrapper> {
     using TSelf = TNextValueStringWrapper;
     using TBase = TMutableComputationNode<TSelf>;
-    typedef TBase TBaseComputation;
+    using TBaseComputation = TBase;
+
 public:
     TNextValueStringWrapper(TComputationMutables& mutables, IComputationNode* source, EDataSlot slot)
         : TBaseComputation(mutables)
-        , Source(source)
-        , Slot(slot)
+        , Source_(source)
+        , Slot_(slot)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        TUnboxedValue input = Source->GetValue(ctx);
+        TUnboxedValue input = Source_->GetValue(ctx);
         const auto& inputStr = input.AsStringRef();
-        auto output = (Slot == EDataSlot::Utf8) ? NYql::NextValidUtf8(inputStr) : NYql::NextLexicographicString(inputStr);
+        auto output = (Slot_ == EDataSlot::Utf8) ? NYql::NextValidUtf8(inputStr) : NYql::NextLexicographicString(inputStr);
         if (!output) {
             return {};
         }
@@ -42,11 +42,11 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Source);
+        this->DependsOn(Source_);
     }
 
-    IComputationNode* const Source;
-    const EDataSlot Slot;
+    IComputationNode* const Source_;
+    const EDataSlot Slot_;
 };
 
 } // namespace
@@ -74,5 +74,4 @@ IComputationNode* WrapNextValue(TCallable& callable, const TComputationNodeFacto
     return new TNextValueStringWrapper(ctx.Mutables, source, from);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

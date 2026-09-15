@@ -1,7 +1,6 @@
 #pragma once
 
 #include "public.h"
-#include "bundle_controller_settings.h"
 
 #include <yt/yt/client/api/client_common.h>
 

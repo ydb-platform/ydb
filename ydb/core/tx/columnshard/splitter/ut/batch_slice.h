@@ -19,6 +19,7 @@ public:
             MergeSlice(std::move(objects[i]));
         }
     }
+
     void MergeSlice(TBatchSerializedSlice&& slice) {
         Batch = NArrow::CombineBatches({ Batch, slice.Batch });
         TBase::MergeSlice(std::move(slice));
@@ -28,4 +29,4 @@ public:
         const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
         const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo);
 };
-}
+}   // namespace NKikimr::NOlap

@@ -1,121 +1,148 @@
-{%- macro SomeSet(some_set, module, reldir = "") -%}
+{%- macro IncludeGlobs(some_set, dir) -%}
+.include({%- for glob in some_set.globs -%}"{{ glob|replace(export_root + "/" + curdir, "$projectBuildDir")|replace(export_root, "$baseBuildDir") }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
+{%- endmacro -%}
+
+{%- macro PrintGlobs(module, some_set, dir) -%}
+{%-     if module == 'resources' -%}
+{%-         if (some_set.globs|length) -%}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
+{%-         endif -%}
+{%-     else -%}
+{%-         if (some_set.globs|length) -%}
+{{ IncludeGlobs(some_set, dir) }}
+{%-         else -%}
+.include("**/*")
+{%-         endif -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro SomeSet(some_set, module, reldir, current_target) -%}
 {%-     set dir = some_set.dir -%}
 {%-     if (reldir != "") and (dir[0] != "/") -%}
 {#-         Relative path in tests #}
 {%-         set dir = reldir + dir -%}
 {%-     endif -%}
-{%-     if some_set.globs|join('')|replace('*', '') != some_set.globs|join('') %}
-        {{ module }}.srcDir({{ PatchRoots(dir) }})
-{%-     else -%}
-{#- TODO Use single source file from each glob
-{%-         for glob in some_set.globs %}
-        {{ module }}.include({{ PatchRoots(dir, false, false, "/" + glob) }})
-{%-         endfor -%}
-#}
-        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%-     if use_full_source_sets_path and dir|replace(export_root, "") == dir and dir|replace(arcadia_root, "") == dir -%}
+{%-         set dir = arcadia_root + "/" + curdir + "/" + dir -%}
 {%-     endif -%}
+{%-     if dir|replace(export_root, "") != dir -%}
+{#-         Generated (re)sources -#}
+{%-         set runs_out = current_target.runs|selectattr('out')|map(attribute='out')|sum -%}
+{%-         set runs_out_has_dir = runs_out|select('in', dir)|length -%}
+{%-         set dir_has_runs_out = runs_out|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         set runs_outdir = current_target.runs|selectattr('out_dir')|map(attribute='out_dir')|sum -%}
+{%-         set runs_outdir_has_dir = runs_outdir|select('in', dir)|length -%}
+{%-         set dir_has_runs_outdir = runs_outdir|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         set cruns_outputs = current_target.custom_runs|selectattr('outputs')|map(attribute='outputs')|sum -%}
+{%-         set cruns_outputs_has_dir = cruns_outputs|select('in', dir)|length -%}
+{%-         set dir_has_cruns_outputs = cruns_outputs|join('|') != runs_out|join('|')|replace(dir + '/', '') -%}
+{%-         if (runs_out_has_dir) or (dir_has_runs_out) or (runs_outdir_has_dir) or (dir_has_runs_outdir) or (cruns_outputs_has_dir) or (dir_has_cruns_outputs) %}
+        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
+{%-         else %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
+{%-         endif -%}
+{%-     elif (varprefix == MAIN_VARPREFIX) and (module == "java") and (some_set.dir == '.') and not(some_set.globs|length) -%}
+{#-         Empty JAVA_SRCS() create dir == '.' and globs == [], and without this fix all files in module included #}
+        // Preventing automatic search for main
+        java.setSrcDirs(emptyList<Any>())
+{%-         if with_kotlin %}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-         endif %}
+{%-     else %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
+{%-     endif -%}
+{%-     if auto_resource_sets and "resources" in dir and module != "resources" -%}
+{{ SomeSet(some_set, "resources", reldir, current_target) }}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro SomeSets(some_sets, module, reldir, current_target) -%}
+{%-     if some_sets|length -%}
+{%-         for some_set in some_sets -%}
+{{ SomeSet(some_set, module, reldir, current_target) }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro PreventAutoSearch(in_comment, kotlin = false) %}
+        // Preventing automatic search for {{ in_comment }}
+        java.setSrcDirs(emptyList<Any>())
+        resources.setSrcDirs(emptyList<Any>())
+{%      if kotlin and with_kotlin -%}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro TargetSets(current_target, reldir = "") -%}
+{{ SomeSets(current_target.source_sets, "java", reldir, current_target) }}
+{#- glue -#}
+{{ SomeSets(current_target.resource_sets, "resources", reldir, current_target) }}
 {%- endmacro %}
 
 sourceSets {
-{%- set target_jar_source_set = target.jar_source_set|unique -%}
-{%- set target_jar_resource_set = target.jar_resource_set|unique -%}
-{%- if target_jar_source_set|length or target_jar_resource_set|length or target.source_sets|length or target.resource_sets|length or proto_template %}
+{%- if target.source_sets|length or target.resource_sets|length -%}
+{%-     set varprefix = MAIN_VARPREFIX %}
     main {
-{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
-{%-     if target_jar_source_set|length and not(target.source_sets|length) -%}
-{%-         for source_set in target_jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set srcdir = srcdir_glob[0] %}
-        java.srcDir({{ PatchRoots(srcdir) }})
-{%-         endfor -%}
-{%-     endif -%}
-
-{%-     if target_jar_resource_set|length and not(target.resource_sets|length) -%}
-{%-         for resource_set in target_jar_resource_set -%}
-{%-             set resdir_glob = split(resource_set, ':') -%}
-{%-             set resdir = resdir_glob[0] %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-         endfor -%}
-{%-     endif -%}
-{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
-
-{%-     if target.source_sets|length -%}
-{%-         for source_set in target.source_sets -%}
-{{ SomeSet(source_set, "java") }}
-{%-         endfor -%}
-{%-     endif -%}
-
-{%-     if target.resource_sets|length -%}
-{%-         for resource_set in target.resource_sets -%}
-{{ SomeSet(resource_set, "resources") }}
-{%-         endfor -%}
-{%-     endif -%}
-
-{%-     if proto_template and symlinks_to_generated %}
-        java.srcDir("generated/source/proto/main/java")
-{%-         if target.proto_grpc %}
-        java.srcDir("generated/source/proto/main/grpc")
-{%-         endif -%}
-{%-     elif proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java")
-{%-         if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc")
-{%-         endif -%}
-{%-     endif %}
+{#- glue -#}
+{{ PreventAutoSearch("mains in src/main/java") }}
+{#- glue -#}
+{{ TargetSets(target) }}
+    }
+{%  elif not(target is defined) %}
+    main {
+{#- glue -#}
+{{ PreventAutoSearch("mains in src/main/java", true) }}
     }
 {%  endif -%}
 
-{%- if not proto_template and extra_targets|length %}
+{%- if not proto_template -%}
+{%-     if named_tests -%}
+{%-         for extra_target in ordered_extra_targets -%}
+{%-             if extra_target.source_sets|length or extra_target.resource_sets|length -%}
+{%-                 set testname = SourceSetName(extra_target) %}
+    {% if testname == NS_TEST %}{{ testname }}{% else %}named("{{ testname }}"){% endif %} {
+{%-                 set reldir = "" -%}
+{%-                 if extra_target.test_reldir -%}
+{%-                     set reldir = extra_target.test_reldir + "/" -%}
+{%-                 endif -%}
+{#-             TestN target codegen -#}
+{%-                 set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{%-                 if testname == NS_TEST -%}
+{{ PreventAutoSearch("tests in src/test/java") }}
+{%-                 endif -%}
+{{ TargetSets(extra_target, reldir) }}
+    }
+{%              endif -%}
+{%-         endfor -%}
+{%-         if not(test_extra_targets|length) %}
     test {
-{%-     for extra_target in extra_targets -%}
-{%-         set reldir = "" -%}
-{%-         if extra_target.test_reldir -%}
-{%-             set reldir = extra_target.test_reldir + "/" -%}
-{%-         endif -%}
-{#- DEPRECATED vvvvvvvvvvvvvvvv -#}
-{%-         if extra_target.jar_source_set|length and not(extra_target.source_sets|length) -%}
-{%-             for source_set in extra_target.jar_source_set|unique -%}
-{%-                 set srcdir_glob = split(source_set, ':', 2) -%}
-{%-                 if srcdir_glob[0][0] == "/" -%}
-{#-                     Absolute path in glob -#}
-{%-                     set srcdir = srcdir_glob[0] -%}
-{%-                 else -%}
-{%-                     set srcdir = reldir + srcdir_glob[0] -%}
-{%-                 endif %}
-        java.srcDir({{ PatchRoots(srcdir) }})
-{%-             endfor -%}
-{%-         endif -%}
-{%-         if extra_target.jar_resource_set|length and not(extra_target.resource_sets|length) -%}
-{%-             for resource_set in extra_target.jar_resource_set|unique -%}
-{%-                 set resdir_glob = split(resource_set, ':', 2) -%}
-{%-                 if resdir_glob[0][0] == "/" -%}
-{#-                     Absolute path in glob -#}
-{%-                     set resdir = resdir_glob[0] -%}
-{%-                 else -%}
-{%-                     set resdir = reldir + resdir_glob[0] -%}
-{%-                 endif %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-             endfor -%}
-{%-         endif -%}
-{#- DEPRECATED ^^^^^^^^^^^^^^^^ -#}
-{%-         for source_set in extra_target.source_sets -%}
-{{ SomeSet(source_set, "java", reldir) }}
-{%-         endfor -%}
-{%-         for resource_set in extra_target.resource_sets -%}
-{{ SomeSet(resource_set, "resources", reldir) }}
-{%-         endfor -%}
-{%-     endfor %}
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java", true) }}
     }
-{%  endif -%}
+{%          endif -%}
+{%-     else -%}
+{%-         if extra_targets|length %}
+    test {
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java") }}
+{%-         for extra_target in extra_targets -%}
+{%-             set reldir = "" -%}
+{%-             if extra_target.test_reldir -%}
+{%-                 set reldir = extra_target.test_reldir + "/" -%}
+{%-             endif -%}
+{#-         TestN target codegen -#}
+{%-             set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
+{{ TargetSets(extra_target, reldir) }}
+{%-         endfor %}
+    }
+{%          else %}
+    test {
+{#- glue -#}
+{{ PreventAutoSearch("tests in src/test/java", true) }}
+    }
+{%          endif -%}
+{%-     endif -%}
+{%- endif -%}
 }
-
-tasks.withType<Jar>() {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-tasks.withType<Copy>() {
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
-tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)

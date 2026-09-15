@@ -1,65 +1,98 @@
 #include "local_partition_actor.h"
-#include "logging.h"
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
 
-TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId)
+using namespace NSchemeCache;
+
+TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(
+        const std::string& database,
+        const std::string& topicPath,
+        ui32 partitionId)
     : Database(database)
-    , TopicPath(std::move(topicPath))
+    , TopicPath(topicPath)
     , PartitionId(partitionId)
 {
 }
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
     LogPrefix = MakeLogPrefix();
-    DoDescribe();
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
+    DoDescribe(TopicPath);
 }
 
-void TBaseLocalTopicPartitionActor::DoDescribe() {
-    auto path = TStringBuilder() << "/" << Database << TopicPath;
-    LOG_D("Describe topic '" << path << "'");
+TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
+    if (path.StartsWith(Database + "/")) {
+        return path;
+    }
+
+    if (path.StartsWith("/")) {
+        return TStringBuilder() << Database << path;
+    }
+
+    return TStringBuilder() << Database << "/" << path;
+}
+
+void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
+    auto path = MakeAbsolutePath(topicPath);
+    YDB_LOG_DEBUG("Describe topic",
+        {"path", path});
+
     auto request = MakeHolder<TNavigate>();
-    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
+    request->DatabaseName = Database;
+
+    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpPath));
     Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);
 }
 
-void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    static const TString errorMarket = "LocalYdbProxy";
-
-    LOG_T("Handle " << ev->Get()->ToString());
+void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto& result = ev->Get()->Request;
+    static const TString errorMarker = "LocalYdbProxy";
 
-    if (!CheckNotEmpty(errorMarket, result, LeaveOnError())) {
+    if (!CheckNotEmpty(errorMarker, result, LeaveOnError())) {
         return;
     }
 
-    if (!CheckEntriesCount(errorMarket, result, 1, LeaveOnError())) {
+    if (!CheckEntriesCount(errorMarker, result, 1, LeaveOnError())) {
         return;
     }
 
     const auto& entry = result->ResultSet.at(0);
+    if (entry.Status == TNavigate::EStatus::PathErrorUnknown) {
+        return OnFatalError(TStringBuilder() << "Discovery for all topics failed."
+            << " The last error was: no path '" << Database << TopicPath << "'");
+    }
 
-    if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
+    if (!CheckEntrySucceeded(errorMarker, entry, DoRetryDescribe())) {
         return;
     }
 
-    if (!CheckEntrySucceeded(errorMarket, entry, DoRetryDescribe())) {
+    if (entry.Kind == TNavigate::EKind::KindCdcStream) {
+        return DoDescribe(TStringBuilder() << TopicPath << "/streamImpl");
+    }
+
+    if (!CheckEntryKind(errorMarker, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
         return;
     }
 
-    auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
+    const auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
     if (!node) {
-        return OnFatalError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
+        return OnError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
     }
+
     PartitionTabletId = node->TabletId;
     DoCreatePipe();
 }
 
 void TBaseLocalTopicPartitionActor::HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev) {
     if (static_cast<ui64>(EWakeupType::Describe) == ev->Get()->Tag) {
-        DoDescribe();
+        DoDescribe(TopicPath);
     }
 }
 
@@ -80,8 +113,10 @@ TSchemeCacheHelpers::TCheckFailFunc TBaseLocalTopicPartitionActor::LeaveOnError(
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateDescribe"});
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        hFunc(TEvNavigateResult, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnDescribe);
 
         sFunc(TEvents::TEvPoison, PassAway);
@@ -91,7 +126,8 @@ STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
 }
 
 void TBaseLocalTopicPartitionActor::DoCreatePipe() {
-    LOG_T("Create pipe to " << PartitionTabletId);
+    YDB_LOG_TRACE("Create pipe",
+        {"partitionTabletId", PartitionTabletId});
 
     Attempt = 0;
     CreatePipe();
@@ -105,7 +141,8 @@ void TBaseLocalTopicPartitionActor::CreatePipe() {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
 
     auto& msg = *ev->Get();
     if (msg.Status != NKikimrProto::OK) {
@@ -115,17 +152,20 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TP
         return CreatePipe();
     }
 
-    LOG_T("Pipe has been connected");
+    YDB_LOG_TRACE("Pipe has been connected");
 
     OnDescribeFinished();
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
     OnError("Pipe destroyed");
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateCreatePipe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateCreatePipe"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

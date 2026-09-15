@@ -1,0 +1,14 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:28:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:30:31: Error: At function: Apply
+        	    $format($dt_utc) as utc0, $format_c($dt_utc) as utcZ,
+	                              ^
+            <tmp_path>/program.sql:<main>:24:23: Error: At function: NamedApply, Callable is produced by Udf: DateTime2.Format
+            	$format_c = DateTime::Format("%Y-%m-%d %H:%M:%S%z", True as WriteOffsetWithColon);
+	                      ^
+                <tmp_path>/program.sql:<main>:24:23: Error: Unknown argument name: WriteOffsetWithColon
+                	$format_c = DateTime::Format("%Y-%m-%d %H:%M:%S%z", True as WriteOffsetWithColon);
+	                      ^

@@ -44,28 +44,6 @@ public:
     }
 };
 
-class TProcessOrdered {
-private:
-    YDB_READONLY(ui64, ProcessId, 0);
-    YDB_READONLY(ui64, CPUTime, 0);
-
-public:
-    TProcessOrdered(const ui64 processId, const ui64 cpuTime)
-        : ProcessId(processId)
-        , CPUTime(cpuTime) {
-    }
-
-    bool operator<(const TProcessOrdered& item) const {
-        if (CPUTime < item.CPUTime) {
-            return true;
-        }
-        if (item.CPUTime < CPUTime) {
-            return false;
-        }
-        return ProcessId < item.ProcessId;
-    }
-};
-
 class TProcess: public TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TProcess> {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
@@ -76,7 +54,6 @@ private:
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
-    ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
 
 public:
@@ -99,10 +76,6 @@ public:
         WaitingTasksCount->Sub(Tasks.size());
     }
 
-    bool HasTasks() const {
-        return Tasks.size();
-    }
-
     ui32 GetTasksCount() const {
         return Tasks.size();
     }
@@ -112,7 +85,8 @@ public:
         CPUUsage->AddPredicted(result.GetPredictedDuration());
         WaitingTasksCount->Dec();
         InProgressTasksCount.Inc();
-        return std::move(result).BuildTask(signals->GetTaskSignals(result.GetTask()->GetTaskClassIdentifier()));
+        const auto taskClass = result.GetTask()->GetTaskClassIdentifier();
+        return std::move(result).BuildTask(signals->GetTaskSignals(taskClass));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
@@ -121,18 +95,8 @@ public:
         InProgressTasksCount.Dec();
     }
 
-    [[nodiscard]] bool DecRegistration() {
-        AFL_VERIFY(LinksCount);
-        --LinksCount;
-        return LinksCount == 0;
-    }
-
     double GetWeight() const {
         return 1.0;
-    }
-
-    void IncRegistration() {
-        ++LinksCount;
     }
 
     TProcess(
@@ -142,11 +106,10 @@ public:
         , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
-        IncRegistration();
     }
 
-    void RegisterTask(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category) {
-        TWorkerTaskPrepare wTask(task, AverageTaskDuration.GetValue(), category, Scope, ProcessId);
+    void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {
+        TWorkerTaskPrepare wTask(std::move(task), AverageTaskDuration.GetValue(), category, Scope, ProcessId);
         Tasks.push(std::move(wTask));
         WaitingTasksCount->Inc();
     }

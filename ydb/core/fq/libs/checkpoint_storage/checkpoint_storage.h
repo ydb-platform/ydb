@@ -4,6 +4,7 @@
 #include <ydb/core/fq/libs/checkpoint_storage/proto/graph_description.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -20,7 +21,7 @@ public:
     using TGetTotalCheckpointsStateSizeResult = std::pair<ui64, NYql::TIssues>;
     using TCreateCheckpointResult = std::pair<TString, NYql::TIssues>; // graphDescId for subsequent usage.
 
-    virtual NThreading::TFuture<NYql::TIssues> Init() = 0;
+    virtual NThreading::TFuture<NYql::TIssues> Init(const NACLib::TDiffACL& acl) = 0;
 
     virtual NThreading::TFuture<NYql::TIssues> RegisterGraphCoordinator(
         const TCoordinatorId& coordinator) = 0;

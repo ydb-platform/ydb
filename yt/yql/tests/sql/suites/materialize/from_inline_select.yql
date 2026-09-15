@@ -1,0 +1,4 @@
+use plato;
+
+MATERIALIZE (SELECT key, value FROM Input WHERE key > "050") INTO $result;
+SELECT * FROM $result ORDER BY key;

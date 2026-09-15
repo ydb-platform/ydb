@@ -79,7 +79,7 @@ TError::TErrorOr(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... arg
     : TErrorOr(code, NYT::NDetail::FormatErrorMessage(format.Get(), std::forward<TArgs>(args)...), DisableFormat)
 { }
 
-template <CInvocable<bool(const TError&)> TFilter>
+template <NMpl::CInvocable<bool(const TError&)> TFilter>
 std::optional<TError> TError::FindMatching(const TFilter& filter) const
 {
     if (!Impl_) {
@@ -99,18 +99,19 @@ std::optional<TError> TError::FindMatching(const TFilter& filter) const
     return {};
 }
 
-template <CInvocable<bool(TErrorCode)> TFilter>
+template <NMpl::CInvocable<bool(TErrorCode)> TFilter>
 std::optional<TError> TError::FindMatching(const TFilter& filter) const
 {
     return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
 }
 
+//! NB: wrapping an OK error yields a bare wrapper, since #AddInnerError drops OK operands.
 #define IMPLEMENT_COPY_WRAP(...) \
-    return TError(__VA_ARGS__) << *this; \
+    return TError(__VA_ARGS__).With(*this); \
     static_assert(true)
 
 #define IMPLEMENT_MOVE_WRAP(...) \
-    return TError(__VA_ARGS__) << std::move(*this); \
+    return TError(__VA_ARGS__).With(std::move(*this)); \
     static_assert(true)
 
 template <class U>
@@ -154,35 +155,113 @@ TError TError::Wrap(TErrorCode code, TFormatString<TArgs...> format, TArgs&&... 
 #undef IMPLEMENT_COPY_WRAP
 #undef IMPLEMENT_MOVE_WRAP
 
-template <CErrorNestable TValue>
-TError&& TError::operator << (TValue&& rhs) &&
+template <CConvertibleToAttributeValue TValue>
+TError TError::With(const TErrorAttribute::TKey& key, const TValue& value) const &
 {
-    return std::move(*this <<= std::forward<TValue>(rhs));
+    auto result = TError(*this);
+    result.AddAttribute(TErrorAttribute(key, value));
+    return result;
 }
 
-template <CErrorNestable TValue>
-TError TError::operator << (TValue&& rhs) const &
+template <CConvertibleToAttributeValue TValue>
+TError&& TError::With(const TErrorAttribute::TKey& key, const TValue& value) &&
 {
-    return TError(*this) << std::forward<TValue>(rhs);
+    AddAttribute(TErrorAttribute(key, value));
+    return std::move(*this);
 }
 
-template <CErrorNestable TValue>
-TError&& TError::operator << (const std::optional<TValue>& rhs) &&
+template <CErrorAttributeRange TRange>
+TError TError::With(TRange&& attributes) const &
 {
-    if (rhs) {
-        return std::move(*this <<= *rhs);
-    } else {
-        return std::move(*this);
+    auto result = TError(*this);
+    result.AddAttributes(std::forward<TRange>(attributes));
+    return result;
+}
+
+template <CErrorAttributeRange TRange>
+TError&& TError::With(TRange&& attributes) &&
+{
+    AddAttributes(std::forward<TRange>(attributes));
+    return std::move(*this);
+}
+
+template <CConvertibleToAttributeValue TValue>
+TError& TError::Add(const TErrorAttribute::TKey& key, const TValue& value) &
+{
+    AddAttribute(TErrorAttribute(key, value));
+    return *this;
+}
+
+template <CErrorAttributeRange TRange>
+TError& TError::Add(TRange&& attributes) &
+{
+    AddAttributes(std::forward<TRange>(attributes));
+    return *this;
+}
+
+template <CErrorAttributeRange TRange>
+void TError::AddAttributes(TRange&& attributes)
+{
+    for (const auto& attribute : attributes) {
+        AddAttribute(attribute);
     }
 }
 
-template <CErrorNestable TValue>
-TError TError::operator << (const std::optional<TValue>& rhs) const &
+template <CErrorRange TRange>
+TError TError::With(TRange&& innerErrors) const &
 {
-    if (rhs) {
-        return TError(*this) << *rhs;
-    } else {
-        return *this;
+    auto result = TError(*this);
+    result.AddInnerErrors(std::forward<TRange>(innerErrors));
+    return result;
+}
+
+template <CErrorRange TRange>
+TError&& TError::With(TRange&& innerErrors) &&
+{
+    AddInnerErrors(std::forward<TRange>(innerErrors));
+    return std::move(*this);
+}
+
+template <class... TArgs>
+TError TError::WithIf(bool condition, TArgs&&... args) const &
+{
+    return condition
+        ? With(Force(std::forward<TArgs>(args))...)
+        : *this;
+}
+
+template <class... TArgs>
+TError&& TError::WithIf(bool condition, TArgs&&... args) &&
+{
+    return condition
+        ? std::move(*this).With(Force(std::forward<TArgs>(args))...)
+        : std::move(*this);
+}
+
+template <CErrorRange TRange>
+TError& TError::Add(TRange&& innerErrors) &
+{
+    AddInnerErrors(std::forward<TRange>(innerErrors));
+    return *this;
+}
+
+template <CErrorRange TRange>
+void TError::AddInnerErrors(TRange&& innerErrors)
+{
+    if constexpr (std::ranges::sized_range<TRange>) {
+        auto* result = MutableInnerErrors();
+        result->reserve(result->size() + std::ranges::size(innerErrors));
+    }
+
+    for (auto&& innerError : innerErrors) {
+        if constexpr (
+            std::is_rvalue_reference_v<TRange&&> &&
+            !std::ranges::view<std::remove_cvref_t<TRange>>)
+        {
+            AddInnerError(std::move(innerError));
+        } else {
+            AddInnerError(std::forward<decltype(innerError)>(innerError));
+        }
     }
 }
 
@@ -246,36 +325,44 @@ inline void TError::ThrowOnError() &&
 
 template <class T>
 TErrorOr<T>::TErrorOr()
+    requires std::is_default_constructible_v<T>
 {
     Value_.emplace();
 }
 
 template <class T>
 TErrorOr<T>::TErrorOr(T&& value) noexcept
+    requires std::is_move_constructible_v<T>
     : Value_(std::move(value))
 { }
 
 template <class T>
 TErrorOr<T>::TErrorOr(const T& value)
+    requires std::is_copy_constructible_v<T>
     : Value_(value)
 { }
 
 template <class T>
-TErrorOr<T>::TErrorOr(const TError& other)
+template <class TErrorLike>
+TErrorOr<T>::TErrorOr(const TErrorLike& other)
+    requires std::is_same_v<TErrorLike, TError>
     : TError(other)
 {
     YT_VERIFY(!IsOK());
 }
 
 template <class T>
-TErrorOr<T>::TErrorOr(TError&& other) noexcept
-    : TError(std::move(other))
+template <class TErrorLike>
+TErrorOr<T>::TErrorOr(TErrorLike&& other) noexcept
+    requires std::is_same_v<TErrorLike, TError>
+    : TError(std::forward<TErrorLike>(other))
 {
     YT_VERIFY(!IsOK());
 }
 
 template <class T>
 TErrorOr<T>::TErrorOr(const TErrorOr<T>& other)
+    requires std::is_copy_constructible_v<T>
     : TError(other)
 {
     if (IsOK()) {
@@ -284,7 +371,8 @@ TErrorOr<T>::TErrorOr(const TErrorOr<T>& other)
 }
 
 template <class T>
-TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept
+TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+    requires std::is_move_constructible_v<T>
     : TError(std::move(other))
 {
     if (IsOK()) {
@@ -295,6 +383,7 @@ TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept
 template <class T>
 template <class U>
 TErrorOr<T>::TErrorOr(const TErrorOr<U>& other)
+    requires std::is_constructible_v<T, const U&>
     : TError(other)
 {
     if (IsOK()) {
@@ -305,6 +394,7 @@ TErrorOr<T>::TErrorOr(const TErrorOr<U>& other)
 template <class T>
 template <class U>
 TErrorOr<T>::TErrorOr(TErrorOr<U>&& other) noexcept
+    requires std::is_constructible_v<T, U&&>
     : TError(other)
 {
     if (IsOK()) {
@@ -463,6 +553,27 @@ const T& TErrorOr<T>::Value() const & Y_LIFETIME_BOUND
 }
 
 template <class T>
+T&& TErrorOr<T>::ValueOrCrash() && Y_LIFETIME_BOUND
+{
+    YT_VERIFY(IsOK());
+    return std::move(*Value_);
+}
+
+template <class T>
+T& TErrorOr<T>::ValueOrCrash() & Y_LIFETIME_BOUND
+{
+    YT_VERIFY(IsOK());
+    return *Value_;
+}
+
+template <class T>
+const T& TErrorOr<T>::ValueOrCrash() const & Y_LIFETIME_BOUND
+{
+    YT_VERIFY(IsOK());
+    return *Value_;
+}
+
+template <class T>
 const T& TErrorOr<T>::ValueOrDefault(const T& defaultValue Y_LIFETIME_BOUND) const & Y_LIFETIME_BOUND
 {
     return IsOK() ? *Value_ : defaultValue;
@@ -498,7 +609,7 @@ TException&& operator <<= (TException&& ex, const TError& error)
 {
     YT_VERIFY(!error.IsOK());
     ex.Error() = error;
-    return std::move(ex);
+    return std::forward<TException>(ex);
 }
 
 template <class TException>
@@ -507,7 +618,7 @@ TException&& operator <<= (TException&& ex, TError&& error)
 {
     YT_VERIFY(!error.IsOK());
     ex.Error() = std::move(error);
-    return std::move(ex);
+    return std::forward<TException>(ex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -568,6 +679,14 @@ template <class T>
 void FormatValue(TStringBuilderBase* builder, const TErrorOr<T>& error, TStringBuf spec)
 {
     FormatValue(builder, static_cast<const TError&>(error), spec);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class F, class... As>
+auto RunNoExcept(F&& functor, As&&... args) noexcept -> decltype(functor(std::forward<As>(args)...))
+{
+    return functor(std::forward<As>(args)...);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

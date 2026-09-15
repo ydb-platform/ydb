@@ -1,4 +1,5 @@
 PRAGMA config.flags('OptimizerFlags', 'EqualityFilterOverJoin');
+
 PRAGMA AnsiOptionalAs;
 
 -- part of tpcds-6

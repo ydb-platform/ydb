@@ -77,8 +77,8 @@ def _remove_z_mask(
     z_array = np.ma.asarray(z, dtype=np.float64)  # type: ignore[no-untyped-call]
     z_masked = np.ma.masked_invalid(z_array, copy=False)  # type: ignore[no-untyped-call]
 
-    if np.ma.is_masked(z_masked):  # type: ignore[no-untyped-call]
-        mask = np.ma.getmask(z_masked)  # type: ignore[no-untyped-call]
+    if np.ma.is_masked(z_masked):
+        mask = np.ma.getmask(z_masked)
     else:
         mask = None
 

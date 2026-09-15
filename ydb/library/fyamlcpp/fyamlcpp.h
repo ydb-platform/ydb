@@ -120,13 +120,11 @@ public:
 template <class T>
 class TUserDataHolder : public IBasicUserData {
 public:
-    TUserDataHolder(IBasicUserData* next, T* data)
-        : Next_(next)
-        , Data_(data)
+    TUserDataHolder(T* data)
+        : Data_(data)
     {}
 
 private:
-    std::unique_ptr<IBasicUserData> Next_ = nullptr;
     std::unique_ptr<T> Data_ = nullptr;
 };
 

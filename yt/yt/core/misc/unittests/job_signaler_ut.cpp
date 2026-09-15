@@ -22,7 +22,7 @@ static void SignalHandler(int /*signum*/)
     Y_UNUSED(::write(PipeDescriptors[1], "got signal\n", 11));
 }
 
-TEST(TJobSignaler, Basic)
+TEST(TJobSignalerTest, Basic)
 {
     ASSERT_EQ(0, ::pipe(PipeDescriptors));
     ASSERT_EQ(0, ::fcntl(PipeDescriptors[0], F_SETFL, ::fcntl(PipeDescriptors[0], F_GETFL) | O_NONBLOCK));
@@ -57,7 +57,7 @@ TEST(TJobSignaler, Basic)
     ASSERT_EQ(pid, ::waitpid(pid, nullptr, 0));
 }
 
-TEST(TJobSignaler, UnknownSignal)
+TEST(TJobSignalerTest, UnknownSignal)
 {
     int pid = ::getpid();
     ASSERT_THROW(SendSignal({pid}, "SIGUNKNOWN"), std::exception);

@@ -15,10 +15,8 @@ namespace itertools
 {
 
   template <typename Operator, typename List0>
-  details::filter<typename std::remove_cv<
-                      typename std::remove_reference<Operator>::type>::type,
-                  typename std::remove_cv<
-                      typename std::remove_reference<List0>::type>::type>
+  details::filter<std::remove_cv_t<std::remove_reference_t<Operator>>,
+                  std::remove_cv_t<std::remove_reference_t<List0>>>
   ifilter(Operator &&_op, List0 &&_seq);
 
   DEFINE_FUNCTOR(pythonic::itertools, ifilter);

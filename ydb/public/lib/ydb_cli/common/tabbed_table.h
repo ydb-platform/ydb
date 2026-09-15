@@ -2,8 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 class TAdaptiveTabbedTable {
 public:
@@ -23,11 +22,10 @@ private:
 
     const std::vector<NScheme::TSchemeEntry>& Entries;
     TVector<TColumnInfo> ColumnInfo;
-    size_t ColumnCount;
+    size_t ColumnCount = 0;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient
 
 template <>
 inline void Out<NYdb::NConsoleClient::TAdaptiveTabbedTable>(

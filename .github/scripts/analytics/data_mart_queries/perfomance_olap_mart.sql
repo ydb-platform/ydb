@@ -2,14 +2,15 @@ $start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
 
 $all_suites = (
     SELECT 
-        Suite, Test 
+        Suite, Test, Db
     FROM (
-        SELECT 
-            Suite, 
+        SELECT
+            Db,
+            Suite,
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
-        GROUP BY Suite 
+        WHERE Timestamp >= $start_timestamp
+        GROUP BY Suite, Db
     ) 
     FLATTEN LIST BY Tests AS Test
 );
@@ -17,25 +18,29 @@ $all_suites = (
 $launch_times = (
     SELECT 
         launch_times_raw.*,
-        all_suites.*
-    FROM (
+        all_suites.Suite as Suite,
+        all_suites.Test as Test,
+        COALESCE(SubString(CAST(launch_times_raw.Version AS String), 0U, RFIND(CAST(launch_times_raw.Version AS String), '.')), 'unknown') As Branch,
+        COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, RFIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
+        COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, RFIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
+    FROM
+    $all_suites AS all_suites 
+    LEFT JOIN (
         SELECT
             Db,
-            Branch,
             Version,
             LunchId,
             CAST(Min(RunId / 1000UL) AS Timestamp) AS Run_start_timestamp,
             ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version,
-            ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Min(RunId) DESC) AS Run_number_in_branch_desc
+            JSON_VALUE(MAX_BY(Info, RunId), "$.ci_version") AS CiVersion,
+            JSON_VALUE(MAX_BY(Info, RunId), "$.test_tools_version") AS TestToolsVersion,
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
+        WHERE Timestamp >= $start_timestamp
         GROUP BY
             Db,
-            Unicode::SplitToList(JSON_VALUE(Info, "$.cluster.version"), '.')[0] As Branch,
             JSON_VALUE(Info, "$.cluster.version") AS Version,
-            JSON_VALUE(Info, "$.ci_launch_id") AS LunchId
-    ) AS launch_times_raw
-    CROSS JOIN $all_suites AS all_suites
+            COALESCE(JSON_VALUE(Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId
+    ) AS launch_times_raw ON all_suites.Db == launch_times_raw.Db
 );
 
 $all_tests_raw =
@@ -43,8 +48,13 @@ $all_tests_raw =
         tests_results.*,
         JSON_VALUE(Info, "$.report_url") AS Report,
         JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
-        JSON_VALUE(tests_results.Info, "$.ci_launch_id") AS LunchId_n,
+        JSON_VALUE(Info, "$.ci_version") AS CiVersion_n,
+        JSON_VALUE(Info, "$.test_tools_version") AS TestToolsVersion_n,
+        COALESCE(JSON_VALUE(tests_results.Info, "$.ci_launch_id"), CAST(RunId AS String)) AS LunchId_n,
         CAST(JSON_VALUE(Stats, '$.DiffsCount') AS INT) AS diff_response,
+        IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationAvg') AS Double) AS Uint64)) AS CompilationAvg,
+        IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.CompilationCPUTime') AS Double) AS Uint64)) AS CompilationCPUTime,
+        IF(Success > 0, CAST(CAST(JSON_VALUE(Stats, '$.ProcessCPUTime') AS Double) AS Uint64)) AS ProcessCPUTime,
         IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
         IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
         IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
@@ -60,7 +70,7 @@ $all_tests_raw =
             )
         ) AS Color
     FROM `perfomance/olap/tests_results` AS tests_results
-    WHERE Timestamp >= $start_timestamp  and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'));
+    WHERE Timestamp >= $start_timestamp;
 
 SELECT 
     Db,
@@ -68,7 +78,6 @@ SELECT
     Test,
     Run_start_timestamp,
     Run_number_in_version,
-    Run_number_in_branch_desc,
     MaxDuration,
     MeanDuration,
     MedianDuration,
@@ -76,8 +85,15 @@ SELECT
     YdbSumMax,
     YdbSumMeans,
     YdbSumMin,
+    CompilationAvg,
+    CompilationCPUTime,
+    ProcessCPUTime,
     Version,
+    CiVersion,
+    TestToolsVersion,
     Branch,
+    CiBranch,
+    TestToolsBranch,
     diff_response,
     Timestamp,
     COALESCE(Success,0) AS Success,
@@ -87,7 +103,51 @@ SELECT
     max(RunTs) OVER (PARTITION  by Db, Run_start_timestamp, Suite) AS RunTs,
     YdbSumMeans IS NULL AS errors,
     max(Report) OVER (PARTITION  by Db, Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
-    Color
+    Color,
+    CASE
+        WHEN Db LIKE '%sas%' THEN 'sas'
+        WHEN Db LIKE '%vla%' THEN 'vla'
+        WHEN Db LIKE '%klg%' THEN 'klg'
+        WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%' THEN 'cloud'
+        ELSE 'other'
+    END AS DbDc,
+
+    CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbType,
+
+    CASE
+        WHEN Db LIKE '%sas-daily%' THEN 'sas_small_'
+        WHEN Db LIKE '%sas-perf%' THEN 'sas_big_'
+        WHEN Db LIKE '%vla-acceptance%' THEN 'vla_small_'
+        WHEN Db LIKE '%vla-perf%' THEN 'vla_big_'
+        WHEN Db LIKE '%vla4-8154%' OR Db LIKE '%vla4-8158%' THEN 'vla_2_node_'
+        WHEN Db LIKE '%vla4-8157%' THEN 'vla_1_node_'
+        WHEN Db LIKE '%vla4-8163%' OR Db LIKE '%vla4-8171%' OR Db LIKE '%vla4-8174%' THEN 'vla_3_node_'
+        WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
+        WHEN Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
+        WHEN Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
+        WHEN Db LIKE '%ydb-vla-dev04-002%' THEN 'oltp-vla-perf1_'
+        WHEN Db LIKE '%ydb-vla-dev04-005%' THEN 'oltp-vla-perf2_'
+        WHEN Db LIKE '%ydb-qa-01-klg-015%' THEN 'oltp-klg-perf3_'
+        WHEN Db LIKE '%ydb-qa-01-klg-014%' THEN 'oltp-klg-perf4_'
+        WHEN Db LIKE '%ydb-qa-01-klg-022%' THEN 'oltp-klg-perf5_'
+        WHEN Db LIKE '%ydb-qa-01-sas-000%' THEN 'oltp-3dc-perf6_'
+        WHEN Db LIKE '%ydb-qa-01-klg-035%' THEN 'oltp-klg-perf7_'
+        WHEN Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf9_'
+        WHEN Db LIKE '%sas%' THEN 'sas_'
+        WHEN Db LIKE '%vla%' THEN 'vla_'
+        WHEN Db LIKE '%klg%' THEN 'klg_'
+        ELSE 'new_db_'
+    END || CASE
+        WHEN Db LIKE '%load%' THEN 'column'
+        WHEN Db LIKE '%/s3%' THEN 's3'
+        WHEN Db LIKE '%/row%' THEN 'row'
+        ELSE 'other'
+    END AS DbAlias,
 FROM (
     SELECT
         null_template.Db AS Db,  --only from null_template
@@ -98,18 +158,24 @@ FROM (
         COALESCE(real_data.MinDuration, null_template.MinDuration) AS MinDuration,
         COALESCE(real_data.Report, null_template.Report) AS Report,
         COALESCE(real_data.Branch, null_template.Branch) AS Branch,
+        COALESCE(real_data.CiBranch, null_template.CiBranch) AS CiBranch,
+        COALESCE(real_data.TestToolsBranch, null_template.TestToolsBranch) AS TestToolsBranch,
         COALESCE(real_data.RunId, null_template.RunId) AS RunId,
         COALESCE(real_data.RunTs, null_template.RunTs) AS RunTs,
         null_template.Run_number_in_version AS Run_number_in_version,  --only from null_template
         null_template.Run_start_timestamp AS Run_start_timestamp,  --only from null_template
-        COALESCE(real_data.Run_number_in_branch_desc, null_template.Run_number_in_branch_desc) AS Run_number_in_branch_desc,
         COALESCE(real_data.Success, null_template.Success) AS Success,
         null_template.Suite AS Suite,  --only from null_template
         null_template.Test AS Test,  --only from null_template
         COALESCE(real_data.Timestamp, null_template.Timestamp) AS Timestamp,
         COALESCE(real_data.Version, null_template.Version) AS Version,
+        COALESCE(real_data.CiVersion, null_template.CiVersion) AS CiVersion,
+        COALESCE(real_data.TestToolsVersion, null_template.TestToolsVersion) AS TestToolsVersion,
         COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
         COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
+        COALESCE(real_data.CompilationAvg, null_template.CompilationAvg) AS CompilationAvg,
+        COALESCE(real_data.CompilationCPUTime, null_template.CompilationCPUTime) AS CompilationCPUTime,
+        COALESCE(real_data.ProcessCPUTime, null_template.ProcessCPUTime) AS ProcessCPUTime,
         COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
         COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
         COALESCE(real_data.Color, null_template.Color) AS Color,
@@ -139,19 +205,25 @@ FROM (
             real_data.MinDuration AS MinDuration,
             real_data.Report AS Report,
             real_data.Branch AS Branch,
+            real_data.CiBranch AS CiBranch,
+            real_data.TestToolsBranch AS TestToolsBranch,
             real_data.RunId AS RunId,
             real_data.RunTs AS RunTs,
             real_data.Run_number_in_version AS Run_number_in_version,
             real_data.Run_start_timestamp AS Run_start_timestamp,
-            real_data.Run_number_in_branch_desc AS Run_number_in_branch_desc,
             --real_data.Stats AS Stats,
             real_data.Success AS Success,
             real_data.Suite AS Suite,
             real_data.Test AS Test,
             real_data.Timestamp AS Timestamp,
             real_data.Version AS Version,
+            real_data.CiVersion AS CiVersion,
+            real_data.TestToolsVersion AS TestToolsVersion,
             real_data.YdbSumMax AS YdbSumMax,
             real_data.YdbSumMeans AS YdbSumMeans,
+            real_data.CompilationAvg AS CompilationAvg,
+            real_data.CompilationCPUTime AS CompilationCPUTime,
+            real_data.ProcessCPUTime AS ProcessCPUTime,
             real_data.YdbSumMin AS YdbSumMin,
             real_data.diff_response AS diff_response,
             real_data.Color AS Color,

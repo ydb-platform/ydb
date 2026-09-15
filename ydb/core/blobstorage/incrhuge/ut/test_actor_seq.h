@@ -58,8 +58,10 @@ public:
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
 
         for (const auto& item : msg->Items) {
-            LOG_DEBUG(ctx, NActorsServices::TEST, "Item# {Id# %016" PRIx64 " Lsn# %" PRIu64 " LogoBlobId# %s}",
-                    item.Id, item.Lsn, TLogoBlobID(item.Meta.RawU64).ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Dump id, lsn, logoBlobId",
+                {"id", item.Id},
+                {"lsn", item.Lsn},
+                {"logoBlobId", TLogoBlobID(item.Meta.RawU64)});
         }
 
         auto itemIt = msg->Items.begin();
@@ -70,7 +72,8 @@ public:
             if (!itemValid || stateIt->second.Lsn < itemIt->Lsn) {
                 // we have an entry in confirmed state that is not in msg->Items; this happens only if we had delete
                 // request in flight that succeeded, but we haven't received reply
-                LOG_DEBUG(ctx, NActorsServices::TEST, "deleted Id# %016" PRIx64, stateIt->second.Id);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Deleted",
+                    {"id", stateIt->second.Id});
                 Y_ABORT_UNLESS(State.DeleteRequest);
                 Y_ABORT_UNLESS(*State.DeleteRequest == stateIt->second.Lsn);
                 stateIt = State.ConfirmedState.erase(stateIt);
@@ -78,7 +81,8 @@ public:
             } else if (!stateValid || itemIt->Lsn < stateIt->second.Lsn) {
                 // here we have entry in msg->Items that is not in confirmed state -- this happens only if we had
                 // in-flight write request, but haven't got reply
-                LOG_DEBUG(ctx, NActorsServices::TEST, "added Id# %016" PRIx64, itemIt->Id);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Added",
+                    {"id", itemIt->Id});
                 Y_ABORT_UNLESS(State.WriteRequest);
                 Y_ABORT_UNLESS(itemIt->Lsn == State.WriteRequest->Lsn);
                 Y_ABORT_UNLESS(TLogoBlobID(itemIt->Meta.RawU64) == State.WriteRequest->LogoBlobId);
@@ -139,7 +143,9 @@ public:
             State.DeleteRequest = it->second.Lsn;
             ui64 seqNo = State.Lsn++;
             ctx.Send(KeeperId, new TEvIncrHugeDelete(Owner, seqNo, {it->second.Id}), 0, it->first);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "sent Delete Id# %016" PRIx64 " SeqNo# %" PRIu64, it->second.Id, seqNo);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Sent Delete",
+                {"id", it->second.Id},
+                {"seqNo", seqNo});
             return;
         } else {
             option -= deleteScore;
@@ -170,8 +176,9 @@ public:
             ctx.Send(KeeperId, new TEvIncrHugeWrite(Owner, blob.Lsn, meta, std::move(data),
                     std::make_unique<TPayload>(blob.Lsn, blob.LogoBlobId)));
             State.WriteRequest = blob;
-            LOG_DEBUG(ctx, NActorsServices::TEST, "sent Write Lsn# %" PRIu64 " LogoBlobId# %s", blob.Lsn,
-                    blob.LogoBlobId.ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Sent Write",
+                {"lsn", blob.Lsn},
+                {"logoBlobId", blob.LogoBlobId});
             return;
         } else {
             option -= writeScore;
@@ -181,8 +188,9 @@ public:
 
     void Handle(TEvIncrHugeDeleteResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeDeleteResult *msg = ev->Get();
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Delete Status# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), ev->Cookie);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished Delete",
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
+            {"id", ev->Cookie});
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
         Y_ABORT_UNLESS(ev->Cookie == *State.DeleteRequest);
         State.DeleteRequest.Clear();
@@ -193,8 +201,11 @@ public:
     void Handle(TEvIncrHugeWriteResult::TPtr& ev, const TActorContext& ctx) {
         TEvIncrHugeWriteResult *msg = ev->Get();
         TPayload *payload = static_cast<TPayload *>(msg->Payload.get());
-        LOG_DEBUG(ctx, NActorsServices::TEST, "finished Write Status# %s Lsn# %" PRIu64 " LogoBlobId# %s Id# %016" PRIx64,
-                NKikimrProto::EReplyStatus_Name(msg->Status).data(), payload->Lsn, payload->LogoBlobId.ToString().data(), msg->Id);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NActorsServices::TEST, "Finished Write",
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Status).data()},
+            {"lsn", payload->Lsn},
+            {"logoBlobId", payload->LogoBlobId},
+            {"id", msg->Id});
         Y_ABORT_UNLESS(msg->Status == NKikimrProto::OK);
         Y_ABORT_UNLESS(State.WriteRequest);
         State.WriteRequest->Id = msg->Id;

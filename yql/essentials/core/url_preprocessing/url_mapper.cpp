@@ -16,4 +16,4 @@ bool TUrlMapper::MapUrl(const TString& url, TString& mappedUrl) const {
     return false;
 }
 
-}
+} // namespace NYql

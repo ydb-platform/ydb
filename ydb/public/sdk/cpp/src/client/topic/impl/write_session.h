@@ -4,9 +4,12 @@
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
+#include <library/cpp/threading/future/future.h>
+
 #include <util/generic/buffer.h>
 
 #include <atomic>
+#include <memory>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -43,6 +46,7 @@ public:
                       TTransactionBase* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<bool> Flush() override;
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
@@ -88,6 +92,5 @@ private:
 
     std::atomic_bool Closed = false;
 };
-
 
 } // namespace NYdb::NTopic

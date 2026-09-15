@@ -3,16 +3,14 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_agg_ut.cpp
+    kqp_concurrent_results_ut.cpp
     kqp_extract_predicate_unpack_ut.cpp
+    kqp_hash_combine_ut.cpp
     kqp_kv_ut.cpp
     kqp_merge_ut.cpp
     kqp_named_expressions_ut.cpp
@@ -22,6 +20,10 @@ SRCS(
     kqp_returning_ut.cpp
     kqp_sort_ut.cpp
     kqp_sqlin_ut.cpp
+    kqp_union_ut.cpp
+    kqp_peephole_ut.cpp
+    kqp_partitions_by_keys_sort_ut.cpp
+    kqp_constant_folding_ut.cpp
 )
 
 PEERDIR(

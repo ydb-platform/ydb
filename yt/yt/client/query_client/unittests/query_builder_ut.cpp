@@ -24,7 +24,7 @@ TEST(TQueryBuilderTest, Build)
     builder.AddOrderByExpression("[res]", EOrderByDirection::Descending);
     builder.AddOrderByExpression("[some_field]", EOrderByDirection::Ascending);
 
-    builder.AddJoinExpression("barTable", "bar", "fooTable.[id] = barTable.[id]", ETableJoinType::Left);
+    builder.AddJoinExpression("barTable", "bar", "fooTable.[id] = barTable.[id]", ETableJoinType::Left, "id = 0");
 
     auto source = builder.Build();
 
@@ -34,7 +34,7 @@ TEST(TQueryBuilderTest, Build)
     EXPECT_NE(source.find("ORDER BY ([res]) DESC, ([some_field]) ASC"), source.npos);
     EXPECT_NE(source.find("WHERE ([id] = 42) AND ([some_other_field] < 15)"), source.npos);
     EXPECT_NE(source.find("([some_field] * [some_other_field]) AS res"), source.npos);
-    EXPECT_NE(source.find("LEFT JOIN [barTable] AS [bar] ON fooTable.[id] = barTable.[id]"), source.npos);
+    EXPECT_NE(source.find("LEFT JOIN [barTable] AS [bar] ON fooTable.[id] = barTable.[id] AND id = 0"), source.npos);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

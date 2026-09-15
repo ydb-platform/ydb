@@ -13,17 +13,18 @@ SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16 cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
 ENDIF()
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
 )
 

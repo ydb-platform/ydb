@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {
@@ -14,7 +14,8 @@ private:
 
 public:
     TTabletCountersHandle(TTabletCountersBase& stats)
-        : TabletCounters(stats) {
+        : TabletCounters(stats)
+    {
     }
 
     void SetCounter(NColumnShard::ESimpleCounters counter, ui64 num) const {
@@ -75,6 +76,12 @@ public:
         IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
     }
 
+    void OnBulkWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BULK_BYTES_WRITTEN, bytesWritten);
+        IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
+    }
+
     void OnWriteFailure() const {
         IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
     }
@@ -96,6 +103,10 @@ public:
         IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
     }
 
+    void OnWritePutBulkBlobsSuccess(const ui64 rowsWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BULK_ROWS_WRITTEN, rowsWritten);
+    }
+
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
         IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, rawBytes);
         IncCounter(NColumnShard::COUNTER_BYTES_ERASED, blobBytes);
@@ -103,17 +114,17 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN));
+        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN) + GetValue(COUNTER_OPERATIONS_BULK_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));
 
         output.SetImmediateTxCompleted(GetValue(COUNTER_IMMEDIATE_TX_COMPLETED));
         output.SetTxRejectedByOverload(GetValue(COUNTER_WRITE_OVERLOAD));
-        output.SetTxRejectedBySpace(GetValue(COUNTER_OUT_OF_SPACE));
+        output.SetTxRejectedBySpace(GetValue(COUNTER_DISK_GROUP_OUT_OF_SPACE));
         output.SetPlannedTxCompleted(GetValue(COUNTER_PLANNED_TX_COMPLETED));
         output.SetTxCompleteLagMsec(GetValue(COUNTER_TX_COMPLETE_LAG));
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

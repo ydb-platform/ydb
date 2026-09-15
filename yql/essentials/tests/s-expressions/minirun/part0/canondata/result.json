@@ -153,6 +153,20 @@
             "uri": "https://{canondata_backend}/1889210/9f4b906f09e498ba6ae471f1757ad6c2e977b007/resource.tar.gz#test.test_EquiJoin-JoinInMemRename-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Flow-DependsOnFlowMultipleClients-default.txt-Debug]": [
+        {
+            "checksum": "bcaf7cb52647bf1156533e4f4b7586d9",
+            "size": 1225,
+            "uri": "https://{canondata_backend}/1936997/b10ab7849281322e9789ab99dce65b00e2cbeee4/resource.tar.gz#test.test_Flow-DependsOnFlowMultipleClients-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Flow-DependsOnFlowMultipleClients-default.txt-Results]": [
+        {
+            "checksum": "91e639fc280b4d454690d132e1c2264a",
+            "size": 2875,
+            "uri": "https://{canondata_backend}/1903280/3fb0e318928fae9beeca96846c59623a03c2a654/resource.tar.gz#test.test_Flow-DependsOnFlowMultipleClients-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[ImplictCasts-AutoConvertByIf-default.txt-Debug]": [
         {
             "checksum": "e828d461bd8c86f54368812537bd34e7",
@@ -571,6 +585,20 @@
             "checksum": "d26e7be91bdee4db7fd087c41cb7ca8b",
             "size": 879,
             "uri": "https://{canondata_backend}/1775059/859a07feef8e40497c12c615a8aa01c1439f1d8d/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverExtend-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Debug]": [
+        {
+            "checksum": "55b9ca6ccc7d1ca0946d60bfab2109dc",
+            "size": 1073,
+            "uri": "https://{canondata_backend}/1889210/307147b3e1b8c63eb3bd1a3f2a7364bb8ab92130/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Results]": [
+        {
+            "checksum": "d14dcbca03c83cdc2125658f7031af41",
+            "size": 2177,
+            "uri": "https://{canondata_backend}/1899731/117b9874e975a561af1e4e382b23ce8fbd0cea2f/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Results_/results.txt"
         }
     ],
     "test.test[Pure-PureNonList-default.txt-Debug]": [

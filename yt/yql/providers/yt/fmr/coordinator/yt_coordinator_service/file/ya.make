@@ -6,7 +6,9 @@ SRCS(
 
 PEERDIR(
     yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/interface
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
+    yt/yql/providers/yt/gateway/file
 )
 
 YQL_LAST_ABI_VERSION()

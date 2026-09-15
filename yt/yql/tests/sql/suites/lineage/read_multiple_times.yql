@@ -1,0 +1,11 @@
+use plato;
+
+INSERT INTO @tmp WITH TRUNCATE
+SELECT key, subkey FROM Input;
+COMMIT;
+
+INSERT INTO Output1 WITH TRUNCATE
+SELECT DISTINCT key FROM @tmp WITH SCHEMA Struct<key: String>;
+
+INSERT INTO Output2 WITH TRUNCATE
+SELECT DISTINCT subkey FROM @tmp WITH SCHEMA Struct<subkey: String>;

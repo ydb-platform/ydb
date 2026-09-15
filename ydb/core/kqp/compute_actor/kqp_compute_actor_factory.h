@@ -1,16 +1,20 @@
 #pragma once
 
+#include "kqp_compute_actor.h"
+
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
+    class TNodeState;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -92,15 +96,12 @@ public:
     }
 };
 
-struct IKqpNodeState {
-    virtual ~IKqpNodeState() = default;
-
-    virtual void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) = 0;
-};
-
-
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
+
+    std::atomic<bool> AccountDefaultPoolInScheduler = false;
+    std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
+    std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
 
 public:
     struct TCreateArgs {
@@ -111,13 +112,14 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
-        const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
+        NYql::NDq::IMemoryQuotaManager::TPtr TaskQuotaManager;
+        NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+        TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
         const TString& SerializedGUCSettings;
         const ui32 NumberOfTasks;
         const ui64 OutputChunkMaxSize;
-        const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;
         const bool WithSpilling;
         const NYql::NDqProto::EDqStatsMode StatsMode;
         const bool WithProgressStats;
@@ -127,22 +129,26 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
-        std::shared_ptr<IKqpNodeState> State = nullptr;
-        TSchedulableOptions SchedulableOptions;
+        std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
+
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+
+        bool UseBatchPool = false;
     };
 
-    typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;
-    virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
+    virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
+    virtual bool GetVerboseMemoryLimitException() = 0;
+    virtual TShardsScanningPolicy GetShardsScanningPolicy() = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        NScheduler::TSchedulableTaskFactory schedulableTaskFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKikimr::NKqp::NComputeActor

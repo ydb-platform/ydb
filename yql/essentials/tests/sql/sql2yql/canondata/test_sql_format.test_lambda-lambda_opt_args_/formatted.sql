@@ -1,5 +1,3 @@
-/* postgres can not */
-/* syntax version 1 */
 $f = ($x, $y?) -> ($x + ($y ?? 0));
 
 SELECT

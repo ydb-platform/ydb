@@ -45,17 +45,16 @@ namespace NTests {
 
 
         class TFixture : public NUnitTest::TBaseFixture {
-        protected: 
-            TFixture() : 
+        protected:
+            TFixture() :
                 WriteSession(std::make_shared<MockWriteSession>()),
                 Clock(CreateClock()),
                 Log(CreateLogger()),
                 GeneratedMessages(TTopicWorkloadWriterWorker::GenerateMessages(100'000))
             {}
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(
-                // we need error flag = true, cause without it, stats collector will go into the infinite loop
-                // during the call to PrintWindowStatsLoop. And this call is the only way to deque write events to
-                // statisitcs. 
+                // errorFlag=true so PrintWindowStatsLoop exits immediately instead of looping;
+                // it is still needed to drain write events into statistics.
                 1, 1, false, false, 5, 60, 0, 99, std::make_shared<std::atomic_bool>(true), false
             );
             std::shared_ptr<MockWriteSession> WriteSession;
@@ -64,7 +63,7 @@ namespace NTests {
             std::shared_ptr<TLog> Log;
             std::vector<TString> GeneratedMessages;
 
-            TTopicWorkloadWriterProducer CreateProducer();
+            THolder<TTopicWorkloadWriterProducer> CreateProducer();
             TWriteSessionEvent::TAcksEvent CreateAckEvent(ui64 seqno);
             TTopicWorkloadWriterParams CreateParams();
             std::shared_ptr<TLog> CreateLogger();
@@ -72,8 +71,8 @@ namespace NTests {
             void InitContinuationToken(TTopicWorkloadWriterProducer& producer);
         };
 
-        TTopicWorkloadWriterProducer TFixture::CreateProducer() {
-            auto producer = TTopicWorkloadWriterProducer(
+        THolder<TTopicWorkloadWriterProducer> TFixture::CreateProducer() {
+            auto producer = MakeHolder<TTopicWorkloadWriterProducer>(
                 std::move(CreateParams()),
                 StatsCollector,
                 "my-test-producer",
@@ -81,7 +80,7 @@ namespace NTests {
                 Clock
             );
 
-            producer.SetWriteSession(WriteSession);
+            producer->SetWriteSession(WriteSession);
 
             return producer;
         }
@@ -108,7 +107,7 @@ namespace NTests {
                     }}};
         }
 
-        TTopicWorkloadWriterParams TFixture::CreateParams() {   
+        TTopicWorkloadWriterParams TFixture::CreateParams() {
             size_t messageSize = 100'000;
 
             return TTopicWorkloadWriterParams{
@@ -153,8 +152,8 @@ namespace NTests {
         void TFixture::InitContinuationToken(TTopicWorkloadWriterProducer& producer) {
             auto continuationToken = MockContinuationTokenIssuer::IssueContinuationToken();
             std::optional<TWriteSessionEvent::TEvent> event = std::variant<
-                    TWriteSessionEvent::TAcksEvent, 
-                    TWriteSessionEvent::TReadyToAcceptEvent, 
+                    TWriteSessionEvent::TAcksEvent,
+                    TWriteSessionEvent::TReadyToAcceptEvent,
                     TSessionClosedEvent
                     >(TWriteSessionEvent::TReadyToAcceptEvent(std::move(continuationToken)));
 
@@ -168,19 +167,18 @@ namespace NTests {
             auto producer = CreateProducer();
             auto mockNow = TInstant::MilliSeconds(1730111051000);
             Clock.SetBase(mockNow);
-            InitContinuationToken(producer);
+            InitContinuationToken(*producer);
             auto createTime = TInstant::MilliSeconds(1730111050000);
-            producer.Send(createTime, {});
+            producer->Send(createTime, {});
             UNIT_ASSERT_EQUAL(0, StatsCollector->GetTotalWriteMessages());
-            // We need this call, cause only this call initializes StatsCollector.WarmupTime. 
-            // If it is not initialized, no events will be accepted.
-            // Both here and below it will not go into the loop, cause we provided errorFlag into the constructor above.
-            StatsCollector->PrintWindowStatsLoop();
+            // Init() sets WarmupTime; until then no events are accepted.
+            StatsCollector->Init();
 
             auto ackEvent = CreateAckEvent(1);
-            producer.HandleAckEvent(ackEvent);
+            producer->HandleAckEvent(ackEvent);
 
-            // We need this call, cause only this way collector will deque wrtie events to statisitcs. 
+            // PrintWindowStatsLoop drains write events into statistics.
+            // It will not go into the loop, cause we provided errorFlag into the constructor above.
             StatsCollector->PrintWindowStatsLoop();
             UNIT_ASSERT_VALUES_EQUAL(1, StatsCollector->GetTotalWriteMessages());
         }
@@ -190,46 +188,46 @@ namespace NTests {
             auto producer = CreateProducer();
             uint64_t initSeqNo = 0;
             ON_CALL(*WriteSession, GetInitSeqNo()).WillByDefault(testing::Return(NThreading::MakeFuture(initSeqNo)));
-            producer.WaitForInitSeqNo();
-            InitContinuationToken(producer);
+            producer->WaitForInitSeqNo();
+            InitContinuationToken(*producer);
             auto createTs = TInstant::MilliSeconds(1730111050000);
 
             // assert
             EXPECT_CALL(*WriteSession, Write(
-                _, 
+                _,
                 testing::AllOf(
                     // first message id is initSeqNo + 1
-                    testing::Field(&TWriteMessage::Data, GeneratedMessages[initSeqNo + 1]), 
+                    testing::Field(&TWriteMessage::Data, GeneratedMessages[initSeqNo + 1]),
                     testing::Field(&TWriteMessage::SeqNo_, initSeqNo + 1),
                     testing::Field(&TWriteMessage::CreateTimestamp_, createTs)
-                ), 
+                ),
                 _
                 ));
 
             // act
-            producer.Send(createTs, {});
+            producer->Send(createTs, {});
         }
 
         Y_UNIT_TEST_F(WaitForContinuationToken_ShouldExtractContinuationTokenFromEvent, TFixture) {
             auto producer = CreateProducer();
-            UNIT_ASSERT(!producer.ContinuationTokenDefined());
-            
-            InitContinuationToken(producer);
+            UNIT_ASSERT(!producer->ContinuationTokenDefined());
 
-            UNIT_ASSERT(producer.ContinuationTokenDefined());
+            InitContinuationToken(*producer);
+
+            UNIT_ASSERT(producer->ContinuationTokenDefined());
         }
-        
+
         Y_UNIT_TEST_F(WaitForContinuationToken_ShouldThrowExceptionIfEventOfTheWrongType, TFixture) {
             auto producer = CreateProducer();
             std::optional<TWriteSessionEvent::TEvent> event = std::variant<
-                    TWriteSessionEvent::TAcksEvent, 
-                    TWriteSessionEvent::TReadyToAcceptEvent, 
+                    TWriteSessionEvent::TAcksEvent,
+                    TWriteSessionEvent::TReadyToAcceptEvent,
                     TSessionClosedEvent
                     >(CreateAckEvent(123));
             ON_CALL(*WriteSession, GetEvent(_)).WillByDefault(testing::Return(event));
             ON_CALL(*WriteSession, WaitEvent()).WillByDefault(testing::Return(NThreading::MakeFuture()));
 
-            UNIT_ASSERT_EXCEPTION(producer.WaitForContinuationToken(TDuration::Zero()), yexception);
+            UNIT_ASSERT_EXCEPTION(producer->WaitForContinuationToken(TDuration::Zero()), yexception);
         }
     }
 }

@@ -95,7 +95,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto fs = context.SS->FileStoreInfos[txState->TargetPathId];
+        auto fs = context.SS->FileStoreInfos.at(txState->TargetPathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
@@ -136,7 +136,8 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvFileStore::TEvUpdateConfigResponse::EventType,
         });
     }
 
@@ -364,6 +365,15 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         result->SetError(
             NKikimrScheme::StatusPreconditionFailed,
             "Wrong version in config");
+        return result;
+    }
+
+    if (!TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(
+            fs->Config.GetBlockSize(),
+            alterConfig->GetBlocksCount(),
+            errStr))
+    {
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
         return result;
     }
 

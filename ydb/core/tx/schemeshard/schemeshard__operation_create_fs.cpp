@@ -96,7 +96,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        auto fs = context.SS->FileStoreInfos[txState->TargetPathId];
+        auto fs = context.SS->FileStoreInfos.at(txState->TargetPathId);
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
@@ -445,15 +445,27 @@ TFileStoreInfo::TPtr TCreateFileStore::CreateFileStoreInfo(
     TFileStoreInfo::TPtr fs = new TFileStoreInfo();
 
     const auto& config = op.GetConfig();
+
     if (!config.HasBlockSize()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "Block size is required";
         return nullptr;
     }
 
+    if (config.GetBlockSize() == 0) {
+        status = NKikimrScheme::StatusInvalidParameter;
+        errStr = "Non zero block size is required";
+        return nullptr;
+    }
+
     if (config.HasVersion()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "Setting version is not allowed";
+        return nullptr;
+    }
+
+    if (!TFileStoreInfo::ValidateFileStoreConfigSpaceOverflow(config.GetBlockSize(), config.GetBlocksCount(), errStr)) {
+        status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
 
@@ -502,9 +514,8 @@ TTxState& TCreateFileStore::PrepareChanges(
     }
     context.SS->PersistPath(db, fsPath->PathId);
 
-    context.SS->FileStoreInfos[pathId] = fs;
+    context.SS->FileStoreInfos.Set(pathId, fs);
     context.SS->PersistFileStoreInfo(db, pathId, fs);
-    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);

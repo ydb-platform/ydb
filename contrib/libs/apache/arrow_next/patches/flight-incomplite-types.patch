@@ -1,0 +1,11 @@
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/flight/types.h	(index)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/flight/types.h	(working tree)
+@@ -484,7 +484,7 @@ class ARROW_FLIGHT_EXPORT FlightInfo
+     std::string app_metadata;
+   };
+ 
+-  explicit FlightInfo(Data data) : data_(std::move(data)), reconstructed_schema_(false) {}
++  explicit FlightInfo(Data data);// : data_(std::move(data)), reconstructed_schema_(false) {}
+ 
+   /// \brief Factory method to construct a FlightInfo.
+   static arrow20::Result<FlightInfo> Make(const Schema& schema,

@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/datashard/export_iface.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -11,18 +12,21 @@
 
 namespace NKikimrRun {
 
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+
 struct TAsyncQueriesSettings {
-    enum class EVerbose {
+    enum class EVerbosity {
         EachQuery,
         Final,
     };
 
     ui64 InFlightLimit = 0;
-    EVerbose Verbose = EVerbose::EachQuery;
+    EVerbosity Verbosity = EVerbosity::EachQuery;
 };
 
 struct TServerSettings {
-    ui32 NodeCount = 1;
+    ui32 NodeCount = 0;
+    ui32 StorageGroupCount = 0;
     TString DomainName = "Root";
 
     bool MonitoringEnabled = false;
@@ -38,6 +42,7 @@ struct TServerSettings {
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
+    std::shared_ptr<NKikimr::NDataShard::IExportFactory> DataShardExportFactory;
 };
 
 enum class EResultOutputFormat {

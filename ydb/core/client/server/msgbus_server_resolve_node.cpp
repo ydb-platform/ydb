@@ -80,6 +80,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, Cancel);
         }
     }
 };

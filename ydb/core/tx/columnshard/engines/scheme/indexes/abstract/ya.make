@@ -13,6 +13,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow
+    ydb/core/tx/columnshard/engines/protos  # stopgap: proper edge (-> skip_index/portions) cycles
     ydb/library/formats/arrow/protos
     yql/essentials/core/arrow_kernels/request
     ydb/core/formats/arrow/program

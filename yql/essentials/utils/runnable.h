@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-class IRunnable: public TThrRefBase {
+class IRunnable: public virtual TThrRefBase {
 public:
     using TPtr = THolder<IRunnable>;
 

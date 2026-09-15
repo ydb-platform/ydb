@@ -1,15 +1,12 @@
 ```typescript
-import { Driver, TokenAuthService } from 'ydb-sdk';
+import { Driver } from "@ydbjs/core";
+import { AccessTokenCredentialsProvider } from "@ydbjs/auth/access-token";
 
-export async function connect(endpoint: string, database: string, accessToken: string) {
-    const authService = new TokenAuthService(accessToken);
-    const driver = new Driver({endpoint, database, authService});
-    const timeout = 10000;
-    if (!await driver.ready(timeout)) {
-        console.log(`Driver has not become ready in ${timeout}ms!`);
-        process.exit(1);
-    }
-    console.log('Driver connected')
-    return driver
-}
+const driver = new Driver("grpc://localhost:2136/local", {
+  credentialsProvider: new AccessTokenCredentialsProvider({
+    token: "accessToken",
+  }),
+});
+
+await driver.ready();
 ```

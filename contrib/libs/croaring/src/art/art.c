@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <stdalign.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -1543,7 +1542,7 @@ static void art_node_print_type(art_ref_t ref) {
     }
 }
 
-void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
+static void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
     if (art_is_leaf(ref)) {
         printf("{ type: Leaf, key: ");
         art_leaf_t *leaf = (art_leaf_t *)art_deref(art, ref);
@@ -1591,7 +1590,7 @@ void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
         } break;
         case CROARING_ART_NODE48_TYPE: {
             art_node48_t *node48 = (art_node48_t *)inner_node;
-            for (int i = 0; i < 256; ++i) {
+            for (uint16_t i = 0; i < 256; ++i) {
                 if (node48->keys[i] != CROARING_ART_NODE48_EMPTY_VAL) {
                     printf("%*s", depth, "");
                     printf("key: %02x ", i);
@@ -1603,7 +1602,7 @@ void art_node_printf(const art_t *art, art_ref_t ref, uint8_t depth) {
         } break;
         case CROARING_ART_NODE256_TYPE: {
             art_node256_t *node256 = (art_node256_t *)inner_node;
-            for (int i = 0; i < 256; ++i) {
+            for (uint16_t i = 0; i < 256; ++i) {
                 if (node256->children[i] != CROARING_ART_NULL_REF) {
                     printf("%*s", depth, "");
                     printf("key: %02x ", i);

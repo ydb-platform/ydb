@@ -2,9 +2,9 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -23,6 +23,5 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     schemereq_ut.cpp
 )
-
 
 END()

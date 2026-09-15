@@ -12,16 +12,11 @@ namespace NGRpcService {
 
 class TInFlightLimiterRegistry : public TThrRefBase {
 private:
-    TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TMutex Lock;
     THashMap<TString, NYdbGrpc::IGRpcRequestLimiterPtr> PerTypeLimiters;
 
 public:
-    explicit TInFlightLimiterRegistry(TIntrusivePtr<NKikimr::TControlBoard> icb)
-        : Icb(icb)
-    {}
-
-    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(TString name, i64 limit);
+    NYdbGrpc::IGRpcRequestLimiterPtr RegisterRequestType(const TString& name, THotSwap<TControl>& icbControl, i64 limit);
 };
 
 class TCreateLimiterCB {
@@ -30,7 +25,7 @@ public:
         : LimiterRegistry(limiterRegistry)
     {}
 
-    NYdbGrpc::IGRpcRequestLimiterPtr operator()(const char* serviceName, const char* requestName, i64 limit) const;
+    NYdbGrpc::IGRpcRequestLimiterPtr operator()(const TString& controlName, THotSwap<TControl>& icbControl, i64 limit) const;
 
 private:
     TIntrusivePtr<TInFlightLimiterRegistry> LimiterRegistry;
@@ -40,7 +35,9 @@ inline TCreateLimiterCB CreateLimiterCb(TIntrusivePtr<TInFlightLimiterRegistry> 
     return TCreateLimiterCB(limiterRegistry);
 }
 
-template <typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
+template <typename TIn, typename TOut, typename TService,
+    typename TInProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TIn>,
+    typename TOutProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TOut>>
 using TGRpcRequest = NYdbGrpc::TGRpcRequest<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
 
 } // namespace NGRpcService

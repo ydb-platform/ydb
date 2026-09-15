@@ -52,12 +52,13 @@ struct TClientContext {
             bool secure)
     {
         TDriverConfig params;
+        params.SetDatabase("/Root");
         params.SetEndpoint(endpoint);
         if (token) {
             params.SetAuthToken(token);
         }
         if (secure) {
-            params.UseSecureConnection(NYdbSslTestData::CaCrt);
+            params.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt());
         }
         return params;
     }
@@ -624,12 +625,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 }
 
 Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClientAuth) {
-    struct WithSslAndAuth : TKikimrTestSettings {
-        static constexpr bool SSL = true;
-        static constexpr bool AUTH = true;
-    };
-
-    using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
+    using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 
     Y_UNIT_TEST(OwnersAndPermissions) {
         TKikimrWithGrpcAndRootSchema server;

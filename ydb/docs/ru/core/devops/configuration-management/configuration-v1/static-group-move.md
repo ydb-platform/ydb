@@ -1,7 +1,5 @@
 # Перемещение статической группы
 
-{% include [deprecated](_includes/deprecated.md) %}
-
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../reference/configuration/index.md#blob_storage_config), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
@@ -67,6 +65,6 @@ blob_storage_config:
 
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
 1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все статические узлы кластера.
-1. Перейдите на страницу мониторинга Embedded UI и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../../../reference/embedded-ui/ydb-monitoring.md#static-group).
+1. Перейдите на страницу мониторинга {{ ydb-ui-name }} и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../../../reference/ydb-ui/ydb-monitoring.md#static-group).
 1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все динамические узлы кластера.
 

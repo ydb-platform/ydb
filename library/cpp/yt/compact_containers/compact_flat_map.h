@@ -1,22 +1,11 @@
 #pragma once
 
+#include "comparison.h"
 #include "compact_vector.h"
 
+#include <functional>
+
 namespace NYT {
-
-///////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
-
-template <typename T>
-concept CHasIsTransparentFlag = requires {
-    typename T::is_transparent;
-};
-
-template <typename T, typename U, typename TCompare>
-concept CComparisonAllowed = std::same_as<T, U> || CHasIsTransparentFlag<TCompare>;
-
-} // namespace NDetail
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -61,8 +50,7 @@ public:
 
     TCompactFlatMap(std::initializer_list<value_type> values);
 
-    bool operator==(const TCompactFlatMap& rhs) const;
-    bool operator!=(const TCompactFlatMap& rhs) const;
+    bool operator==(const TCompactFlatMap& rhs) const = default;
 
     iterator begin();
     const_iterator begin() const;
@@ -122,7 +110,7 @@ private:
     TStorage Storage_;
 
     template <class TArg>
-    std::pair<iterator, bool> do_insert(TArg&& value);
+    std::pair<iterator, bool> DoInsert(TArg&& value);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

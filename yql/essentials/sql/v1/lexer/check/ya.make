@@ -16,6 +16,9 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/regex
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/sql/v1/translation
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

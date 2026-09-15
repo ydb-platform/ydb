@@ -4,7 +4,9 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <util/string/escape.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/stream/output.h>
 
 namespace NKikimr {
 
@@ -745,3 +747,17 @@ size_t GetCellHeaderSize() {
 }
 
 } // namespace NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::ETriBool, out, value) {
+    switch (value) {
+        case NKikimr::ETriBool::True:
+            out << "True";
+            break;
+        case NKikimr::ETriBool::False:
+            out << "False";
+            break;
+        case NKikimr::ETriBool::Null:
+            out << "Null";
+            break;
+    }
+}

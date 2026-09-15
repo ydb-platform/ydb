@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/config/init)
 
 SRCS(
     init_ut.cpp
+    yaml_config_helpers_ut.cpp
 )
 
 PEERDIR(

@@ -1,12 +1,11 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TBitOr : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TBitOr<TLeft, TRight, TOutput>> {
+template <typename TLeft, typename TRight, typename TOutput>
+struct TBitOr: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TBitOr<TLeft, TRight, TOutput>> {
     static TOutput Do(TOutput left, TOutput right)
     {
         return left | right;
@@ -20,11 +19,10 @@ struct TBitOr : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TBitOr<TL
 #endif
 };
 
-}
+} // namespace
 
 void RegisterBitOr(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryUnsignedFunctionOpt<TBitOr, TBinaryArgsOpt>(registry, "BitOr");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

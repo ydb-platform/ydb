@@ -13,6 +13,7 @@
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -20,6 +21,8 @@
 #include <util/stream/file.h>
 #include <util/string/split.h>
 #include <util/stream/output.h>
+
+#include <limits>
 
 using namespace NYql::NDq;
 using namespace NYql::NDq::NTaskRunnerActor;
@@ -69,7 +72,7 @@ struct TSinkInfo {
 };
 
 class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
-    bool AllocateQuota(ui64) override {
+    bool AllocateQuota(ui64, bool) override {
         return true;
     }
 
@@ -87,8 +90,8 @@ class TDummyMemoryQuotaManager: public IMemoryQuotaManager {
         return TString();
     }
 
-    bool IsReasonableToUseSpilling() const override {
-        return false;
+    i64 GetMemoryAvailability() const override {
+        return std::numeric_limits<i64>::max();
     }
 };
 
@@ -250,6 +253,7 @@ private:
         Y_ABORT_UNLESS(!Executer);
         Executer = ev->Sender;
         Task = ev->Get()->Record.GetTask();
+        RuntimeSettings = NYql::DeserializeRuntimeSettingsFromProto(Task.GetProgram().GetRuntimeSettings());
 
         Yql::DqsProto::TTaskMeta taskMeta;
         Task.GetMeta().UnpackTo(&taskMeta);
@@ -309,6 +313,7 @@ private:
                         auto& source = SourcesMap[inputId];
                         source.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
                         source.ProgramBuilder.emplace(*source.TypeEnv, *FunctionRegistry);
+                        Y_ENSURE(RuntimeSettings, "RuntimeSettings is not set");
                         std::tie(source.Source, source.Actor) =
                             AsyncIoFactory->CreateDqSource(
                             IDqAsyncIoFactory::TSourceArguments {
@@ -323,7 +328,8 @@ private:
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory,
                                 .ProgramBuilder = *source.ProgramBuilder,
-                                .MemoryQuotaManager = MemoryQuotaManager
+                                .MemoryQuotaManager = MemoryQuotaManager,
+                                .DatumValidationMode = RuntimeSettings->DatumValidation.Get()
                             });
                         RegisterLocalChild(source.Actor);
                     } else {
@@ -568,11 +574,11 @@ private:
             return;
         }
 
-        THashSet<ui32> inputChannels;
+        TVector<ui32> inputChannels;
         for (auto& input : InputMap) {
             auto& channel = input.second;
             if (!channel.Requested && !channel.Finished) {
-                inputChannels.insert(channel.ChannelId);
+                inputChannels.push_back(channel.ChannelId);
             }
         }
 
@@ -764,7 +770,12 @@ private:
         Y_UNUSED(state);
         Y_UNUSED(outputIndex);
         Y_UNUSED(checkpoint);
-        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, "Unimplemented"));
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
+    }
+
+    void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
+        Y_UNUSED(outputIndex, checkpoint);
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, TStringBuilder() << "Unimplemented: " << __func__));
     }
 
     void SinkSend(
@@ -791,6 +802,7 @@ private:
     TActorId TaskRunnerActor;
 
     NDqProto::TDqTask Task;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
     ui64 StageId = 0;
     bool TaskRunnerPrepared = false;
 

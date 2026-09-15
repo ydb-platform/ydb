@@ -1,5 +1,6 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet_counters.proto";
+import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrTabletBase;
 option java_package = "ru.yandex.kikimr.proto";
@@ -50,14 +51,18 @@ message TTabletTypes {
         StatisticsAggregator = 40;
         GraphShard = 41;
         BackupController = 42;
+        BlockStorePartitionDirect = 43;
+        BlockStoreVolumeDirect = 44;
+        NbsLoadTablet = 45;
+        DbsController = 46;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
-        Reserved43 = 43;
-        Reserved44 = 44;
-        Reserved45 = 45;
-        Reserved46 = 46;
+        Reserved47 = 47;
+        Reserved48 = 48;
+        Reserved49 = 49;
+        Reserved50 = 50;
 
         UserTypeStart = 255;
         TypeInvalid = -1;
@@ -255,4 +260,43 @@ message TEvDropLease {
 
 message TEvLeaseDropped {
     optional uint64 TabletID = 1;
+}
+
+message TEvTabletStateSubscribe {
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TEvTabletStateUnsubscribe {
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+}
+
+message TEvTabletStateUpdate {
+    enum EState {
+        StateUnknown = 0;
+        StateBooting = 1;
+        StateActive = 2;
+        StateTerminating = 3;
+        StateDead = 4;
+    }
+
+    optional fixed64 TabletId = 1;
+    optional uint64 SeqNo = 2;
+    optional EState State = 3;
+    optional NActorsProto.TActorId UserActorId = 4;
+}
+
+message TEvMoveData {
+    repeated uint32 Groups = 1;
+}
+
+message TEvMoveDataResponse {
+    optional uint64 TabletId = 1;
+    enum EStatus {
+        Success = 0;
+        ErrorGroupIdMismatch = 1;
+    }
+    optional EStatus Status = 2;
+    optional string ErrorReason = 3;
 }

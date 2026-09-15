@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/login/protos/login.pb.h>
@@ -49,13 +48,14 @@ public:
     }
 
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool needTraverse,
         bool requireUserAdministratorAccess, bool applyPathTableRange)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
+        , NeedTraverse(needTraverse)
     {
         if (applyPathTableRange) {
             if (auto cellsFrom = TBase::TableRange.From.GetCells(); cellsFrom.size() > 0 && !cellsFrom[0].IsNull()) {
@@ -76,8 +76,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::NAuth::TAuthScanBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::NAuth::TAuthScanBase: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -90,14 +90,12 @@ protected:
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         bool isAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "ProceedToScan,"
-            << " tenant name: " << TBase::TenantName
-            << " tenant owner: " << TBase::DatabaseOwner
-            << " subject sid: " << (UserToken ? UserToken->GetUserSID() : "empty")
-            << " require admin access: " << RequireUserAdministratorAccess
-            << " is admin: " << isAdmin
-        );
+        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::ProceedToScan: starting auth scan",
+            {"tenantName", TBase::TenantName},
+            {"databaseOwner", TBase::DatabaseOwner},
+            {"userSid", (UserToken ? UserToken->GetUserSID() : "empty")},
+            {"requireAdministratorAccess", RequireUserAdministratorAccess},
+            {"isAdmin", isAdmin});
 
         if (RequireUserAdministratorAccess && !isAdmin) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
@@ -117,6 +115,10 @@ protected:
     }
 
     void ContinueScan() {
+        if (IsNavigatePathInProgress) {
+            return;
+        }
+
         while (DeepFirstSearchStack) {
             auto& last = DeepFirstSearchStack.back();
 
@@ -156,6 +158,7 @@ protected:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        IsNavigatePathInProgress = false;
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
 
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
@@ -167,20 +170,19 @@ protected:
             return;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got navigate: " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::HandleNavigateResult: received navigate result",
+            {"navigateResult", request->ToString(*AppData()->TypeRegistry)});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
-        FillBatch(*batch, entry);
-
-        if (!RequireUserAdministratorAccess
-                && UserToken && !UserToken->GetSerializedToken().empty()
-                && entry.SecurityObject && !entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
-            batch->Rows.clear();
+        if (RequireUserAdministratorAccess
+            || !UserToken || UserToken->GetSerializedToken().empty()
+            || !entry.SecurityObject
+            || entry.SecurityObject->CheckAccess(NACLib::DescribeSchema, *UserToken)) {
+            FillBatch(*batch, entry);
         }
 
-        if (!batch->Finished && entry.ListNodeEntry) {
+        if (NeedTraverse && entry.ListNodeEntry) {
             DeepFirstSearchStack.emplace_back(std::move(entry));
         }
 
@@ -198,7 +200,10 @@ protected:
     }
 
     void NavigatePath(TPath path) {
+        IsNavigatePathInProgress = true;
+
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = this->DatabaseName;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
@@ -206,8 +211,8 @@ protected:
         entry.Operation = TSchemeCacheNavigate::OpList;
         entry.RedirectRequired = false;
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Navigate " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_TRACE_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::Navigate: sending navigate request",
+            {"navigateRequest", request->ToString(*AppData()->TypeRegistry)});
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
@@ -261,6 +266,8 @@ private:
     bool RequireUserAdministratorAccess;
     std::optional<TString> PathFrom, PathTo;
     TVector<TTraversingChildren> DeepFirstSearchStack;
+    bool IsNavigatePathInProgress = false;
+    const bool NeedTraverse;
 };
 
 }

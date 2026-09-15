@@ -3,7 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/random/fast.h>
@@ -140,10 +140,10 @@ public:
                 CutLogLsn = *NextCutLogLsn;
                 CutLogBytesWritten = NextCutLogBytesWritten;
                 ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
-                        record, DataBuffer, seg, nullptr);
+                        record, DataBuffer, seg, nullptr, TWriteSource::GroupWriteLoadActor);
             } else {
                 ev = std::make_unique<NPDisk::TEvLog>(PDiskParams->Owner, OwnerRound, TLogSignature(),
-                        DataBuffer, seg, nullptr);
+                        DataBuffer, seg, nullptr, TWriteSource::GroupWriteLoadActor);
             }
             BytesInFlight += DataBuffer.GetSize();
             ++LogInFlight;
@@ -283,8 +283,10 @@ class TPDiskLogWriterLoadTestActor : public TActorBootstrapped<TPDiskLogWriterLo
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     i32 OwnerInitInProgress = 0;
     ui32 HarakiriInFlight = 0;
+    ui32 InitializingWorkerIdx = 0;
 
     TReallyFastRng32 Rng;
 
@@ -336,6 +338,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         // Report->Duration = TDuration::Seconds(DurationSeconds);
 
@@ -354,16 +357,15 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskLogWriterLoadTestActor::StateFunc);
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
         if (IsWardenlessTest) {
             for (auto& worker : Workers) {
-                AppData(ctx)->Icb->RegisterLocalControl(worker->MaxInFlight,
+                AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                         Sprintf("PDiskWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
-                SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }
+            InitWorker(ctx);
         } else {
             LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Send TEvRegisterPDiskLoadActor");
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
@@ -375,10 +377,18 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << (ui32)msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
-            SendRequest(ctx, worker->GetYardInit(PDiskGuid));
+        }
+        InitWorker(ctx);
+    }
+
+    void InitWorker(const TActorContext& ctx) {
+        // YardInitResult has no VDisk ID or request cookie. Keep one initial YardInit
+        // in flight and associate its result with InitializingWorkerIdx.
+        if (InitializingWorkerIdx < Workers.size()) {
+            SendRequest(ctx, Workers[InitializingWorkerIdx]->GetYardInit(PDiskGuid));
         }
     }
 
@@ -397,18 +407,18 @@ public:
                 << " Owner# " << (ui32)msg->PDiskParams->Owner
                 << " OwnerRound# " << msg->PDiskParams->OwnerRound);
 
-        for (auto& worker : Workers) {
-            if (!worker->PDiskParams) {
-                worker->PDiskParams = std::move(msg->PDiskParams);
-                worker->OwnerRound = Max(worker->OwnerRound, worker->PDiskParams->OwnerRound);
-                auto logRead = worker->GetLogRead();
-                Y_ABORT_UNLESS(logRead);
-                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
-                        << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
-                SendRequest(ctx, std::move(logRead));
-                break;
-            }
-        }
+        Y_ABORT_UNLESS(InitializingWorkerIdx < Workers.size());
+        auto& worker = Workers[InitializingWorkerIdx];
+        Y_ABORT_UNLESS(!worker->PDiskParams);
+        worker->PDiskParams = std::move(msg->PDiskParams);
+        worker->OwnerRound = Max(worker->OwnerRound, worker->PDiskParams->OwnerRound);
+        auto logRead = worker->GetLogRead();
+        Y_ABORT_UNLESS(logRead);
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
+                << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
+        SendRequest(ctx, std::move(logRead));
+        ++InitializingWorkerIdx;
+        InitWorker(ctx);
     }
 
     void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) {
@@ -434,6 +444,7 @@ public:
 
         // All workers is initialized
         if (!OwnerInitInProgress) {
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
             TestStartTime = TAppData::TimeProvider->Now();
             if (IsDying) {
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvReadLogResult, "
@@ -480,7 +491,7 @@ public:
         auto msg = ev->Get();
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
-                << " TEvRegisterPDiskLoadActorResult recieved, ownerRound# " << msg->OwnerRound);
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             worker->PoisonPill();

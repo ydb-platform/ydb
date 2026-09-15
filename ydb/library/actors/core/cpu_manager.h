@@ -2,9 +2,9 @@
 
 #include "config.h"
 #include "executor_pool.h"
-#include "mon_stats.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
+#include <optional>
 
 namespace NActors {
     struct TActorSystemSetup;
@@ -41,6 +41,8 @@ namespace NActors {
             return Executors[poolId].Get();
         }
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {
                 Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
@@ -51,11 +53,12 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
-        THarmonizerStats GetHarmonizerStats() const {
+        void GetHarmonizerStats(THarmonizerStats &stats) const {
             if (Harmonizer) {
-                return Harmonizer->GetStats();
+                return Harmonizer->GetStats(stats);
+            } else {
+                stats = {};
             }
-            return {};
         }
 
     private:

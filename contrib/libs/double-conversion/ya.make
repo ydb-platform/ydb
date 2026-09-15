@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(3.3.1)
+VERSION(3.4.0)
 
-ORIGINAL_SOURCE(https://github.com/google/double-conversion/archive/v3.3.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/double-conversion/archive/v3.4.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/double-conversion

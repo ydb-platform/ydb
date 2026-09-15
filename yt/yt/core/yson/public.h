@@ -12,9 +12,9 @@ namespace NYT::NYson {
 
 enum class ETokenType;
 
-class TYsonProducer;
 template <class... TAdditionalArgs>
-class TExtendedYsonProducer;
+class TParametricYsonProducer;
+using TYsonProducer = TParametricYsonProducer<>;
 
 class TYsonInput;
 class TYsonOutput;
@@ -53,6 +53,15 @@ DEFINE_ENUM(EUnknownYsonFieldsMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_ERROR_ENUM(
+    ((ParseError)                (4000))
+    ((MemoryLimitExceeded)       (4001))
+    ((DepthLimitExceeded)        (4002))
+    ((InvalidProtobufWireFormat) (4003))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 //
 // We need two limits for YSON parsing:
 //  - the smaller (CypressWriteNestingLevelLimit) is used for commands like set or create.
@@ -60,7 +69,6 @@ DEFINE_ENUM(EUnknownYsonFieldsMode,
 // Thus we try to avoid the problem when we cannot read
 // a value that was written successfully, i.e. get("//a/@") after set("//a/@x", <deep yson>).
 // See YT-15698.
-constexpr int OriginalNestingLevelLimit = 64;
 constexpr int CypressWriteNestingLevelLimit = 128;
 constexpr int NewNestingLevelLimit = 256;
 

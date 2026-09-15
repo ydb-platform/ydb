@@ -4,13 +4,16 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TEvRequestFilter::TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber)
-    : MinPK(source.GetMinPK())
-    , MaxPK(source.GetMaxPK())
-    , SourceId(source.GetSourceId())
+TEvRequestFilter::TEvRequestFilter(const TPortionDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber)
+    : ExternalTaskId(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetScanIdentifier())
+    , MinPK(source.GetPortionInfo().IndexKeyStart())
+    , MaxPK(source.GetPortionInfo().IndexKeyEnd())
+    , PortionId(source.GetPortionInfo().GetPortionId())
     , RecordsCount(source.GetRecordsCount())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
-    , Subscriber(subscriber) {
+    , Subscriber(subscriber)
+    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag())
+{
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

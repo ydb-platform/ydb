@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -12,6 +13,7 @@
 
 #include <util/generic/algorithm.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/system/event.h>
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
 
@@ -23,6 +25,21 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
+
+    class TSignalActor : public TActorBootstrapped<TSignalActor> {
+    public:
+        explicit TSignalActor(TManualEvent* done)
+            : Done(done)
+        {}
+
+        void Bootstrap() {
+            Done->Signal();
+            PassAway();
+        }
+
+    private:
+        TManualEvent* const Done;
+    };
 
     class TAliveCounterDecorator : public TDecorator {
     public:
@@ -191,7 +208,7 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -226,6 +243,31 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
 
     Y_UNIT_TEST(RegistrationAndPassingAwayActorsLazyStrictPool) {
         RunRegistrationAndPassingAwayActors<ESendingType::Lazy>(true);
+    }
+
+    Y_UNIT_TEST(AllThreadsSharedRunWithoutLegacySharedFlag) {
+        THolder<TActorSystemSetup> setup = TActorBenchmark::GetActorSystemSetup();
+        setup->CpuManager.Shared.United = true;
+        setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+            .PoolId = 0,
+            .PoolName = "UnitedPool",
+            .Threads = 2,
+            .SpinThreshold = 0,
+            .MaxThreadCount = 2,
+            .DefaultThreadCount = 2,
+            .AllThreadsAreShared = true,
+        });
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TManualEvent done;
+        actorSystem.Register(new TSignalActor(&done), TMailboxType::HTSwap, 0);
+        const bool completed = done.WaitT(TDuration::Seconds(5));
+
+        actorSystem.Stop();
+        UNIT_ASSERT_C(completed,
+            "AllThreadsAreShared pool did not execute an actor without the legacy HasSharedThread flag");
     }
 
 } // Y_UNIT_TEST_SUITE(ActorBenchmark)

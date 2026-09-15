@@ -2,23 +2,60 @@
 
 #include "defs.h"
 
+#include <util/generic/algorithm.h>
+
+#include <array>
+#include <atomic>
+#include <cstring>
+#include <type_traits>
+
 namespace NActors {
     // wait-free one writer multi reader hash-tree for service mapping purposes
     // on fast updates on same key - could lead to false-negatives, we don't care as such cases are broken from service-map app logic
 
     template <typename TKey, typename TValue, typename THash, ui64 BaseSize = 256 * 1024, ui64 ExtCount = 4, ui64 ExtBranching = 4>
     class TServiceMap : TNonCopyable {
+        // CounterIn/CounterOut validate the whole snapshot, but every part still
+        // has to be accessed atomically to make a discarded torn read well-defined.
+        template <typename T>
+        class TAtomicStorage : TNonCopyable {
+            static_assert(std::is_trivially_copyable_v<T>);
+            static_assert(sizeof(T) % sizeof(ui64) == 0);
+
+            static constexpr size_t PartCount = sizeof(T) / sizeof(ui64);
+            std::array<std::atomic<ui64>, PartCount> Parts{};
+
+        public:
+            T Load() const noexcept {
+                std::array<ui64, PartCount> parts;
+                for (size_t i = 0; i != PartCount; ++i) {
+                    parts[i] = Parts[i].load(std::memory_order_relaxed);
+                }
+
+                T value;
+                std::memcpy(&value, parts.data(), sizeof(value));
+                return value;
+            }
+
+            void Store(const T& value) noexcept {
+                std::array<ui64, PartCount> parts;
+                std::memcpy(parts.data(), &value, sizeof(value));
+
+                for (size_t i = 0; i != PartCount; ++i) {
+                    Parts[i].store(parts[i], std::memory_order_relaxed);
+                }
+            }
+        };
+
         struct TEntry : TNonCopyable {
             ui32 CounterIn;
             ui32 CounterOut;
-            TKey Key;
-            TValue Value;
+            TAtomicStorage<TKey> Key;
+            TAtomicStorage<TValue> Value;
 
             TEntry()
                 : CounterIn(0)
                 , CounterOut(0)
-                , Key()
-                , Value()
             {
             }
         };
@@ -39,8 +76,8 @@ namespace NActors {
             for (ui32 i = 0; i != ExtCount; ++i) {
                 const TEntry& entry = branch->Entries[i];
                 const ui32 counterIn = AtomicLoad(&entry.CounterIn);
-                if (counterIn != 0 && entry.Key == key) {
-                    ret = entry.Value;
+                if (counterIn != 0 && entry.Key.Load() == key) {
+                    ret = entry.Value.Load();
                     const ui32 counterOut = AtomicLoad(&entry.CounterOut);
                     if (counterOut == counterIn)
                         return true;
@@ -64,7 +101,7 @@ namespace NActors {
                             return;
                     }
                 } else {
-                    if (entry.Key == key) {
+                    if (entry.Key.Load() == key) {
                         oldEntry = &entry;
                         if (!zeroEntry || *zeroEntry)
                             return;
@@ -131,12 +168,12 @@ namespace NActors {
             // now we got both entries, first - push new one
             const ui32 counter = AtomicUi32Increment(&Counter);
             AtomicStore(&zeroEntry->CounterOut, counter);
-            zeroEntry->Key = key;
-            zeroEntry->Value = value;
+            zeroEntry->Key.Store(key);
+            zeroEntry->Value.Store(value);
             AtomicStore(&zeroEntry->CounterIn, counter);
 
             if (oldEntry != nullptr) {
-                const TValue ret = oldEntry->Value;
+                const TValue ret = oldEntry->Value.Load();
                 AtomicStore<ui32>(&oldEntry->CounterOut, 0);
                 AtomicStore<ui32>(&oldEntry->CounterIn, 0);
                 return ret;

@@ -1,6 +1,5 @@
 #pragma once
 #include <ydb/core/formats/arrow/common/adapter.h>
-#include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
@@ -159,6 +158,13 @@ public:
         AFL_VERIFY(ExecuteToArrayImpl(batch, acceptor));
         return result;
     }
+};
+
+class THashConstructor {
+public:
+    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+    static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+
 };
 
 }   // namespace NKikimr::NArrow::NHash

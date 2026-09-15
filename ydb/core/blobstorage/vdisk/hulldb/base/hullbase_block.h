@@ -45,6 +45,9 @@ namespace NKikimr {
             return TabletId == other.TabletId;
         }
     };
+
+    static_assert(sizeof(TKeyBlock) == 8, "expect sizeof(TKeyBlock) == 8");
+
 #pragma pack(pop)
 
     inline bool operator <(const TKeyBlock &x, const TKeyBlock &y) {
@@ -153,6 +156,9 @@ namespace NKikimr {
             return Sprintf("{BlockedGen: %" PRIu32 "}", BlockedGeneration);
         }
     };
+
+    static_assert(sizeof(TMemRecBlock) == 4, "expect sizeof(TMemRecBlock) == 4");
+
 #pragma pack(pop)
 
     inline bool operator==(const TMemRecBlock &x, const TMemRecBlock &y) {

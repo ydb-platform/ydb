@@ -2,7 +2,7 @@
 #include "defs.h"
 
 namespace NKikimr {
-    
+
 static const ui32 Primes[128] = {
     104743, 105023, 105359, 105613,
     104759, 105031, 105361, 105619,
@@ -38,22 +38,35 @@ static const ui32 Primes[128] = {
     106013, 106303, 106591, 106823,
 };
 
-class TStateStorageRingWalker {
-    const ui32 Sz;
-    const ui32 Delta;
-    ui32 A;
-public:
-    TStateStorageRingWalker(ui32 hash, ui32 sz)
-        : Sz(sz)
-        , Delta(Primes[hash % 128])
-        , A(hash + Delta)
+struct TStateStorageRingWalker {
+    static auto Select(ui32 hash, ui32 sz, ui32 nToSelect)
     {
-        Y_DEBUG_ABORT_UNLESS(Delta > Sz);
-    }
-
-    ui32 Next() {
-        A += Delta;
-        return (A % Sz);
+        std::vector<ui32> rings;
+        rings.resize(nToSelect);
+        std::unordered_set<ui32> ringsUsed;
+        const ui32 delta = Primes[hash % 128];
+        ui32 a = hash + delta;
+        Y_DEBUG_ABORT_UNLESS(delta > sz);
+        for (ui32 i : xrange(nToSelect)) {
+            a += delta;
+            rings[i] = a % sz;
+            ringsUsed.insert(rings[i]);
+        }
+        if (ringsUsed.size() != nToSelect) {
+            std::unordered_set<ui32> duplicates;
+            for (ui32 i : xrange(nToSelect)) {
+                if (!duplicates.insert(rings[i]).second) {
+                    ui32 proposedRing = rings[i];
+                    while (ringsUsed.count(proposedRing) > 0) {
+                        proposedRing = (proposedRing + 1) % nToSelect;
+                    }
+                    rings[i] = proposedRing;
+                    ringsUsed.insert(proposedRing);
+                    duplicates.insert(proposedRing);
+                }
+            }
+        }
+        return rings;
     }
 };
 }

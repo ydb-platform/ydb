@@ -14,6 +14,18 @@ def post_install(self):
         libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_DL_LIB")
         libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_PTHREAD_LIB")
 
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_HAVE_GETAUXVAL")
+        libunwind.after(
+            "CFLAGS",
+            """
+            IF (OS_LINUX)
+                CFLAGS(
+                    -D_LIBUNWIND_HAVE_GETAUXVAL
+                )
+            ENDIF()
+            """,
+        )
+
         # original build uses -f options heavily, keep only necessary subset
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
@@ -38,12 +50,14 @@ def post_install(self):
                             "-D_LIBUNWIND_HIDE_SYMBOLS",
                         ],
                     ),
-                    "OS_EMSCRIPTEN AND NOT ARCH_WASM32": Linkable(
+                    "OS_EMSCRIPTEN AND ARCH_WASM64": Linkable(
                         SRCS=["src/Unwind-wasm.c"],
                         PEERDIR=["contrib/restricted/emscripten/include"],
                         CFLAGS=[
                             "-D_LIBUNWIND_HIDE_SYMBOLS",
                             "-D__WASM_EXCEPTIONS__",
+                            # Silence 'omitting the parameter name in a function definition is a C23 extension' warning
+                            "-Wno-c23-extensions",
                         ],
                     ),
                 }
@@ -52,7 +66,7 @@ def post_install(self):
 
 
 llvm_libunwind = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib", "g:cpp-committee"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/libunwind",
     nixattr="llvmPackages_latest.libunwind",
     copy_sources=[
@@ -65,6 +79,8 @@ llvm_libunwind = CMakeNinjaNixProject(
     ],
     disable_includes=[
         "commpage_defs.h",
+        "OS.h",
+        "ptrauth.h",
         "sys/debug.h",
         "sys/pseg.h",
         "System/pthread_machdep.h",

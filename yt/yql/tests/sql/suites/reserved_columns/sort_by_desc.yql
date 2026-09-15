@@ -1,0 +1,8 @@
+-- ORDER BY ... DESC makes YQL generate auxiliary "_yql_column_N" sort columns:
+-- they are internal and must not be rejected by the reserved prefix check
+PRAGMA yt.UseNativeDescSort = 'false';
+
+INSERT INTO plato.Output WITH TRUNCATE
+SELECT key, subkey, value
+FROM plato.Input
+ORDER BY key DESC, subkey;

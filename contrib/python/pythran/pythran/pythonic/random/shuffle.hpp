@@ -52,8 +52,7 @@ namespace random
   template <class T, class function>
   types::none_type shuffle(T &seq, function &&randf)
   {
-    std::shuffle(seq.begin(), seq.end(),
-                 details::URG<function>(std::forward<function>(randf)));
+    std::shuffle(seq.begin(), seq.end(), details::URG<function>(std::forward<function>(randf)));
     return builtins::None;
   }
 } // namespace random

@@ -54,7 +54,7 @@
                                         "PlanNodeId": 9,
                                         "Plans": [
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "t1.q2"
                                                 ],
@@ -63,7 +63,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)",
+                                                        "Node Type": "Aggregate-LeftJoin (Map)",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{COUNT(item.t2.q1)}",
@@ -92,7 +92,7 @@
                                                                         "ExternalPlanNodeId": 3
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (MapJoin)"
+                                                                "Name": "LeftJoin (Map)"
                                                             }
                                                         ],
                                                         "PlanNodeId": 7,
@@ -114,10 +114,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
-                                                                                            "q1",
-                                                                                            "q2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "q1 (-\u221e, +\u221e)",
                                                                                             "q2 (-\u221e, +\u221e)"
                                                                                         ],
@@ -152,10 +148,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join-group-by-with-null.test_plan/int8_tbl",
                                                                                         "ReadColumns": [
-                                                                                            "q1",
-                                                                                            "q2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "q1 (-\u221e, +\u221e)",
                                                                                             "q2 (-\u221e, +\u221e)"
                                                                                         ],

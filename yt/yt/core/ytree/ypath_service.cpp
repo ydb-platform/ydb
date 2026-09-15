@@ -51,7 +51,7 @@ struct TCacheKey
         , RequestBodyHash(GetChecksum(RequestBody))
     { }
 
-    bool operator == (const TCacheKey& other) const
+    bool operator==(const TCacheKey& other) const
     {
         return
             Path == other.Path &&
@@ -96,7 +96,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CheckProducedNonEmptyData(const TString& data)
+void CheckProducedNonEmptyData(const std::string& data)
 {
     if (data.empty()) {
         THROW_ERROR_EXCEPTION(
@@ -233,7 +233,7 @@ class TFromExtendedProducerYPathService
     : public TYPathServiceBase
     , public TSupportsGet
 {
-    using TUnderlyingProducer = TExtendedYsonProducer<const IAttributeDictionaryPtr&>;
+    using TUnderlyingProducer = TParametricYsonProducer<const IAttributeDictionaryPtr&>;
 public:
     explicit TFromExtendedProducerYPathService(TUnderlyingProducer producer)
         : Producer_(std::move(producer))
@@ -326,7 +326,7 @@ private:
 };
 
 IYPathServicePtr IYPathService::FromProducer(
-    NYson::TExtendedYsonProducer<const IAttributeDictionaryPtr&> producer)
+    NYson::TParametricYsonProducer<const IAttributeDictionaryPtr&> producer)
 {
     return New<TFromExtendedProducerYPathService>(std::move(producer));
 }
@@ -602,7 +602,6 @@ public:
 private:
     const IYPathServicePtr UnderlyingService_;
     const IInvokerPtr Invoker_;
-
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
@@ -912,7 +911,7 @@ public:
         TPermissionValidator validator)
         : UnderlyingService_(std::move(underlyingService))
         , Validator_(std::move(validator))
-        , CachingPermissionValidator_(this, EPermissionCheckScope::This)
+        , CachingAdHocPermissionValidator_(this)
     { }
 
     TResolveResult Resolve(
@@ -931,7 +930,7 @@ private:
     const IYPathServicePtr UnderlyingService_;
     const TPermissionValidator Validator_;
 
-    TCachingPermissionValidator CachingPermissionValidator_;
+    TCachingAdHocPermissionValidator CachingAdHocPermissionValidator_;
 
     void ValidatePermission(
         EPermissionCheckScope /*scope*/,
@@ -944,7 +943,9 @@ private:
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         // TODO(max42): choose permission depending on method.
-        CachingPermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
+        CachingAdHocPermissionValidator_.Validate(
+            EPermission::Read,
+            context->GetAuthenticationIdentity().User);
         ExecuteVerb(UnderlyingService_, context);
         return true;
     }

@@ -8,41 +8,41 @@
 #include "request_validators.h"
 #include "util.h"
 #include "validators.h"
-#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
-#include <ydb/core/fq/libs/control_plane_storage/internal/response_tasks.h>
-
-#include <util/generic/guid.h>
-#include <util/system/yassert.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-#include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/protobuf/interop/cast.h>
-
-#include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
-#include <ydb/library/db_pool/db_pool.h>
-#include <ydb/library/security/util.h>
-#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/mon/mon.h>
-
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
+#include <ydb/core/fq/libs/control_plane_storage/internal/utils.h>
+#include <ydb/core/fq/libs/control_plane_storage/internal/response_tasks.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/metrics/status_code_counters.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
+#include <ydb/core/mon/mon.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/db_pool/db_pool.h>
+#include <ydb/library/security/util.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/core/util/exceptions.h>
+
+#include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/protobuf/interop/cast.h>
+
+#include <util/generic/guid.h>
+#include <util/system/yassert.h>
 
 namespace NFq {
 
@@ -186,7 +186,7 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntitiesWithVisibilityPriority. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -214,7 +214,7 @@ TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, b
         T entity;
         if (!entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for GetEntities. Please contact internal support";
         }
         const auto visibility = entity.content().acl().visibility();
         if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
@@ -249,7 +249,7 @@ struct TPrepareResponseResultType : TPrepareResponseResultTypeImpl<ResponseEvent
 
 class TDbRequester {
 protected:
-    explicit TDbRequester(TDbPool::TPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
+    explicit TDbRequester(TDbPoolPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
         : DbPool(std::move(pool))
         , YdbConnection(std::move(ydbConnection))
     {
@@ -263,7 +263,7 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
 
-    TAsyncStatus Validate(
+    static TAsyncStatus Validate(
         NActors::TActorSystem* actorSystem,
         std::shared_ptr<std::optional<TTransaction>> transaction,
         size_t item, const TVector<TValidationQuery>& validators,
@@ -281,7 +281,8 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryTli = true);
 
-    TAsyncStatus ReadModifyWrite(
+    static TAsyncStatus ReadModifyWrite(
+        TDbPoolPtr dbPool,
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -291,8 +292,20 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
 
+    TAsyncStatus ReadModifyWrite(
+        const TString& readQuery,
+        const NYdb::TParams& readParams,
+        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo = {},
+        const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryOnTli = true) {
+        return ReadModifyWrite(DbPool, readQuery, readParams, prepare, requestCounters, debugInfo, validators, transactionMode, retryOnTli);
+    }
+
 protected:
-    TDbPool::TPtr DbPool;
+    TDbPoolPtr DbPool;
     TYdbConnectionPtr YdbConnection;
 };
 
@@ -316,6 +329,7 @@ protected:
     * Utility
     */
     bool IsSuperUser(const TString& user) const;
+    static bool IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user);
 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool passwordRequired = true) const
@@ -400,6 +414,7 @@ protected:
         RTS_CREATE_DATABASE,
         RTS_DESCRIBE_DATABASE,
         RTS_MODIFY_DATABASE,
+        RTS_DELETE_FOLDER_RESOURCES,
         RTS_MAX,
     };
 
@@ -427,7 +442,8 @@ protected:
         "PingTask",
         "CreateDatabase",
         "DescribeDatabase",
-        "ModifyDatabase"
+        "ModifyDatabase",
+        "DeleteFolderResources"
     };
 
     enum ERequestTypeCommon {
@@ -461,6 +477,7 @@ protected:
         RTC_CREATE_DATABASE,
         RTC_DESCRIBE_DATABASE,
         RTC_MODIFY_DATABASE,
+        RTC_DELETE_FOLDER_RESOURCES,
         RTC_MAX,
     };
 
@@ -514,7 +531,8 @@ protected:
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
             { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
             { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
-            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") }
+            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources") },
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -608,23 +626,26 @@ protected:
     std::pair<FederatedQuery::Query, FederatedQuery::Job> GetCreateQueryProtos(
         const FederatedQuery::CreateQueryRequest& request, const TString& user, TInstant startTime) const;
 
-    FederatedQuery::Internal::QueryInternal GetQueryInternalProto(
+    static FederatedQuery::Internal::QueryInternal GetQueryInternalProto(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token,
-        const TMaybe<TQuotaMap>& quotas) const;
+        const TMaybe<TQuotaMap>& quotas);
 
-    void FillConnectionsAndBindings(
+    static void FillConnectionsAndBindings(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         FederatedQuery::Internal::QueryInternal& queryInternal, FederatedQuery::QueryContent::QueryType queryType,
         const TVector<FederatedQuery::Connection>& allConnections,
         const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
-        const THashMap<TString, FederatedQuery::Binding>& visibleBindings) const;
+        const THashMap<TString, FederatedQuery::Binding>& visibleBindings);
 
     // Describe query request
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev) const;
 
-    void FillDescribeQueryResult(
+    static void FillDescribeQueryResult(
+        const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
         FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal,
-        const TString& user, TPermissions permissions) const;
+        const TString& user, TPermissions permissions);
 
     // Get result data request
 
@@ -670,7 +691,7 @@ protected:
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev) const;
 
-    void FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks) const;
+    static void FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks);
 
     // Ping task request
 
@@ -687,14 +708,14 @@ protected:
 
     NYql::TIssues ValidateRequest(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev) const;
 
-    void UpdateTaskInfo(
-        NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
+    static void UpdateTaskInfo(
+        NActors::TActorSystem* actorSystem, const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
         FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-        TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const;
+        NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt);
 
-    void FillQueryStatistics(
+    static void FillQueryStatistics(
         const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-        const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const;
+        const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter);
 
     void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 
@@ -747,7 +768,7 @@ protected:
                     issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                     internalIssues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 }
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -767,7 +788,10 @@ protected:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(request)) << "} ERROR: " << internalIssues.ToOneLineString());
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
+                    {"request", TrimForLogs(SecureDebugString(request))},
+                    {"ERROR", internalIssues.ToOneLineString()});
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -780,7 +804,9 @@ protected:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name},
+                    {"result", TrimForLogs(SecureDebugString(result))});
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);
@@ -815,10 +841,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     // Query Quota
-    TQueryQuotasMap QueryQuotas;
-    THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
-    TInstant QuotasUpdatedAt = TInstant::Zero();
-    bool QuotasUpdating = false;
+    struct TQueryQuotaState {
+        TQueryQuotasMap Query;
+        THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> Requests;
+        TInstant UpdatedAt = TInstant::Zero();
+        bool Updating = false;
+    };
+    std::shared_ptr<TQueryQuotaState> Quotas = std::make_shared<TQueryQuotaState>();
 
     TString TablePathPrefix;
 
@@ -863,6 +892,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
@@ -902,6 +932,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev);
+
+    void Handle(TEvControlPlaneStorage::TEvDeleteFolderResourcesRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev);
@@ -968,7 +1000,7 @@ private:
         const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        return status.Apply([prepare, actorSystem, name, debugInfo, startTime, self, sender=ev->Sender, cookie=ev->Cookie, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -980,7 +1012,7 @@ private:
                 } else {
                     issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 }
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -999,11 +1031,13 @@ private:
 
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << " ERROR: " << internalIssues.ToOneLineString());
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
+                    {"ERROR", internalIssues.ToOneLineString()});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -1012,11 +1046,12 @@ private:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": SUCCESS");
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncOk();
             }
             requestCounters.DecInFly();
@@ -1035,7 +1070,8 @@ private:
         bool RetryOnTli = false;
     };
 
-    NThreading::TFuture<void> PickTask(
+    static NThreading::TFuture<void> PickTask(
+        TDbPoolPtr dbPool,
         const TPickTaskParams& taskParams,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,

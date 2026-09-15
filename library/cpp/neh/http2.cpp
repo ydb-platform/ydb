@@ -126,6 +126,10 @@ bool THttp2Options::Set(TStringBuf name, TStringBuf value) {
 
 namespace NNeh {
     const NDns::TResolvedHost* Resolve(const TStringBuf host, ui16 port, NHttp::EResolverType resolverType);
+
+    bool IsNotError(unsigned httpCode) {
+        return (httpCode >= 200u && httpCode < (!THttp2Options::RedirectionNotError ? 300u : 400u)) || THttp2Options::AnyResponseIsNotError;
+    }
 }
 
 namespace {
@@ -1229,7 +1233,7 @@ namespace {
     void THttpRequest::OnResponse(TAutoPtr<THttpParser>& rsp) {
         DBGOUT("THttpRequest::OnResponse()");
         ReleaseConn();
-        if (Y_LIKELY(((rsp->RetCode() >= 200u && rsp->RetCode() < (!THttp2Options::RedirectionNotError ? 300u : 400u)) || THttp2Options::AnyResponseIsNotError))) {
+        if (Y_LIKELY(IsNotError(rsp->RetCode()))) {
             NotifyResponse(rsp->DecodedContent(), rsp->FirstLine(), rsp->Headers());
         } else {
             TString message;
@@ -1852,7 +1856,7 @@ namespace {
             TLockFreeQueue<TResponseDataRef> ResponsesDataQueue_;
             THashMap<TAtomicBase, TResponseDataRef> ResponsesData_;
 
-            TAtomicBool Canceled_;
+            TAtomicBool Canceled_ = false;
             TAtomicBool SeenMessageWithoutKeepalive_ = false;
 
             i32 LeftRequestsToDisconnect_ = -1;
@@ -1939,19 +1943,14 @@ namespace {
         }
 
         TDuration GetKeepAliveTimeout() const noexcept {
-            size_t cc = HttpInConnCounter()->Val();
-            TFdLimits lim(*HttpInConnLimits());
+            const TFdLimits lim(*HttpInConnLimits());
 
-            if (!TFdLimits::ExceedLimit(cc, lim.Soft())) {
-                return THttp2Options::ServerInputDeadlineKeepAliveMax;
-            }
-
-            if (cc > lim.Hard()) {
-                cc = lim.Hard();
-            }
-            TDuration::TValue softTuneRange = THttp2Options::ServerInputDeadlineKeepAliveMax.Seconds() - THttp2Options::ServerInputDeadlineKeepAliveMin.Seconds();
-
-            return TDuration::Seconds((softTuneRange * (cc - lim.Soft())) / (lim.Hard() - lim.Soft() + 1)) + THttp2Options::ServerInputDeadlineKeepAliveMin;
+            return NNeh::CalcKeepAliveTimeout(
+                HttpInConnCounter()->Val(),
+                lim.Soft(),
+                lim.Hard(),
+                THttp2Options::ServerInputDeadlineKeepAliveMin,
+                THttp2Options::ServerInputDeadlineKeepAliveMax);
         }
 
     private:
@@ -2050,6 +2049,26 @@ namespace NNeh {
     void SetHttp2InputConnectionsTimeouts(unsigned minSeconds, unsigned maxSeconds) {
         THttp2Options::ServerInputDeadlineKeepAliveMin = TDuration::Seconds(minSeconds);
         THttp2Options::ServerInputDeadlineKeepAliveMax = TDuration::Seconds(maxSeconds);
+    }
+
+    TDuration CalcKeepAliveTimeout(size_t connectionCount, size_t softLimit, size_t hardLimit, TDuration minTimeout, TDuration maxTimeout) noexcept {
+        //keep unused connections as long as possible, while below the soft limit
+        if (!TFdLimits::ExceedLimit(connectionCount, softLimit)) {
+            return maxTimeout;
+        }
+
+        if (connectionCount > hardLimit) {
+            connectionCount = hardLimit;
+        }
+        //an inverted window (maxTimeout < minTimeout) must not wrap the unsigned subtraction,
+        //in that case the ramp collapses and minTimeout is used right above the soft limit
+        const TDuration::TValue softTuneRange = maxTimeout > minTimeout
+            ? maxTimeout.Seconds() - minTimeout.Seconds()
+            : 0;
+
+        //approx. linear decrease [max..min], while conn. count goes [soft..hard],
+        //so the closer we are to the hard limit, the faster unused connections are dropped
+        return TDuration::Seconds((softTuneRange * (hardLimit - connectionCount)) / (hardLimit - softLimit + 1)) + minTimeout;
     }
 
     class TUnixSocketResolver {

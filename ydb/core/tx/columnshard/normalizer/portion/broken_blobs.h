@@ -34,7 +34,8 @@ public:
     }
 
     TNormalizer(const TNormalizationController::TInitContext& info)
-        : TPortionsNormalizerBase(info) {
+        : TPortionsNormalizerBase(info)
+    {
     }
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& /*schema*/) const override {

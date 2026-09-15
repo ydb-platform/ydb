@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_VALUE_OF_PRIOR_IMPL_SEP_24_2009_0158PM)
+#ifndef BOOST_FUSION_VALUE_OF_PRIOR_IMPL_SEP_24_2009_0158PM
 #define BOOST_FUSION_VALUE_OF_PRIOR_IMPL_SEP_24_2009_0158PM
 
 #include <boost/fusion/support/config.hpp>

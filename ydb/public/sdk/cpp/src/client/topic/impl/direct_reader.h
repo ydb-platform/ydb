@@ -10,7 +10,7 @@
 #include <util/thread/lfqueue.h>
 
 
-namespace NYdb::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 template <bool UseMigrationProtocol>
 class TDeferredActions;
@@ -232,7 +232,6 @@ public:
 
     void StartPartitionSession(TDirectReadPartitionSession&&);
     void UpdatePartitionSession(TPartitionSessionId, TPartitionId, TPartitionLocation);
-    TDirectReadSessionContextPtr ErasePartitionSession(TPartitionSessionId);
     void StopPartitionSession(TPartitionSessionId);
 
     // Update LastDirectReadId in the partition session object.

@@ -19,8 +19,8 @@ namespace itertools
   }
 
   template <class T, class H>
-  permutations_iterator<T, H>::permutations_iterator(pool_type const &iter,
-                                                     size_t num_elts, bool end)
+  permutations_iterator<T, H>::permutations_iterator(pool_type const &iter, size_t num_elts,
+                                                     bool end)
       : pool(iter), curr_permut(pool.size()), _size(num_elts), end(end)
   {
     std::iota(curr_permut.begin(), curr_permut.end(), 0);
@@ -37,8 +37,7 @@ namespace itertools
     return res;
   }
   template <class T, size_t N>
-  types::array_tuple<T, N> init_permut_from(size_t n,
-                                            types::array_tuple<T, N> *)
+  types::array_tuple<T, N> init_permut_from(size_t n, types::array_tuple<T, N> *)
   {
     assert(N == n && "consistent init");
     return {};
@@ -55,14 +54,12 @@ namespace itertools
   }
 
   template <class T, class I>
-  types::dynamic_tuple<T> init_permut_from(I begin, I end,
-                                           types::dynamic_tuple<T> *)
+  types::dynamic_tuple<T> init_permut_from(I begin, I end, types::dynamic_tuple<T> *)
   {
     return {begin, end};
   }
   template <class T, size_t N, class I>
-  types::array_tuple<T, N> init_permut_from(I begin, I end,
-                                            types::array_tuple<T, N> *)
+  types::array_tuple<T, N> init_permut_from(I begin, I end, types::array_tuple<T, N> *)
   {
     types::array_tuple<T, N> res;
     std::copy(begin, end, res.begin());
@@ -77,14 +74,13 @@ namespace itertools
       // than the the pool size
       // FIXME a better implementation would be to avoid
       // std::next_permutation, but only in the slow path
-      H prev_permut = init_permut_from(
-          curr_permut.begin(), curr_permut.begin() + _size, (H *)nullptr);
-      while ((end = std::next_permutation(curr_permut.begin(),
-                                          curr_permut.end()))) {
+      H prev_permut =
+          init_permut_from(curr_permut.begin(), curr_permut.begin() + _size, (H *)nullptr);
+      while ((end = std::next_permutation(curr_permut.begin(), curr_permut.end()))) {
         // Check if the prefix of the new permutation is
         // different of the previous one
-        H new_permut = init_permut_from(
-            curr_permut.begin(), curr_permut.begin() + _size, (H *)nullptr);
+        H new_permut =
+            init_permut_from(curr_permut.begin(), curr_permut.begin() + _size, (H *)nullptr);
         if (!(prev_permut == new_permut))
           break;
       }
@@ -94,25 +90,21 @@ namespace itertools
   }
 
   template <class T, class H>
-  bool permutations_iterator<T, H>::operator!=(
-      permutations_iterator<T, H> const &other) const
+  bool permutations_iterator<T, H>::operator!=(permutations_iterator<T, H> const &other) const
   {
     return !(*this == other);
   }
 
   template <class T, class H>
-  bool permutations_iterator<T, H>::operator==(
-      permutations_iterator<T, H> const &other) const
+  bool permutations_iterator<T, H>::operator==(permutations_iterator<T, H> const &other) const
   {
     if (other.end != end)
       return false;
-    return std::equal(curr_permut.begin(), curr_permut.end(),
-                      other.curr_permut.begin());
+    return std::equal(curr_permut.begin(), curr_permut.end(), other.curr_permut.begin());
   }
 
   template <class T, class H>
-  bool permutations_iterator<T, H>::operator<(
-      permutations_iterator<T, H> const &other) const
+  bool permutations_iterator<T, H>::operator<(permutations_iterator<T, H> const &other) const
   {
     if (end != other.end)
       return end > other.end;
@@ -136,8 +128,7 @@ namespace itertools
   }
 
   template <class T, class H>
-  typename _permutations<T, H>::iterator const &
-  _permutations<T, H>::begin() const
+  typename _permutations<T, H>::iterator const &_permutations<T, H>::begin() const
   {
     return *this;
   }
@@ -155,15 +146,14 @@ namespace itertools
   }
 
   template <typename T0>
-  _permutations<T0, types::dynamic_tuple<typename T0::value_type>>
-  permutations(T0 iter, long num_elts)
+  _permutations<T0, types::dynamic_tuple<typename T0::value_type>> permutations(T0 iter,
+                                                                                long num_elts)
   {
     return {iter, num_elts};
   }
 
   template <typename T0>
-  _permutations<T0, types::dynamic_tuple<typename T0::value_type>>
-  permutations(T0 iter)
+  _permutations<T0, types::dynamic_tuple<typename T0::value_type>> permutations(T0 iter)
   {
     return {iter, std::distance(iter.begin(), iter.end())};
   }

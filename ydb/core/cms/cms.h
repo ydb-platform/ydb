@@ -4,6 +4,7 @@
 #include "cluster_info.h"
 #include "cms_state.h"
 
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/maintenance.pb.h>
 
@@ -91,6 +92,14 @@ struct TEvCms {
         EvStoreWalleTaskFailed,
         EvGetClusterInfoRequest,
         EvGetClusterInfoResponse,
+        EvDDiskInfoListRequest,
+        EvDDiskInfoListResponse,
+        EvDDiskInfoGetRequest,
+        EvDDiskInfoGetResponse,
+        EvDDiskTabletListRequest,
+        EvDDiskTabletListResponse,
+        EvDDiskDiskListRequest,
+        EvDDiskDiskListResponse,
 
         EvEnd
     };
@@ -279,6 +288,46 @@ struct TEvCms {
         TString ToString() const override {
             return "Get Cluster Info Response";
         }
+    };
+
+    struct TEvDDiskInfoListRequest : public TEventPB<TEvDDiskInfoListRequest,
+                                                       NKikimrBlobStorage::TEvControllerDDiskInfoListTablets,
+                                                       EvDDiskInfoListRequest> {
+    };
+
+    struct TEvDDiskInfoListResponse : public TEventPB<TEvDDiskInfoListResponse,
+                                                        NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult,
+                                                        EvDDiskInfoListResponse> {
+    };
+
+    struct TEvDDiskInfoGetRequest : public TEventPB<TEvDDiskInfoGetRequest,
+                                                     NKikimrBlobStorage::TEvControllerDDiskInfoGetTablet,
+                                                     EvDDiskInfoGetRequest> {
+    };
+
+    struct TEvDDiskInfoGetResponse : public TEventPB<TEvDDiskInfoGetResponse,
+                                                      NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult,
+                                                      EvDDiskInfoGetResponse> {
+    };
+
+    struct TEvDDiskTabletListRequest : public TEventPB<TEvDDiskTabletListRequest,
+                                                         NKikimrCms::TDDiskTabletListRequest,
+                                                         EvDDiskTabletListRequest> {
+    };
+
+    struct TEvDDiskTabletListResponse : public TEventPB<TEvDDiskTabletListResponse,
+                                                          NKikimrCms::TDDiskTabletListResponse,
+                                                          EvDDiskTabletListResponse> {
+    };
+
+    struct TEvDDiskDiskListRequest : public TEventPB<TEvDDiskDiskListRequest,
+                                                       NKikimrCms::TDDiskDiskListRequest,
+                                                       EvDDiskDiskListRequest> {
+    };
+
+    struct TEvDDiskDiskListResponse : public TEventPB<TEvDDiskDiskListResponse,
+                                                        NKikimrCms::TDDiskDiskListResponse,
+                                                        EvDDiskDiskListResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,

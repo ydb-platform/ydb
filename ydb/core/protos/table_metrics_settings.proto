@@ -1,0 +1,24 @@
+package NKikimrSchemeOp;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TTableDetailedMetricsSettings {
+    enum EMetricsLevel {
+        MetricsLevelUnspecified = 0;
+        MetricsLevelDisabled = 1;
+        MetricsLevelTable = 2;
+        MetricsLevelPartition = 3;
+    }
+
+    message TConfigured {
+        optional EMetricsLevel MetricsLevel = 1;
+    }
+
+    // Helps clear table level override to stick to database defaults
+    message TNotConfigured {
+    }
+
+    oneof Status {
+        TConfigured Configured = 1;
+        TNotConfigured NotConfigured = 2;
+    }
+}

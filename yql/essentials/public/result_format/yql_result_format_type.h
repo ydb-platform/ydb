@@ -68,7 +68,7 @@ public:
     virtual void OnPg(TStringBuf name, TStringBuf category) = 0;
 };
 
-class TSameActionTypeVisitor : public ITypeVisitor {
+class TSameActionTypeVisitor: public ITypeVisitor {
 public:
     void OnVoid() override;
     void OnNull() override;
@@ -127,23 +127,22 @@ public:
     void OnEndTagged() override;
     void OnPg(TStringBuf name, TStringBuf category) override;
 
-public:
     virtual void Do() = 0;
 };
 
-class TThrowingTypeVisitor : public TSameActionTypeVisitor {
+class TThrowingTypeVisitor: public TSameActionTypeVisitor {
 public:
     void Do() final;
 };
 
-class TEmptyTypeVisitor : public TSameActionTypeVisitor {
+class TEmptyTypeVisitor: public TSameActionTypeVisitor {
 public:
     void Do() final;
 };
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor);
 
-class TTypeBuilder : public ITypeVisitor {
+class TTypeBuilder: public ITypeVisitor {
 public:
     TTypeBuilder();
     const NYT::TNode& GetResult() const;
@@ -210,9 +209,8 @@ private:
     void Push();
     void Pop();
 
-private:
     NYT::TNode Root_;
     TVector<NYT::TNode*> Stack_;
 };
 
-}
+} // namespace NYql::NResult

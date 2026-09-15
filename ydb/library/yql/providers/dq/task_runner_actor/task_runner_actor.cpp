@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -35,23 +36,6 @@ TTaskRunnerActorSensors GetSensors(const T& t) {
     return result;
 }
 
-class TSpillingStorageInfo : public TSimpleRefCount<TSpillingStorageInfo> {
-public:
-    using TPtr = std::shared_ptr<TSpillingStorageInfo>;
-
-    TSpillingStorageInfo(const IDqChannelStorage::TPtr spillingStorage, ui64 channelId)
-        : SpillingStorage(spillingStorage)
-        , ChannelId(channelId)
-        , FirstStoredId(0)
-        , NextStoredId(0)
-    {}
-
-    const IDqChannelStorage::TPtr SpillingStorage = nullptr;
-    ui64 ChannelId = 0;
-    ui64 FirstStoredId = 0;
-    ui64 NextStoredId = 0;
-};
-
 struct TOutputChannelReadResult {
     bool IsChanged = false;
     bool IsFinished = false;
@@ -63,19 +47,14 @@ struct TOutputChannelReadResult {
 class TOutputChannelReader {
 public:
     TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize,
-        bool wasFinished, TSpillingStorageInfo::TPtr spillingStorageInfo, ui64 cookie
+        bool wasFinished
     )
         : Channel(channel)
-        , SpillingStorageInfo(spillingStorageInfo)
         , ToPopSize(toPopSize)
         , WasFinished(wasFinished)
-        , Cookie(cookie)
     {}
 
     TOutputChannelReadResult Read() {
-        if (SpillingStorageInfo) {
-            return ReadWithSpilling();
-        }
         return ReadDirectly();
     }
 
@@ -120,64 +99,9 @@ private:
         return result;
     }
 
-    TOutputChannelReadResult ReadWithSpilling() {
-        bool changed = false;
-        bool isChanFinished = false;
-        i64 remain = ToPopSize;
-        bool hasData = true;
-        TOutputChannelReadResult result;
-
-        if (remain == 0) {
-            // special case to WorkerActor
-            remain = 5_MB;
-        }
-
-        auto spillingStorage = SpillingStorageInfo->SpillingStorage;
-        // Read all available data from the pipe and spill it
-        while (spillingStorage && !isChanFinished && hasData) {
-            TDqSerializedBatch data;
-            const auto lastPop = std::move(Channel->Pop(data));
-
-            for (auto& metric : lastPop.GetMetric()) {
-                result.Metrics.push_back(metric);
-            }
-
-            hasData = lastPop.GetResult();
-            isChanFinished = !hasData && Channel->IsFinished();
-            changed = changed || hasData || (isChanFinished != WasFinished);
-            if (hasData) {
-                spillingStorage->Put(SpillingStorageInfo->NextStoredId++, SaveForSpilling(std::move(data)), Cookie);
-            }
-        }
-
-        changed = false;
-        result.DataChunks.reserve(SpillingStorageInfo->NextStoredId - SpillingStorageInfo->FirstStoredId);
-        while (SpillingStorageInfo->FirstStoredId < SpillingStorageInfo->NextStoredId && remain > 0) {
-            TDqSerializedBatch data;
-            YQL_ENSURE(spillingStorage);
-            TBuffer blob;
-            if (!spillingStorage->Get(SpillingStorageInfo->FirstStoredId, blob, Cookie)) {
-                break;
-            }
-            ++SpillingStorageInfo->FirstStoredId;
-            data = LoadSpilled(std::move(blob));
-            remain -= data.Size();
-            result.DataChunks.emplace_back(std::move(data));
-            changed = true;
-            hasData = true;
-        }
-
-        result.IsFinished = isChanFinished && SpillingStorageInfo->FirstStoredId == SpillingStorageInfo->NextStoredId;
-        result.IsChanged = changed;
-        result.HasData = hasData;
-        return result;
-    }
-
     NTaskRunnerProxy::IOutputChannel::TPtr Channel;
-    TSpillingStorageInfo::TPtr SpillingStorageInfo;
     i64 ToPopSize;
     bool WasFinished;
-    ui64 Cookie;
 };
 
 } // namespace
@@ -425,7 +349,8 @@ private:
         YQL_ENSURE(!batch.IsWide());
 
         auto* source = TaskRunner->GetSource(index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion);
+        Y_ENSURE(RuntimeSettings, "RuntimeSettings is not set. Expected to be set in OnDqTask stage.");
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion, ValuePackerVersion, RuntimeSettings->DatumValidation.Get());
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
         Invoker->Invoke([serialized=std::move(serialized), taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
@@ -463,15 +388,12 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        ui64 channelId = ev->Get()->ChannelId;
 
-        TSpillingStorageInfo::TPtr spillingStorageInfo = GetSpillingStorage(channelId);
-
-        Invoker->Invoke([spillingStorageInfo, cookie, selfId, channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
+        Invoker->Invoke([cookie, selfId, channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
-                TOutputChannelReader reader(channel, toPop, wasFinished, spillingStorageInfo, cookie);
+                TOutputChannelReader reader(channel, toPop, wasFinished);
                 TOutputChannelReadResult result = reader.Read();
 
                 NDqProto::TPopResponse response;
@@ -511,15 +433,20 @@ private:
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion());
+        Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set on OnDqTask stage.");
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(),
+                                         TaskRunner->GetHolderFactory(),
+                                         (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion(),
+                                         FromProto(ev->Get()->Batch.Proto.GetValuePackerVersion()),
+                                         RuntimeSettings->DatumValidation.Get());
         dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
 
         Parent->SinkSend(
             ev->Get()->Index,
             std::move(batch),
             std::move(ev->Get()->Checkpoint),
-            ev->Get()->CheckpointSize,
             ev->Get()->Size,
+            ev->Get()->CheckpointSize,
             ev->Get()->Finished,
             ev->Get()->Changed);
     }
@@ -581,7 +508,6 @@ private:
         auto cookie = ev->Cookie;
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
-        auto& outputs = ev->Get()->Task.GetOutputs();
         auto startTime = TInstant::Now();
         ExecCtx = ev->Get()->ExecCtx;
         auto* actorSystem = TActivationContext::ActorSystem();
@@ -589,18 +515,11 @@ private:
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
             if (input.HasSource()) {
-                Sources.emplace(inputId);
+                Sources.emplace_back(inputId);
             } else {
                 for (auto& channel : input.GetChannels()) {
-                    Inputs.emplace(channel.GetId());
+                    Inputs.emplace_back(channel.GetId());
                 }
-            }
-        }
-
-        for (auto outputId = 0; outputId < outputs.size(); outputId++) {
-            auto& channels = outputs[outputId].GetChannels();
-            for (auto& channel : channels) {
-                CreateSpillingStorage(channel.GetId(), actorSystem, channel.GetEnableSpilling());
             }
         }
 
@@ -612,6 +531,8 @@ private:
             Settings->Dispatch(taskMeta.GetSettings());
             Settings->FreezeDefaults();
             DataTransportVersion = Settings->GetDataTransportVersion();
+            ValuePackerVersion = FromProto(Settings->GetValuePackerVersion());
+            RuntimeSettings = DeserializeRuntimeSettingsFromProto(ev->Get()->Task.GetProgram().GetRuntimeSettings());
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
@@ -725,28 +646,6 @@ private:
         });
     }
 
-    TSpillingStorageInfo::TPtr GetSpillingStorage(ui64 channelId) {
-        TSpillingStorageInfo::TPtr spillingStorage = nullptr;
-        auto spillingIt = SpillingStoragesInfos.find(channelId);
-        if (spillingIt != SpillingStoragesInfos.end()) {
-            spillingStorage = spillingIt->second;
-        }
-        return spillingStorage;
-    }
-
-    void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
-        TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
-
-        if (channelStorage) {
-            auto spillingIt = SpillingStoragesInfos.find(channelId);
-            YQL_ENSURE(spillingIt == SpillingStoragesInfos.end());
-
-            TSpillingStorageInfo* info = new TSpillingStorageInfo(channelStorage, channelId);
-            spillingIt = SpillingStoragesInfos.emplace(channelId, info).first;
-        }
-    }
-
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -756,16 +655,17 @@ private:
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
-    THashSet<ui32> Inputs;
-    THashSet<ui32> Sources;
+    TVector<ui32> Inputs;
+    TVector<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
     NDqProto::EDataTransportVersion DataTransportVersion;
+    NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
 
     std::shared_ptr<IDqTaskRunnerExecutionContext> ExecCtx;
-    std::unordered_map<ui64, TSpillingStorageInfo::TPtr> SpillingStoragesInfos;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {
@@ -784,7 +684,6 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);

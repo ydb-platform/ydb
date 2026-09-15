@@ -194,7 +194,7 @@ private:
             1,
             reinterpret_cast<const unsigned char*>(data),
             len);
-        auto error = TError("Error parsing JSON") << TError(TRuntimeFormat((char*) errorMessage));
+        auto error = TError("Error parsing JSON").With(TError(TRuntimeFormat((char*) errorMessage)));
         yajl_free_error(YajlHandle_.get(), errorMessage);
         THROW_ERROR_EXCEPTION(error);
     }
@@ -235,6 +235,19 @@ void ParseJson(
     EYsonType type)
 {
     TJsonParser jsonParser(consumer, config, type);
+    jsonParser.Parse(input);
+}
+
+void ParseWebJson(
+    IInputStream* input,
+    IYsonConsumer* consumer,
+    TWebJsonFormatConfigPtr /*config*/,
+    EYsonType type)
+{
+    TJsonParser jsonParser(
+        consumer,
+        New<TJsonFormatConfig>(),
+        type);
     jsonParser.Parse(input);
 }
 

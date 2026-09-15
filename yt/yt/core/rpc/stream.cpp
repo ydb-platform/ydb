@@ -1,8 +1,14 @@
 #include "stream.h"
 #include "client.h"
-#include "service_detail.h"
 
 #include <yt/yt/core/compression/codec.h>
+
+#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
+#include <yt/yt/core/misc/finally.h>
+
+#include <yt/yt/core/rpc/service.h>
 
 namespace NYT::NRpc {
 
@@ -26,10 +32,12 @@ size_t GetStreamingAttachmentSize(TRef attachment)
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttachmentsInputStream::TAttachmentsInputStream(
+    TRequestId requestId,
     TClosure readCallback,
     IInvokerPtr compressionInvoker,
     std::optional<TDuration> timeout)
-    : ReadCallback_(std::move(readCallback))
+    : RequestId_(requestId)
+    , ReadCallback_(std::move(readCallback))
     , CompressionInvoker_(std::move(compressionInvoker))
     , Timeout_(timeout)
     , Window_(MaxWindowSize)
@@ -41,7 +49,7 @@ TFuture<TSharedRef> TAttachmentsInputStream::Read()
 
     // Failure here indicates an attempt to read past EOSs.
     if (Closed_) {
-        return MakeFuture<TSharedRef>(TError("Stream is already closed"));
+        return {};
     }
 
     if (!Error_.IsOK()) {
@@ -163,7 +171,7 @@ void TAttachmentsInputStream::AbortUnlessClosed(const TError& error, bool fireAb
         return;
     }
 
-    static const auto FinishedError = TError("Request finished");
+    auto FinishedError = TError("Request finished").With(GetErrorAttributes());
     DoAbort(
         guard,
         error.IsOK() ? FinishedError : error,
@@ -194,7 +202,8 @@ void TAttachmentsInputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, cons
 void TAttachmentsInputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream read timed out")
-        << TErrorAttribute("timeout", *Timeout_));
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
@@ -204,15 +213,24 @@ TStreamingFeedback TAttachmentsInputStream::GetFeedback() const
     };
 }
 
+std::vector<TErrorAttribute> TAttachmentsInputStream::GetErrorAttributes() const
+{
+    return {
+        TErrorAttribute("request_id", RequestId_),
+    };
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TAttachmentsOutputStream::TAttachmentsOutputStream(
+    TRequestId requestId,
     NCompression::ECodec codec,
     IInvokerPtr compressisonInvoker,
     TClosure pullCallback,
     ssize_t windowSize,
     std::optional<TDuration> timeout)
-    : Codec_(codec)
+    : RequestId_(requestId)
+    , Codec_(codec)
     , CompressionInvoker_(std::move(compressisonInvoker))
     , PullCallback_(std::move(pullCallback))
     , WindowSize_(windowSize)
@@ -261,7 +279,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
 {
     if (ClosePromise_) {
         guard.Release();
-        TError error("Stream is already closed");
+        auto error = TError("Stream is already closed").With(GetErrorAttributes());
         for (auto& packet : packets) {
             TDelayedExecutor::CancelAndClear(packet.TimeoutCookie);
             packet.Promise.Set(error);
@@ -278,6 +296,10 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
         return;
     }
 
+    if (!packets.Empty() && WritePosition_ == ReadPosition_) {
+        WindowDrainedTimer_.Stop();
+    }
+
     std::vector<TPromise<void>> promisesToSet;
     for (auto& packet : packets) {
         WritePosition_ += GetStreamingAttachmentSize(packet.Data);
@@ -290,6 +312,7 @@ void TAttachmentsOutputStream::OnWindowPacketsReady(TMutableRange<TWindowPacket>
                 .Position = WritePosition_
             });
         } else {
+            WriteStallTimer_.StartIfNotActive();
             ConfirmationQueue_.push({
                 .Position = WritePosition_,
                 .Promise = std::move(packet.Promise),
@@ -326,6 +349,10 @@ TFuture<void> TAttachmentsOutputStream::Close()
             *Timeout_);
     }
 
+    if (WritePosition_ == ReadPosition_) {
+        WindowDrainedTimer_.Stop();
+    }
+
     TSharedRef nullAttachment;
     DataQueue_.push(nullAttachment);
     WritePosition_ += GetStreamingAttachmentSize(nullAttachment);
@@ -354,9 +381,12 @@ void TAttachmentsOutputStream::AbortUnlessClosed(const TError& error, bool fireA
         return;
     }
 
+    auto requestAlreadyCompletedError = TError("Request is already completed")
+        .With(GetErrorAttributes());
+
     DoAbort(
         guard,
-        error.IsOK() ? TError("Request is already completed") : error,
+        error.IsOK() ? requestAlreadyCompletedError : error,
         fireAborted);
 }
 
@@ -367,6 +397,9 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
     }
 
     Error_ = error;
+
+    WindowDrainedTimer_.Stop();
+    WriteStallTimer_.Stop();
 
     std::vector<TPromise<void>> promises;
     promises.reserve(ConfirmationQueue_.size());
@@ -399,7 +432,8 @@ void TAttachmentsOutputStream::DoAbort(TGuard<NThreading::TSpinLock>& guard, con
 void TAttachmentsOutputStream::OnTimeout()
 {
     Abort(TError(NYT::EErrorCode::Timeout, "Attachments stream write timed out")
-        << TErrorAttribute("timeout", *Timeout_));
+        .With("timeout", *Timeout_)
+        .With(GetErrorAttributes()));
 }
 
 void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback)
@@ -417,7 +451,8 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
     if (feedback.ReadPosition > WritePosition_) {
         THROW_ERROR_EXCEPTION("Stream read position exceeds write position: %v > %v",
             feedback.ReadPosition,
-            WritePosition_);
+            WritePosition_)
+            .With(GetErrorAttributes());
     }
 
     ReadPosition_ = feedback.ReadPosition;
@@ -434,10 +469,16 @@ void TAttachmentsOutputStream::HandleFeedback(const TStreamingFeedback& feedback
         ConfirmationQueue_.pop();
     }
 
+    if (ConfirmationQueue_.empty() || !ConfirmationQueue_.front().Promise) {
+        WriteStallTimer_.Stop();
+    }
+
     if (ClosePromise_ && ReadPosition_ == WritePosition_) {
         promises.push_back(ClosePromise_);
         TDelayedExecutor::CancelAndClear(CloseTimeoutCookie_);
         Closed_ = true;
+    } else if (ReadPosition_ == WritePosition_) {
+        WindowDrainedTimer_.StartIfNotActive();
     }
 
     MaybeInvokePullCallback(guard);
@@ -500,6 +541,25 @@ bool TAttachmentsOutputStream::CanPullMore(bool first) const
     }
 
     return false;
+}
+
+TDuration TAttachmentsOutputStream::GetWindowDrainedTime()
+{
+    auto guard = Guard(Lock_);
+    return WindowDrainedTimer_.GetElapsedTime();
+}
+
+TDuration TAttachmentsOutputStream::GetWriteStallTime()
+{
+    auto guard = Guard(Lock_);
+    return WriteStallTimer_.GetElapsedTime();
+}
+
+std::vector<TErrorAttribute> TAttachmentsOutputStream::GetErrorAttributes() const
+{
+    return {
+        TErrorAttribute("request_id", RequestId_),
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -582,7 +642,7 @@ TFuture<void> ExpectHandshake(
 {
     return feedbackEnabled
         ? ExpectWriterFeedback(input, NDetail::EWriterFeedback::Handshake)
-        : ExpectEndOfStream(input);
+        : CheckEndOfStream(input);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -774,7 +834,7 @@ void HandleInputStreamingRequest(
 {
     auto inputStream = context->GetRequestAttachmentsStream();
     YT_VERIFY(inputStream);
-    WaitFor(ExpectEndOfStream(inputStream))
+    WaitFor(CheckEndOfStream(inputStream))
         .ThrowOnError();
 
     auto outputStream = context->GetResponseAttachmentsStream();
@@ -870,4 +930,3 @@ void HandleOutputStreamingRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc
-

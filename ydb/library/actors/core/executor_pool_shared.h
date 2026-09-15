@@ -9,7 +9,6 @@
 #include "scheduler_queue.h"
 #include <memory>
 #include <ydb/library/actors/actor_type/indexes.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -45,6 +44,7 @@ namespace NActors {
         std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
+        std::vector<i16> AdjacentOwnerByPool;
 
         TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
@@ -61,6 +61,7 @@ namespace NActors {
         virtual void FillOwnedThreads(std::vector<i16>& ownedThreads) const = 0;
         virtual i16 GetSharedThreadCount() const = 0;
         virtual void SetForeignThreadSlots(i16 poolId, i16 slots) = 0;
+        virtual bool IsUnited() const = 0;
     };
 
     class TSharedExecutorPool: public TExecutorPoolBaseMailboxed, public ISharedPool {
@@ -80,6 +81,7 @@ namespace NActors {
         const ui64 DefaultSpinThresholdCycles;
         const TString PoolName;
         const ui64 SoftProcessingDurationTs;
+        const bool United = false;
 
         char Barrier[64];
 
@@ -148,6 +150,9 @@ namespace NActors {
         TString GetName() const override {
             return PoolName;
         }
+        bool IsUnited() const override {
+            return United;
+        }
 
         ui32 GetThreads() const override;
         float GetThreadCount() const override;
@@ -159,6 +164,7 @@ namespace NActors {
         i16 GetSharedThreadCount() const override;
 
         bool WakeUpLocalThreads(i16 poolId);
+        bool WakeUpAdjacentOwner(i16 poolId);
         bool WakeUpGlobalThreads(i16 poolId);
 
         void FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const override;

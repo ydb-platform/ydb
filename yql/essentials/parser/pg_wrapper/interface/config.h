@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/generic/fwd.h>
 
 namespace NYql {
@@ -5,4 +7,4 @@ namespace NYql {
 TString GetPostgresServerVersionNum();
 TString GetPostgresServerVersionStr();
 
-} // NYql
+} // namespace NYql

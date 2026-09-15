@@ -10,12 +10,10 @@ void TPlainMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::
             Cursors.emplace_back(
                 NCompaction::TPortionColumnCursor(Context.GetLoader()->GetResultField()->type(), Context.GetLoader()->GetDefaultValue()));
         }
-        
     }
 }
 
-TColumnPortionResult TPlainMerger::DoExecute(
-    const TChunkMergeContext& chunkContext, TMergingContext& /*mContext*/) {
+TColumnPortionResult TPlainMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mContext*/) {
     NCompaction::TMergedColumn mColumn(Context);
     std::optional<ui16> predPortionIdx;
     for (ui32 idx = 0; idx < chunkContext.GetRemapper().GetRecordsCount(); ++idx) {

@@ -3,13 +3,15 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #include <ydb/library/yql/dq/actors/dq.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
+
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
@@ -20,6 +22,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -40,14 +43,13 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TTxId& txId, ui64 taskId, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
         , Alloc(alloc)
         , Parent(parent)
         , Factory(factory)
         , TxId(txId)
         , TaskId(taskId)
-        , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
     {
     }
@@ -91,12 +93,12 @@ private:
     void OnStatisticsRequest(TEvStatistics::TPtr& ev) {
 
         THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
-        for (const auto sinkId : ev->Get()->SinkIds) {
+        for (const auto sinkId : Sinks) {
             sinks[sinkId] = TaskRunner->GetSink(sinkId).Get();
         }
 
         THashMap<ui32, const IDqAsyncInputBuffer*> inputTransforms;
-        for (const auto inputTransformId : ev->Get()->InputTransformIds) {
+        for (const auto inputTransformId : InputTransforms) {
             inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
         }
 
@@ -125,6 +127,7 @@ private:
 
     void PassAway() override {
         if (MemoryQuota) {
+            MemoryQuota->UnbindOperatorQuota(); // the graph dies without a quota, maybe under the execution scope
             MemoryQuota->TryReleaseQuota();
         }
         TaskRunner.Reset();
@@ -132,20 +135,23 @@ private:
     }
 
     bool ReadyToCheckpoint() {
-        for (const auto inputChannelId: Inputs) {
-            if (InputChannelsWithDisabledCheckpoints.contains(inputChannelId)) {
-                continue;
+        for (const auto sourceId: Sources) {
+            const auto input = TaskRunner->GetSource(sourceId);
+            // sources are not polled upon checkpoint
+            if (!input->Empty()) { // check if buffer is empty
+                return false;
             }
-
+        }
+        for (const auto inputChannelId: InputsWithCheckpoints) {
             const auto input = TaskRunner->GetInputChannel(inputChannelId);
-            if (!input->IsPaused()) {
+            if (!input->IsPausedByCheckpoint()) {
                 return false;
             }
             if (!input->Empty()) {
                 return false;
             }
         }
-        for (const auto transformId: InputTransforms) {
+        for (const auto transformId: InputTransformsWithCheckpoints) {
             const auto t = TaskRunner->GetInputTransform(transformId);
             if (t) {
                 auto [_, transform] = *t;
@@ -162,7 +168,9 @@ private:
 
     void OnContinueRun(TEvContinueRun::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : ev->Get()->MemLimit);
-        auto inputMap = ev->Get()->AskFreeSpace
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
+        const auto& inputMap = ev->Get()->AskFreeSpace
             ? Inputs
             : ev->Get()->InputChannels;
 
@@ -171,16 +179,7 @@ private:
         THashMap<ui32, i64> inputChannelFreeSpace;
         THashMap<ui32, i64> sourcesFreeSpace;
 
-        const bool shouldHandleWatermark = ev->Get()->WatermarkRequest.Defined()
-            && ev->Get()->WatermarkRequest->Watermark > TaskRunner->GetWatermark().WatermarkIn;
-
         if (!ev->Get()->CheckpointOnly) {
-            if (shouldHandleWatermark) {
-                const auto watermark = ev->Get()->WatermarkRequest->Watermark;
-                LOG_T("Task runner. Inject watermark " << watermark);
-                TaskRunner->SetWatermarkIn(watermark);
-            }
-
             res = TaskRunner->Run();
         }
 
@@ -192,23 +191,8 @@ private:
             sourcesFreeSpace[index] = TaskRunner->GetSource(index)->GetFreeSpace();
         }
 
-        auto watermarkInjectedToOutputs = false;
         THolder<TMiniKqlProgramState> mkqlProgramState;
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
-            if (shouldHandleWatermark) {
-                const auto watermarkRequested = ev->Get()->WatermarkRequest->Watermark;
-                LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequested
-                    << " to " << ev->Get()->WatermarkRequest->ChannelIds.size() << " outputs ");
-
-                for (const auto& channelId : ev->Get()->WatermarkRequest->ChannelIds) {
-                    NDqProto::TWatermark watermark;
-                    watermark.SetTimestampUs(watermarkRequested.MicroSeconds());
-                    TaskRunner->GetOutputChannel(channelId)->Push(std::move(watermark));
-                }
-
-                watermarkInjectedToOutputs = true;
-            }
-
             if (ev->Get()->CheckpointRequest.Defined() && ReadyToCheckpoint()) {
                 mkqlProgramState = MakeHolder<TMiniKqlProgramState>();
                 try {
@@ -218,33 +202,35 @@ private:
                     data.Blob = TaskRunner->Save();
                     // inject barriers
                     // todo:(whcrc) barriers are injected even if source state save failed
-                    for (const auto& channelId : ev->Get()->CheckpointRequest->ChannelIds) {
+                    for (const auto& channelId : Outputs) {
                         TaskRunner->GetOutputChannel(channelId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
                     }
-                    for (const auto& sinkId : ev->Get()->CheckpointRequest->SinkIds) {
+                    for (const auto& sinkId : Sinks) {
                         TaskRunner->GetSink(sinkId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
                     }
                 } catch (const std::exception& e) {
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
+                StartResumeByCheckpoint();
+                HasActiveCheckpoint = false;
             }
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(guard.GetMutex());
+            MemoryQuota->TryShrinkMemory();
         }
 
         {
-            auto st = MakeHolder<TEvStatistics>(std::move(ev->Get()->SinkIds), std::move(ev->Get()->InputTransformIds));
+            auto st = MakeHolder<TEvStatistics>();
 
             THashMap<ui32, const IDqAsyncOutputBuffer*> sinks;
-            for (const auto sinkId : st->SinkIds) {
+            for (const auto sinkId : Sinks) {
                 sinks[sinkId] = TaskRunner->GetSink(sinkId).Get();
             }
 
             THashMap<ui32, const IDqAsyncInputBuffer*> inputTransforms;
-            for (const auto inputTransformId : st->InputTransformIds) { // TODO
+            for (const auto inputTransformId : InputTransforms) { // TODO
                 inputTransforms[inputTransformId] = TaskRunner->GetInputTransform(inputTransformId)->second.Get();
             }
 
@@ -262,7 +248,6 @@ private:
                 (MemoryQuota && MemoryQuota->GetProfileStats()) ? *MemoryQuota->GetProfileStats() : TDqMemoryQuota::TProfileStats(),
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
-                watermarkInjectedToOutputs,
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -282,9 +267,9 @@ private:
             inputChannel->Finish();
         }
         if (ev->Get()->PauseAfterPush) {
-            inputChannel->Pause();
+            HasActiveCheckpoint = true;
+            inputChannel->PauseByCheckpoint();
         }
-
         // run
         Send(
             ParentId,
@@ -307,7 +292,7 @@ private:
         }
         Send(
             ParentId,
-            new TEvSourceDataAck(index, source->GetFreeSpace()),
+            new TEvSourceDataAck(index, source->GetFreeSpace(), finish),
             /*flags=*/0,
             cookie);
     }
@@ -362,7 +347,7 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                ResumeInputs();
+                AdvanceResumeByCheckpoint();
                 break;
             }
 
@@ -386,10 +371,26 @@ private:
             ev->Cookie);
     }
 
-    void ResumeInputs() {
-        for (const auto& inputId : Inputs) {
-            TaskRunner->GetInputChannel(inputId)->Resume();
+    void MaybeResumeByCheckpoint() {
+        if (UnsentCheckpoints > 0) {
+            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            return;
         }
+        for (const auto& inputId : InputsWithCheckpoints) {
+            TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
+        }
+    }
+
+    void StartResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints == 0);
+        UnsentCheckpoints = Sinks.size() + Outputs.size();
+        MaybeResumeByCheckpoint();
+    }
+
+    void AdvanceResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints > 0);
+        --UnsentCheckpoints;
+        MaybeResumeByCheckpoint();
     }
 
     void OnSinkDataRequest(TEvSinkDataRequest::TPtr& ev) {
@@ -409,7 +410,7 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            ResumeInputs();
+            AdvanceResumeByCheckpoint();
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
@@ -427,22 +428,50 @@ private:
         auto& inputs = settings.GetInputs();
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
+            bool inputCheckpointDisabled = false;
             if (input.HasSource()) {
-                Sources.emplace(inputId);
+                Sources.emplace_back(inputId);
             } else {
                 for (auto& channel : input.GetChannels()) {
-                    Inputs.emplace(channel.GetId());
+                    Inputs.emplace_back(channel.GetId());
+                    if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                        InputsWithCheckpoints.emplace_back(channel.GetId());
+                    } else {
+                        inputCheckpointDisabled = true;
+                    }
+                }
+            }
+            if (input.HasTransform()) {
+                if (!inputCheckpointDisabled) {
+                    InputTransformsWithCheckpoints.emplace_back(inputId);
                 }
             }
         }
+        std::sort(Inputs.begin(), Inputs.end());
+        Y_ENSURE(std::unique(Inputs.begin(), Inputs.end()) == Inputs.end());
+
+        auto& outputs = settings.GetOutputs();
+        for (auto outputId = 0; outputId < outputs.size(); outputId++) {
+            auto& output = outputs[outputId];
+            if (output.HasSink()) {
+                Sinks.emplace_back(outputId);
+            } else {
+                for (auto& channel : output.GetChannels()) {
+                    Outputs.emplace_back(channel.GetId());
+                }
+            }
+        }
+        std::sort(Outputs.begin(), Outputs.end());
+        Y_ENSURE(std::unique(Outputs.begin(), Outputs.end()) == Outputs.end());
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
+            MemoryQuota->BindScopedAlloc(guard.GetMutex());
             if (settings.GetEnableSpilling()) {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl();
             } else {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
-            }   
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback();
+            }
         }
 
         if (settings.GetEnableSpilling()) {
@@ -456,8 +485,11 @@ private:
         THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> inputTransforms;
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
+                Y_ENSURE(inputs[i].HasTransform());
                 inputTransforms[i] = *t;
-                InputTransforms.emplace(i);
+                InputTransforms.emplace_back(i);
+            } else {
+                Y_ENSURE(!inputs[i].HasTransform());
             }
         }
 
@@ -482,11 +514,14 @@ private:
         const bool isHardLimit = dynamic_cast<const THardMemoryLimitException*>(&e) != nullptr;
         TStringBuilder err;
         err << "Mkql memory limit exceeded";
-        if (isHardLimit) {
-            err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+        if (MemoryQuota) {
+            if (isHardLimit) {
+                err << ", hard limit: " << MemoryQuota->GetHardMemoryLimit();
+            } else {
+                err << ", limit: " << MemoryQuota->GetMkqlMemoryLimit();
+            }
         } else {
-            err << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
-                << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
+            err << ", quota manager NOT assigned";
         }
         LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);
@@ -504,13 +539,18 @@ private:
     TTaskRunnerFactory Factory;
     const TTxId TxId;
     const ui64 TaskId;
-    THashSet<ui32> Inputs;
-    THashSet<ui32> InputTransforms;
-    THashSet<ui32> Sources;
+    TVector<ui32> Inputs;
+    TVector<ui32> InputsWithCheckpoints;
+    TVector<ui32> InputTransforms;
+    TVector<ui32> InputTransformsWithCheckpoints;
+    TVector<ui32> Sources;
+    TVector<ui32> Sinks;
+    TVector<ui32> Outputs;
+    THolder<TDqMemoryQuota> MemoryQuota; // declared before TaskRunner: the graph must die before its quota
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
-    THashSet<ui32> InputChannelsWithDisabledCheckpoints;
-    THolder<TDqMemoryQuota> MemoryQuota;
     ui64 ActorElapsedTicks = 0;
+    bool HasActiveCheckpoint = false;
+    ui32 UnsentCheckpoints = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
@@ -523,10 +563,9 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&& inputChannelsWithDisabledCheckpoints,
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
     {
-        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
+        auto* actor = new TLocalTaskRunnerActor(parent, Factory, alloc, txId, taskId, std::move(memoryQuota));
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)

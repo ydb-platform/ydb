@@ -3,10 +3,10 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 PyDoc_STRVAR(math_ceil__doc__,
 "ceil($module, x, /)\n"
@@ -54,9 +54,7 @@ PyDoc_STRVAR(math_factorial__doc__,
 "factorial($module, n, /)\n"
 "--\n"
 "\n"
-"Find n!.\n"
-"\n"
-"Raise a ValueError if x is negative or non-integral.");
+"Find n!.");
 
 #define MATH_FACTORIAL_METHODDEF    \
     {"factorial", (PyCFunction)math_factorial, METH_O, math_factorial__doc__},
@@ -78,8 +76,9 @@ PyDoc_STRVAR(math_frexp__doc__,
 "\n"
 "Return the mantissa and exponent of x, as pair (m, e).\n"
 "\n"
-"m is a float and e is an int, such that x = m * 2.**e.\n"
-"If x is 0, m and e are both 0.  Else 0.5 <= abs(m) < 1.0.");
+"If x is a finite nonzero number, then m is a float with\n"
+"0.5 <= abs(m) < 1.0 and an integer e is such that\n"
+"x == m * 2**e exactly.  Else, return (x, 0).");
 
 #define MATH_FREXP_METHODDEF    \
     {"frexp", (PyCFunction)math_frexp, METH_O, math_frexp__doc__},
@@ -203,6 +202,67 @@ PyDoc_STRVAR(math_log10__doc__,
 
 #define MATH_LOG10_METHODDEF    \
     {"log10", (PyCFunction)math_log10, METH_O, math_log10__doc__},
+
+PyDoc_STRVAR(math_fma__doc__,
+"fma($module, x, y, z, /)\n"
+"--\n"
+"\n"
+"Fused multiply-add operation.\n"
+"\n"
+"Compute (x * y) + z with a single round.");
+
+#define MATH_FMA_METHODDEF    \
+    {"fma", _PyCFunction_CAST(math_fma), METH_FASTCALL, math_fma__doc__},
+
+static PyObject *
+math_fma_impl(PyObject *module, double x, double y, double z);
+
+static PyObject *
+math_fma(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    PyObject *return_value = NULL;
+    double x;
+    double y;
+    double z;
+
+    if (!_PyArg_CheckPositional("fma", nargs, 3, 3)) {
+        goto exit;
+    }
+    if (PyFloat_CheckExact(args[0])) {
+        x = PyFloat_AS_DOUBLE(args[0]);
+    }
+    else
+    {
+        x = PyFloat_AsDouble(args[0]);
+        if (x == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
+    if (PyFloat_CheckExact(args[1])) {
+        y = PyFloat_AS_DOUBLE(args[1]);
+    }
+    else
+    {
+        y = PyFloat_AsDouble(args[1]);
+        if (y == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
+    if (PyFloat_CheckExact(args[2])) {
+        z = PyFloat_AS_DOUBLE(args[2]);
+    }
+    else
+    {
+        z = PyFloat_AsDouble(args[2]);
+        if (z == -1.0 && PyErr_Occurred()) {
+            goto exit;
+        }
+    }
+    return_value = math_fma_impl(module, x, y, z);
+
+exit:
+    return return_value;
+}
 
 PyDoc_STRVAR(math_fmod__doc__,
 "fmod($module, x, y, /)\n"
@@ -833,8 +893,8 @@ PyDoc_STRVAR(math_nextafter__doc__,
 "\n"
 "If steps is not specified or is None, it defaults to 1.\n"
 "\n"
-"Raises a TypeError, if x or y is not a double, or if steps is not an integer.\n"
-"Raises ValueError if steps is negative.");
+"Raises a TypeError, if x or y is not a double, or if steps is not\n"
+"an integer.  Raises ValueError if steps is negative.");
 
 #define MATH_NEXTAFTER_METHODDEF    \
     {"nextafter", _PyCFunction_CAST(math_nextafter), METH_FASTCALL|METH_KEYWORDS, math_nextafter__doc__},
@@ -950,4 +1010,4 @@ math_ulp(PyObject *module, PyObject *arg)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=c1335a499389a04e input=a9049054013a1b77]*/
+/*[clinic end generated code: output=9ed980dea18198be input=a9049054013a1b77]*/

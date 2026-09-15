@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -22,6 +23,8 @@
 
 #include <util/generic/intrlist.h>
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace {
 
@@ -78,7 +81,7 @@ public:
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
 
-        TMaybe<ui32> NodeId = {};
+        TMaybe<ui32> NodeId;
         bool IsFirst = false;
         bool IsFake = false;
 
@@ -282,6 +285,10 @@ public:
             Points.push_back(std::move(point));
         }
 
+        void ReservePoints(size_t count) {
+            Points.reserve(count);
+        }
+
     private:
         TSmallVec<TSerializedTableRange> Ranges;
         TSmallVec<TSerializedCellVec> Points;
@@ -333,25 +340,36 @@ public:
 public:
     TKqpReadActor(
         const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
-        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+        const NActors::TActorId& computeActorId,
+        ui64 inputIndex,
+        NYql::NDq::TCollectStatsLevel statsLevel,
+        NYql::NDq::TTxId txId,
+        ui64 taskId,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const NWilson::TTraceId& traceId,
+        TIntrusivePtr<TKqpCounters> counters,
+        TVector<TSerializedCellVec> keyPoints)
         : Settings(settings)
-        , Arena(args.Arena)
-        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
-        , ComputeActorId(args.ComputeActorId)
-        , InputIndex(args.InputIndex)
-        , TypeEnv(args.TypeEnv)
-        , HolderFactory(args.HolderFactory)
-        , Alloc(args.Alloc)
+        , Arena(arena)
+        , DirectKeyPoints(std::move(keyPoints))
+        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , ComputeActorId(computeActorId)
+        , InputIndex(inputIndex)
+        , TypeEnv(typeEnv)
+        , HolderFactory(holderFactory)
+        , Alloc(alloc)
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
-        IngressStats.Level = args.StatsLevel;
+        IngressStats.Level = statsLevel;
 
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
@@ -367,10 +385,6 @@ public:
             // specific flag is set. otherwise we always read from main replicas.
             PipeCacheId = FollowersPipeCacheId;
             UseFollowers = true;
-        }
-
-        if (Settings->DuplicateCheckColumnsSize() > 0) {
-            CollectDuplicateStats = true;
         }
 
         InitResultColumns();
@@ -408,6 +422,7 @@ public:
                 hFunc(TEvRetryShard, HandleRetry);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -424,7 +439,16 @@ public:
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (Settings->HasFullRange()) {
+        if (!DirectKeyPoints.empty()) {
+            // Points handed over pre-parsed by an in-process parent actor; consume
+            // them as-is instead of copying and re-parsing the settings' KeyPoints.
+            YQL_ENSURE(!Settings->HasFullRange() && !Settings->HasRanges());
+            state.ReservePoints(DirectKeyPoints.size());
+            for (auto& point : DirectKeyPoints) {
+                state.AddPoint(std::move(point));
+            }
+            DirectKeyPoints.clear();
+        } else if (Settings->HasFullRange()) {
             state.AddRange(TSerializedTableRange(Settings->GetFullRange()));
         } else {
             YQL_ENSURE(Settings->HasRanges());
@@ -435,13 +459,16 @@ public:
                 }
             } else {
                 YQL_ENSURE(Settings->GetRanges().KeyPointsSize() > 0);
+                state.ReservePoints(Settings->GetRanges().KeyPointsSize());
                 for (const auto& point : Settings->GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }
             }
         }
 
-        CA_LOG_D("Shards State: " << state.ToString(KeyColumnTypes));
+        YDB_LOG_DEBUG("Started table scan with initial shard state",
+            {"logPrefix", this->LogPrefix},
+            {"state", state.ToString(KeyColumnTypes)});
 
         if (!Settings->HasShardIdHint()) {
             state.IsFake = true;
@@ -454,12 +481,19 @@ public:
     }
 
     bool StartShards() {
-        const ui32 maxAllowedInFlight = Settings->GetSorted() ? 1 : MaxInFlight;
-        CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
+        const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
+        YDB_LOG_DEBUG("Computed effective max in-flight shard count",
+            {"logPrefix", this->LogPrefix},
+            {"maxAllowedInFlight", maxAllowedInFlight},
+            {"sorted", Settings->GetSorted()});
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
-                CA_LOG_D("BEFORE: " << PendingShards.Size() << "." << RunningReads());
+                YDB_LOG_DEBUG("Starting next batch of shard reads",
+                    {"logPrefix", this->LogPrefix},
+                    {"event", "startShardsBefore"},
+                    {"pendingShardsBefore", PendingShards.Size()},
+                    {"runningReads", RunningReads()});
                 isFirst = false;
             }
             if (Settings->GetReverse()) {
@@ -473,11 +507,17 @@ public:
             }
         }
         if (!isFirst) {
-            CA_LOG_D("AFTER: " << PendingShards.Size() << "." << RunningReads());
+            YDB_LOG_DEBUG("Finished starting batch of shard reads",
+                {"logPrefix", this->LogPrefix},
+                {"event", "startShardsAfter"},
+                {"pendingShardsAfter", PendingShards.Size()},
+                {"runningReads", RunningReads()});
         }
 
-        CA_LOG_D("Scheduled table scans, in flight: " << RunningReads() << " shards. "
-            << "pending shards to read: " << PendingShards.Size() << ", ");
+        YDB_LOG_DEBUG("Scheduled table scans across shards",
+            {"logPrefix", this->LogPrefix},
+            {"runningReads", RunningReads()},
+            {"pendingShards", PendingShards.Size()});
 
         return RunningReads() > 0 || !PendingShards.Empty();
     }
@@ -506,11 +546,14 @@ public:
         auto keyDesc = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, columns);
 
-        CA_LOG_D("Sending TEvResolveKeySet update for table '" << Settings->GetTable().GetTablePath() << "'"
-            << ", range: " << DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)
-            << ", attempt #" << state->ResolveAttempt);
+        YDB_LOG_DEBUG("Sending TEvResolveKeySet to scheme cache",
+            {"logPrefix", this->LogPrefix},
+            {"tablePath", Settings->GetTable().GetTablePath()},
+            {"range", DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)},
+            {"resolveAttempt", state->ResolveAttempt});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings->GetDatabase();
         request->ResultSet.emplace_back(std::move(keyDesc));
 
         request->ResultSet.front().UserData = ResolveShardId;
@@ -524,7 +567,9 @@ public:
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("Received TEvResolveKeySetResult update for table '" << Settings->GetTable().GetTablePath() << "'");
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult from scheme cache",
+            {"logPrefix", this->LogPrefix},
+            {"tablePath", Settings->GetTable().GetTablePath()});
 
         auto* request = ev->Get()->Request.Get();
         THolder<TShardState> state;
@@ -536,7 +581,10 @@ public:
         }
 
         if (request->ErrorCount > 0 || !state) {
-            CA_LOG_E("Resolve request failed for table '" << Settings->GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
+            YDB_LOG_ERROR("Shard resolve request failed",
+                {"logPrefix", this->LogPrefix},
+                {"tablePath", Settings->GetTable().GetTablePath()},
+                {"errorCount", request->ErrorCount});
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
             TString error;
@@ -575,7 +623,9 @@ public:
 
         if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
-            CA_LOG_E(error);
+            YDB_LOG_ERROR("No partitions found for resolved table",
+                {"logPrefix", this->LogPrefix},
+                {"error", error});
             return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         } else if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
@@ -596,6 +646,9 @@ public:
             }
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
+        }
+        if (Settings->GetIsolationLevel() == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
         }
 
         const auto& tr = *AppData()->TypeRegistry;
@@ -626,26 +679,34 @@ public:
                 keyDesc->GetPartitions()[idx].Range->IsInclusive
             };
 
-            CA_LOG_D("Processing resolved ShardId# " << partition.ShardId
-                << ", partition range: " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                << ", i: " << rangeIndex << ", state ranges: " << ranges.size()
-                << ", points: " << points.size());
+            YDB_LOG_DEBUG("Processing resolved partition for shard split",
+                {"logPrefix", this->LogPrefix},
+                {"shardId", partition.ShardId},
+                {"range", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                {"rangeIndex", rangeIndex},
+                {"rangesCount", ranges.size()},
+                {"pointsCount", points.size()});
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
                     auto comparison = CompareRanges(partitionRange, ranges[j].ToTableRange(), KeyColumnTypes);
-                    CA_LOG_D("Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
-                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                        << " : " << comparison);
+                    YDB_LOG_DEBUG("Comparing read range with partition range",
+                        {"logPrefix", this->LogPrefix},
+                        {"rangeIndex", j},
+                        {"range", DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)},
+                        {"partitionRange", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                        {"comparison", comparison});
 
                     if (comparison > 0) {
                         continue;
                     } else if (comparison == 0) {
                         auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
-                        CA_LOG_D("Add range to new shardId: " << partition.ShardId
-                            << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
+                        YDB_LOG_DEBUG("Adding intersected range to new shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId},
+                            {"range", DebugPrintRange(KeyColumnTypes, intersection, tr)});
 
                         newShard->AddRange(TSerializedTableRange(intersection));
                     } else {
@@ -667,7 +728,9 @@ public:
 
                     if (intersection == 0) {
                         newShard->AddPoint(std::move(points[pointIndex]));
-                        CA_LOG_D("Add point to new shardId: " << partition.ShardId);
+                        YDB_LOG_DEBUG("Adding point to new shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId});
                     } else {
                         YQL_ENSURE(intersection > 0, "Missed intersection of point and partition ranges.");
                         break;
@@ -678,6 +741,11 @@ public:
                     newShards.push_back(std::move(newShard));
                 }
             }
+        }
+
+        if (newShards.empty()) {
+            NotifyCA();
+            return;
         }
 
         YQL_ENSURE(!newShards.empty());
@@ -711,7 +779,10 @@ public:
                     sb << st.ToString(KeyColumnTypes) << "; ";
                 }
             }
-            CA_LOG_D(sb);
+            YDB_LOG_DEBUG("Shard queue state after resolve",
+                {"logPrefix", this->LogPrefix},
+                {"event", "shardQueueAfterResolve"},
+                {"shardStates", sb});
         }
         StartShards();
     }
@@ -723,12 +794,12 @@ public:
         }
     }
 
-    bool CheckTotalRetriesExeeded() {
+    bool CheckTotalRetriesExceeded() {
         const auto limit = MaxTotalRetries();
         return limit && TotalRetries + 1 > *limit;
     }
 
-    bool CheckShardRetriesExeeded(ui64 id) {
+    bool CheckShardRetriesExceeded(ui64 id) {
         if (!Reads[id] || Reads[id].Finished) {
             return false;
         }
@@ -737,31 +808,39 @@ public:
         return state->RetryAttempt + 1 > MaxShardRetries();
     }
 
-    void RetryRead(ui64 id, bool allowInstantRetry = true) {
+    void RetryRead(ui64 id, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
-        auto state = Reads[id].Shard;
+        auto* state = Reads[id].Shard;
 
-        if (CheckTotalRetriesExeeded()) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
-                NDqProto::StatusIds::UNAVAILABLE);
+        TDuration delay;
+        if (!throttleDelay) {
+            if (CheckTotalRetriesExceeded()) {
+                return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
+                    NDqProto::StatusIds::UNAVAILABLE);
+            }
+            ++TotalRetries;
+
+            if (CheckShardRetriesExceeded(id)) {
+                ResetRead(id);
+                return ResolveShard(state);
+            }
+            ++state->RetryAttempt;
+            delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
-        ++TotalRetries;
 
-        if (CheckShardRetriesExeeded(id)) {
-            ResetRead(id);
-            return ResolveShard(state);
-        }
-        ++state->RetryAttempt;
-
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }
 
-        CA_LOG_D("schedule retry #" << id << " after " << delay);
+        YDB_LOG_DEBUG("Scheduled read retry after delay",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"delay", delay});
         TlsActivationContext->Schedule(delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
     }
 
@@ -771,7 +850,9 @@ public:
         }
 
         auto state = Reads[id].Shard;
-        CA_LOG_D("Retrying read #" << id);
+        YDB_LOG_DEBUG("Retrying read",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id});
 
         ResetRead(id);
 
@@ -808,25 +889,20 @@ public:
         BatchOperationReadColumns.clear();
 
         auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        size_t notSystemColumnsIndex = 0;
         for (size_t i = 0; i < columnsSize; ++i) {
             const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
 
-                if (Settings->GetIsBatch()) {
-                    NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetType(), column.GetTypeInfo());
-                    BatchOperationReadColumns.emplace_back(column.GetId(), typeInfo, column.GetIsPrimary());
+                if (Settings->GetIsBatch() && column.GetIsPrimary()) {
+                    BatchOperationReadColumns.emplace_back(notSystemColumnsIndex, column.GetId());
                 }
+                notSystemColumnsIndex++;
             }
         }
 
-        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
-
-        if (CollectDuplicateStats) {
-            for (const auto& column : DuplicateCheckExtraColumns) {
-                record.AddColumns(column.Tag);
-            }
-        }
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() == KeyColumnTypes.size());
 
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
@@ -874,19 +950,41 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
-            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
-            << ", limit: " << limit
-            << ", readId = " << id
-            << ", reverse = " << record.GetReverse()
-            << ", snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
-            << ", lockTxId = " << Settings->GetLockTxId()
-            << ", lockNodeId = " << Settings->GetLockNodeId());
+        if (Settings->HasQuerySpanId()) {
+            record.SetQuerySpanId(Settings->GetQuerySpanId());
+        }
+
+        if (Settings->HasVectorTopK()) {
+            *record.MutableVectorTopK() = Settings->GetVectorTopK();
+        }
+
+        if (Settings->HasPoolId()) {
+            record.SetDatabaseId(Settings->GetDatabase());
+            record.SetPoolId(Settings->GetPoolId());
+        }
+
+        YDB_LOG_DEBUG("Sending TEvRead to data shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", state->TabletId},
+            {"tablePath", Settings->GetTable().GetTablePath()},
+            {"ranges", DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)},
+            {"limit", limit},
+            {"readId", id},
+            {"reverse", record.GetReverse()},
+            {"snapshotTxId", Settings->GetSnapshot().GetTxId()},
+            {"snapshotStep", Settings->GetSnapshot().GetStep()},
+            {"lockTxId", Settings->GetLockTxId()},
+            {"lockNodeId", Settings->GetLockNodeId()},
+            {"lockMode", Settings->GetLockMode()});
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
+        bool newPipe = HasEstablishedPipe.insert(state->TabletId).second;
+        Send(PipeCacheId, new TEvPipeCache::TEvForward(
+            ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
+                .AutoConnect = newPipe,
+                .Subscribe = newPipe}),
             IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
@@ -903,7 +1001,7 @@ public:
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    TString DebugPrintContionuationToken(TString s) {
+    TString DebugPrintContinuationToken(TString s) {
         NKikimrTxDataShard::TReadContinuationToken token;
         Y_ABORT_UNLESS(token.ParseFromString(s));
         TString lastKey = "(empty)";
@@ -917,9 +1015,10 @@ public:
     }
 
     void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
-        CA_LOG_D(TStringBuilder() << "validation failed, "
-            << " seqno = " << result->Get()->Record.GetSeqNo()
-            << " finished = " << result->Get()->Record.GetFinished());
+        YDB_LOG_DEBUG("Read validation failed: NULL value in NOT NULL column",
+            {"logPrefix", this->LogPrefix},
+            {"seqNo", result->Get()->Record.GetSeqNo()},
+            {"finished", result->Get()->Record.GetFinished()});
         NYql::TIssue issue;
         issue.SetCode(NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, NYql::TSeverityIds::S_FATAL);
         issue.SetMessage(TStringBuilder()
@@ -930,32 +1029,32 @@ public:
     }
 
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
-        const auto& record = ev->Get()->Record;
+        auto& msg = *ev->Get();
+        const auto& record = msg.Record;
         auto id = record.GetReadId();
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
         }
 
-        CA_LOG_D("Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
-            << ", ReadId=" << id
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+        TStringBuilder brokenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            brokenTxlocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult from data shard",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", Reads[id].Shard->TabletId},
+            {"readId", id},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", brokenTxlocks});
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();
@@ -963,14 +1062,20 @@ public:
             auto* state = Reads[id].Shard;
             if (!state->NodeId) {
                 state->NodeId = record.GetNodeId();
-                CA_LOG_D("Node mismatch for tablet " << state->TabletId << " " << *state->NodeId << " != SelfId: " << SelfId().NodeId());
+                YDB_LOG_DEBUG("Detected node mismatch for tablet read",
+                    {"logPrefix", this->LogPrefix},
+                    {"tabletId", state->TabletId},
+                    {"nodeId", *state->NodeId},
+                    {"selfNodeId", SelfId().NodeId()});
                 if (state->IsFirst) {
                     Counters->ReadActorRemoteFirstFetch->Inc();
                 }
                 Counters->ReadActorRemoteFetch->Inc();
             }
         } else {
-            CA_LOG_T("Node match for tablet " << Reads[id].Shard->TabletId);
+            YDB_LOG_TRACE("Node matches local node for tablet read",
+                {"logPrefix", this->LogPrefix},
+                {"tabletId", Reads[id].Shard->TabletId});
         }
 
         Counters->DataShardIteratorMessages->Inc();
@@ -979,7 +1084,10 @@ public:
         }
 
         for (auto& issue : record.GetStatus().GetIssues()) {
-            CA_LOG_D("read id #" << id << " got issue " << issue.Getmessage());
+            YDB_LOG_DEBUG("Read result contains issue",
+                {"logPrefix", this->LogPrefix},
+                {"readId", id},
+                {"issueMessage", issue.Getmessage()});
             Reads[id].Shard->Issues.push_back(issue);
         }
 
@@ -1001,15 +1109,18 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id))) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
                 }
-                return RetryRead(id, false);
+                return RetryRead(id, false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -1017,7 +1128,7 @@ public:
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
-                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                if (CheckTotalRetriesExceeded() || CheckShardRetriesExceeded(id)) {
                     return replyError(
                         TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::UNAVAILABLE);
@@ -1043,26 +1154,48 @@ public:
             BrokenLocks.push_back(lock);
         }
 
+        // Collect deferred breaker info for TLI logging
+        {
+            const auto& traceIds = record.GetDeferredBreakerQuerySpanIds();
+            const auto& nodeIds = record.GetDeferredBreakerNodeIds();
+            for (int i = 0; i < traceIds.size(); ++i) {
+                DeferredBreakers.push_back({traceIds[i], i < nodeIds.size() ? nodeIds[i] : 0u});
+            }
+        }
+
+        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
+            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
+        }
+
         if (UseFollowers) {
             YQL_ENSURE(Locks.empty());
         }
 
-        CA_LOG_D("Taken " << Locks.size() << " locks");
+        YDB_LOG_DEBUG("Collected transaction locks from read result",
+            {"logPrefix", this->LogPrefix},
+            {"locksCount", Locks.size()});
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
-        ui64 seqNo = ev->Get()->Record.GetSeqNo();
-        Reads[id].RegisterMessage(*ev->Get());
+        ui64 seqNo = record.GetSeqNo();
+        Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch()) {
-            SetBatchOperationMaxRow(ev->Get());
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0 && BatchOperationMaxRow.GetCells().empty()) {
+            auto cells = msg.GetCells(msg.GetRowsCount() - 1);
+            BatchOperationMaxRow = TSerializedCellVec{cells};
         }
 
+        ReceivedRowCount += msg.GetRowsCount();
 
-        ReceivedRowCount += ev->Get()->GetRowsCount();
-        CA_LOG_D(TStringBuilder() << "new data for read #" << id
-            << " seqno = " << ev->Get()->Record.GetSeqNo()
-            << " finished = " << ev->Get()->Record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+        YDB_LOG_DEBUG("Queued new read result batch",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"seqNo", seqNo},
+            {"finished", record.GetFinished()});
+        YDB_LOG_TRACE("Read result pushed with continuation token",
+            {"logPrefix", this->LogPrefix},
+            {"readId", id},
+            {"cells", DebugPrintCells(&msg)},
+            {"continuationToken", DebugPrintContinuationToken(record.GetContinuationToken())});
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
@@ -1071,9 +1204,13 @@ public:
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
 
+        HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
-        CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
+        YDB_LOG_WARN("Received TEvDeliveryProblem from pipe cache",
+            {"logPrefix", this->LogPrefix},
+            {"tabletId", msg.TabletId},
+            {"notDelivered", msg.NotDelivered});
         for (auto read : reads) {
             if (Reads[read]) {
                 Counters->IteratorDeliveryProblems->Inc();
@@ -1203,12 +1340,6 @@ public:
             }
         }
 
-        if (CollectDuplicateStats) {
-            for (auto& column : DuplicateCheckExtraColumns) {
-                types.push_back(column.TypeInfo);
-            }
-        }
-
         for (size_t rowIndex = 0; rowIndex < result->GetRowsCount(); ++rowIndex) {
             const auto& row = result->GetCells(rowIndex);
             builder << "|" << DebugPrintPoint(types, row, *AppData()->TypeRegistry);
@@ -1220,11 +1351,12 @@ public:
         auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
-        CA_LOG_D(TStringBuilder() << "enter pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Entering PackCells for read result",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"packedRows", packed},
+            {"freeSpace", freeSpace});
 
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
@@ -1257,40 +1389,6 @@ public:
                 }
             }
 
-            if (CollectDuplicateStats) {
-                TVector<TCell> cells;
-                cells.resize(DuplicateCheckColumnRemap.size());
-                for (size_t deduplicateColumn = 0; deduplicateColumn < DuplicateCheckColumnRemap.size(); ++deduplicateColumn) {
-                    cells[deduplicateColumn] = row[DuplicateCheckColumnRemap[deduplicateColumn]];
-                }
-                TString result = TSerializedCellVec::Serialize(cells);
-                if (auto ptr = DuplicateCheckStats.FindPtr(result)) {
-                    TVector<NScheme::TTypeInfo> types;
-                    for (auto& column : Settings->GetDuplicateCheckColumns()) {
-                        types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
-                    }
-                    TString rowRepr = DebugPrintPoint(types, cells, *AppData()->TypeRegistry);
-
-                    TStringBuilder rowMessage;
-                    rowMessage << "found duplicate rows from table "
-                        << Settings->GetTable().GetTablePath()
-                        << " previous shardId is " << ptr->ShardId
-                        << " current is " << handle.ShardId
-                        << " previous readId is " << ptr->ReadId
-                        << " current is " << handle.ReadId
-                        << " previous seqNo is " << ptr->SeqNo
-                        << " current is " << handle.SeqNo
-                        << " previous row number is " << ptr->RowIndex
-                        << " current is " << rowIndex
-                        << " key is " << rowRepr;
-                    CA_LOG_E(rowMessage);
-                    Counters->RowsDuplicationsFound->Inc();
-                    RuntimeError(rowMessage, NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
-                    return stats;
-                }
-                DuplicateCheckStats[result] = {.ReadId = readId , .ShardId = handle.ShardId, .SeqNo = seqNo, .RowIndex = rowIndex };
-            }
-
             stats.DataBytes += rowSize;
             stats.AllocatedBytes += GetRowSize(rowItems).AllocatedBytes;
             freeSpace -= rowSize;
@@ -1301,11 +1399,12 @@ public:
             }
         }
 
-        CA_LOG_D(TStringBuilder() << "exit pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Exiting PackCells for read result",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"packedRows", packed},
+            {"freeSpace", freeSpace});
         return stats;
     }
 
@@ -1327,8 +1426,10 @@ public:
 
         YQL_ENSURE(!resultBatch.IsWide(), "Wide stream is not supported");
 
-        CA_LOG_D(TStringBuilder() << " enter getasyncinputdata results size " << Results.size()
-            << ", freeSpace " << freeSpace);
+        YDB_LOG_DEBUG("Entering GetAsyncInputData",
+            {"logPrefix", this->LogPrefix},
+            {"resultsCount", Results.size()},
+            {"freeSpace", freeSpace});
 
         ui64 bytes = 0;
         while (!Results.empty()) {
@@ -1350,6 +1451,11 @@ public:
             }
 
             auto id = result.ReadResult->Get()->Record.GetReadId();
+            // For VectorTopK pushdown, accumulate actual scanned rows from datashard stats
+            if (result.ProcessedRows == 0 && Settings->HasVectorTopK() && msg.Record.HasStats()) {
+                ScannedRowCount += msg.Record.GetStats().GetRows();
+                ScannedBytesCount += msg.Record.GetStats().GetBytes();
+            }
 
             for (; result.ProcessedRows < result.PackedRows; ++result.ProcessedRows) {
                 NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[result.ProcessedRows].GetElements());
@@ -1358,11 +1464,15 @@ public:
                 bytes += rowSize.AllocatedBytes;
                 if (ProcessedRowCount == Settings->GetItemsLimit()) {
                     finished = true;
-                    CA_LOG_D(TStringBuilder() << " returned async data because limit reached");
+                    YDB_LOG_DEBUG("Returned async data because limit reached",
+                        {"logPrefix", this->LogPrefix});
                     return bytes;
                 }
             }
-            CA_LOG_D(TStringBuilder() << "returned " << resultBatch.RowCount() << " rows; processed " << ProcessedRowCount << " rows");
+            YDB_LOG_DEBUG("Returned rows from result batch",
+                {"logPrefix", this->LogPrefix},
+                {"resultBatchRowCount", resultBatch.RowCount()},
+                {"processedRowCount", ProcessedRowCount});
 
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
@@ -1382,8 +1492,15 @@ public:
                             request->Record.SetMaxRows(*limit);
                         }
                         Counters->SentIteratorAcks->Inc();
-                        CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
-                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, true),
+                        YDB_LOG_DEBUG("Sending TEvReadAck to data shard",
+                            {"logPrefix", this->LogPrefix},
+                            {"readId", id},
+                            {"limit", limit},
+                            {"seqNo", record.GetSeqNo()});
+                        bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
+                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
+                            .AutoConnect = newPipe,
+                            .Subscribe = newPipe}),
                             IEventHandle::FlagTrackDelivery);
 
                         if (auto delay = ShardTimeout()) {
@@ -1399,7 +1516,9 @@ public:
                 }
 
                 Results.pop();
-                CA_LOG_D("dropping batch for read #" << id);
+                YDB_LOG_DEBUG("Dropped processed read result batch",
+                    {"logPrefix", this->LogPrefix},
+                    {"readId", id});
 
                 if (LimitReached()) {
                     finished = true;
@@ -1416,15 +1535,16 @@ public:
             finished = true;
         }
 
-        CA_LOG_D(TStringBuilder() << "returned async data"
-            << " processed rows " << ProcessedRowCount
-            << " left freeSpace " << freeSpace
-            << " received rows " << ReceivedRowCount
-            << " running reads " << RunningReads()
-            << " pending shards " << PendingShards.Size()
-            << " finished = " << finished
-            << " has limit " << (Settings->GetItemsLimit() != 0)
-            << " limit reached " << LimitReached());
+        YDB_LOG_DEBUG("Returning async input data to compute actor",
+            {"logPrefix", this->LogPrefix},
+            {"processedRowCount", ProcessedRowCount},
+            {"freeSpace", freeSpace},
+            {"receivedRowCount", ReceivedRowCount},
+            {"runningReads", RunningReads()},
+            {"pendingShardsCount", PendingShards.Size()},
+            {"finished", finished},
+            {"hasItemsLimit", (Settings->GetItemsLimit() != 0)},
+            {"limitReached", LimitReached()});
 
         return bytes;
     }
@@ -1444,17 +1564,35 @@ public:
 
             }
 
-            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
-
             //FIXME: use real rows count
+            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
+            auto consumedBytes = mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes;
+
+            // For VectorTopK pushdown, use actual scanned rows from datashard stats
+            if (Settings->HasVectorTopK()) {
+                consumedRows = ScannedRowCount;
+                consumedBytes = ScannedBytesCount;
+            }
+
             tableStats->SetReadRows(tableStats->GetReadRows() + consumedRows);
-            tableStats->SetReadBytes(tableStats->GetReadBytes() + (mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes));
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + consumedBytes);
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             //FIXME: use evread statistics after KIKIMR-16924
             //tableStats->SetReadRows(tableStats->GetReadRows() + ReceivedRowCount);
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
+
+            // Add lock stats for broken locks from read operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 
@@ -1506,22 +1644,29 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
-        if (Settings->GetIsBatch() && !BatchOperationMaxRow.empty()) {
+        // Add deferred breaker info for TLI logging
+        for (const auto& breaker : DeferredBreakers) {
+            resultInfo.AddDeferredBreakerQuerySpanIds(breaker.QuerySpanId);
+            resultInfo.AddDeferredBreakerNodeIds(breaker.NodeId);
+        }
+        if (DeferredVictimQuerySpanId) {
+            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
+        }
+        if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
-            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
-                if (const auto& column = BatchOperationReadColumns[i]; column.IsPrimary) {
-                    keyRow.push_back(BatchOperationMaxRow[i]);
-                    resultInfo.AddBatchOperationKeyIds(column.Id);
-                }
+            auto cells = BatchOperationMaxRow.GetCells();
+
+            for (const auto& meta : BatchOperationReadColumns) {
+                keyRow.push_back(cells[meta.ReadIndex]);
+                resultInfo.AddBatchOperationKeyIds(meta.ColumnId);
             }
 
             if (!keyRow.empty()) {
                 YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
-
-                TConstArrayRef<TCell> keyRef(keyRow);
-                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRef));
+                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRow));
             }
         }
+
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1543,39 +1688,6 @@ private:
             column.NotNull = srcColumn.GetNotNull();
             ResultColumns.push_back(column);
         }
-        if (CollectDuplicateStats) {
-            THashMap<ui32, ui32> positions;
-            size_t resultIndex = 0;
-            for (auto& column : Settings->GetColumns()) {
-                if (!IsSystemColumn(column.GetId())) {
-                    positions[column.GetId()] = resultIndex;
-                    resultIndex += 1;
-                }
-            }
-            DuplicateCheckExtraColumns.reserve(Settings->ColumnsSize());
-            for (size_t deduplicateColumn = 0; deduplicateColumn < Settings->DuplicateCheckColumnsSize(); ++deduplicateColumn) {
-                const auto& srcColumn = Settings->GetDuplicateCheckColumns(deduplicateColumn);
-                TResultColumn column;
-                column.Tag = srcColumn.GetId();
-                Y_ENSURE(!IsSystemColumn(column.Tag));
-                if (!positions.contains(column.Tag)) {
-                    positions[column.Tag] = resultIndex;
-                    resultIndex += 1;
-                    column.TypeInfo = MakeTypeInfo(srcColumn);
-                    column.IsSystem = false;
-                    column.NotNull = false;
-                    DuplicateCheckExtraColumns.push_back(column);
-                }
-                DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
-            }
-        }
-    }
-
-    void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
-        if (ev->GetRowsCount() > 0) {
-            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
-            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
-        }
     }
 
 private:
@@ -1588,12 +1700,17 @@ private:
 
     const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;
     TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+    // Pre-parsed point lookups passed in-process (see CreateKqpReadActor); moved
+    // into the initial shard state by StartTableScan, empty afterwards.
+    TVector<TSerializedCellVec> DirectKeyPoints;
 
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
+    ui64 ScannedRowCount = 0;  // Actual rows scanned (for VectorTopK, may differ from ReceivedRowCount)
+    ui64 ScannedBytesCount = 0;
     ui64 ProcessedRowCount = 0;
     ui64 ResetReads = 0;
     ui64 ReadId = 0;
@@ -1610,6 +1727,12 @@ private:
 
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
+    ui64 DeferredVictimQuerySpanId = 0;
 
     IKqpGateway::TKqpSnapshot Snapshot;
 
@@ -1638,34 +1761,41 @@ private:
     NWilson::TSpan ReadActorSpan;
     NWilson::TSpan ReadActorStateSpan;
 
-    bool CollectDuplicateStats = false;
-    struct TDuplicationStats {
-        ui64 ReadId;
-        ui64 ShardId;
-        ui64 SeqNo;
-        ui64 RowIndex;
-    };
-    THashMap<TString, TDuplicationStats> DuplicateCheckStats;
-    TVector<TResultColumn> DuplicateCheckExtraColumns;
-    TVector<ui32> DuplicateCheckColumnRemap;
+    THashSet<ui64> HasEstablishedPipe;
 
-    struct TReadColumnInfo {
-        ui32 Id;
-        NScheme::TTypeInfo TypeInfo;
-        bool IsPrimary = false;
+    struct TBatchOperationColumnMeta {
+        size_t ReadIndex;
+        ui32 ColumnId;
     };
 
-    TVector<TReadColumnInfo> BatchOperationReadColumns;
-    TOwnedCellVec BatchOperationMaxRow;
+    // For BATCH operations only
+    TVector<TBatchOperationColumnMeta> BatchOperationReadColumns;
+    TSerializedCellVec BatchOperationMaxRow;
 };
 
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+    const NActors::TActorId& computeActorId,
+    ui64 inputIndex,
+    NYql::NDq::TCollectStatsLevel statsLevel,
+    NYql::NDq::TTxId txId,
+    ui64 taskId,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const NWilson::TTraceId& traceId,
+    TIntrusivePtr<TKqpCounters> counters,
+    TVector<TSerializedCellVec> keyPoints) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters, std::move(keyPoints));
+    return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+}
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(settings, args, counters);
-            return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+            return CreateKqpReadActor(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
         });
 }
 

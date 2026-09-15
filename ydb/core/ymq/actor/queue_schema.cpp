@@ -1,4 +1,5 @@
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
+#include "create_topic_tx.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
@@ -33,7 +34,8 @@ static bool IsGoodStatusCode(ui32 code) {
     }
 }
 
-TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
+TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
+                                                     const TQueuePath& path,
                                                      const TCreateQueueRequest& req,
                                                      const TActorId& sender,
                                                      const TString& requestId,
@@ -46,8 +48,10 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
-    : QueuePath_(path)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
+    : AccountName_(accountName)
+    , QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
     , CustomQueueName_(customQueueName)
@@ -63,6 +67,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , UserSid_(userSid)
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
+    , SourceAddress_(sourceAddress)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -477,6 +482,41 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
+void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
+    TTopicParams params;
+    params.PartitionLifetimeSeconds = Max<ui64>(1, *ValidatedAttributes_.MessageRetentionPeriod);
+    if (ValidatedAttributes_.ContentBasedDeduplication) {
+        params.HasContentBasedDeduplication = true;
+        params.ContentBasedDeduplication = *ValidatedAttributes_.ContentBasedDeduplication;
+    }
+    if (ValidatedAttributes_.DelaySeconds) {
+        params.DefaultDelayMessageTimeMs = SecondsToMs(*ValidatedAttributes_.DelaySeconds);
+    }
+    if (ValidatedAttributes_.VisibilityTimeout) {
+        params.DefaultProcessingTimeoutSeconds = *ValidatedAttributes_.VisibilityTimeout;
+    }
+    if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
+        params.DefaultReceiveMessageWaitTimeMs = SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds);
+    }
+    params.ReadRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
+    if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
+        params.MaxReceiveCount = *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount;
+    }
+    if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
+        params.RedriveTargetQueueName = *ValidatedAttributes_.RedrivePolicy.TargetQueueName;
+    }
+    params.AccountName = AccountName_;
+    params.FolderId = FolderId_;
+    params.QueueName = QueuePath_.QueueName;
+
+    auto request = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
+    Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
+        .Database = Cfg().GetRoot() == "/Root/SQS" ? "/Root" : Cfg().GetRoot(),
+        .Request = std::move(request),
+        .IfNotExists = true,
+    }));
+}
+
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
     RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second);
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
@@ -529,6 +569,10 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
             AddRPSQuota();
             break;
         }
+        case ECreateComponentsStep::MakeTopic: {
+            RegisterMakeTopicActor(QueuePath_.GetQueuePath(), VersionName_);
+            break;
+        }
         case ECreateComponentsStep::Commit: {
             CommitNewVersion();
             break;
@@ -541,6 +585,7 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
+        hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
@@ -566,6 +611,8 @@ void TCreateQueueSchemaActorV2::Step() {
             } else {
                 if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                     CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+                } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                    CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
                 } else {
                     CurrentCreationStep_ = ECreateComponentsStep::Commit;
                 }
@@ -593,12 +640,22 @@ void TCreateQueueSchemaActorV2::Step() {
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                 CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
             } else {
                 CurrentCreationStep_ = ECreateComponentsStep::Commit;
             }
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
+            if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
+            } else {
+                CurrentCreationStep_ = ECreateComponentsStep::Commit;
+            }
+            break;
+        }
+        case ECreateComponentsStep::MakeTopic: {
             CurrentCreationStep_ = ECreateComponentsStep::Commit;
             break;
         }
@@ -609,6 +666,22 @@ void TCreateQueueSchemaActorV2::Step() {
     }
 
     CreateComponents();
+}
+
+void TCreateQueueSchemaActorV2::Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
+    const auto& response = *ev->Get();
+    if (response.Status == Ydb::StatusIds::SUCCESS) {
+        Step();
+    } else {
+        RLOG_SQS_WARN("CreateTopic failed for [" << QueuePath_.UserName << "/" << QueuePath_.QueueName << "]: " << response.ErrorMessage);
+
+        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
+        resp->State = EQueueState::Creating;
+        resp->Error = std::move(ev->Get()->ErrorMessage);
+        Send(Sender_, std::move(resp));
+
+        PassAway();
+    }
 }
 
 void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
@@ -746,23 +819,24 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
             (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
             (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
             (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
+            (let topicCreated           (Parameter 'TOPIC_CREATED     (DataType 'Bool)))
     )__";
 
     if (isCloudEventsEnabled) {
         result +=
         R"__(
                 (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
-                (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsQueueName               (Parameter 'CUSTOMNAME (DataType 'Utf8String)))
                 (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
                 (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
                 (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsMaskedToken      (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
                 (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8String)))
         )__";
 
@@ -778,12 +852,12 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                     '('Type cloudEventsType)
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
                     '('UserSID cloudEventsUserSID)
                     '('MaskedToken cloudEventsMaskedToken)
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
                     '('Labels cloudEventsQueueTags)))
         )__";
     }
@@ -890,7 +964,8 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 '('DlqName dlqName)
                 '('MasterTabletId masterTabletId)
                 '('TablesFormat tablesFormat)
-                '('Tags tags)))
+                '('Tags tags)
+                '('TopicCreated topicCreated)))
 
             (let eventsUpdate '(
                 '('CustomQueueName customName)
@@ -910,7 +985,8 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 '('MaxReceiveCount maxReceiveCount)
                 '('DlqArn dlqArn)
                 '('DlqName dlqName)
-                '('VisibilityTimeout visibility)))
+                '('VisibilityTimeout visibility)
+                '('TopicCreated topicCreated)))
 
             (let willCommit
                 (And
@@ -945,7 +1021,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
     if (isCloudEventsEnabled) {
         result +=
         R"__(
-                    (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
+                (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
         )__";
     }
 
@@ -1070,9 +1146,9 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
             .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-            .Utf8("CLOUD_EVENT_PEERNAME", "")
+            .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1099,7 +1175,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
             .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
             .Utf8("USER_NAME", QueuePath_.UserName)
-            .Utf8("TAGS", TagsJson_);
+            .Utf8("TAGS", TagsJson_)
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
@@ -1233,7 +1310,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
                                                            Version_, RequiredShardsCount_, IsFifo_,
-                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_));
+                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_, SourceAddress_));
             }
 
         } else {
@@ -1267,7 +1344,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1280,6 +1358,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
 }
 
@@ -1296,7 +1375,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
-                                                     const TString& authType)
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1309,6 +1389,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
 
@@ -1353,50 +1434,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
             (let now                (Parameter 'NOW (DataType 'Uint64)))
             (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
             (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-    )__";
 
-    if (isCloudEventsEnabled) {
-        result +=
-        R"__(
-                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
-                (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
-                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
-                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
-                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
-                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
-                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
-                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
-                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
-                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
-                (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
-        )__";
-
-        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
-
-        result += R"__(
-                (let cloudEventsRow '(
-                    '('CreatedAt cloudEventsCreatedAt)
-                    '('Id cloudEventsId)))
-
-                (let cloudEventsUpdate '(
-                    '('QueueName cloudEventsQueueName)
-                    '('Type cloudEventsType)
-                    '('CloudId cloudEventsCloudId)
-                    '('FolderId cloudEventsFolderId)
-                    '('UserSID cloudEventsUserSID)
-                    '('MaskedToken cloudEventsMaskedToken)
-                    '('AuthType cloudEventsAuthType)
-                    '('PeerName cloudEventsPeerName)
-                    '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
-                    '('Labels cloudEventsQueueTags)))
-        )__";
-    }
-
-    result +=
-    R"__(
             (let queuesTable '%2$s/.Queues)
             (let removedQueuesTable '%2$s/.RemovedQueues)
             (let eventsTable '%2$s/.Events)
@@ -1463,7 +1501,49 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                     (Utf8String '"")
                 )
             )
+    )__";
 
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+                (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
+        )__";
+
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
+
+        result += R"__(
+                (let cloudEventsRow '(
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
+
+                (let cloudEventsUpdate '(
+                    '('QueueName customName)
+                    '('Type cloudEventsType)
+                    '('CloudId cloudEventsCloudId)
+                    '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
+                    '('UserSID cloudEventsUserSID)
+                    '('MaskedToken cloudEventsMaskedToken)
+                    '('AuthType cloudEventsAuthType)
+                    '('PeerName cloudEventsPeerName)
+                    '('RequestId cloudEventsRequestId)
+                    '('Labels cloudEventsQueueTags)))
+        )__";
+    }
+
+    result +=
+    R"__(
             (let tablesFormat
                 (Coalesce
                     (Member queuesRead 'TablesFormat)
@@ -1520,7 +1600,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
     if (isCloudEventsEnabled) {
         result +=
         R"__(
-                        (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
+                    (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
         )__";
     }
 
@@ -1543,6 +1623,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
             ))
         )
     )__";
+
     return result;
 }
 
@@ -1580,9 +1661,8 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", "")
-                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
             } else {
                 TParameters(trans->MutableParams()->MutableProto())
                     .Utf8("NAME", QueuePath_.QueueName)
@@ -1593,6 +1673,12 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             }
 
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
+            break;
+        }
+        case EDeleting::RemoveTopic: {
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveTopicEvent(GetVersionedQueueDir(QueuePath_, Version_), "streamImpl"), false, QueuePath_, GetTransactionCounters(UserCounters_))
+            );
             break;
         }
         case EDeleting::RemoveTables: {
@@ -1637,6 +1723,10 @@ void TDeleteQueueSchemaActorV2::NextAction() {
 void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
     switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
+            DeletionStep_ = EDeleting::RemoveTopic;
+            break;
+        }
+        case EDeleting::RemoveTopic: {
             if (TablesFormat_ == 0) {
                 DeletionStep_ = EDeleting::RemoveTables;
             } else {
@@ -1680,8 +1770,8 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
             DeletionStep_ = EDeleting::Finish;
             break;
         }
-        default: {
-            Y_VERIFY_S(false, "incorrect queue deletion step: " << DeletionStep_); // unreachable
+        case EDeleting::Finish: {
+            break;
         }
     }
 

@@ -44,13 +44,12 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase::Bootstrap url=" << RequestEvent->Get()->Request.GetPathInfo());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase::Bootstrap",
+            {"url", RequestEvent->Get()->Request.GetPathInfo()});
 
         TAutoPtr<TRequestEvent> request = PrepareRequest(ctx);
         if (!request) {
-            LOG_ERROR_S(ctx, NKikimrServices::CMS,
-                        "TJsonProxyBase no request to send was built");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase no request to send was built");
             return;
         }
 
@@ -65,11 +64,18 @@ public:
             return;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                    "TJsonProxyBase send request to " << GetTabletName() << " tablet " << tid);
+        std::optional<ui32> followerId = GetFollowerId(ctx);
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::CMS, "TJsonProxyBase send request",
+            {"tabletName", GetTabletName()},
+            {"tabletId", tid},
+            {"followerId", ((followerId) ? ToString(*followerId) : TString("(undefined)"))});
 
         NTabletPipe::TClientConfig pipeConfig;
+
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        pipeConfig.AllowFollower = (followerId && (*followerId != 0));
+        pipeConfig.FollowerId = followerId;
+
         Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig));
         NTabletPipe::SendData(ctx, Pipe, request.Release());
 
@@ -77,7 +83,8 @@ public:
     }
 
     virtual TAutoPtr<TRequestEvent> PrepareRequest(const TActorContext &ctx) = 0;
-    virtual ui64 GetTabletId(const TActorContext &ctx) const = 0;
+    virtual ui64 GetTabletId(const TActorContext& ctx) const = 0;
+    virtual std::optional<ui32> GetFollowerId(const TActorContext& ctx) const = 0;
     virtual TString GetTabletName() const = 0;
 
 protected:
@@ -91,8 +98,9 @@ protected:
             CFunc(TEvTabletPipe::TEvClientDestroyed::EventType, Disconnect);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default:
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->ToString().data());
+            YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::CMS, "HTTP::StateWork ignored event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
         }
     }
 
@@ -242,8 +250,12 @@ public:
     {
     }
 
-    ui64 GetTabletId(const TActorContext& /*ctx*/) const override {
+    ui64 GetTabletId(const TActorContext&) const override {
         return useConsole ? MakeConsoleID() : MakeCmsID();
+    }
+
+    std::optional<ui32> GetFollowerId(const TActorContext&) const override {
+        return std::optional<ui32>(); // Do not force a specific leader/follower
     }
 
     TString GetTabletName() const override {

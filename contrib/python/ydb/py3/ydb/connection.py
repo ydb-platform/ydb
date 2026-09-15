@@ -1,16 +1,31 @@
 # -*- coding: utf-8 -*-
 import logging
 import copy
-import typing
 from concurrent import futures
 import uuid
 import threading
 import collections
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from .settings import BaseRequestSettings
+    from .driver import DriverConfig
 
 from google.protobuf import text_format
 import grpc
 from . import issues, _apis, _utilities
 from . import default_pem
+from .observability import sdk_build_info_tokens
+from .observability.tracing import get_trace_metadata
 
 _stubs_list = (
     _apis.TableService.Stub,
@@ -26,9 +41,10 @@ YDB_TRACE_ID_HEADER = "x-ydb-trace-id"
 YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type"
 
 _DEFAULT_MAX_GRPC_MESSAGE_SIZE = 64 * 10**6
+_DEFAULT_KEEPALIVE_TIMEOUT = 10000
 
 
-def _message_to_string(message):
+def _message_to_string(message: Any) -> str:
     """
     Constructs a string representation of provided message or generator
     :param message: A protocol buffer or generator instance
@@ -40,7 +56,7 @@ def _message_to_string(message):
         return str(message)
 
 
-def _log_response(rpc_state, response):
+def _log_response(rpc_state: "_RpcState", response: Any) -> None:
     """
     Writes a message with response into debug logs
     :param rpc_state: A state of rpc
@@ -51,7 +67,7 @@ def _log_response(rpc_state, response):
         logger.debug("%s: response = { %s }", rpc_state, _message_to_string(response))
 
 
-def _log_request(rpc_state, request):
+def _log_request(rpc_state: "_RpcState", request: Any) -> None:
     """
     Writes a message with request into debug logs
     :param rpc_state: An id of request
@@ -63,17 +79,18 @@ def _log_request(rpc_state, request):
 
 
 def _rpc_error_handler(
-    rpc_state,
-    rpc_error: typing.Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
-    on_disconnected: typing.Callable[[], None] = None,
-):
+    rpc_state: Union["_RpcState", str],
+    rpc_error: Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
+    on_disconnected: Optional[Callable[[], None]] = None,
+    use_unavailable: bool = False,
+) -> issues.Error:
     """
     RPC call error handler, that translates gRPC error into YDB issue
     :param rpc_state: A state of rpc
     :param rpc_error: an underlying rpc error to handle
     :param on_disconnected: a handler to call on disconnected connection
     """
-    logger.info("%s: received error, %s", rpc_state, rpc_error)
+    logger.debug("%s: received error, %s", rpc_state, rpc_error)
     if isinstance(rpc_error, (grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call)):
         if rpc_error.code() == grpc.StatusCode.UNAUTHENTICATED:
             return issues.Unauthenticated(rpc_error.details())
@@ -81,12 +98,29 @@ def _rpc_error_handler(
             return issues.DeadlineExceed("Deadline exceeded on request")
         elif rpc_error.code() == grpc.StatusCode.UNIMPLEMENTED:
             return issues.Unimplemented("Method or feature is not implemented on server!")
+        elif rpc_error.code() == grpc.StatusCode.CANCELLED:
+            return issues.Cancelled(rpc_error.details())
+        elif rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+            if "Sent message larger than max" in rpc_error.details():
+                return issues.BadRequest(rpc_error.details())
+        elif use_unavailable and rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+            return issues.Unavailable(rpc_error.details())
 
     logger.debug("%s: unhandled rpc error, disconnecting channel", rpc_state)
     if on_disconnected is not None:
         on_disconnected()
 
     return issues.ConnectionLost("Rpc error, reason %s" % str(rpc_error))
+
+
+def _is_disconnect_needed(error):
+    return isinstance(
+        error,
+        (
+            issues.ConnectionLost,
+            issues.Unavailable,
+        ),
+    )
 
 
 def _on_response_callback(rpc_state, call_state_unref, wrap_result=None, on_disconnected=None, wrap_args=()):
@@ -146,7 +180,11 @@ def _construct_metadata(driver_config, settings):
             metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
         metadata.extend(getattr(settings, "headers", []))
 
-    metadata.append(_utilities.x_ydb_sdk_build_info_header())
+    additional_sdk_headers = (*sdk_build_info_tokens(), *getattr(driver_config, "_additional_sdk_headers", ()))
+    metadata.append(_utilities.x_ydb_sdk_build_info_header(additional_sdk_headers))
+
+    metadata.extend(get_trace_metadata())
+
     return metadata
 
 
@@ -162,11 +200,14 @@ def _get_request_timeout(settings):
 
 
 class EndpointOptions(object):
-    __slots__ = ("ssl_target_name_override", "node_id")
+    __slots__ = ("ssl_target_name_override", "node_id", "address", "port", "location")
 
-    def __init__(self, ssl_target_name_override=None, node_id=None):
+    def __init__(self, ssl_target_name_override=None, node_id=None, address=None, port=None, location=None):
         self.ssl_target_name_override = ssl_target_name_override
         self.node_id = node_id
+        self.address = address
+        self.port = port
+        self.location = location
 
 
 def _construct_channel_options(driver_config, endpoint_options=None):
@@ -185,15 +226,18 @@ def _construct_channel_options(driver_config, endpoint_options=None):
             getattr(driver_config, "grpc_lb_policy_name", "round_robin"),
         ),
     ]
-    if driver_config.grpc_keep_alive_timeout is not None:
-        _default_connect_options.extend(
-            [
-                ("grpc.keepalive_time_ms", driver_config.grpc_keep_alive_timeout >> 3),
-                ("grpc.keepalive_timeout_ms", driver_config.grpc_keep_alive_timeout),
-                ("grpc.http2.max_pings_without_data", 0),
-                ("grpc.keepalive_permit_without_calls", 0),
-            ]
-        )
+    if driver_config.grpc_keep_alive_timeout is None:
+        driver_config.grpc_keep_alive_timeout = _DEFAULT_KEEPALIVE_TIMEOUT
+
+    _default_connect_options.extend(
+        [
+            ("grpc.keepalive_time_ms", driver_config.grpc_keep_alive_timeout),
+            ("grpc.keepalive_timeout_ms", driver_config.grpc_keep_alive_timeout),
+            ("grpc.http2.max_pings_without_data", 0),
+            ("grpc.keepalive_permit_without_calls", 0),
+        ]
+    )
+
     if endpoint_options is not None:
         if endpoint_options.ssl_target_name_override:
             _default_connect_options.append(
@@ -211,7 +255,7 @@ def _construct_channel_options(driver_config, endpoint_options=None):
     return channel_options
 
 
-class _RpcState(object):
+class _RpcState:
     __slots__ = (
         "rpc",
         "request_id",
@@ -223,7 +267,16 @@ class _RpcState(object):
         "endpoint_key",
     )
 
-    def __init__(self, stub_instance, rpc_name, endpoint, endpoint_key):
+    rpc: Any
+    request_id: "uuid.UUID"
+    result_future: "futures.Future[Any]"
+    rpc_name: str
+    endpoint: str
+    rendezvous: Any
+    metadata_kv: Optional[Dict[str, set]]
+    endpoint_key: "EndpointKey"
+
+    def __init__(self, stub_instance: Any, rpc_name: str, endpoint: str, endpoint_key: "EndpointKey") -> None:
         """Stores all RPC related data"""
         self.rpc_name = rpc_name
         self.rpc = getattr(stub_instance, rpc_name)
@@ -233,10 +286,10 @@ class _RpcState(object):
         self.metadata_kv = None
         self.endpoint_key = endpoint_key
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "RpcState(%s, %s, %s)" % (self.rpc_name, self.request_id, self.endpoint)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Execute a RPC."""
         try:
             response, rendezvous = self.rpc.with_call(*args, **kwargs)
@@ -245,21 +298,20 @@ class _RpcState(object):
         except AttributeError:
             return self.rpc(*args, **kwargs)
 
-    def trailing_metadata(self):
+    def trailing_metadata(self) -> Dict[str, set]:
         """Trailing metadata of the call."""
         if self.metadata_kv is None:
-
             self.metadata_kv = collections.defaultdict(set)
             for metadatum in self.rendezvous.trailing_metadata():
                 self.metadata_kv[metadatum.key].add(metadatum.value)
 
         return self.metadata_kv
 
-    def future(self, *args, **kwargs):
+    def future(self, *args: Any, **kwargs: Any) -> Tuple[Any, "futures.Future[Any]"]:
         self.rendezvous = self.rpc.future(*args, **kwargs)
         self.result_future = futures.Future()
 
-        def _cancel_callback(f):
+        def _cancel_callback(f: Any) -> None:
             """forwards cancel to gPRC future"""
             if f.cancelled():
                 self.rendezvous.cancel()
@@ -321,6 +373,33 @@ class EndpointKey(object):
         self.node_id = node_id
 
 
+class _SafeSyncIterator:
+    def __init__(self, resp, rpc_state, on_disconnected_callback):
+        self.resp = resp
+        self.it = resp.__iter__()
+        self.rpc_state = rpc_state
+        self.on_disconnected_callback = on_disconnected_callback
+
+    def cancel(self):
+        self.resp.cancel()
+        return self
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return self.it.__next__()
+        except grpc.RpcError as rpc_error:
+            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
+            if _is_disconnect_needed(ydb_error):
+                self.on_disconnected_callback()
+            raise ydb_error
+
+    def __getattr__(self, item):
+        return getattr(self.resp, item)
+
+
 class Connection(object):
     __slots__ = (
         "endpoint",
@@ -335,24 +414,34 @@ class Connection(object):
         "closing",
         "endpoint_key",
         "node_id",
+        "peer_address",
+        "peer_port",
+        "peer_location",
     )
 
-    def __init__(self, endpoint, driver_config=None, endpoint_options=None):
+    def __init__(
+        self,
+        endpoint: str,
+        driver_config: Optional["DriverConfig"] = None,
+        endpoint_options: Optional[EndpointOptions] = None,
+    ) -> None:
         """
         Object that wraps gRPC channel and encapsulates gRPC request execution logic
         :param endpoint: endpoint to connect (in pattern host:port), constructed by user or
         discovered by the YDB endpoint discovery mechanism
         :param driver_config: A driver config instance to be used for RPC call interception
         """
-        global _stubs_list
         self.endpoint = endpoint
         self.node_id = getattr(endpoint_options, "node_id", None)
+        self.peer_address = getattr(endpoint_options, "address", None)
+        self.peer_port = getattr(endpoint_options, "port", None)
+        self.peer_location = getattr(endpoint_options, "location", None)
         self.endpoint_key = EndpointKey(endpoint, getattr(endpoint_options, "node_id", None))
         self._channel = channel_factory(self.endpoint, driver_config, endpoint_options=endpoint_options)
         self._driver_config = driver_config
-        self._call_states = {}
-        self._stub_instances = {}
-        self._cleanup_callbacks = []
+        self._call_states: Dict[Any, "_RpcState"] = {}
+        self._stub_instances: Dict[Any, Any] = {}
+        self._cleanup_callbacks: List[Callable[["Connection"], None]] = []
         # pre-initialize stubs
         for stub in _stubs_list:
             self._stub_instances[stub] = stub(self._channel)
@@ -393,14 +482,14 @@ class Connection(object):
 
     def future(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        on_disconnected=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        on_disconnected: Optional[Callable[[], None]] = None,
+    ) -> "futures.Future[Any]":
         """
         Sends request constructed by client
         :param request: A request constructed by client
@@ -433,14 +522,14 @@ class Connection(object):
 
     def __call__(
         self,
-        request,
-        stub,
-        rpc_name,
-        wrap_result=None,
-        settings=None,
-        wrap_args=(),
-        on_disconnected=None,
-    ):
+        request: Any,
+        stub: Any,
+        rpc_name: str,
+        wrap_result: Optional[Callable[..., Any]] = None,
+        settings: Optional["BaseRequestSettings"] = None,
+        wrap_args: Tuple[Any, ...] = (),
+        on_disconnected: Optional[Callable[[], None]] = None,
+    ) -> Any:
         """
         Synchronously sends request constructed by client library
         :param request: A request constructed by client
@@ -462,6 +551,11 @@ class Connection(object):
                 compression=getattr(settings, "compression", None),
             )
             _log_response(rpc_state, response)
+
+            if hasattr(response, "__iter__"):
+                # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+                response = _SafeSyncIterator(response, rpc_state, on_disconnected)
+
             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
         except grpc.RpcError as rpc_error:
             raise _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
@@ -495,7 +589,7 @@ class Connection(object):
         Closes the underlying gRPC channel
         :return: None
         """
-        logger.info("Closing channel for endpoint %s", self.endpoint)
+        logger.debug("Closing channel for endpoint %s", self.endpoint)
         with self.lock:
             self.closing = True
 
@@ -510,8 +604,12 @@ class Connection(object):
                 self.destroy()
 
     def destroy(self):
-        if hasattr(self, "_channel") and hasattr(self._channel, "close"):
-            self._channel.close()
+        channel = getattr(self, "_channel", None)
+        if channel is not None and hasattr(channel, "close"):
+            channel.close()
+
+        self._stub_instances.clear()
+        self._channel = None
 
     def ready_future(self):
         """

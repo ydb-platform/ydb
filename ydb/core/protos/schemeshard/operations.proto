@@ -94,6 +94,10 @@ enum EOperationType {
     ESchemeOpDropCdcStream = 68;
     ESchemeOpDropCdcStreamImpl = 69;
     ESchemeOpDropCdcStreamAtTable = 70;
+    // Rotate
+    ESchemeOpRotateCdcStream = 120;
+    ESchemeOpRotateCdcStreamImpl = 121;
+    ESchemeOpRotateCdcStreamAtTable = 122;
 
     ESchemeOpMoveTable = 71;
     ESchemeOpMoveTableIndex = 72;
@@ -133,6 +137,7 @@ enum EOperationType {
     ESchemeOpAlterExternalDataSource = 91;
 
     ESchemeOpCreateColumnBuild = 92;
+    ESchemeOpDropColumnBuild = 125;
 
     // View
     ESchemeOpCreateView = 93;
@@ -183,6 +188,41 @@ enum EOperationType {
 
     // Change Path State
     ESchemeOpChangePathState = 119;
+
+    // Incremental Restore Finalization
+    ESchemeOpIncrementalRestoreFinalize = 123;
+
+    // Long Incremental Backup
+    ESchemeOpCreateLongIncrementalBackupOp = 124;
+
+    reserved 126;
+
+    // Secret
+    ESchemeOpCreateSecret = 127;
+    ESchemeOpAlterSecret = 128;
+    ESchemeOpDropSecret = 129;
+
+    // Streaming query
+    ESchemeOpCreateStreamingQuery = 130;
+    ESchemeOpDropStreamingQuery = 131;
+    ESchemeOpAlterStreamingQuery = 132;
+
+    // Truncate table
+    ESchemeOpTruncateTable = 133;
+
+    // Publish shadow data and take snapshot in one step
+    ESchemeOpPrepareIndexValidation = 134;
+
+    // Incremental restore path-state lock/unlock; propose-only, no DS-side work.
+    ESchemeOpIncrementalRestoreLockTargets = 135;
+    ESchemeOpIncrementalRestoreUnlockTargets = 136;
+
+    // Full Backup (trackable aggregator over BackupBackupCollection's CCT)
+    ESchemeOpCreateFullBackupOp = 137;
+
+    // TestShardSet
+    ESchemeOpCreateTestShardSet = 138;
+    ESchemeOpDropTestShardSet = 139;
 
     // Some entries are grouped by semantics, so are out of order
 }

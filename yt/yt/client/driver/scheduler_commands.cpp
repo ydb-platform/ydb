@@ -8,6 +8,7 @@
 #include <yt/yt/client/table_client/row_buffer.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/logging/fluent_log.h>
 
@@ -25,7 +26,7 @@ using namespace NJobTrackerClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
+static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, JobShellStructuredLogger, "JobShell");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -150,6 +151,13 @@ void TGetJobStderrCommand::Register(TRegistrar registrar)
             return command->Options.Offset;
         })
         .Optional(/*init*/ true);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<NApi::EJobStderrType>>(
+        "type",
+        [] (TThis* command) -> auto& {
+            return command->Options.Type;
+        })
+        .Optional(/*init*/ true);
 }
 
 bool TGetJobStderrCommand::HasResponseParameters() const
@@ -176,32 +184,19 @@ void TGetJobStderrCommand::DoExecute(ICommandContextPtr context)
 
 void TGetJobTraceCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<TJobId>>(
-        "job_id",
-        [] (TThis* command) -> auto& { return command->Options.JobId; })
-        .Optional(/*init*/ false);
+    registrar.Parameter("job_id", &TThis::JobId);
 
     registrar.ParameterWithUniversalAccessor<std::optional<TJobTraceId>>(
         "trace_id",
         [] (TThis* command) -> auto& { return command->Options.TraceId; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
-        "from_event_index",
-        [] (TThis* command) -> auto& { return command->Options.FromEventIndex; })
-        .Optional(/*init*/ false);
-
-    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
-        "to_event_index",
-        [] (TThis* command) -> auto& { return command->Options.ToEventIndex; })
-        .Optional(/*init*/ false);
-
-    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "from_time",
         [] (TThis* command) -> auto& { return command->Options.FromTime; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "to_time",
         [] (TThis* command) -> auto& { return command->Options.ToTime; })
         .Optional(/*init*/ false);
@@ -209,13 +204,11 @@ void TGetJobTraceCommand::Register(TRegistrar registrar)
 
 void TGetJobTraceCommand::DoExecute(ICommandContextPtr context)
 {
-    auto result = WaitFor(context->GetClient()->GetJobTrace(OperationIdOrAlias, Options))
+    auto jobTraceReader = WaitFor(context->GetClient()->GetJobTrace(OperationIdOrAlias, JobId, Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(BuildYsonStringFluently()
-        .DoListFor(result, [&] (TFluentList fluent, const TJobTraceEvent& traceEvent) {
-            Serialize(traceEvent, fluent.GetConsumer());
-        }));
+    auto output = context->Request().OutputStream;
+    PipeInputToOutput(jobTraceReader, output);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -319,21 +312,21 @@ void TListOperationsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "filter",
         [] (TThis* command) -> auto& {
             return command->Options.SubstrFilter;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "pool_tree",
         [] (TThis* command) -> auto& {
             return command->Options.PoolTree;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "pool",
         [] (TThis* command) -> auto& {
             return command->Options.Pool;
@@ -368,7 +361,7 @@ void TListOperationsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -422,7 +415,7 @@ void TListOperationsCommand::DoExecute(ICommandContextPtr context)
 
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
-            .Do(std::bind(&TListOperationsCommand::BuildOperations, this, result, std::placeholders::_1))
+            .Do(std::bind_front(&TListOperationsCommand::BuildOperations, this, result))
             .DoIf(result.PoolTreeCounts.operator bool(), [&] (TFluentMap fluent) {
                 fluent.Item("pool_tree_counts").BeginMap()
                 .DoFor(*result.PoolTreeCounts, [] (TFluentMap fluent, const auto& item) {
@@ -524,6 +517,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "monitoring_descriptor",
+        [] (TThis* command) -> auto& { return command->Options.MonitoringDescriptor; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "from_time",
         [] (TThis* command) -> auto& { return command->Options.FromTime; })
@@ -534,9 +532,14 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.ToTime; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "continuation_token",
         [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TCollectiveId>(
+        "collective_id",
+        [] (TThis* command) -> auto& { return command->Options.CollectiveId; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<TJobId>(
@@ -544,7 +547,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "task_name",
         [] (TThis* command) -> auto& { return command->Options.TaskName; })
         .Optional(/*init*/ false);
@@ -610,7 +613,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -655,11 +658,62 @@ void TListJobsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TListJobTracesCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "per_process",
+        [] (TThis* command) -> auto& {
+            return command->Options.PerProcess;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "limit",
+        [] (TThis* command) -> auto& {return command->Options.Limit; })
+        .Optional(/*init*/ false);
+}
+
+void TListJobTracesCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->ListJobTraces(OperationIdOrAlias, JobId, Options);
+    auto result = WaitFor(asyncResult)
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .List(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCheckOperationPermissionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user", &TThis::User);
+    registrar.Parameter("permission", &TThis::Permission);
+}
+
+void TCheckOperationPermissionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto asyncResult = context->GetClient()->CheckOperationPermission(
+        User,
+        OperationIdOrAlias,
+        Permission,
+        Options);
+    auto result = WaitFor(asyncResult)
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .Value(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TGetJobCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -730,6 +784,25 @@ void TPollJobShellCommand::DoExecute(ICommandContextPtr context)
     }
 
     ProduceSingleOutputValue(context, "result", response.Result);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRunJobShellCommandCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("command", &TThis::Command);
+    registrar.Parameter("shell_name", &TThis::ShellName)
+        .Default();
+}
+
+void TRunJobShellCommandCommand::DoExecute(ICommandContextPtr context)
+{
+    auto reader = WaitFor(context->GetClient()->RunJobShellCommand(JobId, ShellName, Command, Options))
+        .ValueOrThrow();
+
+    auto output = context->Request().OutputStream;
+    PipeInputToOutput(reader, output);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -866,7 +939,7 @@ void TRemoteCopyCommand::Register(TRegistrar registrar)
 
 void TAbortOperationCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "abort_message",
         [] (TThis* command) -> auto& {
             return command->Options.AbortMessage;
@@ -892,7 +965,7 @@ void TSuspendOperationCommand::Register(TRegistrar registrar)
             return command->Options.AbortRunningJobs;
         })
         .Optional(/*init*/ false);
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "reason",
         [] (TThis* command) -> auto& {
             return command->Options.Reason;
@@ -968,7 +1041,7 @@ void TPatchOperationSpecCommand::DoExecute(ICommandContextPtr context)
 
 void TGetOperationCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;

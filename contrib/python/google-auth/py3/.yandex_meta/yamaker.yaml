@@ -1,5 +1,0 @@
-requirements:
-  - cryptography
-  - grpcio
-  - requests
-  - packaging

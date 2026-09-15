@@ -1,0 +1,37 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"NormalizeEqualityFilterOverJoin"))
+(let world (Configure! world config '"OptimizerFlags" '"EqualityFilterOverJoin"))
+
+(let list1 (AsList
+  (AsStruct '('a.key1 (Just (Int32 '1))) '('c.value1 (Just (String 'A))))
+  (AsStruct '('a.key1 (Just (Int32 '7))) '('c.value1 (Just (String 'B))))
+  (AsStruct '('a.key1 (Just (Int32 '4))) '('c.value1 (Just (String 'C))))
+  (AsStruct '('a.key1 (Just (Int32 '4))) '('c.value1 (Just (String 'D))))
+))
+
+(let list2 (AsList
+  (AsStruct '('key2 (Int32 '9)) '('value2 (String 'Z)))
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'Y)))
+  (AsStruct '('key2 (Int32 '3)) '('value2 (String 'X)))
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'W)))
+  (AsStruct '('key2 (Int32 '8)) '('value2 (String 'V)))
+))
+
+(let joinCross (EquiJoin '(list1 '('a 'c)) '(list2 'b) '('Cross 'c 'b '() '() '())
+'(
+'('rename '"a.key1" '"akey1")
+'('rename '"c.value1" '"cvalue1")
+
+)
+))
+
+(let filtered (Filter joinCross
+(lambda '(row) (Coalesce (== (+ (Member row 'akey1) (Int32 '2)) (+ (Member row 'b.key2) (Int32 '0))) (Bool 'false))
+)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) filtered '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "state_storage.h"
+#include "storage_settings.h"
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
 namespace NFq {
@@ -11,7 +10,7 @@ namespace NFq {
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStoragePtr NewYdbStateStorage(
-    const NConfig::TCheckpointCoordinatorConfig& config,
-    const TYdbConnectionPtr& ydbConnection);
+    const TCheckpointStorageSettings& config,
+    const IYdbConnection::TPtr& ydbConnection);
 
 } // namespace NFq

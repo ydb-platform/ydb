@@ -165,6 +165,16 @@ Datetime types with time zone label.
 * Value is represented as string with the date/time value and the time zone label separated by a comma.
 * Sample JSON value: `"1946-02-14,Europe/Moscow"`, `"1946-02-14T19:17:09,Europe/Moscow"`, `"1946-02-14T19:17:09.234568,Europe/Moscow"` for TzDate32, TzDateTime64 и TzTimestamp64 respectively.
 
+## PostgreSQL types
+
+PostgreSQL types, such as pgbytea, pgdate, etc.
+
+* if the value contains `NULL`, it is passed to JSON as `null`
+* if there are invalid utf-8 characters, such as `\xFF`, the string is encoded in base64 and wrapped in an array with one element
+* if there are no special characters, it is passed as is
+* Type in JSON: `string` or `array` or `null`
+* Sample JSON value: `null`, `"AB"`, `["qw6="]` (for the string `\xAB\xAC`)
+
 ## Optional {#optional}
 
 Means that the value can be `null`. If the value is `null`, then in JSON it's also `null`. If the value is not `null`, then the JSON value is expressed as if the type isn't `Optional`.

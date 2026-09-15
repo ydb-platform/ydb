@@ -1,14 +1,20 @@
 LIBRARY()
 
 SRCS(
+    check.cpp
     clean.cpp
     common_queries.cpp
     data_splitter.cpp
     histogram.cpp
     init.cpp
     import.cpp
+    import_tui.cpp
     log_backend.cpp
+    logs_scroller.cpp
+    path_checker.cpp
     runner.cpp
+    runner_tui.cpp
+    scroller.cpp
     task_queue.cpp
     terminal.cpp
     transaction_delivery.cpp
@@ -17,6 +23,7 @@ SRCS(
     transaction_payment.cpp
     transaction_simulation.cpp
     transaction_stocklevel.cpp
+    tui_base.cpp
     util.cpp
 )
 

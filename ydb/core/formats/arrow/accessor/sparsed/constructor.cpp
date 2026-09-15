@@ -16,7 +16,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto schema = std::make_shared<arrow::Schema>(fields);
     auto rbParsed = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!rbParsed.ok()) {
-        return TConclusionStatus::Fail(rbParsed.status().ToString());
+        return TConclusionStatus::Fail(TStringBuilder{}
+            << "Internal deserialization error. type: sparsed, schema: " << schema->ToString()
+            << " records count: " << externalInfo.GetRecordsCount()
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
+            << " reason: " << rbParsed.status().ToString()
+            << " original data: " << Base64Encode(originalData));
     }
     auto rb = *rbParsed;
     AFL_VERIFY(rb->num_columns() == 2)("count", rb->num_columns())("schema", rb->schema()->ToString());
@@ -35,9 +40,11 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     std::shared_ptr<TSparsedArray> sparsed = std::static_pointer_cast<TSparsedArray>(columnData);
-    return externalInfo.GetDefaultSerializer()->SerializePayload(sparsed->GetRecordBatchVerified());
+    return { externalInfo.GetDefaultSerializer()->SerializePayload(sparsed->GetRecordBatchVerified()),
+        std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

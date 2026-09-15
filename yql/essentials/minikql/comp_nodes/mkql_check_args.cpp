@@ -1,12 +1,11 @@
 #include "mkql_check_args.h"
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
-        TType* left, TType* right,
-        bool allowOptionalInput, bool requiresBooleanArgs)
+    TType* left, TType* right,
+    bool allowOptionalInput, bool requiresBooleanArgs)
 {
     TBinaryFunctionArgsDesc desc;
     const auto& leftType = UnpackOptional(left, desc.IsLeftOptional);
@@ -32,5 +31,4 @@ TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
     return desc;
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

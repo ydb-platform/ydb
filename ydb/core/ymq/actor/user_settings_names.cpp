@@ -8,4 +8,7 @@ extern const TString USER_SETTING_SHOW_DETAILED_COUNTERS_DEADLINE_MS = "ShowDeta
 extern const TString USER_SETTING_EXPORT_TRANSACTION_COUNTERS = "ExportTransactionCounters";
 extern const TString USE_CPU_LEADER_OPTIMIZATION = "UseCPULeaderOptimization";
 
+extern const TString USER_SETTING_MIGRATION_COMPATIBILITY = "MigrationCompatibility";
+extern const TString USER_SETTING_MIGRATION_FINISHED = "MigrationFinished";
+
 } // namespace NKikimr::NSQS

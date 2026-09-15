@@ -315,7 +315,7 @@ TString GetAddIOMethodName(EIODirection direction)
 struct TFormatBuilder::TFormatSwitcher
 {
     template <typename T>
-    auto operator() (const T& /*t*/) {
+    auto operator()(const T& /*t*/) {
         if constexpr (std::is_same_v<T, TTNodeStructuredRowStream>) {
             return &TFormatBuilder::CreateNodeFormat;
         } else if constexpr (std::is_same_v<T, TTYaMRRowStructuredRowStream>) {
@@ -570,7 +570,7 @@ std::pair<TFormat, TMaybe<TSmallJobFile>> TFormatBuilder::CreateProtobufFormat(
 struct TGetTableSchemaImpl
 {
     template <typename T>
-    TMaybe<TTableSchema> operator() (const T& description) {
+    TMaybe<TTableSchema> operator()(const T& description) {
         if constexpr (std::is_same_v<T, TUnspecifiedTableStructure>) {
             return Nothing();
         } else if constexpr (std::is_same_v<T, TProtobufTableStructure>) {

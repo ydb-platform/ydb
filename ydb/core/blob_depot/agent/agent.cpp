@@ -3,6 +3,8 @@
 #include "blocks.h"
 #include "blob_mapping_cache.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+
 namespace NKikimr::NBlobDepot {
 
     TBlobDepotAgent::TBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId)
@@ -31,7 +33,14 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::Bootstrap() {
         Become(&TThis::StateFunc);
 
+        TControlBoard::RegisterSharedControl(S3MaxGetsInFlight, AppData()->Icb->BlobDepotControls.S3MaxGetsInFlight);
+
         SetupCounters();
+
+        CurrentMaxS3GetsInFlight = MaxS3GetsInFlight();
+        if (S3GetsMaxInFlightCounter) {
+            *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
+        }
 
         if (TabletId && TabletId != Max<ui64>()) {
             ConnectToBlobDepot();
@@ -56,6 +65,8 @@ namespace NKikimr::NBlobDepot {
 
         PendingEventQueueItems = pendingEventQueue->GetCounter("Items", false);
         PendingEventQueueBytes = pendingEventQueue->GetCounter("Bytes", false);
+        PendingEventQueueOverflows = pendingEventQueue->GetCounter("Overflows", true);
+        PendingEventQueueTimeouts = pendingEventQueue->GetCounter("Timeouts", true);
 
         auto requests = AgentCounters->GetSubgroup("subsystem", "requests");
 
@@ -84,10 +95,21 @@ namespace NKikimr::NBlobDepot {
         S3GetBytesOk = s3->GetCounter("GetBytesOk", true);
         S3GetsOk = s3->GetCounter("GetsOk", true);
         S3GetsError = s3->GetCounter("GetsError", true);
+        S3GetsSlowDown = s3->GetCounter("GetsSlowDown", true);
+        S3GetThrottleActivations = s3->GetCounter("GetThrottleActivations", true);
+        S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
+        S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
+        S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);
 
         S3PutBytesOk = s3->GetCounter("PutBytesOk", true);
         S3PutsOk = s3->GetCounter("PutsOk", true);
         S3PutsError = s3->GetCounter("PutsError", true);
+        S3PutsSlowDown = s3->GetCounter("PutsSlowDown", true);
+        S3PutsInFlightCounter = s3->GetCounter("PutsInFlight", false);
+        S3Counters = s3;
+
+        auto allocate = AgentCounters->GetSubgroup("subsystem", "allocate");
+        AllocateIdFailures = allocate->GetCounter("IdFailures", true);
     }
 
     void TBlobDepotAgent::SwitchMode(EMode mode) {
@@ -109,6 +131,22 @@ namespace NKikimr::NBlobDepot {
             }
             Mode = mode;
         }
+    }
+
+    void TBlobDepotAgent::IncS3HttpErrorCounter(const TString& operation, int httpCode) {
+        if (httpCode <= 0 || !S3Counters) {
+            return;
+        }
+        const auto key = std::make_pair(operation, httpCode);
+        auto it = S3HttpErrorCounters.find(key);
+        if (it == S3HttpErrorCounters.end()) {
+            auto counter = S3Counters->GetSubgroup(operation, "httpCode")
+                ->GetSubgroup("code", ::ToString(httpCode))
+                ->GetCounter("", true);
+            it = S3HttpErrorCounters.emplace(key, counter).first;
+        }
+
+        ++*it->second;
     }
 
     IActor *CreateBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {

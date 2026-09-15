@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/blobstorage_hullgcmap.h>
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
 
@@ -66,7 +67,8 @@ namespace NKikimr {
                     void *cookie = nullptr;
                     auto write = std::make_unique<NPDisk::TEvChunkWrite>(Worker->PDiskCtx->Dsk->Owner,
                         Worker->PDiskCtx->Dsk->OwnerRound, preallocatedLocation.ChunkIdx, preallocatedLocation.Offset,
-                        partsPtr, cookie, true, NPriWrite::HullComp, false);
+                        partsPtr, cookie, true, NPriWrite::HullComp, TWriteSource::HullCompactWorkerWrite,
+                        false);
                     Worker->PendingWrites.push_back(std::move(write));
                 }
             }
@@ -77,8 +79,9 @@ namespace NKikimr {
             }
 
         public:
-            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, addHeader)
+            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype,
+                    EBlobHeaderMode blobHeaderMode)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, blobHeaderMode)
             {}
         };
 
@@ -101,6 +104,7 @@ namespace NKikimr {
         enum class ETryProcessItemStatus {
             Success,        // item was written to SST
             NeedMoreChunks, // we need more chunks to create new writer
+            NeedStripeSlot, // we need a stripe-heap slot for a small SST
             FinishSST,      // we need to flush current SST to start a new one as this is full
         };
 
@@ -164,18 +168,15 @@ namespace NKikimr {
         // number of currently unresponded write requests
         ui32 InFlightWrites = 0;
 
-        // maximum number of such requests
-        ui32 MaxInFlightWrites;
-
         // number of currently unresponded read requests
         ui32 InFlightReads = 0;
-
-        // maximum number of such requests
-        ui32 MaxInFlightReads = 0;
 
         // vector of freed huge blobs
         TDiskPartVec FreedHugeBlobs;
         TDiskPartVec AllocatedHugeBlobs;
+        TDiskPartVec AllocatedStripeBlobs;
+        TDiskPart StripeSstLocation;
+        std::vector<ui32> StripeSstAllocSizes;
 
         // generated level segments
         TVector<TIntrusivePtr<TLevelSegment>> LevelSegments;
@@ -188,6 +189,10 @@ namespace NKikimr {
 
         // pointer to an atomic variable contaning number of in flight writes
         TAtomic *WritesInFlight;
+
+        // max inflight request to pdisk
+        ui32 MaxInFlightWrites;
+        ui32 MaxInFlightReads;
 
         struct TBatcherPayload {
             ui64 Id = 0;
@@ -233,19 +238,15 @@ namespace NKikimr {
             // time stat
             TInstant CreationTime;
             TInstant StartTime;
-            TInstant FinishTime;
 
             TStatistics(THullCtxPtr hullCtx)
                 : HullCtx(hullCtx)
                 , CreationTime(TAppData::TimeProvider->Now())
-                , StartTime()
-                , FinishTime()
             {}
 
             TString ToString() const {
                 TStringStream str;
                 str << "{WaitTime# " << (StartTime - CreationTime).ToString()
-                    << " GetNextItemTime# " << (FinishTime - StartTime).ToString()
                     << " BytesRead# " << BytesRead << " ReadIOPS# " << ReadIOPS
                     << " BytesWritten# " << BytesWritten << " WriteIOPS# " << WriteIOPS
                     << " ItemsWritten# " << ItemsWritten
@@ -310,13 +311,13 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType, HullCtx->AddHeader)
+            , IndexMerger(GType, HullCtx->VCfg->BlobHeaderMode)
             , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
                     PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->VCfg->BlobHeaderMode)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -324,17 +325,16 @@ namespace NKikimr {
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
-                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->FreshCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->FreshCompReadsInFlight;
                 WritesInFlight = &LevelIndex->FreshCompWritesInFlight;
             } else {
                 ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
-                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }
+
+            MaxInFlightWrites = GetMaxInFlightWrites();
+            MaxInFlightReads = GetMaxInFlightReads();
         }
 
         void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
@@ -409,6 +409,12 @@ namespace NKikimr {
                                 }
                                 return false;
 
+                            case ETryProcessItemStatus::NeedStripeSlot:
+                                StripeSstAllocSizes.assign(1, HullCtx->VCfg->HeapAllocatorMaxSstInBytes);
+                                *slotAllocations = &StripeSstAllocSizes;
+                                State = EState::WaitForSlotAllocation;
+                                return false;
+
                             case ETryProcessItemStatus::FinishSST:
                                 StartCollectingDeferredItems();
                                 break;
@@ -417,6 +423,9 @@ namespace NKikimr {
 
                     case EState::WaitingForDeferredItems:
                         ProcessPendingMessages(msgsForYard); // issue any messages generated by deferred items queue
+                        if (PendingWrites.size()) {
+                            return false;
+                        }
                         if (!DeferredItems.AllProcessed()) {
                             return false;
                         }
@@ -440,6 +449,7 @@ namespace NKikimr {
                         }
                         break;
                     }
+
 
                     case EState::WaitForPendingRequests:
                         // wait until all writes succeed
@@ -542,15 +552,24 @@ namespace NKikimr {
         }
 
         void Apply(TEvHugeAllocateSlotsResult *msg) {
+            Y_DEBUG_ABORT_UNLESS(State == EState::WaitForSlotAllocation);
+            State = EState::TryProcessItem;
+            Y_VERIFY_S(msg->Locations.size() == msg->IsStripe.size(), HullCtx->VCtx->VDiskLogPrefix);
             if constexpr (LogoBlobs) {
-                Y_DEBUG_ABORT_UNLESS(State == EState::WaitForSlotAllocation);
-                State = EState::TryProcessItem;
-                for (const TDiskPart& p : msg->Locations) { // remember newly allocated slots for entrypoint
-                    AllocatedHugeBlobs.PushBack(p);
+                for (size_t i = 0; i < msg->Locations.size(); ++i) {
+                    if (msg->IsStripe[i]) {
+                        AllocatedStripeBlobs.PushBack(msg->Locations[i]);
+                    } else {
+                        AllocatedHugeBlobs.PushBack(msg->Locations[i]);
+                    }
                 }
                 IndexMerger.GetDataMerger().ApplyAllocatedSlots(msg->Locations);
             } else {
-                Y_ABORT("impossible case");
+                Y_VERIFY_S(msg->Locations.size() == 1, HullCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(msg->IsStripe.front(), HullCtx->VCtx->VDiskLogPrefix
+                    << " Blocks/Barriers SST requested a stripe, but the huge keeper allocated a slot");
+                StripeSstLocation = msg->Locations.front();
+                AllocatedStripeBlobs.PushBack(StripeSstLocation);
             }
         }
 
@@ -558,6 +577,7 @@ namespace NKikimr {
         const TVector<TChunkIdx>& GetCommitChunks() const { return CommitChunks; }
         const TDiskPartVec& GetFreedHugeBlobs() const { return FreedHugeBlobs; }
         const TDiskPartVec& GetAllocatedHugeBlobs() const { return AllocatedHugeBlobs; }
+        const TDiskPartVec& GetAllocatedStripeBlobs() const { return AllocatedStripeBlobs; }
         const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
@@ -599,10 +619,30 @@ namespace NKikimr {
                 const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
                 const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
 
-                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
-                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+                NGcOpt::TKeepFlagStat keepFlagStat;
+                if (IsFresh) {
+                    // we need this record only if it does contain DoNotKeep flag and there is Keep flag somewhere else
+                    keepFlagStat.Needed = subsDoNotKeep != 0 && subsKeep < wholeKeep;
+                } else {
+                    keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
+                }
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), keepFlagStat, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
 
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
+                const TLogoBlobID& id = Key.LogoBlobID();
+                if (!TBlobStorageGroupType::IsCrcModeValid(id.CrcMode())) {
+                    YDB_LOG_CRIT_COMP(NKikimrServices::BS_SKELETON, "Invalid CrcMode in BlobId found during compaction",
+                        {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                        {"blobId", id},
+                        {"keepIndex", keep.KeepIndex},
+                        {"keepData", keep.KeepData},
+                        {"subsKeep", subsKeep},
+                        {"subsDoNotKeep", subsDoNotKeep},
+                        {"wholeKeep", wholeKeep},
+                        {"wholeDoNotKeep", wholeDoNotKeep});
+                }
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, id, MinHugeBlobInBytes), keep.KeepData);
             } else {
                 keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
                     AllowGarbageCollection);
@@ -637,18 +677,30 @@ namespace NKikimr {
 
             // if there is no active writer, create one and start writing
             if (!WriterPtr) {
-                // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
-                if (ReservedChunks.size() < ChunksToUse) {
-                    return ETryProcessItemStatus::NeedMoreChunks;
+                if (UseStripeSst()) {
+                    if (StripeSstLocation.Empty()) {
+                        return ETryProcessItemStatus::NeedStripeSlot;
+                    }
+                    ReservedChunks.push_front(StripeSstLocation.ChunkIdx);
+                    WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
+                        1, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, StripeSstLocation.Size,
+                        PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset);
+                    WriterHasPendingOperations = false;
+                } else {
+                    // ensure we have enough reserved chunks to do operation; or else request for allocation and wait
+                    if (ReservedChunks.size() < ChunksToUse) {
+                        return ETryProcessItemStatus::NeedMoreChunks;
+                    }
+
+                    // create new instance of writer
+                    WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
+                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
+                        PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode);
+
+                    WriterHasPendingOperations = false;
                 }
-
-                // create new instance of writer
-                WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
-                    ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
-                    PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                    false, ReservedChunks, Arena, HullCtx->AddHeader);
-
-                WriterHasPendingOperations = false;
             }
 
             // try to push blob to the index
@@ -669,8 +721,9 @@ namespace NKikimr {
                     // ensure preallocated location has correct size
                     Y_DEBUG_ABORT_UNLESS(preallocatedLocation.ChunkIdx && preallocatedLocation.Size == MemRec->DataSize());
                     // producing inline blob with data here
-                    for (const auto& [location, partIdx] : collectTask.Reads) {
-                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location});
+                    for (const auto& [location, partIdx, isHugeBlob] : collectTask.Reads) {
+                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location},
+                            isHugeBlob ? TLogoBlobID(blobId, partIdx + 1) : TLogoBlobID());
                     }
                     if (!collectTask.Reads.empty() || WriterHasPendingOperations) { // defer this blob
                         DeferredItems.Put(NextDeferredItemId++, collectTask.Reads.size(), preallocatedLocation,
@@ -681,7 +734,8 @@ namespace NKikimr {
                         Y_VERIFY_S(writtenLocation == preallocatedLocation, HullCtx->VCtx->VDiskLogPrefix);
                     }
                 } else {
-                    Y_VERIFY_S(collectTask.BlobMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(collectTask.BlobMerger.ContainsMetadataPartsOnly() || collectTask.BlobMerger.Empty(),
+                        HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(collectTask.Reads.empty(), HullCtx->VCtx->VDiskLogPrefix);
                 }
 
@@ -691,7 +745,8 @@ namespace NKikimr {
                 }
 
                 for (const auto& [partIdx, from, to] : dataMerger.GetHugeBlobMoves()) {
-                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from});
+                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from},
+                        TLogoBlobID(blobId, partIdx + 1));
                     DeferredItems.Put(NextDeferredItemId++, 1, to, TDiskBlobMerger(), blobId, false);
                 }
             }
@@ -719,7 +774,33 @@ namespace NKikimr {
             // get writer conclusion and fill in entrypoint and used chunks vector
             const auto& conclusion = WriterPtr->GetConclusion();
             LevelSegments.push_back(conclusion.LevelSegment);
-            CommitChunks.insert(CommitChunks.end(), conclusion.UsedChunks.begin(), conclusion.UsedChunks.end());
+            if (!StripeSstLocation.Empty()) {
+                // The stripe was reserved at a worst-case size before the SST was written; now that its real length is
+                // known, shrink the reservation to the extent actually filled so that the commit hands the rest back
+                // to the heap. Keeping the SST to a single index part starting at the stripe origin is what lets the
+                // stripe be recovered from the SST address alone, so nothing about it has to be stored.
+                const TDiskPart& last = conclusion.LevelSegment->LastPartAddr;
+                Y_VERIFY_S(conclusion.LevelSegment->IndexParts.size() == 1 &&
+                    last.ChunkIdx == StripeSstLocation.ChunkIdx && last.Offset == StripeSstLocation.Offset &&
+                    last.Size <= StripeSstLocation.Size, HullCtx->VCtx->VDiskLogPrefix
+                    << " IndexParts# " << conclusion.LevelSegment->IndexParts.size()
+                    << " last# " << last.ToString() << " stripe# " << StripeSstLocation.ToString());
+
+                bool found = false;
+                for (TDiskPart& p : AllocatedStripeBlobs.Vec) {
+                    if (p.ChunkIdx == last.ChunkIdx && p.Offset == last.Offset) {
+                        p.Size = last.Size;
+                        found = true;
+                        break;
+                    }
+                }
+                Y_VERIFY_S(found, HullCtx->VCtx->VDiskLogPrefix << " stripe# " << StripeSstLocation.ToString());
+
+                conclusion.LevelSegment->HeapStripe = last;
+                StripeSstLocation = {};
+            } else {
+                CommitChunks.insert(CommitChunks.end(), conclusion.UsedChunks.begin(), conclusion.UsedChunks.end());
+            }
 
             return true;
         }
@@ -766,7 +847,29 @@ namespace NKikimr {
             }
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
-            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+            // Compaction output: this is what gives space back, so it is not held behind
+            // the static group reserve the way a write of newly accepted data is.
+            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num,
+                /*forHousekeeping=*/true);
+        }
+
+        ui32 GetMaxInFlightWrites() {
+            return IsFresh ? HullCtx->VCfg->FreshCompMaxInFlightWrites : HullCtx->VCfg->HullCompMaxInFlightWrites;
+        }
+
+        ui32 GetMaxInFlightReads() {
+            return IsFresh ? (ui32) HullCtx->VCfg->FreshCompMaxInFlightReads : (ui32) HullCtx->VCfg->HullCompMaxInFlightReads;
+        }
+
+        bool UseStripeAllocator() const {
+            return TlsActivationContext && AppData()->FeatureFlags.GetEnableVDiskHeapAllocator();
+        }
+
+        bool UseStripeSst() const {
+            if constexpr (LogoBlobs) {
+                return false;
+            }
+            return UseStripeAllocator() && HullCtx->VCfg->HeapAllocatorMaxSstInBytes > 0;
         }
     };
 

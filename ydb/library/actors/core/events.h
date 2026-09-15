@@ -12,6 +12,8 @@ namespace NActorsProto {
 } // NActorsProto
 
 namespace NActors {
+    class TActorRunnableItem;
+
     struct TEvents {
         enum EEventSpace {
             ES_HELLOWORLD = 0,
@@ -27,6 +29,9 @@ namespace NActors {
             ES_YF = 10,
             ES_HTTP = 11,
             ES_PGWIRE = 12,
+            ES_INTERCONNECT_RDMA = 13,
+            ES_RETRO_TRACING = 14,
+            ES_CGROUP = 15,
 
             ES_USERSPACE = 4096,
 
@@ -106,7 +111,12 @@ namespace NActors {
                 CoroTimeout,
                 InvokeQuery,
                 Wilson,
-                Preemption,
+                MailboxProcessingFinished,
+                ResumeRunnable,
+                CheckActorLiveness,
+                ActorAlive,
+                ActorDead,
+                ActorLivenessUnsure,
                 End,
 
                 // Compatibility section
@@ -129,12 +139,25 @@ namespace NActors {
             const ui64 Tag = 0;
         };
 
-        struct TEvPreemption: public TEventLocal<TEvPreemption, TSystem::Preemption> {
-            bool ByEventCount = false;
-            bool ByCycles = false;
-            bool ByTailSend = false;
-            ui32 EventCount = 0;
-            ui64 Cycles = 0;
+        struct TEvMailboxProcessingFinished
+            : public TEventLocal<TEvMailboxProcessingFinished, TSystem::MailboxProcessingFinished> {
+            enum class EReason : ui8 {
+                QueueEmpty,
+                EventCountLimitReached,
+                TimeLimitReached,
+                SoftDeadlineReached,
+                TailSend,
+            };
+
+            const EReason Reason;
+            const ui32 ExecutedEvents;
+            const ui64 ElapsedCycles;
+
+            TEvMailboxProcessingFinished(EReason reason, ui32 executedEvents, ui64 elapsedCycles)
+                : Reason(reason)
+                , ExecutedEvents(executedEvents)
+                , ElapsedCycles(elapsedCycles)
+            {}
         };
 
         struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {
@@ -212,10 +235,53 @@ namespace NActors {
         struct TEvGone: public TEventLocal<TEvGone, TSystem::Gone> {
         };
 
+        struct TEvCheckActorLiveness
+            : public TEventSimpleNonLocal<TEvCheckActorLiveness, TSystem::CheckActorLiveness> {
+            static constexpr IEventHandle::TEventFlags RequestFlags =
+                IEventHandle::FlagTrackDelivery |
+                IEventHandle::FlagSystemMessage;
+        };
+
+        struct TEvActorAlive
+            : public TEventSimpleNonLocal<TEvActorAlive, TSystem::ActorAlive> {
+        };
+
+        // The actor registry confirmed that the requested actor does not exist.
+        struct TEvActorDead
+            : public TEventSimpleNonLocal<TEvActorDead, TSystem::ActorDead> {
+        };
+
+        // The target is remote and distributed liveness checks are not
+        // supported yet.
+        struct TEvActorLivenessUnsure
+            : public TEventSimpleNonLocal<TEvActorLivenessUnsure, TSystem::ActorLivenessUnsure> {
+        };
+
         struct TEvInvokeResult;
 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
         using TEvActorDied = TEvGone;
+
+        /**
+         * Special system event used to resume runnable items.
+         *
+         * Caller must guarantee item remains valid until this event is handled
+         * by the target actor. It is possible to cancel this event by changing
+         * item to nullptr while the event is still inflight, but only in the
+         * context of the target actor.
+         *
+         * When event is destroyed before it could be handled the runnable will
+         * be executed with the actor argument equal to nullptr.
+         */
+        struct TEvResumeRunnable: public TEventLocal<TEvResumeRunnable, TSystem::ResumeRunnable> {
+            static constexpr IEventHandle::TEventFlags EventFlags =
+                IEventHandle::FlagSystemMessage;
+
+            TActorRunnableItem* Item; // or nullptr
+
+            TEvResumeRunnable(TActorRunnableItem* item) : Item(item) {}
+            ~TEvResumeRunnable();
+        };
     };
 }
 

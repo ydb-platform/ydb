@@ -1,12 +1,10 @@
 # Static Group Move
 
-{% include [deprecated](_includes/deprecated.md) %}
-
-If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/index.md#blob_storage_config), you need to move it to another host.
+If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config), you need to move it to another host.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 
-As an example, consider a {{ ydb-short-name }} cluster where a [static node](../../../reference/configuration/index.md#hosts) is configured and running on the host with `node_id:1`. This node serves part of the static group.
+As an example, consider a {{ ydb-short-name }} cluster where a [static node](../../../reference/configuration/hosts.md#hosts) is configured and running on the host with `node_id:1`. This node serves part of the static group.
 
 Static group configuration fragment:
 
@@ -68,5 +66,5 @@ To move part of the static group from host `node_id:1` to `node_id:10`:
 
 3. Update the configuration files `config.yaml` for all cluster nodes, including dynamic ones.
 4. Using the [rolling-restart](../../../maintenance/manual/node_restarting.md) procedure, restart all static cluster nodes.
-5. Go to the Embedded UI monitoring page and ensure that the static group VDisk appeared on the target physical disk and is replicating. For more details, see [{#T}](../../../reference/embedded-ui/ydb-monitoring.md#static-group).
+5. Go to the {{ ydb-ui-name }} monitoring page and ensure that the static group VDisk appeared on the target physical disk and is replicating. For more details, see [{#T}](../../../reference/ydb-ui/ydb-monitoring.md#static-group).
 6. Using the [rolling-restart](../../../maintenance/manual/node_restarting.md) procedure, restart all dynamic cluster nodes.

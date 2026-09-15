@@ -85,30 +85,6 @@ namespace types
     return data->end();
   }
 
-  template <class T>
-  typename set<T>::reverse_iterator set<T>::rbegin()
-  {
-    return data->rbegin();
-  }
-
-  template <class T>
-  typename set<T>::const_reverse_iterator set<T>::rbegin() const
-  {
-    return data->rbegin();
-  }
-
-  template <class T>
-  typename set<T>::reverse_iterator set<T>::rend()
-  {
-    return data->rend();
-  }
-
-  template <class T>
-  typename set<T>::const_reverse_iterator set<T>::rend() const
-  {
-    return data->rend();
-  }
-
   // modifiers
   template <class T>
   T set<T>::pop()
@@ -154,8 +130,7 @@ namespace types
     // Remove element elem from the set. Raises KeyError if elem is !
     // contained in the set.
     if (!data->erase(elem))
-      throw std::runtime_error(
-          "set.delete() : couldn't delete element ! in the set.");
+      throw std::runtime_error("set.delete() : couldn't delete element ! in the set.");
   }
 
   // set interface
@@ -184,7 +159,7 @@ namespace types
   bool set<T>::isdisjoint(U const &other) const
   {
     // Return true if the this has no elements in common with other.
-    for (iterator it = begin(); it != end(); ++it) {
+    for (const_iterator it = begin(); it != end(); ++it) {
       if (in(other, *it))
         return false;
     }
@@ -196,7 +171,7 @@ namespace types
   bool set<T>::issubset(U const &other) const
   {
     // Test whether every element in the set is in other.
-    for (iterator it = begin(); it != end(); ++it) {
+    for (const_iterator it = begin(); it != end(); ++it) {
       if (!in(other, *it))
         return false;
     }
@@ -219,11 +194,9 @@ namespace types
 
   template <class T>
   template <typename U, typename... Types>
-  typename __combined<set<T>, U, Types...>::type
-  set<T>::union_(U &&other, Types &&...others) const
+  typename __combined<set<T>, U, Types...>::type set<T>::union_(U &&other, Types &&...others) const
   {
-    typename __combined<set<T>, U, Types...>::type tmp =
-        union_(std::forward<Types...>(others)...);
+    typename __combined<set<T>, U, Types...>::type tmp = union_(std::forward<Types...>(others)...);
     tmp.data->insert(other.begin(), other.end());
     return tmp;
   }
@@ -244,16 +217,14 @@ namespace types
 
   template <class T>
   template <typename U, typename... Types>
-  typename __combined<set<T>, U, Types...>::type
-  set<T>::intersection(U const &other, Types const &...others) const
+  typename __combined<set<T>, U, Types...>::type set<T>::intersection(U const &other,
+                                                                      Types const &...others) const
   {
     // Return a new set with elements common to the set && all others.
-    typename __combined<set<T>, U, Types...>::type tmp =
-        intersection(others...);
+    typename __combined<set<T>, U, Types...>::type tmp = intersection(others...);
     for (auto it = begin(); it != end(); ++it) {
       if (!in(other, *it))
-        tmp.discard(
-            *it); // faster than remove() but ! direct interaction with data
+        tmp.discard(*it); // faster than remove() but ! direct interaction with data
     }
     return tmp;
   }
@@ -284,8 +255,7 @@ namespace types
                    }
                    */ // This algo will do several times the same find(), because
        // std::set::erase() calls find. Lame!
-    for (typename U::const_iterator it = other.begin(); it != other.end();
-         ++it) {
+    for (typename U::const_iterator it = other.begin(); it != other.end(); ++it) {
       tmp.discard(*it);
     }
     return tmp;
@@ -307,8 +277,7 @@ namespace types
 
   template <class T>
   template <typename U>
-  set<typename __combined<T, U>::type>
-  set<T>::symmetric_difference(set<U> const &other) const
+  set<typename __combined<T, U>::type> set<T>::symmetric_difference(set<U> const &other) const
   {
     // Return a new set with elements in either the set || other but ! both.
     // return ((*this-other) | (other-*this));
@@ -320,12 +289,11 @@ namespace types
 
   template <class T>
   template <typename U>
-  typename __combined<U, set<T>>::type
-  set<T>::symmetric_difference(U const &other) const
+  typename __combined<U, set<T>>::type set<T>::symmetric_difference(U const &other) const
   {
     // Return a new set with elements in either the set || other but ! both.
-    set<typename std::iterator_traits<typename U::iterator>::value_type> tmp(
-        other.begin(), other.end());
+    set<typename std::iterator_traits<typename U::iterator>::value_type> tmp(other.begin(),
+                                                                             other.end());
 
     // We must use fcts && ! operators because fcts have to handle any
     // iterable objects && operators only sets (cf python ref)
@@ -381,8 +349,7 @@ namespace types
 
   template <class T>
   template <class U>
-  set<typename __combined<T, U>::type>
-  set<T>::operator|(set<U> const &other) const
+  set<typename __combined<T, U>::type> set<T>::operator|(set<U> const &other) const
   {
     return union_(other);
   }
@@ -396,8 +363,7 @@ namespace types
 
   template <class T>
   template <class U>
-  set<typename __combined<U, T>::type>
-  set<T>::operator&(set<U> const &other) const
+  set<typename __combined<U, T>::type> set<T>::operator&(set<U> const &other) const
   {
     return intersection(other);
   }
@@ -425,8 +391,7 @@ namespace types
 
   template <class T>
   template <class U>
-  set<typename __combined<U, T>::type>
-  set<T>::operator^(set<U> const &other) const
+  set<typename __combined<U, T>::type> set<T>::operator^(set<U> const &other) const
   {
     return symmetric_difference(other);
   }

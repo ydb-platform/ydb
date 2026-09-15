@@ -1,6 +1,6 @@
 #include "fiber.h"
 
-#include "execution_stack.h"
+#include "pooled_execution_stack.h"
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -10,6 +10,7 @@
 
 #include <yt/yt/library/profiling/producer.h>
 
+#include <library/cpp/yt/threading/execution_stack.h>
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
@@ -281,7 +282,7 @@ TInstant TFiberIntrospectionBase::GetWaitingSince() const
 {
     // Locked by introspector
     YT_VERIFY(GetState() == EFiberState::Introspecting);
-    return WaitingSince_;
+    return CpuInstantToInstant(WaitingSince_);
 }
 
 TFls* TFiberIntrospectionBase::GetFls()
@@ -311,7 +312,7 @@ void TFiberIntrospectionBase::OnCallbackExecutionFinished()
 
 void TFiberIntrospectionBase::SetWaiting()
 {
-    WaitingSince_ = CpuInstantToInstant(GetApproximateCpuInstant());
+    WaitingSince_ = GetApproximateCpuInstant();
 
     // Release lock that should be acquired by running fiber.
     YT_VERIFY(State_.load(std::memory_order::relaxed) == EFiberState::Running);
@@ -411,10 +412,9 @@ void TFiber::ReleaseFiber(TFiber* fiber)
 void TFiber::SetRunning()
 {
     if (auto delay = TFiberBase::SetRunning()) {
-        YT_LOG_WARNING(
-            "Fiber execution was delayed due to introspection (FiberId: %x, Delay: %v)",
-            GetFiberId(),
-            *delay);
+        YT_TLOG_WARNING("Fiber execution was delayed due to introspection")
+            .WithFormat("FiberId", "%x", GetFiberId())
+            .With("Delay", *delay);
     }
 }
 
@@ -434,7 +434,7 @@ void TFiber::ReadFibers(TFunctionView<void(TFiberList&)> callback)
 }
 
 TFiber::TFiber(EExecutionStackKind stackKind)
-    : Stack_(CreateExecutionStack(stackKind))
+    : Stack_(GetPooledExecutionStack(stackKind))
     , MachineContext_({
         .TrampoLine = this,
         .Stack = TArrayRef(static_cast<char*>(Stack_->GetStack()), Stack_->GetSize()),

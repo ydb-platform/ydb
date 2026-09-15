@@ -1,8 +1,9 @@
 LIBRARY()
 
-YQL_ABI_VERSION(2 28 0)
+YQL_ABI_VERSION(2 44 0)
 
 PEERDIR(
+    library/cpp/deprecated/enum_codegen
     library/cpp/containers/stack_vector
     library/cpp/json
     library/cpp/yson_pull

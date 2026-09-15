@@ -7,6 +7,10 @@
 #include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
@@ -46,8 +50,8 @@ public:
 
     void Clear();
 
-    void SetReadVersion(TRowVersion readVersion);
-    TRowVersion GetReadVersion() const;
+    void SetMvccVersion(TRowVersion readVersion);
+    TRowVersion GetMvccVersion() const;
 
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters();
@@ -87,14 +91,7 @@ public:
     TTypeEnvironment* Env = nullptr;
 };
 
-IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
-IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
-IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
-
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx);
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

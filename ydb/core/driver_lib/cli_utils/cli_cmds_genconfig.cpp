@@ -89,8 +89,8 @@ public:
         : TClientCommandBase("static", {}, "Generate configuration for static group")
     {
         TStringStream erasureList("{");
-        for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-            erasureList << (species ? "|" : "") << TBlobStorageGroupType::ErasureName[species];
+        for (auto [erasureType, erasureName] : TBlobStorageGroupType::ErasureNames) {
+            erasureList << (erasureType ? "|" : "") << erasureName;
         }
         erasureList << "}";
         ErasureList = erasureList.Str();
@@ -131,7 +131,8 @@ public:
             s == "dc"   ? 10 :
             s == "room" ? 20 :
             s == "rack" ? 30 :
-            s == "body" ? 40 : 0;
+            s == "body" ? 40 :
+            s == "disk_scope" ? 50 : 0;
         if (!level) {
             ythrow yexception() << "unknown distinction level provided: \"" << s << "\"";
         }
@@ -141,11 +142,11 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(ErasureStr);
-        Type = TBlobStorageGroupType(erasure);
-        if (Type.GetErasure() == TBlobStorageGroupType::ErasureSpeciesCount) {
+        TBlobStorageGroupType::EErasureSpecies erasure;
+        if (!TBlobStorageGroupType::ParseErasureName(erasure, ErasureStr)) {
             ythrow TWithBackTrace<yexception>() << "unknown erasure species: \"" << ErasureStr << "\", valid values are: " << ErasureList;
         }
+        Type = TBlobStorageGroupType(erasure);
 
         if (DistinctionLevelStr) {
             BeginLevel = 0;
@@ -217,15 +218,22 @@ public:
             if (pdiskInfo.Type == DesiredPDiskType) {
                 pdisks.push_back(pdiskInfo);
 
+                std::optional<TString> diskScope;
+                if (drive.HasDiskScope()) {
+                    diskScope.emplace(drive.GetDiskScope());
+                }
+
                 mapper.RegisterPDisk({
                     .PDiskId{pdiskInfo.NodeId, pdiskInfo.PDiskId},
                     .Location = pdiskInfo.Location,
                     .Usable = true,
                     .NumSlots = 0,
                     .MaxSlots = 1,
+                    .SlotSizeInBytes = 0,
                     .SpaceAvailable = 0,
                     .Operational = true,
                     .Decommitted = false,
+                    .DiskScope = diskScope,
                 });
 
                 pdiskMap.emplace(NBsController::TPDiskId{pdiskInfo.NodeId, pdiskInfo.PDiskId}, pdisks.size() - 1);
@@ -233,9 +241,9 @@ public:
         }
 
         NBsController::TGroupMapper::TGroupDefinition group;
-        TString error;
+        NBsController::TGroupMapperError error;
         if (!mapper.AllocateGroup(0, group, {}, {}, 1u, 0, false, {}, error)) {
-            Cerr << "Can't allocate group: " << error << Endl;
+            Cerr << "Can't allocate group: " << error.ErrorMessage << Endl;
             return EXIT_FAILURE;
         }
 

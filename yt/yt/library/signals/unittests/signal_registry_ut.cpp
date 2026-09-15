@@ -1,5 +1,7 @@
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/library/signals/signal_registry.h>
@@ -7,6 +9,8 @@
 #include <signal.h>
 
 namespace NYT::NSignals {
+
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -24,7 +28,7 @@ TEST(TSignalRegistryTest, PushCallbackJustWorks)
 
     raise(SIGRTMIN + 1);
 
-    EXPECT_TRUE(future.WithTimeout(TDuration::Seconds(5)).Get().IsOK());
+    EXPECT_TRUE(WaitForFast(future.WithTimeout(TDuration::Seconds(5))).IsOK());
 }
 
 #endif // _win_

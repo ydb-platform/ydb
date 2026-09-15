@@ -2,8 +2,6 @@
 
 #include <ydb/library/actors/core/monotonic.h>
 
-#include <util/random/random.h>
-#include <util/random/fast.h>
 #include <util/stream/output.h>
 
 #include <array>
@@ -22,6 +20,7 @@ namespace NWilson {
             struct {
                 ui32 Verbosity : 4;
                 ui32 TimeToLive : 12;
+                ui32 RetroTrace : 1;
             };
             ui32 Raw;
         };
@@ -31,8 +30,17 @@ namespace NWilson {
         static constexpr ui32 MAX_TIME_TO_LIVE = 4095;
 
     private:
-        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
+        static TTrace GenerateTraceId();
+        static ui64 GenerateSpanId();
+
+    public:
+        using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64) + sizeof(ui32)];
+
+    public:
+
+        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive, bool isRetroTrace = false)
             : TraceId(traceId)
+            , Raw(0)
         {
             if (timeToLive == Max<ui32>()) {
                 timeToLive = MAX_TIME_TO_LIVE;
@@ -42,37 +50,10 @@ namespace NWilson {
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;
+            RetroTrace = isRetroTrace;
         }
 
-        static TTrace GenerateTraceId() {
-            for (;;) {
-                TTrace res;
-                ui32 *p = reinterpret_cast<ui32*>(res.data());
 
-                TReallyFastRng32 rng(RandomNumber<ui64>());
-                p[0] = rng();
-                p[1] = rng();
-                p[2] = rng();
-                p[3] = rng();
-
-                if (res[0] || res[1]) {
-                    return res;
-                }
-            }
-        }
-
-        static ui64 GenerateSpanId() {
-            for (;;) {
-                if (const ui64 res = RandomNumber<ui64>(); res) { // SpanId can't be zero
-                    return res;
-                }
-            }
-        }
-
-    public:
-        using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64) + sizeof(ui32)];
-
-    public:
         TTraceId(ui64) // NBS stub
             : TTraceId()
         {}
@@ -152,22 +133,12 @@ namespace NWilson {
         // do not allow implicit copy of trace id
         TTraceId& operator=(const TTraceId& other) = delete;
 
-        static TTraceId NewTraceId(ui8 verbosity, ui32 timeToLive) {
-            return TTraceId(GenerateTraceId(), 0, verbosity, timeToLive);
+        static TTraceId NewTraceId(ui8 verbosity, ui32 timeToLive, bool retroTrace = false) {
+            return TTraceId(GenerateTraceId(), 0, verbosity, timeToLive, retroTrace);
         }
 
         static TTraceId NewTraceIdThrottled(ui8 verbosity, ui32 timeToLive, std::atomic<NActors::TMonotonic>& counter,
-                NActors::TMonotonic now, TDuration periodBetweenSamples) {
-            static_assert(std::atomic<NActors::TMonotonic>::is_always_lock_free);
-            for (;;) {
-                NActors::TMonotonic ts = counter.load();
-                if (now < ts) {
-                    return {};
-                } else if (counter.compare_exchange_strong(ts, now + periodBetweenSamples)) {
-                    return NewTraceId(verbosity, timeToLive);
-                }
-            }
-        }
+                NActors::TMonotonic now, TDuration periodBetweenSamples);
 
         static TTraceId NewTraceId() { // NBS stub
             return TTraceId();
@@ -181,9 +152,9 @@ namespace NWilson {
             if (!*this || !TimeToLive) {
                 return TTraceId();
             } else if (verbosity <= Verbosity) {
-                return TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1);
+                return TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1, RetroTrace);
             } else {
-                return TTraceId(TraceId, SpanId, Verbosity, TimeToLive - 1);
+                return TTraceId(TraceId, SpanId, Verbosity, TimeToLive - 1, RetroTrace);
             }
         }
 
@@ -212,12 +183,21 @@ namespace NWilson {
             return TimeToLive;
         }
 
+        bool IsWilsonTrace() const;
+        bool IsRetroTrace() const;
+
+        TTraceId MakeRetroIfEmpty(ui8 verbosity, ui32 ttl);
+
+        bool IsSameTrace(const TTraceId& other) const;
+
         const void *GetTraceIdPtr() const { return TraceId.data(); }
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
         const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
         TString GetHexTraceId() const;
+        TString GetHexTraceIdLowerCase() const;
+        TString GetHexFullTraceId() const;
 
         void Validate() const {
             Y_DEBUG_ABORT_UNLESS(*this || !SpanId);

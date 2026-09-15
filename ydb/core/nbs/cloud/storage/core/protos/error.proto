@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/core/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Error Flags.
+
+enum EErrorFlag
+{
+    // Note: sequential flag numbers starting from one are used, not powers of two
+
+    EF_NONE = 0;
+
+    // A flag that makes the target error EErrorKind::ErrorSilent. Such an error
+    // does not increment the fatal error counter.
+    // Be careful using EF_SILENT with retriable errors. This flag changes error
+    // kind to EErrorKind::ErrorSilent making the error non-retriable.
+    EF_SILENT = 1;
+
+    // Currently set if a problem with nonreplicated disk/agent was detected.
+    EF_HW_PROBLEMS_DETECTED = 2;
+
+    // A flag for retriable errors that indicates which requests can be retried
+    // without any delay. It works only once per request to prevent the
+    // possibility of a retry storm.
+    EF_INSTANT_RETRIABLE = 3;
+
+    // A flag that indicates that the checksum of the data does not match the
+    // checksum in the request.
+    EF_CHECKSUM_MISMATCH = 4;
+
+    // The flag indicates that the leadership has been transferred to another disk.
+    // Client should reconnect to new principal.
+    EF_OUTDATED_VOLUME = 5;
+
+    // TODO: EF_RETRIABLE, EF_CLIENT
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Error description.
+
+message TError
+{
+    // Error code.
+    uint32 Code = 1;
+
+    // Error message.
+    string Message = 2;
+
+    // Flags.
+    uint32 Flags = 3;
+}

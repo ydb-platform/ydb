@@ -25,85 +25,68 @@ namespace numpy
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::true_immediate return_inverse);
+  unique(E const &expr, types::false_immediate return_index, types::true_immediate return_inverse);
 
   template <class E>
   types::ndarray<typename E::dtype, types::pshape<long>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::false_immediate return_inverse);
+  unique(E const &expr, types::false_immediate return_index, types::false_immediate return_inverse);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::false_immediate return_inverse);
+  unique(E const &expr, types::true_immediate return_index, types::false_immediate return_inverse);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::true_immediate return_inverse);
+             types::ndarray<long, types::pshape<long>>, types::ndarray<long, types::pshape<long>>>
+  unique(E const &expr, types::true_immediate return_index, types::true_immediate return_inverse);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
+             types::ndarray<long, types::pshape<long>>, types::ndarray<long, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::true_immediate return_inverse,
+  unique(E const &expr, types::true_immediate return_index, types::true_immediate return_inverse,
          types::true_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::true_immediate return_inverse,
+             types::ndarray<long, types::pshape<long>>, types::ndarray<long, types::pshape<long>>>
+  unique(E const &expr, types::true_immediate return_index, types::true_immediate return_inverse,
          types::false_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::false_immediate return_inverse,
+  unique(E const &expr, types::true_immediate return_index, types::false_immediate return_inverse,
          types::false_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::true_immediate return_index,
-         types::false_immediate return_inverse,
+             types::ndarray<long, types::pshape<long>>, types::ndarray<long, types::pshape<long>>>
+  unique(E const &expr, types::true_immediate return_index, types::false_immediate return_inverse,
          types::true_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::true_immediate return_inverse,
+  unique(E const &expr, types::false_immediate return_index, types::true_immediate return_inverse,
          types::false_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>,
-             types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::true_immediate return_inverse,
+             types::ndarray<long, types::pshape<long>>, types::ndarray<long, types::pshape<long>>>
+  unique(E const &expr, types::false_immediate return_index, types::true_immediate return_inverse,
          types::true_immediate return_counts);
 
   template <class E>
   types::ndarray<typename E::dtype, types::pshape<long>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::false_immediate return_inverse,
+  unique(E const &expr, types::false_immediate return_index, types::false_immediate return_inverse,
          types::false_immediate return_counts);
 
   template <class E>
   std::tuple<types::ndarray<typename E::dtype, types::pshape<long>>,
              types::ndarray<long, types::pshape<long>>>
-  unique(E const &expr, types::false_immediate return_index,
-         types::false_immediate return_inverse,
+  unique(E const &expr, types::false_immediate return_index, types::false_immediate return_inverse,
          types::true_immediate return_counts);
 
   DEFINE_FUNCTOR(pythonic::numpy, unique)

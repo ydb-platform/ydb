@@ -4,8 +4,7 @@
 #include <util/generic/strbuf.h>
 #include <util/string/cast.h>
 
-namespace NYql {
-namespace NResult {
+namespace NYql::NResult {
 
 // we should not write numbers as numbers ever
 // write numbers as strings except Yson value where we use restricted dialect
@@ -15,7 +14,6 @@ class TYsonResultWriter {
 public:
     static constexpr TStringBuf VoidString = "Void";
 
-public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)
         : Writer_(writer)
     {
@@ -93,8 +91,6 @@ private:
         Writer_.OnStringScalar(::ToString(value));
     }
 
-private:
     NYson::TYsonConsumerBase& Writer_;
 };
-}
-}
+} // namespace NYql::NResult

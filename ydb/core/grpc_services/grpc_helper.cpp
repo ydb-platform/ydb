@@ -5,11 +5,9 @@ namespace NGRpcService {
 
 //using namespace NActors;
 
-NYdbGrpc::IGRpcRequestLimiterPtr TCreateLimiterCB::operator()(const char* serviceName, const char* requestName, i64 limit) const {
-    TString fullName = "GRpcControls.RequestConfigs." + TString(serviceName) + "_" + requestName;
-    return LimiterRegistry->RegisterRequestType(fullName, limit);
+NYdbGrpc::IGRpcRequestLimiterPtr TCreateLimiterCB::operator()(const TString& controlName, THotSwap<TControl>& icbControl, i64 limit) const {
+    return LimiterRegistry->RegisterRequestType(controlName, icbControl, limit);
 }
-
 
 class TRequestInFlightLimiter : public NYdbGrpc::IGRpcRequestLimiter {
 private:
@@ -30,15 +28,15 @@ public:
 };
 
 
-NYdbGrpc::IGRpcRequestLimiterPtr TInFlightLimiterRegistry::RegisterRequestType(TString name, i64 limit) {
+NYdbGrpc::IGRpcRequestLimiterPtr TInFlightLimiterRegistry::RegisterRequestType(const TString& controlName, THotSwap<TControl>& icbControl, i64 limit) {
     TGuard<TMutex> g(Lock);
-    if (!PerTypeLimiters.count(name)) {
+    if (!PerTypeLimiters.count(controlName)) {
         TControlWrapper control(limit, 0, 1000000);
-        Icb->RegisterSharedControl(control, name + ".MaxInFlight");
-        PerTypeLimiters[name] = new TRequestInFlightLimiter(control);
+        TControlBoard::RegisterSharedControl(control, icbControl);
+        PerTypeLimiters[controlName] = new TRequestInFlightLimiter(control);
     }
 
-    return PerTypeLimiters[name];
+    return PerTypeLimiters[controlName];
 }
 
 } // namespace NGRpcService

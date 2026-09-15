@@ -63,8 +63,12 @@ typedef enum nghttp3_buf_type {
      memory. */
   NGHTTP3_BUF_TYPE_SHARED,
   /* NGHTTP3_BUF_TYPE_ALIEN indicates that the buffer points to a
-     memory which comes from outside of the library. */
+     memory which comes from outside of the library.  When
+     acknowledged, acked_data callback is called. */
   NGHTTP3_BUF_TYPE_ALIEN,
+  /* NGHTTP3_BUF_TYPE_ALIEN_NO_ACK is like NGHTTP3_BUF_TYPE_ALIEN, but
+     acked_data callback is not called. */
+  NGHTTP3_BUF_TYPE_ALIEN_NO_ACK,
 } nghttp3_buf_type;
 
 typedef struct nghttp3_typed_buf {

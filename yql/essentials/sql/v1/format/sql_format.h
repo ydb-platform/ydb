@@ -21,20 +21,20 @@ public:
     using TPtr = THolder<ISqlFormatter>;
 
     virtual bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues,
-        EFormatMode mode = EFormatMode::Pretty) = 0;
+                        EFormatMode mode = EFormatMode::Pretty) = 0;
     virtual ~ISqlFormatter() = default;
 };
 
 ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
-    const NSQLTranslationV1::TParsers& parsers,
-    const NSQLTranslation::TTranslationSettings& settings = {});
+                                     const NSQLTranslationV1::TParsers& parsers,
+                                     const NSQLTranslation::TTranslationSettings& settings = {});
 
 // insert spaces and comments between each tokens
 TString MutateQuery(const NSQLTranslationV1::TLexers& lexers, const TString& query, const NSQLTranslation::TTranslationSettings& settings = {});
 
 bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
-    const NSQLTranslationV1::TParsers& parsers, const TString& query, TString& formattedQuery, TString& error);
+                     const NSQLTranslationV1::TParsers& parsers, const TString& query, TString& formattedQuery, TString& error);
 
 THashSet<TString> GetKeywords();
 
-}
+} // namespace NSQLFormat

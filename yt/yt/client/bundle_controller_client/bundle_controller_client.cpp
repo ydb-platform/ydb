@@ -1,5 +1,7 @@
 #include "bundle_controller_client.h"
 
+#include "bundle_controller_settings.h"
+
 namespace NYT::NBundleControllerClient {
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -7,7 +7,7 @@
 
 using namespace NKikimr;
 
-class TBinaryJsonIdentityTest : public TBinaryJsonTestBase {
+class TBinaryJsonIdentityTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonIdentityTest()
         : TBinaryJsonTestBase()
@@ -15,28 +15,28 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonIdentityTest);
-        UNIT_TEST(TestReadToJsonDom);
-        UNIT_TEST(TestSerializeToJson);
-        UNIT_TEST(TestSerializeDomToBinaryJson);
+    UNIT_TEST(TestReadToJsonDom);
+    UNIT_TEST(TestSerializeToJson);
+    UNIT_TEST(TestSerializeDomToBinaryJson);
     UNIT_TEST_SUITE_END();
 
     const TVector<TString> TestCases = {
-            "false",
-            "true",
-            "null",
-            "\"test string\"",
-            "\"\"",
-            "1.2345",
-            "1",
-            "-23",
-            "0",
-            "0.12345",
-            "{}",
-            "{\"a\":1}",
-            "[]",
-            "[1]",
-            R"([{"key":[true,false,null,"first","second","second","third"]},"fourth",0.34])",
-        };
+        "false",
+        "true",
+        "null",
+        "\"test string\"",
+        "\"\"",
+        "1.2345",
+        "1",
+        "-23",
+        "0",
+        "0.12345",
+        "{}",
+        "{\"a\":1}",
+        "[]",
+        "[1]",
+        R"([{"key":[true,false,null,"first","second","second","third"]},"fourth",0.34])",
+    };
 
     void TestReadToJsonDom() {
         for (const TStringBuf json : TestCases) {

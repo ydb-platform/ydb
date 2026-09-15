@@ -12,8 +12,6 @@
 //    event processing time histograms
 #define ACTORSLIB_COLLECT_EXEC_STATS
 
-static constexpr bool ActorLibCollectUsageStats = false;
-
 namespace NActors {
     using TPoolId = ui8;
     using TPoolsMask = ui64;

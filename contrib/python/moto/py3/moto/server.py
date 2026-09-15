@@ -2,6 +2,9 @@ import argparse
 import os
 import signal
 import sys
+import warnings
+from typing import Any, List, Optional
+
 from werkzeug.serving import run_simple
 
 from moto.moto_server.werkzeug_app import (
@@ -13,11 +16,11 @@ from moto.moto_server.threaded_moto_server import (  # noqa # pylint: disable=un
 )
 
 
-def signal_handler(signum, frame):  # pylint: disable=unused-argument
+def signal_handler(signum: Any, frame: Any) -> None:  # pylint: disable=unused-argument
     sys.exit(0)
 
 
-def main(argv=None):
+def main(argv: Optional[List[str]] = None) -> None:
     argv = argv or sys.argv[1:]
     parser = argparse.ArgumentParser()
 
@@ -70,11 +73,16 @@ def main(argv=None):
     except Exception:
         pass  # ignore "ValueError: signal only works in main thread"
 
+    if args.service:
+        warnings.warn(
+            f"The service-argument ({args.service}) is considered deprecated, and will be deprecated in a future release. Please let us know if you have any questions: https://github.com/getmoto/moto/issues"
+        )
+
     # Wrap the main application
     main_app = DomainDispatcherApplication(create_backend_app, service=args.service)
-    main_app.debug = True
+    main_app.debug = True  # type: ignore
 
-    ssl_context = None
+    ssl_context: Any = None
     if args.ssl_key and args.ssl_cert:
         ssl_context = (args.ssl_cert, args.ssl_key)
     elif args.ssl:

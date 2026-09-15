@@ -1,7 +1,7 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -10,6 +10,8 @@
 #include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -185,27 +187,21 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
     return TComparator::TypedCompare<true>(*Array, Position, *item.Array, item.Position);
 }
 
-TChunkedArraySerialized::TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData)
-    : Array(array)
-    , SerializedData(serializedData) {
-    AFL_VERIFY(serializedData);
-    AFL_VERIFY(Array);
-    AFL_VERIFY(Array->GetRecordsCount());
-}
 
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {
     AFL_VERIFY(Address.Contains(position))("pos", position)("start", Address.DebugString());
     AFL_VERIFY(item.Address.Contains(itemPosition))("pos", itemPosition)("start", item.Address.DebugString());
-    return TComparator::TypedCompare<true>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
+    //https://github.com/ydb-platform/ydb/issues/26933
+    return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
 }
 
 std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {
     return NArrow::CopyRecords(Array, { Address.GetLocalIndex(recordIndex) });
 }
 
-TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position) const {
-    return NArrow::DebugString(Array, Address.GetLocalIndex(position));
+TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position, const NKikimr::NScheme::TTypeInfo* logicalType) const {
+    return NArrow::DebugString(Array, Address.GetLocalIndex(position), logicalType);
 }
 
 void IChunkedArray::TLocalDataAddress::Reallocate() {

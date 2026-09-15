@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/getopt/small/completer.h>
 
 namespace YAML {
 class Node;
@@ -53,7 +54,7 @@ public:
     TClientCommandOption& AddLongOption(const TString& name, const TString& help = "");
     TClientCommandOption& AddLongOption(char c, const TString& name, const TString& help = "");
     TClientCommandOption& AddCharOption(char c, const TString& help = "");
-    TAuthMethodOption& AddAuthMethodOption(const TString& name, const TString& help);
+    TAuthMethodOption& AddAuthMethodOption(const TString& name, const TString& help, bool mainAuthOption = true);
     void AddAnonymousAuthMethodOption();
 
     const NLastGetopt::TOpts& GetOpts() const {
@@ -64,8 +65,8 @@ public:
         return Opts;
     }
 
-    void SetHelpCommandVerbosiltyLevel(size_t level) {
-        HelpCommandVerbosiltyLevel = level;
+    void SetHelpCommandVerbosityLevel(size_t level) {
+        HelpCommandVerbosityLevel = level;
     }
 
     // Priority of parsing auth methods from env, from first to last.
@@ -88,13 +89,13 @@ public:
 
 private:
     TClientCommandOption& AddClientOption(NLastGetopt::TOpt& opt);
-    TAuthMethodOption& AddAuthMethodClientOption(NLastGetopt::TOpt& opt);
+    TAuthMethodOption& AddAuthMethodClientOption(NLastGetopt::TOpt& opt, bool mainAuthOption);
 
 private:
     NLastGetopt::TOpts Opts;
     std::vector<TIntrusivePtr<TClientCommandOption>> ClientOpts;
     std::vector<TIntrusivePtr<TAuthMethodOption>> EnvAuthPriority;
-    size_t HelpCommandVerbosiltyLevel = 1;
+    size_t HelpCommandVerbosityLevel = 1;
 };
 
 // YDB client command option
@@ -129,7 +130,33 @@ public:
 
     TClientCommandOption& AddLongName(const TString& name);
 
+    // When this option is present, disable completion for other options and free args.
+    // Only works in zsh.
     TClientCommandOption& IfPresentDisableCompletion();
+
+    // Set help string that appears when completer suggests values for this option.
+    // This is the group header shown in shell completion (e.g. "-- <database path> --").
+    TClientCommandOption& CompletionArgHelp(const TString& help);
+
+    // Set completer for this option's argument values.
+    TClientCommandOption& Completer(NLastGetopt::NComp::ICompleterPtr completer);
+
+    // Set fixed choices with completion for this option.
+    TClientCommandOption& ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices);
+
+    // Set up shell completion that lists tables and column tables from the YDB database.
+    // Connects to the database using connection settings already specified on the command line.
+    TClientCommandOption& SchemePathCompletionForTables();
+
+    // Same as SchemePathCompletionForTables, but lists topics.
+    TClientCommandOption& SchemePathCompletionForTopics();
+
+    // Same as SchemePathCompletionForTables, but lists only directories.
+    TClientCommandOption& SchemePathCompletionForDir();
+
+    // Same as SchemePathCompletionForTables, but lists all scheme objects
+    // (tables, topics, views, etc.).
+    TClientCommandOption& SchemePathCompletionForAll();
 
     const NLastGetopt::EHasArg& GetHasArg() const;
 
@@ -217,6 +244,8 @@ public:
 
     TClientCommandOption& SetSupportsProfile(bool supports = true);
 
+    TClientCommandOption& DisableImplicitSourcesIf(std::function<bool()> condition);
+
     // Log connection params at high verbosity level
     TClientCommandOption& LogToConnectionParams(const TString& paramName);
 
@@ -224,6 +253,8 @@ public:
     TClientCommandOption& DocLink(const TString& link);
 
     TClientCommandOption& DefaultValue(const TString& defaultValue);
+
+    TClientCommandOption& ManualDefaultValueDescription(const TString& description);
 
     template <class TValue>
     TClientCommandOption& DefaultValue(const TValue& defaultValue) {
@@ -238,10 +269,15 @@ public:
         return *Opt;
     }
 
+    bool IsMainAuthOption() const {
+        return MainAuthOption;
+    }
+
 protected:
     TClientCommandOption& SetHandler();
     bool HandlerImpl(TString value, bool isFileName, const TString& humanReadableFileName, EOptionValueSource valueSource);
     void RebuildHelpMessage();
+    bool NeedPrintDefinitionsPriority() const;
 
     // Try parse from profile.
     // if parsedValue is not null, set it with parsed value, if actual
@@ -267,19 +303,23 @@ protected:
     TString* FilePath = nullptr;
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
+    TString ManualDefaultOptionValueDescription;
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
+    std::function<bool()> ImplicitSourcesDisabled;
     TString ConnectionParamName;
     TString Documentation;
     bool HandlerIsSet = false;
+    // --password-file is an Auth option, but is not considered a main auth option
+    bool MainAuthOption = false;
 };
 
 class TAuthMethodOption : public TClientCommandOption {
 public:
     using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly)>;
 public:
-    TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions);
+    TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions, bool mainAuthOption);
 
     // Auth method name that is used to parse from profile
     TAuthMethodOption& AuthMethod(const TString& methodName);
@@ -330,7 +370,7 @@ public:
         : Opt(std::move(opt))
         , ValueSource(valueSource)
     {
-        OptValues.emplace_back(std::move(value));
+        OptValues.emplace_back(value);
     }
 
     EOptionValueSource GetValueSource() const {

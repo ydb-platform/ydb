@@ -7,11 +7,11 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/attributes.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NFormats {
 
@@ -24,7 +24,7 @@ public:
     TFormat(const TFormat& other);
     TFormat(EFormatType type, const NYTree::IAttributeDictionary* attributes = nullptr);
 
-    TFormat& operator = (const TFormat& other);
+    TFormat& operator=(const TFormat& other);
 
     DEFINE_BYVAL_RO_PROPERTY(EFormatType, Type);
 

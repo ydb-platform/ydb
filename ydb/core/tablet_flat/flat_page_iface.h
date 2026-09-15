@@ -85,6 +85,11 @@ namespace NPage {
         Ever    = 2,    /* Keep in cache util the end  */
     };
 
+    enum class ECacheMode : ui32 {
+        Regular = 0,
+        TryKeepInMemory = 1,
+    };
+
 }
 }
 }

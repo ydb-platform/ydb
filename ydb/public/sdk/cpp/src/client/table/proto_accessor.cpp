@@ -20,6 +20,10 @@ const Ydb::Table::DescribeExternalTableResult& TProtoAccessor::GetProto(const NT
     return description.GetProto();
 }
 
+const Ydb::Table::DescribeSystemViewResult& TProtoAccessor::GetProto(const NTable::TSystemViewDescription& description) {
+    return description.GetProto();
+}
+
 NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) {
     return NTable::TQueryStats(queryStats);
 }
@@ -34,6 +38,14 @@ NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndex
 
 NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc) {
     return NTable::TIndexDescription(tableIndexDesc);
+}
+
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatistics);
+}
+
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatisticsDesc);
 }
 
 NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::Changefeed& changefeed) {

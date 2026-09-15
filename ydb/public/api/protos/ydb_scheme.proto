@@ -66,8 +66,11 @@ message Entry {
         EXTERNAL_DATA_SOURCE = 19;
         VIEW = 20;
         RESOURCE_POOL = 21;
+        BACKUP_COLLECTION = 22;
         TRANSFER = 23;
         SYS_VIEW = 24;
+        SECRET = 25;
+        STREAMING_QUERY = 26;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)
@@ -86,6 +89,9 @@ message Entry {
 
     // Virtual timestamp when the object was created
     VirtualTimestamp created_at = 9;
+
+    // When true, permissions are not inherited from parent objects
+    bool interrupt_permission_inheritance = 10;
 }
 
 message ListDirectoryResult {

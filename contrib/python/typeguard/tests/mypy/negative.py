@@ -1,4 +1,4 @@
-from typeguard import check_argument_types, check_return_type, typechecked, typeguard_ignore
+from typeguard import typechecked, typeguard_ignore
 
 
 @typechecked
@@ -8,28 +8,31 @@ def foo(x: int) -> int:
 
 @typechecked
 def bar(x: int) -> int:
-    return str(x)  # error: Incompatible return value type (got "str", expected "int")
+    return str(x)  # noqa: E501 # error: Incompatible return value type (got "str", expected "int")  [return-value]
 
 
 @typeguard_ignore
 def non_typeguard_checked_func(x: int) -> int:
-    return str(x)  # error: Incompatible return value type (got "str", expected "int")
+    return str(x)  # noqa: E501 # error: Incompatible return value type (got "str", expected "int")  [return-value]
 
 
+@typechecked
 def returns_str() -> str:
-    return bar(0)  # error: Incompatible return value type (got "int", expected "str")
+    return bar(0)  # noqa: E501 # error: Incompatible return value type (got "int", expected "str")  [return-value]
 
 
+@typechecked
 def arg_type(x: int) -> str:
-    return check_argument_types()  # noqa: E501 # error: Incompatible return value type (got "bool", expected "str")
+    return True  # noqa: E501 # error: Incompatible return value type (got "bool", expected "str")  [return-value]
 
 
+@typechecked
 def ret_type() -> str:
-    return check_return_type(False)  # noqa: E501 # error: Incompatible return value type (got "bool", expected "str")
+    return True  # noqa: E501 # error: Incompatible return value type (got "bool", expected "str")  [return-value]
 
 
-_ = arg_type(foo)  # noqa: E501 # error: Argument 1 to "arg_type" has incompatible type "Callable[[int], int]"; expected "int"
-_ = foo("typeguard")  # error: Argument 1 to "foo" has incompatible type "str"; expected "int"
+_ = arg_type(foo)  # noqa: E501 # error: Argument 1 to "arg_type" has incompatible type "Callable[[int], int]"; expected "int"  [arg-type]
+_ = foo("typeguard")  # noqa: E501 # error: Argument 1 to "foo" has incompatible type "str"; expected "int"  [arg-type]
 
 
 @typechecked
@@ -49,5 +52,5 @@ def create_myclass(x: int) -> MyClass:
     return MyClass(x)
 
 
-_ = get_value("foo")  # noqa: E501 # error: Argument 1 to "get_value" has incompatible type "str"; expected "MyClass"
-_ = MyClass(returns_str())  # noqa: E501 # error: Argument 1 to "MyClass" has incompatible type "str"; expected "int"
+_ = get_value("foo")  # noqa: E501 # error: Argument 1 to "get_value" has incompatible type "str"; expected "MyClass"  [arg-type]
+_ = MyClass(returns_str())  # noqa: E501 # error: Argument 1 to "MyClass" has incompatible type "str"; expected "int"  [arg-type]

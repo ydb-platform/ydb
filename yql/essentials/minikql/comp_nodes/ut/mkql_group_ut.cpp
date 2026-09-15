@@ -2,30 +2,29 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<bool UseLLVM>
+template <bool UseLLVM>
 TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     TCallableBuilder callableBuilder(*setup.Env, "TestStream",
-        pgmBuilder.NewStreamType(
-            pgmBuilder.NewDataType(NUdf::EDataSlot::Uint64)
-        )
-    );
+                                     pgmBuilder.NewStreamType(
+                                         NTest::ConvertToMinikqlType<ui64>(pgmBuilder)));
 
-    callableBuilder.Add(pgmBuilder.NewDataLiteral(count));
+    callableBuilder.Add(NTest::ConvertValueToLiteralNode(pgmBuilder, count));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-template<bool UseLLVM>
+template <bool UseLLVM>
 TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch,
-    const std::function<TRuntimeNode(TRuntimeNode)>& handler = {})
+                   const std::function<TRuntimeNode(TRuntimeNode)>& handler = {})
 {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -36,18 +35,18 @@ TRuntimeNode Group(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::funct
     stream = pgmBuilder.GroupingCore(stream, groupSwitch, keyExtractor, handler);
     return pgmBuilder.FlatMap(stream, [&](TRuntimeNode grpItem) {
         return pgmBuilder.Squeeze(pgmBuilder.Nth(grpItem, 1),
-            pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("*"),
-            [&] (TRuntimeNode item, TRuntimeNode state) {
-                auto res = pgmBuilder.Concat(pgmBuilder.ToString(pgmBuilder.Nth(grpItem, 0)), pgmBuilder.ToString(item));
-                res = pgmBuilder.Concat(state, res);
-                res = pgmBuilder.Concat(res, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("*"));
-                return res;
-            },
-            {}, {});
+                                  NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("*")),
+                                  [&](TRuntimeNode item, TRuntimeNode state) {
+                                      auto res = pgmBuilder.Concat(pgmBuilder.ToString(pgmBuilder.Nth(grpItem, 0)), pgmBuilder.ToString(item));
+                                      res = pgmBuilder.Concat(state, res);
+                                      res = pgmBuilder.Concat(res, NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("*")));
+                                      return res;
+                                  },
+                                  {}, {});
     });
 }
 
-template<bool UseLLVM>
+template <bool UseLLVM>
 TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)>& groupSwitch) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -61,194 +60,187 @@ TRuntimeNode GroupKeys(TSetup<UseLLVM>& setup, TRuntimeNode stream, const std::f
     });
 }
 
-template<bool UseLLVM>
+template <bool UseLLVM>
 TRuntimeNode StreamToString(TSetup<UseLLVM>& setup, TRuntimeNode stream) {
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    return pgmBuilder.Squeeze(stream, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"), [&] (TRuntimeNode item, TRuntimeNode state) {
-        return pgmBuilder.Concat(pgmBuilder.Concat(state, item), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("|"));
-    }, {}, {});
+    return pgmBuilder.Squeeze(stream, NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|")), [&](TRuntimeNode item, TRuntimeNode state) {
+        return pgmBuilder.Concat(pgmBuilder.Concat(state, item), NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("|")));
+    },
+                              {}, {});
 }
 
-} // unnamed
-
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest) {
-    Y_UNIT_TEST_LLVM(TestGrouping) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+Y_UNIT_TEST_LLVM(TestGrouping) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-        auto stream = MakeStream(setup);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
-        });
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+    auto stream = MakeStream(setup);
+    stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+        Y_UNUSED(key);
+        return pgmBuilder.Equals(item, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0)));
+    });
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
 
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*|*00*01*|*00*|*00*|*00*01*02*03*|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingKeyNotEquals) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            return pgmBuilder.NotEquals(item, key);
-        });
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*|*11*|*00*00*00*|*11*|*22*|*33*|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingWithEmptyInput) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup, 0);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
-        });
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestSingleGroup) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-        stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            Y_UNUSED(key);
-            Y_UNUSED(item);
-            return pgmBuilder.NewDataLiteral<bool>(false);
-        });
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*00*01*00*00*00*01*02*03*|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingWithYield) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-        TSwitchInput switchInput;
-        switchInput.Indicies.push_back(0);
-        switchInput.InputType = stream.GetStaticType();
-
-        stream = pgmBuilder.Switch(stream,
-                MakeArrayRef(&switchInput, 1),
-                [&](ui32 /*index*/, TRuntimeNode item1) {
-                    return Group(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
-                        Y_UNUSED(key);
-                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0));
-                    });
-                },
-                1,
-                pgmBuilder.NewStreamType(pgmBuilder.NewDataType(NUdf::EDataSlot::String))
-                );
-
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*00*|*00*01*|*00*|*00*|*00*01*02*03*|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingWithoutFetchingSubStreams) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-
-        stream = GroupKeys(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
-            Y_UNUSED(key);
-            return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
-        });
-
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|0|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingWithYieldAndWithoutFetchingSubStreams) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-        TSwitchInput switchInput;
-        switchInput.Indicies.push_back(0);
-        switchInput.InputType = stream.GetStaticType();
-
-        stream = pgmBuilder.Switch(stream,
-                MakeArrayRef(&switchInput, 1),
-                [&](ui32 /*index*/, TRuntimeNode item1) {
-                    return GroupKeys(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
-                        Y_UNUSED(key);
-                        return pgmBuilder.Equals(item2, pgmBuilder.NewDataLiteral<ui64>(0));
-                    });
-                },
-                1,
-                pgmBuilder.NewStreamType(pgmBuilder.NewDataType(NUdf::EDataSlot::String))
-                );
-
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|0|");
-    }
-
-    Y_UNIT_TEST_LLVM(TestGroupingWithHandler) {
-        TSetup<LLVM> setup;
-        TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
-
-        auto stream = MakeStream(setup);
-        stream = Group(setup, stream,
-            [&](TRuntimeNode key, TRuntimeNode item) {
-                Y_UNUSED(key);
-                return pgmBuilder.Equals(item, pgmBuilder.NewDataLiteral<ui64>(0));
-            },
-            [&](TRuntimeNode item) {
-                return pgmBuilder.Add(pgmBuilder.Convert(item, pgmBuilder.NewDataType(NUdf::EDataSlot::Int32)), pgmBuilder.NewDataLiteral<ui64>(1));
-            }
-        );
-        auto pgm = StreamToString(setup, stream);
-        auto graph = setup.BuildGraph(pgm);
-        auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
-
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|*01*|*01*02*|*01*|*01*|*01*02*03*04*|");
-    }
+    AssertUnboxedValueElementEqual(result, TStringBuf("|*00*|*00*01*|*00*|*00*|*00*01*02*03*|"));
 }
 
-} // NMiniKQL
-} // NKikimr
+Y_UNIT_TEST_LLVM(TestGroupingKeyNotEquals) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+    stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+        return pgmBuilder.NotEquals(item, key);
+    });
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|*00*00*|*11*|*00*00*00*|*11*|*22*|*33*|"));
+}
+
+Y_UNIT_TEST_LLVM(TestGroupingWithEmptyInput) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup, 0);
+    stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+        Y_UNUSED(key);
+        return pgmBuilder.Equals(item, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0)));
+    });
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|"));
+}
+
+Y_UNIT_TEST_LLVM(TestSingleGroup) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+    stream = Group(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+        Y_UNUSED(key);
+        Y_UNUSED(item);
+        return NTest::ConvertValueToLiteralNode(pgmBuilder, bool(false));
+    });
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|*00*00*01*00*00*00*01*02*03*|"));
+}
+
+Y_UNIT_TEST_LLVM(TestGroupingWithYield) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+    TSwitchInput switchInput;
+    switchInput.Indicies.push_back(0);
+    switchInput.InputType = stream.GetStaticType();
+
+    stream = pgmBuilder.Switch(stream,
+                               MakeArrayRef(&switchInput, 1),
+                               [&](ui32 /*index*/, TRuntimeNode item1) {
+                                   return Group(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
+                                       Y_UNUSED(key);
+                                       return pgmBuilder.Equals(item2, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0)));
+                                   });
+                               },
+                               1,
+                               pgmBuilder.NewStreamType(NTest::ConvertToMinikqlType<TStringBuf>(pgmBuilder)));
+
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|*00*|*00*01*|*00*|*00*|*00*01*02*03*|"));
+}
+
+Y_UNIT_TEST_LLVM(TestGroupingWithoutFetchingSubStreams) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+
+    stream = GroupKeys(setup, stream, [&](TRuntimeNode key, TRuntimeNode item) {
+        Y_UNUSED(key);
+        return pgmBuilder.Equals(item, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0)));
+    });
+
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|0|0|0|0|0|"));
+}
+
+Y_UNIT_TEST_LLVM(TestGroupingWithYieldAndWithoutFetchingSubStreams) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+    TSwitchInput switchInput;
+    switchInput.Indicies.push_back(0);
+    switchInput.InputType = stream.GetStaticType();
+
+    stream = pgmBuilder.Switch(stream,
+                               MakeArrayRef(&switchInput, 1),
+                               [&](ui32 /*index*/, TRuntimeNode item1) {
+                                   return GroupKeys(setup, item1, [&](TRuntimeNode key, TRuntimeNode item2) {
+                                       Y_UNUSED(key);
+                                       return pgmBuilder.Equals(item2, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0)));
+                                   });
+                               },
+                               1,
+                               pgmBuilder.NewStreamType(NTest::ConvertToMinikqlType<TStringBuf>(pgmBuilder)));
+
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|0|0|0|0|0|"));
+}
+
+Y_UNIT_TEST_LLVM(TestGroupingWithHandler) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
+
+    auto stream = MakeStream(setup);
+    stream = Group(setup, stream,
+                   [&](TRuntimeNode key, TRuntimeNode item) {
+                Y_UNUSED(key);
+                return pgmBuilder.Equals(item, NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(0))); },
+                   [&](TRuntimeNode item) { return pgmBuilder.Add(pgmBuilder.Convert(item, NTest::ConvertToMinikqlType<i32>(pgmBuilder)), NTest::ConvertValueToLiteralNode(pgmBuilder, ui64(1))); });
+    auto pgm = StreamToString(setup, stream);
+    auto graph = setup.BuildGraph(pgm);
+    auto streamVal = graph->GetValue();
+    NUdf::TUnboxedValue result;
+    UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+
+    AssertUnboxedValueElementEqual(result, TStringBuf("|*01*|*01*02*|*01*|*01*|*01*02*03*04*|"));
+}
+} // Y_UNIT_TEST_SUITE(TMiniKQLGroupingTest)
+
+} // namespace NKikimr::NMiniKQL

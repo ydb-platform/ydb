@@ -9,12 +9,8 @@ TOOL_PATH = yatest.common.binary_path('yql/essentials/tools/types_dump/types_dum
 def test_types_dump():
     with open(os.path.join(DATA_PATH, "types.json")) as f:
         types_from_file = json.load(f)
-    res = yatest.common.execute(
-        [TOOL_PATH],
-        check_exit_code=True,
-        wait=True
-    )
+    res = yatest.common.execute([TOOL_PATH], check_exit_code=True, wait=True)
     types_from_tool = json.loads(res.stdout)
-    assert types_from_tool == types_from_file, 'JSON_DIFFER\n' \
-        'File:\n %(types_from_file)s\n\n' \
-        'Tool:\n %(types_from_tool)s\n' % locals()
+    assert types_from_tool == types_from_file, (
+        'JSON_DIFFER\n' 'File:\n %(types_from_file)s\n\n' 'Tool:\n %(types_from_tool)s\n' % locals()
+    )

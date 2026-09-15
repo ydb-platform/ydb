@@ -42,7 +42,7 @@ namespace boost {
 template< typename, typename > class basic_string_view;
 
 namespace container {
-template< typename, typename, typename > class basic_string;
+template< typename, typename, typename, typename > class basic_string;
 } // namespace container
 
 namespace filesystem {
@@ -55,7 +55,7 @@ class directory_entry;
 namespace detail {
 namespace path_traits {
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 typedef wchar_t path_native_char_type;
 #define BOOST_FILESYSTEM_DETAIL_IS_CHAR_NATIVE false
 #define BOOST_FILESYSTEM_DETAIL_IS_WCHAR_T_NATIVE true
@@ -204,7 +204,7 @@ struct path_source_traits< std::wstring >
 };
 
 template< >
-struct path_source_traits< boost::container::basic_string< char, std::char_traits< char >, void > >
+struct path_source_traits< boost::container::basic_string< char, std::char_traits< char >, void, void > >
 {
     typedef boost_container_string_tag tag_type;
     typedef char char_type;
@@ -212,7 +212,7 @@ struct path_source_traits< boost::container::basic_string< char, std::char_trait
 };
 
 template< >
-struct path_source_traits< boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void > >
+struct path_source_traits< boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void, void > >
 {
     typedef boost_container_string_tag tag_type;
     typedef wchar_t char_type;
@@ -482,6 +482,11 @@ BOOST_FORCEINLINE typename Callback::result_type dispatch(Source const& source, 
 typedef char yes_type;
 struct no_type { char buf[2]; };
 
+// Note: check_convertible overloads below are deliberately not templates to allow for one of the overloads
+//       to be selected if the argument is some third-party type that is convertible to one of the supported
+//       string types. This is why we unfortunately can't ignore the irrelevant template parameters like allocator
+//       and Boost.Container options.
+
 #if !defined(BOOST_FILESYSTEM_DETAIL_CXX23_STRING_VIEW_HAS_IMPLICIT_RANGE_CTOR)
 
 namespace is_convertible_to_path_source_impl {
@@ -490,8 +495,8 @@ yes_type check_convertible(const char*);
 yes_type check_convertible(const wchar_t*);
 yes_type check_convertible(std::string const&);
 yes_type check_convertible(std::wstring const&);
-yes_type check_convertible(boost::container::basic_string< char, std::char_traits< char >, void > const&);
-yes_type check_convertible(boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void > const&);
+yes_type check_convertible(boost::container::basic_string< char, std::char_traits< char >, void, void > const&);
+yes_type check_convertible(boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void, void > const&);
 #if !defined(BOOST_NO_CXX17_HDR_STRING_VIEW)
 yes_type check_convertible(std::string_view const&);
 yes_type check_convertible(std::wstring_view const&);
@@ -563,8 +568,8 @@ yes_type check_convertible(const char*);
 yes_type check_convertible(const wchar_t*);
 yes_type check_convertible(std::string const&);
 yes_type check_convertible(std::wstring const&);
-yes_type check_convertible(boost::container::basic_string< char, std::char_traits< char >, void > const&);
-yes_type check_convertible(boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void > const&);
+yes_type check_convertible(boost::container::basic_string< char, std::char_traits< char >, void, void > const&);
+yes_type check_convertible(boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void, void > const&);
 yes_type check_convertible(boost::basic_string_view< char, std::char_traits< char > > const&);
 yes_type check_convertible(boost::basic_string_view< wchar_t, std::char_traits< wchar_t > > const&);
 no_type check_convertible(std::nullptr_t);
@@ -643,24 +648,24 @@ BOOST_FORCEINLINE typename Callback::result_type dispatch_convertible_impl(std::
 template< typename Source, typename Callback >
 BOOST_FORCEINLINE typename Callback::result_type dispatch_convertible_impl
 (
-    boost::container::basic_string< char, std::char_traits< char >, void > const& source,
+    boost::container::basic_string< char, std::char_traits< char >, void, void > const& source,
     Callback cb,
     const codecvt_type* cvt
 )
 {
-    typedef typename path_traits::make_dependent< boost::container::basic_string< char, std::char_traits< char >, void >, Source >::type source_t;
+    typedef typename path_traits::make_dependent< boost::container::basic_string< char, std::char_traits< char >, void, void >, Source >::type source_t;
     return path_traits::dispatch(static_cast< source_t const& >(source), cb, cvt);
 }
 
 template< typename Source, typename Callback >
 BOOST_FORCEINLINE typename Callback::result_type dispatch_convertible_impl
 (
-    boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void > const& source,
+    boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void, void > const& source,
     Callback cb,
     const codecvt_type* cvt
 )
 {
-    typedef typename path_traits::make_dependent< boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void >, Source >::type source_t;
+    typedef typename path_traits::make_dependent< boost::container::basic_string< wchar_t, std::char_traits< wchar_t >, void, void >, Source >::type source_t;
     return path_traits::dispatch(static_cast< source_t const& >(source), cb, cvt);
 }
 

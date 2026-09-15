@@ -7,7 +7,7 @@
 
 ## Перезапуск через Ansible playbook
 
-Репозиторий [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) содержит playbook под названием `ydb_platform.ydb.restart`, который можно использовать для перезапуска кластера {{ ydb-short-name }}. Запускайте его из той же директории, которая использовалась для [изначального развёртывания](initial-deployment.md).
+Репозиторий [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) содержит playbook под названием `ydb_platform.ydb.restart`, который можно использовать для перезапуска кластера {{ ydb-short-name }}. Запускайте его из той же директории, которая использовалась для [изначального развёртывания](./initial-deployment/index.md).
 
 ### Перезапуск всех узлов
 

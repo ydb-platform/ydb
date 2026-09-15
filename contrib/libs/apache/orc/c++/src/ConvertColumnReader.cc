@@ -126,13 +126,13 @@ namespace orc {
                                            bool shouldThrow) {
     constexpr bool isFileTypeFloatingPoint(std::is_floating_point<FileType>::value);
     constexpr bool isReadTypeFloatingPoint(std::is_floating_point<ReadType>::value);
-    int64_t longValue = static_cast<int64_t>(srcValue);
+
     if (isFileTypeFloatingPoint) {
       if (isReadTypeFloatingPoint) {
         destValue = static_cast<ReadType>(srcValue);
       } else {
         if (!canFitInLong(static_cast<double>(srcValue)) ||
-            !downCastToInteger(destValue, longValue)) {
+            !downCastToInteger(destValue, static_cast<int64_t>(srcValue))) {
           handleOverflow<FileType, ReadType>(destBatch, idx, shouldThrow);
         }
       }
@@ -846,7 +846,7 @@ namespace orc {
     }
 
    private:
-    // Algorithm: http://howardhinnant.github.io/date_algorithms.html
+    // Algorithm: https://howardhinnant.github.io/date_algorithms.html
     // The algorithm implements a proleptic Gregorian calendar.
     int64_t daysFromProlepticGregorianCalendar(int32_t y, int32_t m, int32_t d) {
       y -= m <= 2;

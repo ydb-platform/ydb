@@ -74,6 +74,8 @@ struct IThroughputThrottler
     virtual i64 GetQueueTotalAmount() const = 0;
 
     //! Returns estimated duration to drain current request queue.
+    //! Can return TDuration::Max() in cases when the wait is expected
+    //! to be infinitely long.
     /*!
      *  \note Thread affinity: any
      */
@@ -142,7 +144,7 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 //! Constructs a throttler from #config and initializes logger and profiler.
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
-    const TString& name,
+    const std::string& name,
     NLogging::TLogger logger = {},
     NProfiling::TProfiler profiler = {});
 
@@ -151,7 +153,7 @@ IReconfigurableThroughputThrottlerPtr GetUnlimitedThrottler();
 
 //! Returns a throttler that imposes no throughput limit and profiles throughput.
 IReconfigurableThroughputThrottlerPtr CreateNamedUnlimitedThroughputThrottler(
-    const TString& name,
+    const std::string& name,
     NProfiling::TProfiler profiler = {});
 
 //! This throttler is DEPRECATED. Use TFairThrottler instead.
@@ -168,9 +170,9 @@ IThroughputThrottlerPtr CreateStealingThrottler(
 //! throttling amounts are batched in a "prefetching" manner so that
 //! a single request to the underlying throttler serves multiple incoming throttling requests.
 IThroughputThrottlerPtr CreatePrefetchingThrottler(
-    const TPrefetchingThrottlerConfigPtr& config,
-    const IThroughputThrottlerPtr& underlying,
-    const NLogging::TLogger& logger);
+    TPrefetchingThrottlerConfigPtr config,
+    IThroughputThrottlerPtr underlying,
+    NLogging::TLogger logger);
 
 ////////////////////////////////////////////////////////////////////////////////
 

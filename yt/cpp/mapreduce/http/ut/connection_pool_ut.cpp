@@ -130,7 +130,7 @@ private:
     TFunc Func_;
 };
 
-TEST(TConnectionPool, TestReleaseUnread)
+TEST(TConnectionPoolTest, TestReleaseUnread)
 {
     auto simpleServer = CreateSimpleHttpServer();
 
@@ -144,7 +144,7 @@ TEST(TConnectionPool, TestReleaseUnread)
     }
 }
 
-TEST(TConnectionPool, TestProxy)
+TEST(TConnectionPoolTest, TestProxy)
 {
     auto simpleServer = CreateSimpleHttpServer();
     auto simpleServer2 = CreateProxyHttpServer();
@@ -164,7 +164,7 @@ TEST(TConnectionPool, TestProxy)
     }
 }
 
-TEST(TConnectionPool, TestConcurrency)
+TEST(TConnectionPoolTest, TestConcurrency)
 {
     TConnectionPoolConfigGuard g(1);
 

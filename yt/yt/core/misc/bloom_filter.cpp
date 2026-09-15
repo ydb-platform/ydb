@@ -1,8 +1,9 @@
 #include "bloom_filter.h"
-#include "blob.h"
 #include "error.h"
 
 #include <yt/yt_proto/yt/core/misc/proto/bloom_filter.pb.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <cmath>
 
@@ -162,12 +163,12 @@ TBloomFilter::TBloomFilter(TSharedRef data, int hashCount)
     VerifySize(Data_.Size());
 }
 
-TBloomFilter::TBloomFilter(TBloomFilter&& other)
+TBloomFilter::TBloomFilter(TBloomFilter&& other) noexcept
 {
     *this = std::move(other);
 }
 
-TBloomFilter& TBloomFilter::operator=(TBloomFilter&& other)
+TBloomFilter& TBloomFilter::operator=(TBloomFilter&& other) noexcept
 {
     HashCount_ = other.HashCount_;
     LogSize_ = other.LogSize_;
@@ -219,4 +220,3 @@ void FromProto(TBloomFilter* bloomFilter, const NProto::TBloomFilter& protoBloom
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

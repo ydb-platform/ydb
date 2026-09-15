@@ -42,6 +42,7 @@ Y_UNIT_TEST_SUITE(S3SettingsConversion) {
             SecretKey: "SId:secret-key"
             AccessKey: "SId:access-key"
             Region: "ru-central1"
+            UseVirtualAddressing: false
         )", &output));
         ValidateConversion(input, output);
     }
@@ -67,6 +68,7 @@ Y_UNIT_TEST_SUITE(S3SettingsConversion) {
             SecretKey: "SId:secret-key"
             AccessKey: "SId:access-key"
             Region: "ru-central1"
+            UseVirtualAddressing: false
         )", &output));
         ValidateConversion(input, output);
     }

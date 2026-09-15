@@ -137,6 +137,20 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
+namespace {
+
+void AddOffsetRange(std::vector<std::pair<ui64, ui64>>& offsetRanges, const NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageBase& msg) {
+    const auto from = msg.GetOffset();
+    const auto to = from + msg.GetLogicalMessageCount();
+    if (offsetRanges.empty() || offsetRanges.back().second != from) {
+        offsetRanges.emplace_back(from, to);
+    } else {
+        offsetRanges.back().second = to;
+    }
+}
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NFederatedTopic::TReadSessionEvent::TDataReceivedEvent
 
@@ -146,10 +160,12 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 {
     if (event.HasCompressedMessages()) {
         for (auto& msg : event.GetCompressedMessages()) {
+            AddOffsetRange(OffsetRanges, msg);
             CompressedMessages.emplace_back(std::move(msg), federatedPartitionSession);
         }
     } else {
         for (auto& msg : event.GetMessages()) {
+            AddOffsetRange(OffsetRanges, msg);
             Messages.emplace_back(std::move(msg), federatedPartitionSession);
         }
     }
@@ -157,7 +173,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionSessionControl*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -165,4 +181,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::Dev::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

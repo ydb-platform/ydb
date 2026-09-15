@@ -5,18 +5,18 @@
 #include <yql/essentials/public/udf/udf_terminator.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TUnwrapWrapper: public TBinaryCodegeneratorNode<TUnwrapWrapper> {
-    typedef TBinaryCodegeneratorNode<TUnwrapWrapper> TBaseComputation;
+    using TBaseComputation = TBinaryCodegeneratorNode<TUnwrapWrapper>;
 
 public:
     TUnwrapWrapper(IComputationNode* optional, IComputationNode* message, const NUdf::TSourcePosition& pos, EValueRepresentation kind)
         : TBaseComputation(optional, message, kind)
-        , Pos(pos) {
+        , Pos_(pos)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -33,7 +33,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         Value* value = GetNodeValue(Optional(), ctx, block);
         auto& context = ctx.Codegen.GetContext();
 
@@ -43,11 +43,8 @@ public:
         BranchInst::Create(kill, good, IsEmpty(value, block, context), block);
 
         block = kill;
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TUnwrapWrapper::Throw>());
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
-        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {Type::getInt64Ty(context), ctx.Ctx->getType()}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-        CallInst::Create(doFuncType, doFuncPtr, {doFuncArg, ctx.Ctx}, "", block)->setTailCall();
+        EmitFunctionCall<&TUnwrapWrapper::Throw>(Type::getVoidTy(context), {doFuncArg, ctx.Ctx}, ctx, block);
         new UnreachableInst(context, block);
 
         block = good;
@@ -59,7 +56,7 @@ private:
         auto message = self->Message()->GetValue(*ctx);
         MKQL_ENSURE(message.IsString() || message.IsEmbedded(), "Message must be represented as a string.");
         TStringBuilder res;
-        res << self->Pos << " Failed to unwrap empty optional";
+        res << self->Pos_ << " Failed to unwrap empty optional";
         if (message.AsStringRef().Size() > 0) {
             res << ":\n\n"
                 << TStringBuf(message.AsStringRef()) << "\n\n";
@@ -76,7 +73,7 @@ private:
         return Right_;
     };
 
-    const NUdf::TSourcePosition Pos;
+    const NUdf::TSourcePosition Pos_;
 };
 } // namespace
 
@@ -90,5 +87,4 @@ IComputationNode* WrapUnwrap(TCallable& callable, const TComputationNodeFactoryC
     return new TUnwrapWrapper(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1),
                               NUdf::TSourcePosition(row, column, file), kind);
 }
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

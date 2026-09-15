@@ -1,0 +1,5 @@
+RECURSE(
+    lib
+    acl
+    mon
+)

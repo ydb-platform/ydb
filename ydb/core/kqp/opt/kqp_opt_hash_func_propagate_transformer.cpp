@@ -1,17 +1,21 @@
 #include "kqp_opt_hash_func_propagate_transformer.h"
 
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <yql/essentials/utils/log/log.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/yql/dq/common/dq_common.h>
+namespace NKikimr::NKqp {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
-using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 TVector<TDqPhyStage> TopSortStages(const TDqPhyStageList& stages) {
@@ -70,10 +74,10 @@ TMaybeNode<TKqpPhysicalTx> PropogateHashFuncToHashShuffles(
             }
         );
 
-        bool enableShuffleElimination = config->OptShuffleElimination.Get().GetOrElse(config->DefaultEnableShuffleElimination);
-        auto stageHashType = config->HashShuffleFuncType.Get().GetOrElse(config->DefaultHashShuffleFuncType);
+        bool enableShuffleElimination = config->OptShuffleElimination.Get().GetOrElse(config->GetDefaultEnableShuffleElimination());
+        auto stageHashType = config->HashShuffleFuncType.Get().GetOrElse(config->GetDqDefaultHashShuffleFuncType());
         if (isRead && enableShuffleElimination) {
-            stageHashType =  config->ColumnShardHashShuffleFuncType.Get().GetOrElse(config->DefaultColumnShardHashShuffleFuncType);
+            stageHashType =  config->ColumnShardHashShuffleFuncType.Get().GetOrElse(NDq::EHashShuffleFuncType::ColumnShardHashV1);
         } else {
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto input = stage.Inputs().Item(i);
@@ -163,24 +167,27 @@ TAutoPtr<IGraphTransformer> CreateKqpTxHashFuncPropagateTransformer(const TKikim
 class TKqpTxsHashFuncPropagateTransformer : public TSyncTransformerBase {
 public:
     TKqpTxsHashFuncPropagateTransformer(
-        TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
         TTypeAnnotationContext& typesCtx,
         const TKikimrConfiguration::TPtr& config
-    )
-        : TypeAnnTransformer(std::move(typeAnnTransformer))
-    {
+    ) {
         TxTransformer =
             TTransformationPipeline(&typesCtx)
                 .AddServiceTransformers()
-                .Add(*TypeAnnTransformer, "TypeAnnotation")
+                .AddTypeAnnotationTransformer()
                 .AddPostTypeAnnotation(/* forSubgraph */ true)
                 .Add(CreateKqpTxHashFuncPropagateTransformer(config), "Peephole")
             .Build(false);
+        ShuffleEliminationEnabled = config->OptShuffleElimination.Get().GetOrElse(config->GetDefaultEnableShuffleElimination());
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         if (!TKqpPhysicalQuery::Match(input.Get())) {
             return TStatus::Error;
+        }
+
+        if (!ShuffleEliminationEnabled){
+            output = input;
+            return TStatus::Ok;
         }
 
         TKqpPhysicalQuery query(input);
@@ -227,13 +234,13 @@ private:
     }
 
     TAutoPtr<IGraphTransformer> TxTransformer;
-    TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
+    bool ShuffleEliminationEnabled = false;
 };
 
-TAutoPtr<IGraphTransformer>  NKikimr::NKqp::CreateKqpTxsHashFuncPropagateTransformer(
-    TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
-    TTypeAnnotationContext& typesCtx,
-    const TKikimrConfiguration::TPtr& config
-) {
-    return THolder<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typeAnnTransformer, typesCtx, config));
+} // anonymous namespace
+
+TAutoPtr<IGraphTransformer> CreateKqpTxsHashFuncPropagateTransformer(TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config) {
+    return THolder<IGraphTransformer>(new TKqpTxsHashFuncPropagateTransformer(typesCtx, config));
 }
+
+} // namespace NKikimr::NKqp

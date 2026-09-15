@@ -10,7 +10,6 @@ from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter imp
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 import conftest
 
-
 one_time_waiter = OneTimeWaiter(
     data_source_kind=EGenericDataSourceKind.YDB,
     docker_compose_file_path=conftest.docker_compose_file_path,

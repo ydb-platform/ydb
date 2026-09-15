@@ -1,3 +1,5 @@
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include "kqp_opt_phy_effects_impl.h"
 
 namespace NKikimr::NKqp::NOpt {
@@ -74,15 +76,16 @@ TDqPhyPrecompute PrecomputeCondenseInputResult(const TCondenseInputResult& conde
         .Done();
 }
 
-TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryIndexVector(
+TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndexTables(
     const TKikimrTableDescription& table,
     TPositionHandle pos,
     TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx,
     const THashSet<TStringBuf>* filter,
     const std::function<TExprBase (const TKikimrTableMetadata&, TPositionHandle, TExprContext&)>& tableBuilder)
 {
-    TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> secondaryIndexes;
-    secondaryIndexes.reserve(table.Metadata->Indexes.size());
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
+    TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> result(::Reserve(table.Metadata->Indexes.size()));
     YQL_ENSURE(table.Metadata->Indexes.size() == table.Metadata->ImplTables.size());
     for (size_t i = 0; i < table.Metadata->Indexes.size(); i++) {
         const auto& index = table.Metadata->Indexes[i];
@@ -110,23 +113,62 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildSecondaryInde
         }
 
         if (index.KeyColumns && addIndex) {
-            auto& implTable = table.Metadata->ImplTables[i];
-            YQL_ENSURE(!implTable->Next);
-            auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
-            secondaryIndexes.emplace_back(indexTable, &index);
+            TIntrusivePtr<TKikimrTableMetadata> implTable = table.Metadata->ImplTables[i];
+            switch (index.Type) {
+                case TIndexDescription::EType::GlobalJson:
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique: {
+                    YQL_ENSURE(!implTable->Next);
+                    auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
+                    result.emplace_back(indexTable, &index);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
+                        implTable = implTable->Next;
+                    }
+                    YQL_ENSURE(implTable);
+                    auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
+                    result.emplace_back(indexTable, &index);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
+                    YQL_ENSURE(useStreamIndex, "Compact fulltext index update requires EnableIndexStreamWrite");
+                    continue;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (index.KeyColumns.size() == 1) {
+                        YQL_ENSURE(implTable->Next && !implTable->Next->Next);
+                    } else {
+                        YQL_ENSURE(implTable->Next && implTable->Next->Next && !implTable->Next->Next->Next);
+                    }
+                    auto postingTable = implTable->Next;
+                    YQL_ENSURE(postingTable->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
+                    auto indexTable = tableBuilder(*postingTable, pos, ctx).Ptr();
+                    result.emplace_back(indexTable, &index);
+                    break;
+                }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalMinMax:
+                    break;
+            }
         }
     }
-    return secondaryIndexes;
+    return result;
 }
 
-TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table, TPositionHandle pos,
-    TExprContext& ctx, const THashSet<TStringBuf>* filter)
+TSecondaryIndexes BuildAffectedIndexTables(const TKikimrTableDescription& table, TPositionHandle pos,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, const THashSet<TStringBuf>* filter)
 {
     static auto cb = [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
         return BuildTableMeta(meta, pos, ctx);
     };
 
-    return BuildSecondaryIndexVector(table, pos, ctx, filter, cb);
+    return BuildAffectedIndexTables(table, pos, ctx, kqpCtx, filter, cb);
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,

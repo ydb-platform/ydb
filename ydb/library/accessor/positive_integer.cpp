@@ -36,7 +36,7 @@ ui64 TPositiveControlInteger::Val() const {
 
 TPositiveIncreasingControlInteger& TPositiveIncreasingControlInteger::operator=(const TPositiveIncreasingControlInteger& v) {
 	if (&v != this) {
-		AFL_VERIFY(Value < v.Value);
+		AFL_VERIFY(Value < v.Value)("from", Value)("to", v.Value);
 		Value = v.Value;
 	}
 	return *this;

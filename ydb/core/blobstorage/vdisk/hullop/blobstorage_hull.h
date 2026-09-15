@@ -1,11 +1,14 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/cache_block/cache_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
-#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -24,12 +27,15 @@ namespace NKikimr {
         TString ErrorReason;
         ui64 Lsn;
         bool Postponed;
+        bool ObsoleteVersion;
 
-        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false)
+        THullCheckStatus(NKikimrProto::EReplyStatus status, TString errorReason, ui64 lsn = 0, bool postponed = false,
+                bool obsoleteVersion = false)
             : Status(status)
             , ErrorReason(std::move(errorReason))
             , Lsn(lsn)
             , Postponed(postponed)
+            , ObsoleteVersion(obsoleteVersion)
         {}
     };
 
@@ -41,7 +47,12 @@ namespace NKikimr {
         struct TFields;
         std::unique_ptr<TFields> Fields;
 
-        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool *writtenBeyondBarrier);
+        ui64 LogoBlobSyncDataSizeInFlight = 0;
+        ui64 BlockSyncDataSizeInFlight = 0;
+        ui64 BarrierSyncDataSizeInFlight = 0;
+
+        void ValidateWriteQuery(const TActorContext &ctx, const TLogoBlobID &id, bool issueKeepFlag,
+            bool *writtenBeyondBarrier);
 
         // validate GC barrier command against existing barriers metabase (ensure that keys are
         // coming in ascending order, CollectGen/CollectStep pairs do not decrease and that keys
@@ -97,6 +108,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 const TLogoBlobID &id,
                 bool ignoreBlock,
+                bool issueKeepFlag,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier);
 
@@ -106,6 +118,7 @@ namespace NKikimr {
                 ui8 partId,
                 const TIngress &ingress,
                 TRope buffer,
+                std::optional<ui64> checksum,
                 ui64 lsn);
 
         void AddHugeLogoBlob(
@@ -146,8 +159,11 @@ namespace NKikimr {
                 ui64 tabletID,
                 ui32 gen,
                 ui64 issuerGuid,
+                std::optional<ui32> version,
+                TWriteSource writeSource,
                 ui32 *actGen,
-                TLsnSeg *seg);
+                TLsnSeg *seg,
+                bool *versionChanged);
 
         void AddBlockCmd(
                 const TActorContext &ctx,
@@ -201,6 +217,15 @@ namespace NKikimr {
                 TFreshBatch &&freshBatch,
                 const TLsnSeg &seg,
                 const TReplySender &replySender);
+
+        void AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+        void RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize);
+
+        ui64 GetLogoBlobSyncDataSizeInFlight() const { return LogoBlobSyncDataSizeInFlight; }
+        ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
+        ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
+
+        TFreshSpaceDebt GetFreshSpaceDebt() const;
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

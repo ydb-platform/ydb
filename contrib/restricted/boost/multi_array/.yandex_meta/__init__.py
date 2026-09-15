@@ -9,7 +9,7 @@ def post_install(self):
 boost_multi_array = NixSourceProject(
     nixattr="boost_multi_array",
     arcdir=boost.make_arcdir("multi_array"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

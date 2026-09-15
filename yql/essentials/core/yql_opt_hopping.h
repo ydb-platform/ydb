@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <util/datetime/base.h>
@@ -13,6 +14,8 @@ struct THoppingTraits {
     ui64 Hop;
     ui64 Interval;
     ui64 Delay;
+    TMaybe<NHoppingWindow::EPolicy> EarlyPolicy;
+    TMaybe<NHoppingWindow::EPolicy> LatePolicy;
 };
 
 struct TKeysDescription {

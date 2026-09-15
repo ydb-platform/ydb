@@ -3,15 +3,20 @@ UNITTEST_FOR(ydb/core/tx/conveyor_composite/service)
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
-SIZE(MEDIUM)
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
+ELSE()
+    SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
+    ydb/core/cms/console
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/counters
@@ -28,6 +33,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_config.cpp
+    ut_config_subscription.cpp
+    ut_runtime_update.cpp
     ut_simple.cpp
 )
 

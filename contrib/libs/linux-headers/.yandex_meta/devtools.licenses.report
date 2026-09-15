@@ -127,18 +127,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: COPYING at line 3
     Files with this license:
         COPYING [1:20]
 
-KEEP     GPL-2.0-or-later WITH Linux-syscall-note 083347f501aaf4beebfe2d5232bd2a5f
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: GPL-2.0-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
-    Files with this license:
-        linux/raid/md_p.h [6:13]
-        linux/raid/md_u.h [6:13]
-
 KEEP     GPL-2.0-only WITH Linux-syscall-note 08ebfda8cc18a460a255162c738a722c
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -163,8 +151,8 @@ BELONGS ya.make
 
 KEEP     GPL-2.0-only WITH Linux-syscall-note 0a81ea6890789c282ee36f30d20ccf57
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: _nf/linux/netfilter/xt_CONNMARK.h at line 1, _nf/linux/netfilter/xt_DSCP.h at line 1, _nf/linux/netfilter/xt_MARK.h at line 1, _nf/linux/netfilter/xt_RATEEST.h at line 1, _nf/linux/netfilter/xt_TCPMSS.h at line 1, _nf/linux/netfilter_ipv4/ipt_ECN.h at line 1, _nf/linux/netfilter_ipv4/ipt_TTL.h at line 1, _nf/linux/netfilter_ipv6/ip6t_HL.h at line 1, asm-generic/bitsperlong.h at line 1, asm-generic/errno-base.h at line 1, asm-generic/errno.h at line 1, asm-generic/fcntl.h at line 1, asm-generic/int-l64.h at line 1, asm-generic/int-ll64.h at line 1, asm-generic/ioctl.h at line 1, asm-generic/ioctls.h at line 1, asm-generic/ipcbuf.h at line 1, asm-generic/mman-common.h at line 1, asm-generic/mman.h at line 1, asm-generic/msgbuf.h at line 1, asm-generic/param.h at line 1, asm-generic/poll.h at line 1, asm-generic/posix_types.h at line 1, asm-generic/resource.h at line 1, asm-generic/sembuf.h at line 1, asm-generic/setup.h at line 1, asm-generic/shmbuf.h at line 1, asm-generic/siginfo.h at line 1, asm-generic/signal-defs.h at line 1, asm-generic/signal.h at line 1, asm-generic/socket.h at line 1, asm-generic/sockios.h at line 1, asm-generic/stat.h at line 1, asm-generic/statfs.h at line 1, asm-generic/swab.h at line 1, asm-generic/termbits-common.h at line 1, asm-generic/termbits.h at line 1, asm-generic/termios.h at line 1, asm-generic/types.h at line 1, asm-generic/ucontext.h at line 1, asm-generic/unistd.h at line 1, asm/a.out_x86.h at line 1, asm/amd_hsmp_x86.h at line 1, asm/auxvec_arm.h at line 1, asm/auxvec_arm64.h at line 1, asm/auxvec_powerpc.h at line 1, asm/auxvec_x86.h at line 1, asm/bitsperlong_arm64.h at line 1, asm/bitsperlong_powerpc.h at line 1, asm/bitsperlong_x86.h at line 1, asm/boot_x86.h at line 1, asm/bootparam_x86.h at line 1, asm/bootx_powerpc.h at line 1, asm/bpf_perf_event_arm64.h at line 1, asm/byteorder_arm.h at line 1, asm/byteorder_arm64.h at line 1, asm/byteorder_x86.h at line 1, asm/cputable_powerpc.h at line 1, asm/debugreg_x86.h at line 1, asm/e820_x86.h at line 1, asm/eeh_powerpc.h at line 1, asm/errno_powerpc.h at line 1, asm/fcntl_arm.h at line 1, asm/fcntl_arm64.h at line 1, asm/fcntl_powerpc.h at line 1, asm/hw_breakpoint_x86.h at line 1, asm/hwcap2_x86.h at line 1, asm/hwcap_arm.h at line 1, asm/hwcap_arm64.h at line 1, asm/ioctl_powerpc.h at line 1, asm/ioctls_arm.h at line 1, asm/ioctls_powerpc.h at line 1, asm/kvm_arm64.h at line 1, asm/kvm_para_powerpc.h at line 1, asm/kvm_para_x86.h at line 1, asm/kvm_perf_x86.h at line 1, asm/kvm_powerpc.h at line 1, asm/kvm_x86.h at line 1, asm/ldt_x86.h at line 1, asm/mce_x86.h at line 1, asm/mman_arm64.h at line 1, asm/mman_x86.h at line 1, asm/msgbuf_powerpc.h at line 1, asm/msgbuf_x86.h at line 1, asm/msr_x86.h at line 1, asm/papr_pdsm_powerpc.h at line 1, asm/param_arm64.h at line 1, asm/perf_event_powerpc.h at line 1, asm/perf_regs_arm.h at line 1, asm/perf_regs_arm64.h at line 1, asm/perf_regs_powerpc.h at line 1, asm/perf_regs_x86.h at line 1, asm/posix_types_32_x86.h at line 1, asm/posix_types_64_x86.h at line 1, asm/posix_types_arm.h at line 1, asm/posix_types_arm64.h at line 1, asm/posix_types_powerpc.h at line 1, asm/posix_types_x32_x86.h at line 1, asm/posix_types_x86.h at line 1, asm/prctl_x86.h at line 1, asm/processor-flags_x86.h at line 1, asm/ps3fb_powerpc.h at line 1, asm/ptrace-abi_x86.h at line 1, asm/ptrace_arm.h at line 1, asm/ptrace_arm64.h at line 1, asm/ptrace_x86.h at line 1, asm/sembuf_x86.h at line 1, asm/setup_arm.h at line 1, asm/setup_arm64.h at line 1, asm/setup_powerpc.h at line 1, asm/sgx_x86.h at line 1, asm/shmbuf_x86.h at line 1, asm/sigcontext32_x86.h at line 1, asm/sigcontext_arm.h at line 1, asm/sigcontext_arm64.h at line 1, asm/sigcontext_x86.h at line 1, asm/siginfo_x86.h at line 1, asm/signal_arm.h at line 1, asm/signal_arm64.h at line 1, asm/signal_powerpc.h at line 1, asm/signal_x86.h at line 1, asm/stat_arm.h at line 1, asm/stat_x86.h at line 1, asm/statfs_arm.h at line 1, asm/statfs_arm64.h at line 1, asm/statfs_x86.h at line 1, asm/sve_context_arm64.h at line 1, asm/svm_x86.h at line 1, asm/swab_arm.h at line 1, asm/swab_x86.h at line 1, asm/tm_powerpc.h at line 1, asm/types_arm.h at line 1, asm/ucontext_arm64.h at line 1, asm/ucontext_powerpc.h at line 1, asm/ucontext_x86.h at line 1, asm/unistd_arm.h at line 1, asm/unistd_arm64.h at line 1, asm/unistd_x86.h at line 1, asm/vm86_x86.h at line 1, asm/vmx_x86.h at line 1, asm/vsyscall_x86.h at line 1, drm/armada_drm.h at line 1, drm/etnaviv_drm.h at line 1, drm/omap_drm.h at line 1, linux/a.out_x86.h at line 1, linux/acct.h at line 1, linux/acrn.h at line 1, linux/adb.h at line 1, linux/adfs_fs.h at line 1, linux/affs_hardblocks.h at line 1, linux/am437x-vpfe.h at line 1, linux/android/binder.h at line 1, linux/android/binderfs.h at line 1, linux/arcfb.h at line 1, linux/arm_sdei.h at line 1, linux/atalk.h at line 1, linux/atm.h at line 1, linux/atm_eni.h at line 1, linux/atm_he.h at line 1, linux/atm_idt77105.h at line 1, linux/atm_nicstar.h at line 1, linux/atm_tcp.h at line 1, linux/atm_zatm.h at line 1, linux/atmapi.h at line 1, linux/atmarp.h at line 1, linux/atmbr2684.h at line 1, linux/atmclip.h at line 1, linux/atmdev.h at line 1, linux/atmioc.h at line 1, linux/atmlec.h at line 1, linux/atmmpc.h at line 1, linux/atmppp.h at line 1, linux/atmsap.h at line 1, linux/atmsvc.h at line 1, linux/auxvec.h at line 1, linux/ax25.h at line 1, linux/baycom.h at line 1, linux/bcm933xx_hcs.h at line 1, linux/bfs_fs.h at line 1, linux/binfmts.h at line 1, linux/blkpg.h at line 1, linux/blktrace_api.h at line 1, linux/blkzoned.h at line 1, linux/bpf.h at line 1, linux/bpf_common.h at line 1, linux/bpf_perf_event.h at line 1, linux/bpfilter.h at line 1, linux/bpqether.h at line 1, linux/bsg.h at line 1, linux/btf.h at line 1, linux/btrfs.h at line 1, linux/btrfs_tree.h at line 1, linux/byteorder/big_endian.h at line 1, linux/byteorder/little_endian.h at line 1, linux/cachefiles.h at line 1, linux/caif/caif_socket.h at line 1, linux/caif/if_caif.h at line 1, linux/capability.h at line 1, linux/capi.h at line 1, linux/cciss_defs.h at line 1, linux/cciss_ioctl.h at line 1, linux/cdrom.h at line 1, linux/chio.h at line 1, linux/close_range.h at line 1, linux/coff.h at line 1, linux/const.h at line 1, linux/coresight-stm.h at line 1, linux/counter.h at line 1, linux/cramfs_fs.h at line 1, linux/cryptouser.h at line 1, linux/cuda.h at line 1, linux/cxl_mem.h at line 1, linux/cyclades.h at line 1, linux/dcbnl.h at line 1, linux/dccp.h at line 1, linux/dlm.h at line 1, linux/dlm_device.h at line 1, linux/dlm_plock.h at line 1, linux/dlmconstants.h at line 1, linux/dma-buf.h at line 1, linux/dma-heap.h at line 1, linux/edd.h at line 1, linux/efs_fs_sb.h at line 1, linux/elf-em.h at line 1, linux/elf.h at line 1, linux/errqueue.h at line 1, linux/erspan.h at line 1, linux/ethtool.h at line 1, linux/eventfd.h at line 1, linux/ext4.h at line 1, linux/f2fs.h at line 1, linux/fadvise.h at line 1, linux/falloc.h at line 1, linux/fanotify.h at line 1, linux/fb.h at line 1, linux/fcntl.h at line 1, linux/fd.h at line 1, linux/fdreg.h at line 1, linux/fib_rules.h at line 1, linux/fiemap.h at line 1, linux/filter.h at line 1, linux/fpga-dfl.h at line 1, linux/fs.h at line 1, linux/fscrypt.h at line 1, linux/fsl_mc.h at line 1, linux/fsmap.h at line 1, linux/fsverity.h at line 1, linux/futex.h at line 1, linux/gameport.h at line 1, linux/gen_stats.h at line 1, linux/genetlink.h at line 1, linux/genwqe/genwqe_card.h at line 1, linux/gfs2_ondisk.h at line 1, linux/gsmmux.h at line 1, linux/gtp.h at line 1, linux/hdlc.h at line 1, linux/hdlc/ioctl.h at line 1, linux/hdlcdrv.h at line 1, linux/hdreg.h at line 1, linux/hidraw.h at line 1, linux/hpet.h at line 1, linux/hsi/cs-protocol.h at line 1, linux/hsi/hsi_char.h at line 1, linux/hw_breakpoint.h at line 1, linux/hyperv.h at line 1, linux/icmpv6.h at line 1, linux/if_addr.h at line 1, linux/if_addrlabel.h at line 1, linux/if_eql.h at line 1, linux/if_link.h at line 1, linux/if_ltalk.h at line 1, linux/if_packet.h at line 1, linux/if_phonet.h at line 1, linux/if_slip.h at line 1, linux/if_tunnel.h at line 1, linux/if_xdp.h at line 1, linux/ife.h at line 1, linux/iio/buffer.h at line 1, linux/iio/events.h at line 1, linux/iio/types.h at line 1, linux/ila.h at line 1, linux/in_route.h at line 1, linux/inet_diag.h at line 1, linux/inotify.h at line 1, linux/input.h at line 1, linux/ioctl.h at line 1, linux/iommu.h at line 1, linux/iommufd.h at line 1, linux/ioprio.h at line 1, linux/ip6_tunnel.h at line 1, linux/ip_vs.h at line 1, linux/ipc.h at line 1, linux/ipmi_bmc.h at line 1, linux/ipsec.h at line 1, linux/ipv6.h at line 1, linux/isdn/capicmd.h at line 1, linux/iso_fs.h at line 1, linux/isst_if.h at line 1, linux/kcm.h at line 1, linux/kcmp.h at line 1, linux/kcov.h at line 1, linux/kd.h at line 1, linux/kdev_t.h at line 1, linux/kernel-page-flags.h at line 1, linux/kernel.h at line 1, linux/kernelcapi.h at line 1, linux/kexec.h at line 1, linux/keyboard.h at line 1, linux/kvm_arm64.h at line 1, linux/kvm_para.h at line 1, linux/kvm_powerpc.h at line 1, linux/kvm_x86.h at line 1, linux/l2tp.h at line 1, linux/landlock.h at line 1, linux/libc-compat.h at line 1, linux/limits.h at line 1, linux/lirc.h at line 1, linux/loadpin.h at line 1, linux/lp.h at line 1, linux/lwtunnel.h at line 1, linux/magic.h at line 1, linux/major.h at line 1, linux/matroxfb.h at line 1, linux/max2175.h at line 1, linux/mctp.h at line 1, linux/mdio.h at line 1, linux/media-bus-format.h at line 1, linux/media.h at line 1, linux/mei_uuid.h at line 1, linux/memfd.h at line 1, linux/mempolicy.h at line 1, linux/mii.h at line 1, linux/minix_fs.h at line 1, linux/misc/bcm_vk.h at line 1, linux/mman.h at line 1, linux/mmc/ioctl.h at line 1, linux/mmtimer.h at line 1, linux/module.h at line 1, linux/mpls.h at line 1, linux/mroute.h at line 1, linux/mroute6.h at line 1, linux/msdos_fs.h at line 1, linux/msg.h at line 1, linux/mtio.h at line 1, linux/nbd-netlink.h at line 1, linux/neighbour.h at line 1, linux/net_dropmon.h at line 1, linux/net_namespace.h at line 1, linux/net_tstamp.h at line 1, linux/netconf.h at line 1, linux/netfilter.h at line 1, linux/netfilter/ipset/ip_set.h at line 1, linux/netfilter/ipset/ip_set_bitmap.h at line 1, linux/netfilter/ipset/ip_set_hash.h at line 1, linux/netfilter/ipset/ip_set_list.h at line 1, linux/netfilter/nf_conntrack_common.h at line 1, linux/netfilter/nf_conntrack_ftp.h at line 1, linux/netfilter/nf_conntrack_sctp.h at line 1, linux/netfilter/nf_conntrack_tcp.h at line 1, linux/netfilter/nf_conntrack_tuple_common.h at line 1, linux/netfilter/nf_log.h at line 1, linux/netfilter/nf_nat.h at line 1, linux/netfilter/nf_synproxy.h at line 1, linux/netfilter/nf_tables.h at line 1, linux/netfilter/nf_tables_compat.h at line 1, linux/netfilter/nfnetlink.h at line 1, linux/netfilter/nfnetlink_acct.h at line 1, linux/netfilter/nfnetlink_compat.h at line 1, linux/netfilter/nfnetlink_conntrack.h at line 1, linux/netfilter/nfnetlink_cthelper.h at line 1, linux/netfilter/nfnetlink_cttimeout.h at line 1, linux/netfilter/nfnetlink_hook.h at line 1, linux/netfilter/nfnetlink_log.h at line 1, linux/netfilter/nfnetlink_queue.h at line 1, linux/netfilter/x_tables.h at line 1, linux/netfilter/xt_AUDIT.h at line 1, linux/netfilter/xt_CHECKSUM.h at line 1, linux/netfilter/xt_CLASSIFY.h at line 1, linux/netfilter/xt_CONNSECMARK.h at line 1, linux/netfilter/xt_CT.h at line 1, linux/netfilter/xt_HMARK.h at line 1, linux/netfilter/xt_LED.h at line 1, linux/netfilter/xt_LOG.h at line 1, linux/netfilter/xt_NFLOG.h at line 1, linux/netfilter/xt_NFQUEUE.h at line 1, linux/netfilter/xt_SECMARK.h at line 1, linux/netfilter/xt_SYNPROXY.h at line 1, linux/netfilter/xt_TCPOPTSTRIP.h at line 1, linux/netfilter/xt_TEE.h at line 1, linux/netfilter/xt_TPROXY.h at line 1, linux/netfilter/xt_addrtype.h at line 1, linux/netfilter/xt_bpf.h at line 1, linux/netfilter/xt_cgroup.h at line 1, linux/netfilter/xt_cluster.h at line 1, linux/netfilter/xt_comment.h at line 1, linux/netfilter/xt_connbytes.h at line 1, linux/netfilter/xt_connlabel.h at line 1, linux/netfilter/xt_connlimit.h at line 1, linux/netfilter/xt_cpu.h at line 1, linux/netfilter/xt_dccp.h at line 1, linux/netfilter/xt_devgroup.h at line 1, linux/netfilter/xt_dscp.h at line 1, linux/netfilter/xt_ecn.h at line 1, linux/netfilter/xt_esp.h at line 1, linux/netfilter/xt_hashlimit.h at line 1, linux/netfilter/xt_helper.h at line 1, linux/netfilter/xt_ipcomp.h at line 1, linux/netfilter/xt_iprange.h at line 1, linux/netfilter/xt_ipvs.h at line 1, linux/netfilter/xt_l2tp.h at line 1, linux/netfilter/xt_length.h at line 1, linux/netfilter/xt_limit.h at line 1, linux/netfilter/xt_mac.h at line 1, linux/netfilter/xt_mark.h at line 1, linux/netfilter/xt_multiport.h at line 1, linux/netfilter/xt_nfacct.h at line 1, linux/netfilter/xt_owner.h at line 1, linux/netfilter/xt_physdev.h at line 1, linux/netfilter/xt_pkttype.h at line 1, linux/netfilter/xt_policy.h at line 1, linux/netfilter/xt_quota.h at line 1, linux/netfilter/xt_rateest.h at line 1, linux/netfilter/xt_realm.h at line 1, linux/netfilter/xt_recent.h at line 1, linux/netfilter/xt_rpfilter.h at line 1, linux/netfilter/xt_sctp.h at line 1, linux/netfilter/xt_set.h at line 1, linux/netfilter/xt_socket.h at line 1, linux/netfilter/xt_state.h at line 1, linux/netfilter/xt_statistic.h at line 1, linux/netfilter/xt_string.h at line 1, linux/netfilter/xt_tcpmss.h at line 1, linux/netfilter/xt_tcpudp.h at line 1, linux/netfilter/xt_time.h at line 1, linux/netfilter/xt_u32.h at line 1, linux/netfilter_arp/arp_tables.h at line 1, linux/netfilter_arp/arpt_mangle.h at line 1, linux/netfilter_bridge.h at line 1, linux/netfilter_bridge/ebt_802_3.h at line 1, linux/netfilter_bridge/ebt_among.h at line 1, linux/netfilter_bridge/ebt_arp.h at line 1, linux/netfilter_bridge/ebt_arpreply.h at line 1, linux/netfilter_bridge/ebt_ip.h at line 1, linux/netfilter_bridge/ebt_ip6.h at line 1, linux/netfilter_bridge/ebt_limit.h at line 1, linux/netfilter_bridge/ebt_log.h at line 1, linux/netfilter_bridge/ebt_mark_m.h at line 1, linux/netfilter_bridge/ebt_mark_t.h at line 1, linux/netfilter_bridge/ebt_nat.h at line 1, linux/netfilter_bridge/ebt_nflog.h at line 1, linux/netfilter_bridge/ebt_pkttype.h at line 1, linux/netfilter_bridge/ebt_redirect.h at line 1, linux/netfilter_bridge/ebt_stp.h at line 1, linux/netfilter_bridge/ebt_vlan.h at line 1, linux/netfilter_bridge/ebtables.h at line 1, linux/netfilter_ipv4.h at line 1, linux/netfilter_ipv4/ip_tables.h at line 1, linux/netfilter_ipv4/ipt_CLUSTERIP.h at line 1, linux/netfilter_ipv4/ipt_LOG.h at line 1, linux/netfilter_ipv4/ipt_REJECT.h at line 1, linux/netfilter_ipv4/ipt_ah.h at line 1, linux/netfilter_ipv4/ipt_ecn.h at line 1, linux/netfilter_ipv4/ipt_ttl.h at line 1, linux/netfilter_ipv6.h at line 1, linux/netfilter_ipv6/ip6_tables.h at line 1, linux/netfilter_ipv6/ip6t_LOG.h at line 1, linux/netfilter_ipv6/ip6t_NPT.h at line 1, linux/netfilter_ipv6/ip6t_REJECT.h at line 1, linux/netfilter_ipv6/ip6t_ah.h at line 1, linux/netfilter_ipv6/ip6t_frag.h at line 1, linux/netfilter_ipv6/ip6t_hl.h at line 1, linux/netfilter_ipv6/ip6t_ipv6header.h at line 1, linux/netfilter_ipv6/ip6t_mh.h at line 1, linux/netfilter_ipv6/ip6t_opts.h at line 1, linux/netfilter_ipv6/ip6t_rt.h at line 1, linux/netfilter_ipv6/ip6t_srh.h at line 1, linux/netlink.h at line 1, linux/netlink_diag.h at line 1, linux/netrom.h at line 1, linux/nexthop.h at line 1, linux/nfs.h at line 1, linux/nfs2.h at line 1, linux/nfs3.h at line 1, linux/nfs4.h at line 1, linux/nfs4_mount.h at line 1, linux/nfs_fs.h at line 1, linux/nfs_mount.h at line 1, linux/nfsacl.h at line 1, linux/nfsd/debug.h at line 1, linux/nfsd/export.h at line 1, linux/nfsd/stats.h at line 1, linux/nitro_enclaves.h at line 1, linux/nl80211-vnd-intel.h at line 1, linux/nsfs.h at line 1, linux/nubus.h at line 1, linux/nvme_ioctl.h at line 1, linux/nvram.h at line 1, linux/omap3isp.h at line 1, linux/oom.h at line 1, linux/openat2.h at line 1, linux/openvswitch.h at line 1, linux/packet_diag.h at line 1, linux/param.h at line 1, linux/patchkey.h at line 1, linux/pci.h at line 1, linux/pci_regs.h at line 1, linux/pcitest.h at line 1, linux/perf_event.h at line 1, linux/personality.h at line 1, linux/pfkeyv2.h at line 1, linux/pfrut.h at line 1, linux/phonet.h at line 1, linux/pidfd.h at line 1, linux/pkt_cls.h at line 1, linux/pkt_sched.h at line 1, linux/pktcdvd.h at line 1, linux/pmu.h at line 1, linux/posix_types.h at line 1, linux/ppp-comp.h at line 1, linux/ppp-ioctl.h at line 1, linux/ppp_defs.h at line 1, linux/pr.h at line 1, linux/prctl.h at line 1, linux/psample.h at line 1, linux/psci.h at line 1, linux/ptrace.h at line 1, linux/qnx4_fs.h at line 1, linux/qnxtypes.h at line 1, linux/qrtr.h at line 1, linux/radeonfb.h at line 1, linux/random.h at line 1, linux/reboot.h at line 1, linux/reiserfs_fs.h at line 1, linux/reiserfs_xattr.h at line 1, linux/resource.h at line 1, linux/romfs_fs.h at line 1, linux/rose.h at line 1, linux/rpmsg.h at line 1, linux/rpmsg_types.h at line 1, linux/rtc.h at line 1, linux/rtnetlink.h at line 1, linux/scc.h at line 1, linux/sched.h at line 1, linux/sched/types.h at line 1, linux/screen_info.h at line 1, linux/seccomp.h at line 1, linux/securebits.h at line 1, linux/sed-opal.h at line 1, linux/seg6_genl.h at line 1, linux/seg6_hmac.h at line 1, linux/selinux_netlink.h at line 1, linux/sem.h at line 1, linux/serio.h at line 1, linux/shm.h at line 1, linux/signal.h at line 1, linux/signalfd.h at line 1, linux/smc.h at line 1, linux/smc_diag.h at line 1, linux/smiapp.h at line 1, linux/snmp.h at line 1, linux/sock_diag.h at line 1, linux/socket.h at line 1, linux/sonet.h at line 1, linux/sound.h at line 1, linux/stat.h at line 1, linux/stddef.h at line 1, linux/stm.h at line 1, linux/string.h at line 1, linux/sunrpc/debug.h at line 1, linux/suspend_ioctls.h at line 1, linux/swab.h at line 1, linux/switchtec_ioctl.h at line 1, linux/sysctl.h at line 1, linux/sysinfo.h at line 1, linux/target_core_user.h at line 1, linux/tc_act/tc_connmark.h at line 1, linux/tc_act/tc_csum.h at line 1, linux/tc_act/tc_ct.h at line 1, linux/tc_act/tc_ctinfo.h at line 1, linux/tc_act/tc_defact.h at line 1, linux/tc_act/tc_gact.h at line 1, linux/tc_act/tc_ife.h at line 1, linux/tc_act/tc_ipt.h at line 1, linux/tc_act/tc_mirred.h at line 1, linux/tc_act/tc_mpls.h at line 1, linux/tc_act/tc_nat.h at line 1, linux/tc_act/tc_pedit.h at line 1, linux/tc_act/tc_sample.h at line 1, linux/tc_act/tc_skbedit.h at line 1, linux/tc_ematch/tc_em_cmp.h at line 1, linux/tc_ematch/tc_em_ipt.h at line 1, linux/tc_ematch/tc_em_meta.h at line 1, linux/tc_ematch/tc_em_nbyte.h at line 1, linux/tc_ematch/tc_em_text.h at line 1, linux/tcp_metrics.h at line 1, linux/tdx-guest.h at line 1, linux/termios.h at line 1, linux/thermal.h at line 1, linux/time.h at line 1, linux/time_types.h at line 1, linux/timerfd.h at line 1, linux/times.h at line 1, linux/tiocl.h at line 1, linux/tipc_sockets_diag.h at line 1, linux/tps6594_pfsm.h at line 1, linux/tty.h at line 1, linux/tty_flags.h at line 1, linux/types.h at line 1, linux/ublk_cmd.h at line 1, linux/udf_fs_i.h at line 1, linux/udmabuf.h at line 1, linux/ultrasound.h at line 1, linux/un.h at line 1, linux/unistd.h at line 1, linux/unix_diag.h at line 1, linux/usb/audio.h at line 1, linux/usb/cdc-wdm.h at line 1, linux/usb/cdc.h at line 1, linux/usb/ch11.h at line 1, linux/usb/ch9.h at line 1, linux/usb/functionfs.h at line 1, linux/usb/gadgetfs.h at line 1, linux/usb/midi.h at line 1, linux/usb/raw_gadget.h at line 1, linux/usb/tmc.h at line 1, linux/usb/video.h at line 1, linux/usbip.h at line 1, linux/user_events.h at line 1, linux/userfaultfd.h at line 1, linux/utime.h at line 1, linux/utsname.h at line 1, linux/uvcvideo.h at line 1, linux/v4l2-dv-timings.h at line 1, linux/v4l2-mediabus.h at line 1, linux/v4l2-subdev.h at line 1, linux/vduse.h at line 1, linux/veth.h at line 1, linux/vfio.h at line 1, linux/vfio_ccw.h at line 1, linux/vfio_zdev.h at line 1, linux/vhost.h at line 1, linux/vhost_types.h at line 1, linux/virtio_gpio.h at line 1, linux/vm_sockets.h at line 1, linux/vm_sockets_diag.h at line 1, linux/vmcore.h at line 1, linux/vsockmon.h at line 1, linux/vt.h at line 1, linux/vtpm_proxy.h at line 1, linux/wait.h at line 1, linux/watch_queue.h at line 1, linux/watchdog.h at line 1, linux/wireless.h at line 1, linux/x25.h at line 1, linux/xattr.h at line 1, linux/xdp_diag.h at line 1, linux/xfrm.h at line 1, linux/xilinx-v4l2-controls.h at line 1, linux/zorro.h at line 1, linux/zorro_ids.h at line 1, misc/fastrpc.h at line 1, misc/pvpanic.h at line 1, mtd/inftl-user.h at line 1, rdma/rdma_netlink.h at line 1, scsi/fc/fc_els.h at line 1, scsi/fc/fc_fs.h at line 1, scsi/fc/fc_gs.h at line 1, scsi/fc/fc_ns.h at line 1, scsi/scsi_bsg_ufs.h at line 1, sound/asoc.h at line 1, sound/compress_offload.h at line 1, sound/firewire.h at line 1, sound/intel/avs/tokens.h at line 1, sound/skl-tplg-interface.h at line 1, sound/snd_ar_tokens.h at line 1, sound/snd_sst_tokens.h at line 1, video/edid.h at line 1, video/uvesafb.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_CONNMARK.h at line 1, _nf/linux/netfilter/xt_DSCP.h at line 1, _nf/linux/netfilter/xt_MARK.h at line 1, _nf/linux/netfilter/xt_RATEEST.h at line 1, _nf/linux/netfilter/xt_TCPMSS.h at line 1, _nf/linux/netfilter_ipv4/ipt_ECN.h at line 1, _nf/linux/netfilter_ipv4/ipt_TTL.h at line 1, _nf/linux/netfilter_ipv6/ip6t_HL.h at line 1, asm-generic/bitsperlong.h at line 1, asm-generic/errno-base.h at line 1, asm-generic/errno.h at line 1, asm-generic/fcntl.h at line 1, asm-generic/int-l64.h at line 1, asm-generic/int-ll64.h at line 1, asm-generic/ioctl.h at line 1, asm-generic/ioctls.h at line 1, asm-generic/ipcbuf.h at line 1, asm-generic/mman-common.h at line 1, asm-generic/mman.h at line 1, asm-generic/msgbuf.h at line 1, asm-generic/param.h at line 1, asm-generic/poll.h at line 1, asm-generic/posix_types.h at line 1, asm-generic/resource.h at line 1, asm-generic/sembuf.h at line 1, asm-generic/setup.h at line 1, asm-generic/shmbuf.h at line 1, asm-generic/siginfo.h at line 1, asm-generic/signal-defs.h at line 1, asm-generic/signal.h at line 1, asm-generic/socket.h at line 1, asm-generic/sockios.h at line 1, asm-generic/stat.h at line 1, asm-generic/statfs.h at line 1, asm-generic/swab.h at line 1, asm-generic/termbits-common.h at line 1, asm-generic/termbits.h at line 1, asm-generic/termios.h at line 1, asm-generic/types.h at line 1, asm-generic/ucontext.h at line 1, asm-generic/unistd.h at line 1, asm/a.out_x86.h at line 1, asm/amd_hsmp_x86.h at line 1, asm/auxvec_arm.h at line 1, asm/auxvec_arm64.h at line 1, asm/auxvec_powerpc.h at line 1, asm/auxvec_x86.h at line 1, asm/bitsperlong_arm64.h at line 1, asm/bitsperlong_powerpc.h at line 1, asm/bitsperlong_x86.h at line 1, asm/boot_x86.h at line 1, asm/bootparam_x86.h at line 1, asm/bootx_powerpc.h at line 1, asm/bpf_perf_event_arm64.h at line 1, asm/byteorder_arm.h at line 1, asm/byteorder_arm64.h at line 1, asm/byteorder_x86.h at line 1, asm/cputable_powerpc.h at line 1, asm/debugreg_x86.h at line 1, asm/e820_x86.h at line 1, asm/eeh_powerpc.h at line 1, asm/errno_powerpc.h at line 1, asm/fcntl_arm.h at line 1, asm/fcntl_arm64.h at line 1, asm/fcntl_powerpc.h at line 1, asm/hw_breakpoint_x86.h at line 1, asm/hwcap2_x86.h at line 1, asm/hwcap_arm.h at line 1, asm/hwcap_arm64.h at line 1, asm/ioctl_powerpc.h at line 1, asm/ioctls_arm.h at line 1, asm/ioctls_powerpc.h at line 1, asm/kvm_arm64.h at line 1, asm/kvm_para_powerpc.h at line 1, asm/kvm_para_x86.h at line 1, asm/kvm_perf_x86.h at line 1, asm/kvm_powerpc.h at line 1, asm/kvm_x86.h at line 1, asm/ldt_x86.h at line 1, asm/mce_x86.h at line 1, asm/mman_arm64.h at line 1, asm/mman_x86.h at line 1, asm/msgbuf_powerpc.h at line 1, asm/msgbuf_x86.h at line 1, asm/msr_x86.h at line 1, asm/papr_pdsm_powerpc.h at line 1, asm/param_arm64.h at line 1, asm/perf_event_powerpc.h at line 1, asm/perf_regs_arm.h at line 1, asm/perf_regs_arm64.h at line 1, asm/perf_regs_powerpc.h at line 1, asm/perf_regs_x86.h at line 1, asm/posix_types_32_x86.h at line 1, asm/posix_types_64_x86.h at line 1, asm/posix_types_arm.h at line 1, asm/posix_types_arm64.h at line 1, asm/posix_types_powerpc.h at line 1, asm/posix_types_x32_x86.h at line 1, asm/posix_types_x86.h at line 1, asm/prctl_x86.h at line 1, asm/processor-flags_x86.h at line 1, asm/ps3fb_powerpc.h at line 1, asm/ptrace-abi_x86.h at line 1, asm/ptrace_arm.h at line 1, asm/ptrace_arm64.h at line 1, asm/ptrace_x86.h at line 1, asm/sembuf_x86.h at line 1, asm/setup_arm.h at line 1, asm/setup_arm64.h at line 1, asm/setup_powerpc.h at line 1, asm/sgx_x86.h at line 1, asm/shmbuf_x86.h at line 1, asm/sigcontext32_x86.h at line 1, asm/sigcontext_arm.h at line 1, asm/sigcontext_arm64.h at line 1, asm/sigcontext_x86.h at line 1, asm/siginfo_x86.h at line 1, asm/signal_arm.h at line 1, asm/signal_arm64.h at line 1, asm/signal_powerpc.h at line 1, asm/signal_x86.h at line 1, asm/stat_arm.h at line 1, asm/stat_x86.h at line 1, asm/statfs_arm.h at line 1, asm/statfs_arm64.h at line 1, asm/statfs_x86.h at line 1, asm/sve_context_arm64.h at line 1, asm/svm_x86.h at line 1, asm/swab_arm.h at line 1, asm/swab_x86.h at line 1, asm/tm_powerpc.h at line 1, asm/types_arm.h at line 1, asm/ucontext_arm64.h at line 1, asm/ucontext_powerpc.h at line 1, asm/ucontext_x86.h at line 1, asm/unistd_arm.h at line 1, asm/unistd_arm64.h at line 1, asm/unistd_x86.h at line 1, asm/vm86_x86.h at line 1, asm/vmx_x86.h at line 1, asm/vsyscall_x86.h at line 1, drm/armada_drm.h at line 1, drm/etnaviv_drm.h at line 1, drm/omap_drm.h at line 1, linux/a.out_x86.h at line 1, linux/acct.h at line 1, linux/acrn.h at line 1, linux/adb.h at line 1, linux/adfs_fs.h at line 1, linux/affs_hardblocks.h at line 1, linux/am437x-vpfe.h at line 1, linux/android/binder.h at line 1, linux/android/binderfs.h at line 1, linux/arcfb.h at line 1, linux/arm_sdei.h at line 1, linux/atalk.h at line 1, linux/atm.h at line 1, linux/atm_eni.h at line 1, linux/atm_he.h at line 1, linux/atm_idt77105.h at line 1, linux/atm_nicstar.h at line 1, linux/atm_tcp.h at line 1, linux/atm_zatm.h at line 1, linux/atmapi.h at line 1, linux/atmarp.h at line 1, linux/atmbr2684.h at line 1, linux/atmclip.h at line 1, linux/atmdev.h at line 1, linux/atmioc.h at line 1, linux/atmlec.h at line 1, linux/atmmpc.h at line 1, linux/atmppp.h at line 1, linux/atmsap.h at line 1, linux/atmsvc.h at line 1, linux/auxvec.h at line 1, linux/ax25.h at line 1, linux/baycom.h at line 1, linux/bcm933xx_hcs.h at line 1, linux/bfs_fs.h at line 1, linux/binfmts.h at line 1, linux/blkpg.h at line 1, linux/blktrace_api.h at line 1, linux/blkzoned.h at line 1, linux/bpf.h at line 1, linux/bpf_common.h at line 1, linux/bpf_perf_event.h at line 1, linux/bpfilter.h at line 1, linux/bpqether.h at line 1, linux/bsg.h at line 1, linux/btf.h at line 1, linux/btrfs.h at line 1, linux/btrfs_tree.h at line 1, linux/byteorder/big_endian.h at line 1, linux/byteorder/little_endian.h at line 1, linux/cachefiles.h at line 1, linux/caif/caif_socket.h at line 1, linux/caif/if_caif.h at line 1, linux/capability.h at line 1, linux/capi.h at line 1, linux/cciss_defs.h at line 1, linux/cciss_ioctl.h at line 1, linux/cdrom.h at line 1, linux/chio.h at line 1, linux/close_range.h at line 1, linux/coff.h at line 1, linux/const.h at line 1, linux/coresight-stm.h at line 1, linux/counter.h at line 1, linux/cramfs_fs.h at line 1, linux/cryptouser.h at line 1, linux/cuda.h at line 1, linux/cxl_mem.h at line 1, linux/cyclades.h at line 1, linux/dcbnl.h at line 1, linux/dccp.h at line 1, linux/dlm.h at line 1, linux/dlm_device.h at line 1, linux/dlm_plock.h at line 1, linux/dlmconstants.h at line 1, linux/dma-buf.h at line 1, linux/dma-heap.h at line 1, linux/edd.h at line 1, linux/efs_fs_sb.h at line 1, linux/elf-em.h at line 1, linux/elf.h at line 1, linux/errqueue.h at line 1, linux/erspan.h at line 1, linux/ethtool.h at line 1, linux/eventfd.h at line 1, linux/ext4.h at line 1, linux/f2fs.h at line 1, linux/fadvise.h at line 1, linux/falloc.h at line 1, linux/fanotify.h at line 1, linux/fb.h at line 1, linux/fcntl.h at line 1, linux/fd.h at line 1, linux/fdreg.h at line 1, linux/fib_rules.h at line 1, linux/fiemap.h at line 1, linux/filter.h at line 1, linux/fpga-dfl.h at line 1, linux/fs.h at line 1, linux/fscrypt.h at line 1, linux/fsl_mc.h at line 1, linux/fsmap.h at line 1, linux/fsverity.h at line 1, linux/futex.h at line 1, linux/gameport.h at line 1, linux/gen_stats.h at line 1, linux/genetlink.h at line 1, linux/genwqe/genwqe_card.h at line 1, linux/gfs2_ondisk.h at line 1, linux/gsmmux.h at line 1, linux/gtp.h at line 1, linux/hdlc.h at line 1, linux/hdlc/ioctl.h at line 1, linux/hdlcdrv.h at line 1, linux/hdreg.h at line 1, linux/hidraw.h at line 1, linux/hpet.h at line 1, linux/hsi/cs-protocol.h at line 1, linux/hsi/hsi_char.h at line 1, linux/hw_breakpoint.h at line 1, linux/hyperv.h at line 1, linux/icmpv6.h at line 1, linux/if_addr.h at line 1, linux/if_addrlabel.h at line 1, linux/if_eql.h at line 1, linux/if_link.h at line 1, linux/if_ltalk.h at line 1, linux/if_packet.h at line 1, linux/if_phonet.h at line 1, linux/if_slip.h at line 1, linux/if_tunnel.h at line 1, linux/if_xdp.h at line 1, linux/ife.h at line 1, linux/iio/buffer.h at line 1, linux/iio/events.h at line 1, linux/iio/types.h at line 1, linux/ila.h at line 1, linux/in_route.h at line 1, linux/inet_diag.h at line 1, linux/inotify.h at line 1, linux/input.h at line 1, linux/ioctl.h at line 1, linux/iommu.h at line 1, linux/iommufd.h at line 1, linux/ioprio.h at line 1, linux/ip6_tunnel.h at line 1, linux/ip_vs.h at line 1, linux/ipc.h at line 1, linux/ipmi_bmc.h at line 1, linux/ipsec.h at line 1, linux/ipv6.h at line 1, linux/isdn/capicmd.h at line 1, linux/iso_fs.h at line 1, linux/isst_if.h at line 1, linux/kcm.h at line 1, linux/kcmp.h at line 1, linux/kcov.h at line 1, linux/kd.h at line 1, linux/kdev_t.h at line 1, linux/kernel-page-flags.h at line 1, linux/kernel.h at line 1, linux/kernelcapi.h at line 1, linux/kexec.h at line 1, linux/keyboard.h at line 1, linux/kvm_arm64.h at line 1, linux/kvm_para.h at line 1, linux/kvm_powerpc.h at line 1, linux/kvm_x86.h at line 1, linux/l2tp.h at line 1, linux/landlock.h at line 1, linux/libc-compat.h at line 1, linux/limits.h at line 1, linux/lirc.h at line 1, linux/loadpin.h at line 1, linux/lp.h at line 1, linux/lwtunnel.h at line 1, linux/magic.h at line 1, linux/major.h at line 1, linux/matroxfb.h at line 1, linux/max2175.h at line 1, linux/mctp.h at line 1, linux/mdio.h at line 1, linux/media-bus-format.h at line 1, linux/media.h at line 1, linux/mei_uuid.h at line 1, linux/memfd.h at line 1, linux/mempolicy.h at line 1, linux/mii.h at line 1, linux/minix_fs.h at line 1, linux/misc/bcm_vk.h at line 1, linux/mman.h at line 1, linux/mmc/ioctl.h at line 1, linux/mmtimer.h at line 1, linux/module.h at line 1, linux/mpls.h at line 1, linux/mroute.h at line 1, linux/mroute6.h at line 1, linux/msdos_fs.h at line 1, linux/msg.h at line 1, linux/mtio.h at line 1, linux/nbd-netlink.h at line 1, linux/neighbour.h at line 1, linux/net_dropmon.h at line 1, linux/net_namespace.h at line 1, linux/net_tstamp.h at line 1, linux/netconf.h at line 1, linux/netfilter.h at line 1, linux/netfilter/ipset/ip_set.h at line 1, linux/netfilter/ipset/ip_set_bitmap.h at line 1, linux/netfilter/ipset/ip_set_hash.h at line 1, linux/netfilter/ipset/ip_set_list.h at line 1, linux/netfilter/nf_conntrack_common.h at line 1, linux/netfilter/nf_conntrack_ftp.h at line 1, linux/netfilter/nf_conntrack_sctp.h at line 1, linux/netfilter/nf_conntrack_tcp.h at line 1, linux/netfilter/nf_conntrack_tuple_common.h at line 1, linux/netfilter/nf_log.h at line 1, linux/netfilter/nf_nat.h at line 1, linux/netfilter/nf_synproxy.h at line 1, linux/netfilter/nf_tables.h at line 1, linux/netfilter/nf_tables_compat.h at line 1, linux/netfilter/nfnetlink.h at line 1, linux/netfilter/nfnetlink_acct.h at line 1, linux/netfilter/nfnetlink_compat.h at line 1, linux/netfilter/nfnetlink_conntrack.h at line 1, linux/netfilter/nfnetlink_cthelper.h at line 1, linux/netfilter/nfnetlink_cttimeout.h at line 1, linux/netfilter/nfnetlink_hook.h at line 1, linux/netfilter/nfnetlink_log.h at line 1, linux/netfilter/nfnetlink_queue.h at line 1, linux/netfilter/x_tables.h at line 1, linux/netfilter/xt_AUDIT.h at line 1, linux/netfilter/xt_CHECKSUM.h at line 1, linux/netfilter/xt_CLASSIFY.h at line 1, linux/netfilter/xt_CONNSECMARK.h at line 1, linux/netfilter/xt_CT.h at line 1, linux/netfilter/xt_HMARK.h at line 1, linux/netfilter/xt_LED.h at line 1, linux/netfilter/xt_LOG.h at line 1, linux/netfilter/xt_NFLOG.h at line 1, linux/netfilter/xt_NFQUEUE.h at line 1, linux/netfilter/xt_SECMARK.h at line 1, linux/netfilter/xt_SYNPROXY.h at line 1, linux/netfilter/xt_TCPOPTSTRIP.h at line 1, linux/netfilter/xt_TEE.h at line 1, linux/netfilter/xt_TPROXY.h at line 1, linux/netfilter/xt_addrtype.h at line 1, linux/netfilter/xt_bpf.h at line 1, linux/netfilter/xt_cgroup.h at line 1, linux/netfilter/xt_cluster.h at line 1, linux/netfilter/xt_comment.h at line 1, linux/netfilter/xt_connbytes.h at line 1, linux/netfilter/xt_connlabel.h at line 1, linux/netfilter/xt_connlimit.h at line 1, linux/netfilter/xt_cpu.h at line 1, linux/netfilter/xt_dccp.h at line 1, linux/netfilter/xt_devgroup.h at line 1, linux/netfilter/xt_dscp.h at line 1, linux/netfilter/xt_ecn.h at line 1, linux/netfilter/xt_esp.h at line 1, linux/netfilter/xt_hashlimit.h at line 1, linux/netfilter/xt_helper.h at line 1, linux/netfilter/xt_ipcomp.h at line 1, linux/netfilter/xt_iprange.h at line 1, linux/netfilter/xt_ipvs.h at line 1, linux/netfilter/xt_l2tp.h at line 1, linux/netfilter/xt_length.h at line 1, linux/netfilter/xt_limit.h at line 1, linux/netfilter/xt_mac.h at line 1, linux/netfilter/xt_mark.h at line 1, linux/netfilter/xt_multiport.h at line 1, linux/netfilter/xt_nfacct.h at line 1, linux/netfilter/xt_owner.h at line 1, linux/netfilter/xt_physdev.h at line 1, linux/netfilter/xt_pkttype.h at line 1, linux/netfilter/xt_policy.h at line 1, linux/netfilter/xt_quota.h at line 1, linux/netfilter/xt_rateest.h at line 1, linux/netfilter/xt_realm.h at line 1, linux/netfilter/xt_recent.h at line 1, linux/netfilter/xt_rpfilter.h at line 1, linux/netfilter/xt_sctp.h at line 1, linux/netfilter/xt_set.h at line 1, linux/netfilter/xt_socket.h at line 1, linux/netfilter/xt_state.h at line 1, linux/netfilter/xt_statistic.h at line 1, linux/netfilter/xt_string.h at line 1, linux/netfilter/xt_tcpmss.h at line 1, linux/netfilter/xt_tcpudp.h at line 1, linux/netfilter/xt_time.h at line 1, linux/netfilter/xt_u32.h at line 1, linux/netfilter_arp/arp_tables.h at line 1, linux/netfilter_arp/arpt_mangle.h at line 1, linux/netfilter_bridge.h at line 1, linux/netfilter_bridge/ebt_802_3.h at line 1, linux/netfilter_bridge/ebt_among.h at line 1, linux/netfilter_bridge/ebt_arp.h at line 1, linux/netfilter_bridge/ebt_arpreply.h at line 1, linux/netfilter_bridge/ebt_ip.h at line 1, linux/netfilter_bridge/ebt_ip6.h at line 1, linux/netfilter_bridge/ebt_limit.h at line 1, linux/netfilter_bridge/ebt_log.h at line 1, linux/netfilter_bridge/ebt_mark_m.h at line 1, linux/netfilter_bridge/ebt_mark_t.h at line 1, linux/netfilter_bridge/ebt_nat.h at line 1, linux/netfilter_bridge/ebt_nflog.h at line 1, linux/netfilter_bridge/ebt_pkttype.h at line 1, linux/netfilter_bridge/ebt_redirect.h at line 1, linux/netfilter_bridge/ebt_stp.h at line 1, linux/netfilter_bridge/ebt_vlan.h at line 1, linux/netfilter_bridge/ebtables.h at line 1, linux/netfilter_ipv4.h at line 1, linux/netfilter_ipv4/ip_tables.h at line 1, linux/netfilter_ipv4/ipt_CLUSTERIP.h at line 1, linux/netfilter_ipv4/ipt_LOG.h at line 1, linux/netfilter_ipv4/ipt_REJECT.h at line 1, linux/netfilter_ipv4/ipt_ah.h at line 1, linux/netfilter_ipv4/ipt_ecn.h at line 1, linux/netfilter_ipv4/ipt_ttl.h at line 1, linux/netfilter_ipv6.h at line 1, linux/netfilter_ipv6/ip6_tables.h at line 1, linux/netfilter_ipv6/ip6t_LOG.h at line 1, linux/netfilter_ipv6/ip6t_NPT.h at line 1, linux/netfilter_ipv6/ip6t_REJECT.h at line 1, linux/netfilter_ipv6/ip6t_ah.h at line 1, linux/netfilter_ipv6/ip6t_frag.h at line 1, linux/netfilter_ipv6/ip6t_hl.h at line 1, linux/netfilter_ipv6/ip6t_ipv6header.h at line 1, linux/netfilter_ipv6/ip6t_mh.h at line 1, linux/netfilter_ipv6/ip6t_opts.h at line 1, linux/netfilter_ipv6/ip6t_rt.h at line 1, linux/netfilter_ipv6/ip6t_srh.h at line 1, linux/netlink.h at line 1, linux/netlink_diag.h at line 1, linux/netrom.h at line 1, linux/nexthop.h at line 1, linux/nfs.h at line 1, linux/nfs2.h at line 1, linux/nfs3.h at line 1, linux/nfs4.h at line 1, linux/nfs4_mount.h at line 1, linux/nfs_fs.h at line 1, linux/nfs_mount.h at line 1, linux/nfsacl.h at line 1, linux/nfsd/debug.h at line 1, linux/nfsd/export.h at line 1, linux/nfsd/stats.h at line 1, linux/nitro_enclaves.h at line 1, linux/nl80211-vnd-intel.h at line 1, linux/nsfs.h at line 1, linux/nubus.h at line 1, linux/nvme_ioctl.h at line 1, linux/nvram.h at line 1, linux/omap3isp.h at line 1, linux/oom.h at line 1, linux/openat2.h at line 1, linux/openvswitch.h at line 1, linux/packet_diag.h at line 1, linux/param.h at line 1, linux/patchkey.h at line 1, linux/pci.h at line 1, linux/pci_regs.h at line 1, linux/pcitest.h at line 1, linux/perf_event.h at line 1, linux/personality.h at line 1, linux/pfkeyv2.h at line 1, linux/pfrut.h at line 1, linux/phonet.h at line 1, linux/pidfd.h at line 1, linux/pkt_cls.h at line 1, linux/pkt_sched.h at line 1, linux/pktcdvd.h at line 1, linux/pmu.h at line 1, linux/posix_types.h at line 1, linux/ppp-comp.h at line 1, linux/ppp-ioctl.h at line 1, linux/ppp_defs.h at line 1, linux/pr.h at line 1, linux/prctl.h at line 1, linux/psample.h at line 1, linux/psci.h at line 1, linux/ptrace.h at line 1, linux/qnx4_fs.h at line 1, linux/qnxtypes.h at line 1, linux/qrtr.h at line 1, linux/radeonfb.h at line 1, linux/random.h at line 1, linux/reboot.h at line 1, linux/reiserfs_fs.h at line 1, linux/reiserfs_xattr.h at line 1, linux/resource.h at line 1, linux/romfs_fs.h at line 1, linux/rose.h at line 1, linux/rpmsg.h at line 1, linux/rpmsg_types.h at line 1, linux/rtc.h at line 1, linux/rtnetlink.h at line 1, linux/scc.h at line 1, linux/sched.h at line 1, linux/sched/types.h at line 1, linux/screen_info.h at line 1, linux/seccomp.h at line 1, linux/securebits.h at line 1, linux/sed-opal.h at line 1, linux/seg6_genl.h at line 1, linux/seg6_hmac.h at line 1, linux/selinux_netlink.h at line 1, linux/sem.h at line 1, linux/serio.h at line 1, linux/shm.h at line 1, linux/signal.h at line 1, linux/signalfd.h at line 1, linux/smc.h at line 1, linux/smc_diag.h at line 1, linux/smiapp.h at line 1, linux/snmp.h at line 1, linux/sock_diag.h at line 1, linux/socket.h at line 1, linux/sonet.h at line 1, linux/sound.h at line 1, linux/stat.h at line 1, linux/stddef.h at line 1, linux/stm.h at line 1, linux/string.h at line 1, linux/sunrpc/debug.h at line 1, linux/suspend_ioctls.h at line 1, linux/swab.h at line 1, linux/switchtec_ioctl.h at line 1, linux/sysctl.h at line 1, linux/sysinfo.h at line 1, linux/target_core_user.h at line 1, linux/tc_act/tc_connmark.h at line 1, linux/tc_act/tc_csum.h at line 1, linux/tc_act/tc_ct.h at line 1, linux/tc_act/tc_ctinfo.h at line 1, linux/tc_act/tc_defact.h at line 1, linux/tc_act/tc_gact.h at line 1, linux/tc_act/tc_ife.h at line 1, linux/tc_act/tc_ipt.h at line 1, linux/tc_act/tc_mirred.h at line 1, linux/tc_act/tc_mpls.h at line 1, linux/tc_act/tc_nat.h at line 1, linux/tc_act/tc_pedit.h at line 1, linux/tc_act/tc_sample.h at line 1, linux/tc_act/tc_skbedit.h at line 1, linux/tc_ematch/tc_em_cmp.h at line 1, linux/tc_ematch/tc_em_ipt.h at line 1, linux/tc_ematch/tc_em_meta.h at line 1, linux/tc_ematch/tc_em_nbyte.h at line 1, linux/tc_ematch/tc_em_text.h at line 1, linux/tcp_metrics.h at line 1, linux/tdx-guest.h at line 1, linux/termios.h at line 1, linux/thermal.h at line 1, linux/time.h at line 1, linux/time_types.h at line 1, linux/timerfd.h at line 1, linux/times.h at line 1, linux/tiocl.h at line 1, linux/tipc_sockets_diag.h at line 1, linux/tps6594_pfsm.h at line 1, linux/tty.h at line 1, linux/tty_flags.h at line 1, linux/types.h at line 1, linux/ublk_cmd.h at line 1, linux/udf_fs_i.h at line 1, linux/udmabuf.h at line 1, linux/ultrasound.h at line 1, linux/un.h at line 1, linux/unistd.h at line 1, linux/unix_diag.h at line 1, linux/usb/audio.h at line 1, linux/usb/cdc-wdm.h at line 1, linux/usb/cdc.h at line 1, linux/usb/ch11.h at line 1, linux/usb/ch9.h at line 1, linux/usb/functionfs.h at line 1, linux/usb/gadgetfs.h at line 1, linux/usb/midi.h at line 1, linux/usb/raw_gadget.h at line 1, linux/usb/tmc.h at line 1, linux/usb/video.h at line 1, linux/usbip.h at line 1, linux/user_events.h at line 1, linux/userfaultfd.h at line 1, linux/utime.h at line 1, linux/utsname.h at line 1, linux/uvcvideo.h at line 1, linux/v4l2-dv-timings.h at line 1, linux/v4l2-mediabus.h at line 1, linux/v4l2-subdev.h at line 1, linux/vduse.h at line 1, linux/veth.h at line 1, linux/vfio.h at line 1, linux/vfio_ccw.h at line 1, linux/vfio_zdev.h at line 1, linux/vhost.h at line 1, linux/vhost_types.h at line 1, linux/virtio_gpio.h at line 1, linux/vm_sockets.h at line 1, linux/vm_sockets_diag.h at line 1, linux/vmcore.h at line 1, linux/vsockmon.h at line 1, linux/vt.h at line 1, linux/vtpm_proxy.h at line 1, linux/wait.h at line 1, linux/watch_queue.h at line 1, linux/watchdog.h at line 1, linux/wireless.h at line 1, linux/x25.h at line 1, linux/xattr.h at line 1, linux/xdp_diag.h at line 1, linux/xfrm.h at line 1, linux/xilinx-v4l2-controls.h at line 1, linux/zorro.h at line 1, linux/zorro_ids.h at line 1, misc/fastrpc.h at line 1, misc/pvpanic.h at line 1, mtd/inftl-user.h at line 1, rdma/rdma_netlink.h at line 1, scsi/fc/fc_els.h at line 1, scsi/fc/fc_fs.h at line 1, scsi/fc/fc_gs.h at line 1, scsi/fc/fc_ns.h at line 1, scsi/scsi_bsg_ufs.h at line 1, sound/asoc.h at line 1, sound/compress_offload.h at line 1, sound/firewire.h at line 1, sound/intel/avs/tokens.h at line 1, sound/skl-tplg-interface.h at line 1, sound/snd_ar_tokens.h at line 1, sound/snd_sst_tokens.h at line 1, video/edid.h at line 1, video/uvesafb.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: _nf/linux/netfilter/xt_CONNMARK.h at line 1, _nf/linux/netfilter/xt_DSCP.h at line 1, _nf/linux/netfilter/xt_MARK.h at line 1, _nf/linux/netfilter/xt_RATEEST.h at line 1, _nf/linux/netfilter/xt_TCPMSS.h at line 1, _nf/linux/netfilter_ipv4/ipt_ECN.h at line 1, _nf/linux/netfilter_ipv4/ipt_TTL.h at line 1, _nf/linux/netfilter_ipv6/ip6t_HL.h at line 1, asm-generic/bitsperlong.h at line 1, asm-generic/errno-base.h at line 1, asm-generic/errno.h at line 1, asm-generic/fcntl.h at line 1, asm-generic/int-l64.h at line 1, asm-generic/int-ll64.h at line 1, asm-generic/ioctl.h at line 1, asm-generic/ioctls.h at line 1, asm-generic/ipcbuf.h at line 1, asm-generic/mman-common.h at line 1, asm-generic/mman.h at line 1, asm-generic/msgbuf.h at line 1, asm-generic/param.h at line 1, asm-generic/poll.h at line 1, asm-generic/posix_types.h at line 1, asm-generic/resource.h at line 1, asm-generic/sembuf.h at line 1, asm-generic/setup.h at line 1, asm-generic/shmbuf.h at line 1, asm-generic/siginfo.h at line 1, asm-generic/signal-defs.h at line 1, asm-generic/signal.h at line 1, asm-generic/socket.h at line 1, asm-generic/sockios.h at line 1, asm-generic/stat.h at line 1, asm-generic/statfs.h at line 1, asm-generic/swab.h at line 1, asm-generic/termbits-common.h at line 1, asm-generic/termbits.h at line 1, asm-generic/termios.h at line 1, asm-generic/types.h at line 1, asm-generic/ucontext.h at line 1, asm-generic/unistd.h at line 1, asm/a.out_x86.h at line 1, asm/amd_hsmp_x86.h at line 1, asm/auxvec_arm.h at line 1, asm/auxvec_arm64.h at line 1, asm/auxvec_powerpc.h at line 1, asm/auxvec_x86.h at line 1, asm/bitsperlong_arm64.h at line 1, asm/bitsperlong_powerpc.h at line 1, asm/bitsperlong_x86.h at line 1, asm/boot_x86.h at line 1, asm/bootparam_x86.h at line 1, asm/bootx_powerpc.h at line 1, asm/bpf_perf_event_arm64.h at line 1, asm/byteorder_arm.h at line 1, asm/byteorder_arm64.h at line 1, asm/byteorder_x86.h at line 1, asm/cputable_powerpc.h at line 1, asm/debugreg_x86.h at line 1, asm/e820_x86.h at line 1, asm/eeh_powerpc.h at line 1, asm/elf_x86.h at line 1, asm/errno_powerpc.h at line 1, asm/fcntl_arm.h at line 1, asm/fcntl_arm64.h at line 1, asm/fcntl_powerpc.h at line 1, asm/hw_breakpoint_x86.h at line 1, asm/hwcap2_x86.h at line 1, asm/hwcap_arm.h at line 1, asm/hwcap_arm64.h at line 1, asm/ioctl_powerpc.h at line 1, asm/ioctls_arm.h at line 1, asm/ioctls_powerpc.h at line 1, asm/kvm_arm64.h at line 1, asm/kvm_para_powerpc.h at line 1, asm/kvm_para_x86.h at line 1, asm/kvm_perf_x86.h at line 1, asm/kvm_powerpc.h at line 1, asm/kvm_x86.h at line 1, asm/ldt_x86.h at line 1, asm/mce_x86.h at line 1, asm/mman_arm64.h at line 1, asm/mman_x86.h at line 1, asm/msgbuf_powerpc.h at line 1, asm/msgbuf_x86.h at line 1, asm/msr_x86.h at line 1, asm/papr-indices_powerpc.h at line 1, asm/papr-miscdev_powerpc.h at line 1, asm/papr-physical-attestation_powerpc.h at line 1, asm/papr-platform-dump_powerpc.h at line 1, asm/papr-sysparm_powerpc.h at line 1, asm/papr-vpd_powerpc.h at line 1, asm/param_arm64.h at line 1, asm/perf_event_powerpc.h at line 1, asm/perf_regs_arm.h at line 1, asm/perf_regs_arm64.h at line 1, asm/perf_regs_powerpc.h at line 1, asm/perf_regs_x86.h at line 1, asm/posix_types_32_x86.h at line 1, asm/posix_types_64_x86.h at line 1, asm/posix_types_arm.h at line 1, asm/posix_types_arm64.h at line 1, asm/posix_types_powerpc.h at line 1, asm/posix_types_x32_x86.h at line 1, asm/posix_types_x86.h at line 1, asm/prctl_x86.h at line 1, asm/processor-flags_x86.h at line 1, asm/ps3fb_powerpc.h at line 1, asm/ptrace-abi_x86.h at line 1, asm/ptrace_arm.h at line 1, asm/ptrace_arm64.h at line 1, asm/ptrace_x86.h at line 1, asm/sembuf_x86.h at line 1, asm/setup_arm.h at line 1, asm/setup_arm64.h at line 1, asm/setup_data_x86.h at line 1, asm/setup_powerpc.h at line 1, asm/sgx_x86.h at line 1, asm/shmbuf_x86.h at line 1, asm/sigcontext32_x86.h at line 1, asm/sigcontext_arm.h at line 1, asm/sigcontext_arm64.h at line 1, asm/sigcontext_x86.h at line 1, asm/siginfo_x86.h at line 1, asm/signal_arm.h at line 1, asm/signal_arm64.h at line 1, asm/signal_powerpc.h at line 1, asm/signal_x86.h at line 1, asm/stat_arm.h at line 1, asm/stat_x86.h at line 1, asm/statfs_arm.h at line 1, asm/statfs_arm64.h at line 1, asm/statfs_x86.h at line 1, asm/sve_context_arm64.h at line 1, asm/svm_x86.h at line 1, asm/swab_arm.h at line 1, asm/swab_x86.h at line 1, asm/tm_powerpc.h at line 1, asm/types_arm.h at line 1, asm/ucontext_arm64.h at line 1, asm/ucontext_powerpc.h at line 1, asm/ucontext_x86.h at line 1, asm/unistd_arm.h at line 1, asm/unistd_arm64.h at line 1, asm/unistd_x86.h at line 1, asm/vm86_x86.h at line 1, asm/vmx_x86.h at line 1, asm/vsyscall_x86.h at line 1, cxl/features.h at line 1, drm/amdxdna_accel.h at line 1, drm/armada_drm.h at line 1, drm/etnaviv_drm.h at line 1, drm/omap_drm.h at line 1, fwctl/cxl.h at line 1, fwctl/fwctl.h at line 1, fwctl/mlx5.h at line 1, fwctl/pds.h at line 1, linux/a.out_x86.h at line 1, linux/acct.h at line 1, linux/acrn.h at line 1, linux/adb.h at line 1, linux/adfs_fs.h at line 1, linux/affs_hardblocks.h at line 1, linux/am437x-vpfe.h at line 1, linux/android/binder.h at line 1, linux/android/binderfs.h at line 1, linux/arcfb.h at line 1, linux/arm_sdei.h at line 1, linux/atalk.h at line 1, linux/atm.h at line 1, linux/atm_eni.h at line 1, linux/atm_he.h at line 1, linux/atm_idt77105.h at line 1, linux/atm_nicstar.h at line 1, linux/atm_tcp.h at line 1, linux/atm_zatm.h at line 1, linux/atmapi.h at line 1, linux/atmarp.h at line 1, linux/atmbr2684.h at line 1, linux/atmclip.h at line 1, linux/atmdev.h at line 1, linux/atmioc.h at line 1, linux/atmlec.h at line 1, linux/atmmpc.h at line 1, linux/atmppp.h at line 1, linux/atmsap.h at line 1, linux/atmsvc.h at line 1, linux/auxvec.h at line 1, linux/ax25.h at line 1, linux/baycom.h at line 1, linux/bcm933xx_hcs.h at line 1, linux/bfs_fs.h at line 1, linux/binfmts.h at line 1, linux/bits.h at line 1, linux/blk-crypto.h at line 1, linux/blkdev.h at line 1, linux/blkpg.h at line 1, linux/blktrace_api.h at line 1, linux/blkzoned.h at line 1, linux/bpf.h at line 1, linux/bpf_common.h at line 1, linux/bpf_perf_event.h at line 1, linux/bpqether.h at line 1, linux/bsg.h at line 1, linux/btf.h at line 1, linux/btrfs.h at line 1, linux/btrfs_tree.h at line 1, linux/byteorder/big_endian.h at line 1, linux/byteorder/little_endian.h at line 1, linux/cachefiles.h at line 1, linux/caif/caif_socket.h at line 1, linux/caif/if_caif.h at line 1, linux/capability.h at line 1, linux/capi.h at line 1, linux/cciss_defs.h at line 1, linux/cciss_ioctl.h at line 1, linux/cdrom.h at line 1, linux/chio.h at line 1, linux/close_range.h at line 1, linux/coff.h at line 1, linux/const.h at line 1, linux/coresight-stm.h at line 1, linux/counter.h at line 1, linux/counter/microchip-tcb-capture.h at line 1, linux/cramfs_fs.h at line 1, linux/cryptouser.h at line 1, linux/cuda.h at line 1, linux/cxl_mem.h at line 1, linux/cyclades.h at line 1, linux/dcbnl.h at line 1, linux/dccp.h at line 1, linux/dlm.h at line 1, linux/dlm_device.h at line 1, linux/dlm_plock.h at line 1, linux/dlmconstants.h at line 1, linux/dma-buf.h at line 1, linux/dma-heap.h at line 1, linux/edd.h at line 1, linux/efs_fs_sb.h at line 1, linux/elf-em.h at line 1, linux/elf.h at line 1, linux/errqueue.h at line 1, linux/erspan.h at line 1, linux/ethtool.h at line 1, linux/eventfd.h at line 1, linux/exfat.h at line 1, linux/ext4.h at line 1, linux/f2fs.h at line 1, linux/fadvise.h at line 1, linux/falloc.h at line 1, linux/fanotify.h at line 1, linux/fb.h at line 1, linux/fcntl.h at line 1, linux/fd.h at line 1, linux/fdreg.h at line 1, linux/fib_rules.h at line 1, linux/fiemap.h at line 1, linux/filter.h at line 1, linux/fpga-dfl.h at line 1, linux/fs.h at line 1, linux/fscrypt.h at line 1, linux/fsl_mc.h at line 1, linux/fsmap.h at line 1, linux/fsverity.h at line 1, linux/futex.h at line 1, linux/gameport.h at line 1, linux/gen_stats.h at line 1, linux/genetlink.h at line 1, linux/genwqe/genwqe_card.h at line 1, linux/gfs2_ondisk.h at line 1, linux/gsmmux.h at line 1, linux/gtp.h at line 1, linux/hdlc.h at line 1, linux/hdlc/ioctl.h at line 1, linux/hdlcdrv.h at line 1, linux/hdreg.h at line 1, linux/hidraw.h at line 1, linux/hpet.h at line 1, linux/hsi/cs-protocol.h at line 1, linux/hsi/hsi_char.h at line 1, linux/hw_breakpoint.h at line 1, linux/hyperv.h at line 1, linux/icmpv6.h at line 1, linux/if_addr.h at line 1, linux/if_addrlabel.h at line 1, linux/if_eql.h at line 1, linux/if_link.h at line 1, linux/if_ltalk.h at line 1, linux/if_packet.h at line 1, linux/if_phonet.h at line 1, linux/if_slip.h at line 1, linux/if_tunnel.h at line 1, linux/if_xdp.h at line 1, linux/ife.h at line 1, linux/iio/buffer.h at line 1, linux/iio/events.h at line 1, linux/iio/types.h at line 1, linux/ila.h at line 1, linux/in_route.h at line 1, linux/inet_diag.h at line 1, linux/inotify.h at line 1, linux/input.h at line 1, linux/ioctl.h at line 1, linux/iommufd.h at line 1, linux/ioprio.h at line 1, linux/ip6_tunnel.h at line 1, linux/ip_vs.h at line 1, linux/ipc.h at line 1, linux/ipmi_bmc.h at line 1, linux/ipsec.h at line 1, linux/ipv6.h at line 1, linux/isdn/capicmd.h at line 1, linux/iso_fs.h at line 1, linux/isst_if.h at line 1, linux/kcm.h at line 1, linux/kcmp.h at line 1, linux/kcov.h at line 1, linux/kd.h at line 1, linux/kdev_t.h at line 1, linux/kernel-page-flags.h at line 1, linux/kernel.h at line 1, linux/kernelcapi.h at line 1, linux/kexec.h at line 1, linux/keyboard.h at line 1, linux/kvm_arm64.h at line 1, linux/kvm_para.h at line 1, linux/kvm_powerpc.h at line 1, linux/kvm_x86.h at line 1, linux/l2tp.h at line 1, linux/landlock.h at line 1, linux/libc-compat.h at line 1, linux/limits.h at line 1, linux/lirc.h at line 1, linux/loadpin.h at line 1, linux/lp.h at line 1, linux/lsm.h at line 1, linux/lwtunnel.h at line 1, linux/magic.h at line 1, linux/major.h at line 1, linux/matroxfb.h at line 1, linux/max2175.h at line 1, linux/mctp.h at line 1, linux/mdio.h at line 1, linux/media-bus-format.h at line 1, linux/media.h at line 1, linux/mei_uuid.h at line 1, linux/memfd.h at line 1, linux/mempolicy.h at line 1, linux/mii.h at line 1, linux/minix_fs.h at line 1, linux/misc/bcm_vk.h at line 1, linux/mman.h at line 1, linux/mmc/ioctl.h at line 1, linux/mmtimer.h at line 1, linux/module.h at line 1, linux/mpls.h at line 1, linux/mroute.h at line 1, linux/mroute6.h at line 1, linux/msdos_fs.h at line 1, linux/msg.h at line 1, linux/mshv.h at line 1, linux/mtio.h at line 1, linux/nbd-netlink.h at line 1, linux/neighbour.h at line 1, linux/net_dropmon.h at line 1, linux/net_namespace.h at line 1, linux/net_tstamp.h at line 1, linux/netconf.h at line 1, linux/netfilter.h at line 1, linux/netfilter/ipset/ip_set.h at line 1, linux/netfilter/ipset/ip_set_bitmap.h at line 1, linux/netfilter/ipset/ip_set_hash.h at line 1, linux/netfilter/ipset/ip_set_list.h at line 1, linux/netfilter/nf_conntrack_common.h at line 1, linux/netfilter/nf_conntrack_ftp.h at line 1, linux/netfilter/nf_conntrack_sctp.h at line 1, linux/netfilter/nf_conntrack_tcp.h at line 1, linux/netfilter/nf_conntrack_tuple_common.h at line 1, linux/netfilter/nf_log.h at line 1, linux/netfilter/nf_nat.h at line 1, linux/netfilter/nf_synproxy.h at line 1, linux/netfilter/nf_tables.h at line 1, linux/netfilter/nf_tables_compat.h at line 1, linux/netfilter/nfnetlink.h at line 1, linux/netfilter/nfnetlink_acct.h at line 1, linux/netfilter/nfnetlink_compat.h at line 1, linux/netfilter/nfnetlink_conntrack.h at line 1, linux/netfilter/nfnetlink_cthelper.h at line 1, linux/netfilter/nfnetlink_cttimeout.h at line 1, linux/netfilter/nfnetlink_hook.h at line 1, linux/netfilter/nfnetlink_log.h at line 1, linux/netfilter/nfnetlink_queue.h at line 1, linux/netfilter/x_tables.h at line 1, linux/netfilter/xt_AUDIT.h at line 1, linux/netfilter/xt_CHECKSUM.h at line 1, linux/netfilter/xt_CLASSIFY.h at line 1, linux/netfilter/xt_CONNSECMARK.h at line 1, linux/netfilter/xt_CT.h at line 1, linux/netfilter/xt_HMARK.h at line 1, linux/netfilter/xt_LED.h at line 1, linux/netfilter/xt_LOG.h at line 1, linux/netfilter/xt_NFLOG.h at line 1, linux/netfilter/xt_NFQUEUE.h at line 1, linux/netfilter/xt_SECMARK.h at line 1, linux/netfilter/xt_SYNPROXY.h at line 1, linux/netfilter/xt_TCPOPTSTRIP.h at line 1, linux/netfilter/xt_TEE.h at line 1, linux/netfilter/xt_TPROXY.h at line 1, linux/netfilter/xt_addrtype.h at line 1, linux/netfilter/xt_bpf.h at line 1, linux/netfilter/xt_cgroup.h at line 1, linux/netfilter/xt_cluster.h at line 1, linux/netfilter/xt_comment.h at line 1, linux/netfilter/xt_connbytes.h at line 1, linux/netfilter/xt_connlabel.h at line 1, linux/netfilter/xt_connlimit.h at line 1, linux/netfilter/xt_cpu.h at line 1, linux/netfilter/xt_dccp.h at line 1, linux/netfilter/xt_devgroup.h at line 1, linux/netfilter/xt_dscp.h at line 1, linux/netfilter/xt_ecn.h at line 1, linux/netfilter/xt_esp.h at line 1, linux/netfilter/xt_hashlimit.h at line 1, linux/netfilter/xt_helper.h at line 1, linux/netfilter/xt_ipcomp.h at line 1, linux/netfilter/xt_iprange.h at line 1, linux/netfilter/xt_ipvs.h at line 1, linux/netfilter/xt_l2tp.h at line 1, linux/netfilter/xt_length.h at line 1, linux/netfilter/xt_limit.h at line 1, linux/netfilter/xt_mac.h at line 1, linux/netfilter/xt_mark.h at line 1, linux/netfilter/xt_multiport.h at line 1, linux/netfilter/xt_nfacct.h at line 1, linux/netfilter/xt_owner.h at line 1, linux/netfilter/xt_physdev.h at line 1, linux/netfilter/xt_pkttype.h at line 1, linux/netfilter/xt_policy.h at line 1, linux/netfilter/xt_quota.h at line 1, linux/netfilter/xt_rateest.h at line 1, linux/netfilter/xt_realm.h at line 1, linux/netfilter/xt_recent.h at line 1, linux/netfilter/xt_rpfilter.h at line 1, linux/netfilter/xt_sctp.h at line 1, linux/netfilter/xt_set.h at line 1, linux/netfilter/xt_socket.h at line 1, linux/netfilter/xt_state.h at line 1, linux/netfilter/xt_statistic.h at line 1, linux/netfilter/xt_string.h at line 1, linux/netfilter/xt_tcpmss.h at line 1, linux/netfilter/xt_tcpudp.h at line 1, linux/netfilter/xt_time.h at line 1, linux/netfilter/xt_u32.h at line 1, linux/netfilter_arp/arp_tables.h at line 1, linux/netfilter_arp/arpt_mangle.h at line 1, linux/netfilter_bridge.h at line 1, linux/netfilter_bridge/ebt_802_3.h at line 1, linux/netfilter_bridge/ebt_among.h at line 1, linux/netfilter_bridge/ebt_arp.h at line 1, linux/netfilter_bridge/ebt_arpreply.h at line 1, linux/netfilter_bridge/ebt_ip.h at line 1, linux/netfilter_bridge/ebt_ip6.h at line 1, linux/netfilter_bridge/ebt_limit.h at line 1, linux/netfilter_bridge/ebt_log.h at line 1, linux/netfilter_bridge/ebt_mark_m.h at line 1, linux/netfilter_bridge/ebt_mark_t.h at line 1, linux/netfilter_bridge/ebt_nat.h at line 1, linux/netfilter_bridge/ebt_nflog.h at line 1, linux/netfilter_bridge/ebt_pkttype.h at line 1, linux/netfilter_bridge/ebt_redirect.h at line 1, linux/netfilter_bridge/ebt_stp.h at line 1, linux/netfilter_bridge/ebt_vlan.h at line 1, linux/netfilter_bridge/ebtables.h at line 1, linux/netfilter_ipv4.h at line 1, linux/netfilter_ipv4/ip_tables.h at line 1, linux/netfilter_ipv4/ipt_CLUSTERIP.h at line 1, linux/netfilter_ipv4/ipt_LOG.h at line 1, linux/netfilter_ipv4/ipt_REJECT.h at line 1, linux/netfilter_ipv4/ipt_ah.h at line 1, linux/netfilter_ipv4/ipt_ecn.h at line 1, linux/netfilter_ipv4/ipt_ttl.h at line 1, linux/netfilter_ipv6.h at line 1, linux/netfilter_ipv6/ip6_tables.h at line 1, linux/netfilter_ipv6/ip6t_LOG.h at line 1, linux/netfilter_ipv6/ip6t_NPT.h at line 1, linux/netfilter_ipv6/ip6t_REJECT.h at line 1, linux/netfilter_ipv6/ip6t_ah.h at line 1, linux/netfilter_ipv6/ip6t_frag.h at line 1, linux/netfilter_ipv6/ip6t_hl.h at line 1, linux/netfilter_ipv6/ip6t_ipv6header.h at line 1, linux/netfilter_ipv6/ip6t_mh.h at line 1, linux/netfilter_ipv6/ip6t_opts.h at line 1, linux/netfilter_ipv6/ip6t_rt.h at line 1, linux/netfilter_ipv6/ip6t_srh.h at line 1, linux/netlink.h at line 1, linux/netlink_diag.h at line 1, linux/netrom.h at line 1, linux/nexthop.h at line 1, linux/nfs.h at line 1, linux/nfs2.h at line 1, linux/nfs3.h at line 1, linux/nfs4.h at line 1, linux/nfs4_mount.h at line 1, linux/nfs_fs.h at line 1, linux/nfs_mount.h at line 1, linux/nfsacl.h at line 1, linux/nfsd/debug.h at line 1, linux/nfsd/export.h at line 1, linux/nfsd/stats.h at line 1, linux/nitro_enclaves.h at line 1, linux/nl80211-vnd-intel.h at line 1, linux/nsfs.h at line 1, linux/nsm.h at line 1, linux/ntsync.h at line 1, linux/nubus.h at line 1, linux/nvme_ioctl.h at line 1, linux/nvram.h at line 1, linux/omap3isp.h at line 1, linux/oom.h at line 1, linux/openat2.h at line 1, linux/openvswitch.h at line 1, linux/packet_diag.h at line 1, linux/papr_pdsm.h at line 1, linux/param.h at line 1, linux/patchkey.h at line 1, linux/pci.h at line 1, linux/pci_regs.h at line 1, linux/pcitest.h at line 1, linux/perf_event.h at line 1, linux/personality.h at line 1, linux/pfkeyv2.h at line 1, linux/pfrut.h at line 1, linux/phonet.h at line 1, linux/pidfd.h at line 1, linux/pkt_cls.h at line 1, linux/pkt_sched.h at line 1, linux/pktcdvd.h at line 1, linux/pmu.h at line 1, linux/posix_types.h at line 1, linux/ppp-comp.h at line 1, linux/ppp-ioctl.h at line 1, linux/ppp_defs.h at line 1, linux/pps_gen.h at line 1, linux/pr.h at line 1, linux/prctl.h at line 1, linux/psample.h at line 1, linux/psci.h at line 1, linux/ptrace.h at line 1, linux/qnx4_fs.h at line 1, linux/qnxtypes.h at line 1, linux/qrtr.h at line 1, linux/radeonfb.h at line 1, linux/random.h at line 1, linux/reboot.h at line 1, linux/resource.h at line 1, linux/romfs_fs.h at line 1, linux/rose.h at line 1, linux/rpmsg.h at line 1, linux/rpmsg_types.h at line 1, linux/rtc.h at line 1, linux/rtnetlink.h at line 1, linux/scc.h at line 1, linux/sched.h at line 1, linux/sched/types.h at line 1, linux/screen_info.h at line 1, linux/seccomp.h at line 1, linux/securebits.h at line 1, linux/sed-opal.h at line 1, linux/seg6_genl.h at line 1, linux/seg6_hmac.h at line 1, linux/selinux_netlink.h at line 1, linux/sem.h at line 1, linux/serio.h at line 1, linux/shm.h at line 1, linux/signal.h at line 1, linux/signalfd.h at line 1, linux/smc.h at line 1, linux/smc_diag.h at line 1, linux/smiapp.h at line 1, linux/snmp.h at line 1, linux/sock_diag.h at line 1, linux/socket.h at line 1, linux/sonet.h at line 1, linux/sound.h at line 1, linux/stat.h at line 1, linux/stddef.h at line 1, linux/stm.h at line 1, linux/string.h at line 1, linux/sunrpc/debug.h at line 1, linux/suspend_ioctls.h at line 1, linux/swab.h at line 1, linux/switchtec_ioctl.h at line 1, linux/sysctl.h at line 1, linux/sysinfo.h at line 1, linux/target_core_user.h at line 1, linux/tc_act/tc_connmark.h at line 1, linux/tc_act/tc_csum.h at line 1, linux/tc_act/tc_ct.h at line 1, linux/tc_act/tc_ctinfo.h at line 1, linux/tc_act/tc_defact.h at line 1, linux/tc_act/tc_gact.h at line 1, linux/tc_act/tc_ife.h at line 1, linux/tc_act/tc_mirred.h at line 1, linux/tc_act/tc_mpls.h at line 1, linux/tc_act/tc_nat.h at line 1, linux/tc_act/tc_pedit.h at line 1, linux/tc_act/tc_sample.h at line 1, linux/tc_act/tc_skbedit.h at line 1, linux/tc_ematch/tc_em_cmp.h at line 1, linux/tc_ematch/tc_em_ipt.h at line 1, linux/tc_ematch/tc_em_meta.h at line 1, linux/tc_ematch/tc_em_nbyte.h at line 1, linux/tc_ematch/tc_em_text.h at line 1, linux/tcp_metrics.h at line 1, linux/tdx-guest.h at line 1, linux/termios.h at line 1, linux/thermal.h at line 1, linux/time.h at line 1, linux/time_types.h at line 1, linux/timerfd.h at line 1, linux/times.h at line 1, linux/tiocl.h at line 1, linux/tipc_sockets_diag.h at line 1, linux/tps6594_pfsm.h at line 1, linux/trace_mmap.h at line 1, linux/tty.h at line 1, linux/tty_flags.h at line 1, linux/types.h at line 1, linux/ublk_cmd.h at line 1, linux/udf_fs_i.h at line 1, linux/udmabuf.h at line 1, linux/ultrasound.h at line 1, linux/un.h at line 1, linux/unistd.h at line 1, linux/unix_diag.h at line 1, linux/usb/audio.h at line 1, linux/usb/cdc-wdm.h at line 1, linux/usb/cdc.h at line 1, linux/usb/ch11.h at line 1, linux/usb/ch9.h at line 1, linux/usb/functionfs.h at line 1, linux/usb/gadgetfs.h at line 1, linux/usb/midi.h at line 1, linux/usb/raw_gadget.h at line 1, linux/usb/tmc.h at line 1, linux/usb/video.h at line 1, linux/usbip.h at line 1, linux/user_events.h at line 1, linux/userfaultfd.h at line 1, linux/utime.h at line 1, linux/utsname.h at line 1, linux/uvcvideo.h at line 1, linux/v4l2-dv-timings.h at line 1, linux/v4l2-mediabus.h at line 1, linux/v4l2-subdev.h at line 1, linux/vesa.h at line 1, linux/veth.h at line 1, linux/vfio.h at line 1, linux/vfio_ccw.h at line 1, linux/vfio_zdev.h at line 1, linux/vhost.h at line 1, linux/vhost_types.h at line 1, linux/virtio_gpio.h at line 1, linux/vm_sockets.h at line 1, linux/vm_sockets_diag.h at line 1, linux/vmcore.h at line 1, linux/vsockmon.h at line 1, linux/vt.h at line 1, linux/vtpm_proxy.h at line 1, linux/wait.h at line 1, linux/watch_queue.h at line 1, linux/watchdog.h at line 1, linux/wireless.h at line 1, linux/x25.h at line 1, linux/xattr.h at line 1, linux/xdp_diag.h at line 1, linux/xfrm.h at line 1, linux/xilinx-v4l2-controls.h at line 1, linux/zorro.h at line 1, linux/zorro_ids.h at line 1, misc/amd-apml.h at line 1, misc/fastrpc.h at line 1, misc/mrvl_cn10k_dpi.h at line 1, misc/pvpanic.h at line 1, mtd/inftl-user.h at line 1, rdma/rdma_netlink.h at line 1, regulator/regulator.h at line 1, scsi/fc/fc_els.h at line 1, scsi/fc/fc_fs.h at line 1, scsi/fc/fc_gs.h at line 1, scsi/fc/fc_ns.h at line 1, scsi/scsi_bsg_ufs.h at line 1, sound/asoc.h at line 1, sound/compress_offload.h at line 1, sound/fcp.h at line 1, sound/firewire.h at line 1, sound/intel/avs/tokens.h at line 1, sound/scarlett2.h at line 1, sound/skl-tplg-interface.h at line 1, sound/snd_ar_tokens.h at line 1, sound/snd_sst_tokens.h at line 1, video/edid.h at line 1, video/uvesafb.h at line 1
+FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_CONNMARK.h at line 1, _nf/linux/netfilter/xt_DSCP.h at line 1, _nf/linux/netfilter/xt_MARK.h at line 1, _nf/linux/netfilter/xt_RATEEST.h at line 1, _nf/linux/netfilter/xt_TCPMSS.h at line 1, _nf/linux/netfilter_ipv4/ipt_ECN.h at line 1, _nf/linux/netfilter_ipv4/ipt_TTL.h at line 1, _nf/linux/netfilter_ipv6/ip6t_HL.h at line 1, asm-generic/bitsperlong.h at line 1, asm-generic/errno-base.h at line 1, asm-generic/errno.h at line 1, asm-generic/fcntl.h at line 1, asm-generic/int-l64.h at line 1, asm-generic/int-ll64.h at line 1, asm-generic/ioctl.h at line 1, asm-generic/ioctls.h at line 1, asm-generic/ipcbuf.h at line 1, asm-generic/mman-common.h at line 1, asm-generic/mman.h at line 1, asm-generic/msgbuf.h at line 1, asm-generic/param.h at line 1, asm-generic/poll.h at line 1, asm-generic/posix_types.h at line 1, asm-generic/resource.h at line 1, asm-generic/sembuf.h at line 1, asm-generic/setup.h at line 1, asm-generic/shmbuf.h at line 1, asm-generic/siginfo.h at line 1, asm-generic/signal-defs.h at line 1, asm-generic/signal.h at line 1, asm-generic/socket.h at line 1, asm-generic/sockios.h at line 1, asm-generic/stat.h at line 1, asm-generic/statfs.h at line 1, asm-generic/swab.h at line 1, asm-generic/termbits-common.h at line 1, asm-generic/termbits.h at line 1, asm-generic/termios.h at line 1, asm-generic/types.h at line 1, asm-generic/ucontext.h at line 1, asm-generic/unistd.h at line 1, asm/a.out_x86.h at line 1, asm/amd_hsmp_x86.h at line 1, asm/auxvec_arm.h at line 1, asm/auxvec_arm64.h at line 1, asm/auxvec_powerpc.h at line 1, asm/auxvec_x86.h at line 1, asm/bitsperlong_arm64.h at line 1, asm/bitsperlong_powerpc.h at line 1, asm/bitsperlong_x86.h at line 1, asm/boot_x86.h at line 1, asm/bootparam_x86.h at line 1, asm/bootx_powerpc.h at line 1, asm/bpf_perf_event_arm64.h at line 1, asm/byteorder_arm.h at line 1, asm/byteorder_arm64.h at line 1, asm/byteorder_x86.h at line 1, asm/cputable_powerpc.h at line 1, asm/debugreg_x86.h at line 1, asm/e820_x86.h at line 1, asm/eeh_powerpc.h at line 1, asm/elf_x86.h at line 1, asm/errno_powerpc.h at line 1, asm/fcntl_arm.h at line 1, asm/fcntl_arm64.h at line 1, asm/fcntl_powerpc.h at line 1, asm/hw_breakpoint_x86.h at line 1, asm/hwcap2_x86.h at line 1, asm/hwcap_arm.h at line 1, asm/hwcap_arm64.h at line 1, asm/ioctl_powerpc.h at line 1, asm/ioctls_arm.h at line 1, asm/ioctls_powerpc.h at line 1, asm/kvm_arm64.h at line 1, asm/kvm_para_powerpc.h at line 1, asm/kvm_para_x86.h at line 1, asm/kvm_perf_x86.h at line 1, asm/kvm_powerpc.h at line 1, asm/kvm_x86.h at line 1, asm/ldt_x86.h at line 1, asm/mce_x86.h at line 1, asm/mman_arm64.h at line 1, asm/mman_x86.h at line 1, asm/msgbuf_powerpc.h at line 1, asm/msgbuf_x86.h at line 1, asm/msr_x86.h at line 1, asm/papr-indices_powerpc.h at line 1, asm/papr-miscdev_powerpc.h at line 1, asm/papr-physical-attestation_powerpc.h at line 1, asm/papr-platform-dump_powerpc.h at line 1, asm/papr-sysparm_powerpc.h at line 1, asm/papr-vpd_powerpc.h at line 1, asm/param_arm64.h at line 1, asm/perf_event_powerpc.h at line 1, asm/perf_regs_arm.h at line 1, asm/perf_regs_arm64.h at line 1, asm/perf_regs_powerpc.h at line 1, asm/perf_regs_x86.h at line 1, asm/posix_types_32_x86.h at line 1, asm/posix_types_64_x86.h at line 1, asm/posix_types_arm.h at line 1, asm/posix_types_arm64.h at line 1, asm/posix_types_powerpc.h at line 1, asm/posix_types_x32_x86.h at line 1, asm/posix_types_x86.h at line 1, asm/prctl_x86.h at line 1, asm/processor-flags_x86.h at line 1, asm/ps3fb_powerpc.h at line 1, asm/ptrace-abi_x86.h at line 1, asm/ptrace_arm.h at line 1, asm/ptrace_arm64.h at line 1, asm/ptrace_x86.h at line 1, asm/sembuf_x86.h at line 1, asm/setup_arm.h at line 1, asm/setup_arm64.h at line 1, asm/setup_data_x86.h at line 1, asm/setup_powerpc.h at line 1, asm/sgx_x86.h at line 1, asm/shmbuf_x86.h at line 1, asm/sigcontext32_x86.h at line 1, asm/sigcontext_arm.h at line 1, asm/sigcontext_arm64.h at line 1, asm/sigcontext_x86.h at line 1, asm/siginfo_x86.h at line 1, asm/signal_arm.h at line 1, asm/signal_arm64.h at line 1, asm/signal_powerpc.h at line 1, asm/signal_x86.h at line 1, asm/stat_arm.h at line 1, asm/stat_x86.h at line 1, asm/statfs_arm.h at line 1, asm/statfs_arm64.h at line 1, asm/statfs_x86.h at line 1, asm/sve_context_arm64.h at line 1, asm/svm_x86.h at line 1, asm/swab_arm.h at line 1, asm/swab_x86.h at line 1, asm/tm_powerpc.h at line 1, asm/types_arm.h at line 1, asm/ucontext_arm64.h at line 1, asm/ucontext_powerpc.h at line 1, asm/ucontext_x86.h at line 1, asm/unistd_arm.h at line 1, asm/unistd_arm64.h at line 1, asm/unistd_x86.h at line 1, asm/vm86_x86.h at line 1, asm/vmx_x86.h at line 1, asm/vsyscall_x86.h at line 1, cxl/features.h at line 1, drm/amdxdna_accel.h at line 1, drm/armada_drm.h at line 1, drm/etnaviv_drm.h at line 1, drm/omap_drm.h at line 1, fwctl/cxl.h at line 1, fwctl/fwctl.h at line 1, fwctl/mlx5.h at line 1, fwctl/pds.h at line 1, linux/a.out_x86.h at line 1, linux/acct.h at line 1, linux/acrn.h at line 1, linux/adb.h at line 1, linux/adfs_fs.h at line 1, linux/affs_hardblocks.h at line 1, linux/am437x-vpfe.h at line 1, linux/android/binder.h at line 1, linux/android/binderfs.h at line 1, linux/arcfb.h at line 1, linux/arm_sdei.h at line 1, linux/atalk.h at line 1, linux/atm.h at line 1, linux/atm_eni.h at line 1, linux/atm_he.h at line 1, linux/atm_idt77105.h at line 1, linux/atm_nicstar.h at line 1, linux/atm_tcp.h at line 1, linux/atm_zatm.h at line 1, linux/atmapi.h at line 1, linux/atmarp.h at line 1, linux/atmbr2684.h at line 1, linux/atmclip.h at line 1, linux/atmdev.h at line 1, linux/atmioc.h at line 1, linux/atmlec.h at line 1, linux/atmmpc.h at line 1, linux/atmppp.h at line 1, linux/atmsap.h at line 1, linux/atmsvc.h at line 1, linux/auxvec.h at line 1, linux/ax25.h at line 1, linux/baycom.h at line 1, linux/bcm933xx_hcs.h at line 1, linux/bfs_fs.h at line 1, linux/binfmts.h at line 1, linux/bits.h at line 1, linux/blk-crypto.h at line 1, linux/blkdev.h at line 1, linux/blkpg.h at line 1, linux/blktrace_api.h at line 1, linux/blkzoned.h at line 1, linux/bpf.h at line 1, linux/bpf_common.h at line 1, linux/bpf_perf_event.h at line 1, linux/bpqether.h at line 1, linux/bsg.h at line 1, linux/btf.h at line 1, linux/btrfs.h at line 1, linux/btrfs_tree.h at line 1, linux/byteorder/big_endian.h at line 1, linux/byteorder/little_endian.h at line 1, linux/cachefiles.h at line 1, linux/caif/caif_socket.h at line 1, linux/caif/if_caif.h at line 1, linux/capability.h at line 1, linux/capi.h at line 1, linux/cciss_defs.h at line 1, linux/cciss_ioctl.h at line 1, linux/cdrom.h at line 1, linux/chio.h at line 1, linux/close_range.h at line 1, linux/coff.h at line 1, linux/const.h at line 1, linux/coresight-stm.h at line 1, linux/counter.h at line 1, linux/counter/microchip-tcb-capture.h at line 1, linux/cramfs_fs.h at line 1, linux/cryptouser.h at line 1, linux/cuda.h at line 1, linux/cxl_mem.h at line 1, linux/cyclades.h at line 1, linux/dcbnl.h at line 1, linux/dccp.h at line 1, linux/dlm.h at line 1, linux/dlm_device.h at line 1, linux/dlm_plock.h at line 1, linux/dlmconstants.h at line 1, linux/dma-buf.h at line 1, linux/dma-heap.h at line 1, linux/edd.h at line 1, linux/efs_fs_sb.h at line 1, linux/elf-em.h at line 1, linux/elf.h at line 1, linux/errqueue.h at line 1, linux/erspan.h at line 1, linux/ethtool.h at line 1, linux/eventfd.h at line 1, linux/exfat.h at line 1, linux/ext4.h at line 1, linux/f2fs.h at line 1, linux/fadvise.h at line 1, linux/falloc.h at line 1, linux/fanotify.h at line 1, linux/fb.h at line 1, linux/fcntl.h at line 1, linux/fd.h at line 1, linux/fdreg.h at line 1, linux/fib_rules.h at line 1, linux/fiemap.h at line 1, linux/filter.h at line 1, linux/fpga-dfl.h at line 1, linux/fs.h at line 1, linux/fscrypt.h at line 1, linux/fsl_mc.h at line 1, linux/fsmap.h at line 1, linux/fsverity.h at line 1, linux/futex.h at line 1, linux/gameport.h at line 1, linux/gen_stats.h at line 1, linux/genetlink.h at line 1, linux/genwqe/genwqe_card.h at line 1, linux/gfs2_ondisk.h at line 1, linux/gsmmux.h at line 1, linux/gtp.h at line 1, linux/hdlc.h at line 1, linux/hdlc/ioctl.h at line 1, linux/hdlcdrv.h at line 1, linux/hdreg.h at line 1, linux/hidraw.h at line 1, linux/hpet.h at line 1, linux/hsi/cs-protocol.h at line 1, linux/hsi/hsi_char.h at line 1, linux/hw_breakpoint.h at line 1, linux/hyperv.h at line 1, linux/icmpv6.h at line 1, linux/if_addr.h at line 1, linux/if_addrlabel.h at line 1, linux/if_eql.h at line 1, linux/if_link.h at line 1, linux/if_ltalk.h at line 1, linux/if_packet.h at line 1, linux/if_phonet.h at line 1, linux/if_slip.h at line 1, linux/if_tunnel.h at line 1, linux/if_xdp.h at line 1, linux/ife.h at line 1, linux/iio/buffer.h at line 1, linux/iio/events.h at line 1, linux/iio/types.h at line 1, linux/ila.h at line 1, linux/in_route.h at line 1, linux/inet_diag.h at line 1, linux/inotify.h at line 1, linux/input.h at line 1, linux/ioctl.h at line 1, linux/iommufd.h at line 1, linux/ioprio.h at line 1, linux/ip6_tunnel.h at line 1, linux/ip_vs.h at line 1, linux/ipc.h at line 1, linux/ipmi_bmc.h at line 1, linux/ipsec.h at line 1, linux/ipv6.h at line 1, linux/isdn/capicmd.h at line 1, linux/iso_fs.h at line 1, linux/isst_if.h at line 1, linux/kcm.h at line 1, linux/kcmp.h at line 1, linux/kcov.h at line 1, linux/kd.h at line 1, linux/kdev_t.h at line 1, linux/kernel-page-flags.h at line 1, linux/kernel.h at line 1, linux/kernelcapi.h at line 1, linux/kexec.h at line 1, linux/keyboard.h at line 1, linux/kvm_arm64.h at line 1, linux/kvm_para.h at line 1, linux/kvm_powerpc.h at line 1, linux/kvm_x86.h at line 1, linux/l2tp.h at line 1, linux/landlock.h at line 1, linux/libc-compat.h at line 1, linux/limits.h at line 1, linux/lirc.h at line 1, linux/loadpin.h at line 1, linux/lp.h at line 1, linux/lsm.h at line 1, linux/lwtunnel.h at line 1, linux/magic.h at line 1, linux/major.h at line 1, linux/matroxfb.h at line 1, linux/max2175.h at line 1, linux/mctp.h at line 1, linux/mdio.h at line 1, linux/media-bus-format.h at line 1, linux/media.h at line 1, linux/mei_uuid.h at line 1, linux/memfd.h at line 1, linux/mempolicy.h at line 1, linux/mii.h at line 1, linux/minix_fs.h at line 1, linux/misc/bcm_vk.h at line 1, linux/mman.h at line 1, linux/mmc/ioctl.h at line 1, linux/mmtimer.h at line 1, linux/module.h at line 1, linux/mpls.h at line 1, linux/mroute.h at line 1, linux/mroute6.h at line 1, linux/msdos_fs.h at line 1, linux/msg.h at line 1, linux/mshv.h at line 1, linux/mtio.h at line 1, linux/nbd-netlink.h at line 1, linux/neighbour.h at line 1, linux/net_dropmon.h at line 1, linux/net_namespace.h at line 1, linux/net_tstamp.h at line 1, linux/netconf.h at line 1, linux/netfilter.h at line 1, linux/netfilter/ipset/ip_set.h at line 1, linux/netfilter/ipset/ip_set_bitmap.h at line 1, linux/netfilter/ipset/ip_set_hash.h at line 1, linux/netfilter/ipset/ip_set_list.h at line 1, linux/netfilter/nf_conntrack_common.h at line 1, linux/netfilter/nf_conntrack_ftp.h at line 1, linux/netfilter/nf_conntrack_sctp.h at line 1, linux/netfilter/nf_conntrack_tcp.h at line 1, linux/netfilter/nf_conntrack_tuple_common.h at line 1, linux/netfilter/nf_log.h at line 1, linux/netfilter/nf_nat.h at line 1, linux/netfilter/nf_synproxy.h at line 1, linux/netfilter/nf_tables.h at line 1, linux/netfilter/nf_tables_compat.h at line 1, linux/netfilter/nfnetlink.h at line 1, linux/netfilter/nfnetlink_acct.h at line 1, linux/netfilter/nfnetlink_compat.h at line 1, linux/netfilter/nfnetlink_conntrack.h at line 1, linux/netfilter/nfnetlink_cthelper.h at line 1, linux/netfilter/nfnetlink_cttimeout.h at line 1, linux/netfilter/nfnetlink_hook.h at line 1, linux/netfilter/nfnetlink_log.h at line 1, linux/netfilter/nfnetlink_queue.h at line 1, linux/netfilter/x_tables.h at line 1, linux/netfilter/xt_AUDIT.h at line 1, linux/netfilter/xt_CHECKSUM.h at line 1, linux/netfilter/xt_CLASSIFY.h at line 1, linux/netfilter/xt_CONNSECMARK.h at line 1, linux/netfilter/xt_CT.h at line 1, linux/netfilter/xt_HMARK.h at line 1, linux/netfilter/xt_LED.h at line 1, linux/netfilter/xt_LOG.h at line 1, linux/netfilter/xt_NFLOG.h at line 1, linux/netfilter/xt_NFQUEUE.h at line 1, linux/netfilter/xt_SECMARK.h at line 1, linux/netfilter/xt_SYNPROXY.h at line 1, linux/netfilter/xt_TCPOPTSTRIP.h at line 1, linux/netfilter/xt_TEE.h at line 1, linux/netfilter/xt_TPROXY.h at line 1, linux/netfilter/xt_addrtype.h at line 1, linux/netfilter/xt_bpf.h at line 1, linux/netfilter/xt_cgroup.h at line 1, linux/netfilter/xt_cluster.h at line 1, linux/netfilter/xt_comment.h at line 1, linux/netfilter/xt_connbytes.h at line 1, linux/netfilter/xt_connlabel.h at line 1, linux/netfilter/xt_connlimit.h at line 1, linux/netfilter/xt_cpu.h at line 1, linux/netfilter/xt_dccp.h at line 1, linux/netfilter/xt_devgroup.h at line 1, linux/netfilter/xt_dscp.h at line 1, linux/netfilter/xt_ecn.h at line 1, linux/netfilter/xt_esp.h at line 1, linux/netfilter/xt_hashlimit.h at line 1, linux/netfilter/xt_helper.h at line 1, linux/netfilter/xt_ipcomp.h at line 1, linux/netfilter/xt_iprange.h at line 1, linux/netfilter/xt_ipvs.h at line 1, linux/netfilter/xt_l2tp.h at line 1, linux/netfilter/xt_length.h at line 1, linux/netfilter/xt_limit.h at line 1, linux/netfilter/xt_mac.h at line 1, linux/netfilter/xt_mark.h at line 1, linux/netfilter/xt_multiport.h at line 1, linux/netfilter/xt_nfacct.h at line 1, linux/netfilter/xt_owner.h at line 1, linux/netfilter/xt_physdev.h at line 1, linux/netfilter/xt_pkttype.h at line 1, linux/netfilter/xt_policy.h at line 1, linux/netfilter/xt_quota.h at line 1, linux/netfilter/xt_rateest.h at line 1, linux/netfilter/xt_realm.h at line 1, linux/netfilter/xt_recent.h at line 1, linux/netfilter/xt_rpfilter.h at line 1, linux/netfilter/xt_sctp.h at line 1, linux/netfilter/xt_set.h at line 1, linux/netfilter/xt_socket.h at line 1, linux/netfilter/xt_state.h at line 1, linux/netfilter/xt_statistic.h at line 1, linux/netfilter/xt_string.h at line 1, linux/netfilter/xt_tcpmss.h at line 1, linux/netfilter/xt_tcpudp.h at line 1, linux/netfilter/xt_time.h at line 1, linux/netfilter/xt_u32.h at line 1, linux/netfilter_arp/arp_tables.h at line 1, linux/netfilter_arp/arpt_mangle.h at line 1, linux/netfilter_bridge.h at line 1, linux/netfilter_bridge/ebt_802_3.h at line 1, linux/netfilter_bridge/ebt_among.h at line 1, linux/netfilter_bridge/ebt_arp.h at line 1, linux/netfilter_bridge/ebt_arpreply.h at line 1, linux/netfilter_bridge/ebt_ip.h at line 1, linux/netfilter_bridge/ebt_ip6.h at line 1, linux/netfilter_bridge/ebt_limit.h at line 1, linux/netfilter_bridge/ebt_log.h at line 1, linux/netfilter_bridge/ebt_mark_m.h at line 1, linux/netfilter_bridge/ebt_mark_t.h at line 1, linux/netfilter_bridge/ebt_nat.h at line 1, linux/netfilter_bridge/ebt_nflog.h at line 1, linux/netfilter_bridge/ebt_pkttype.h at line 1, linux/netfilter_bridge/ebt_redirect.h at line 1, linux/netfilter_bridge/ebt_stp.h at line 1, linux/netfilter_bridge/ebt_vlan.h at line 1, linux/netfilter_bridge/ebtables.h at line 1, linux/netfilter_ipv4.h at line 1, linux/netfilter_ipv4/ip_tables.h at line 1, linux/netfilter_ipv4/ipt_CLUSTERIP.h at line 1, linux/netfilter_ipv4/ipt_LOG.h at line 1, linux/netfilter_ipv4/ipt_REJECT.h at line 1, linux/netfilter_ipv4/ipt_ah.h at line 1, linux/netfilter_ipv4/ipt_ecn.h at line 1, linux/netfilter_ipv4/ipt_ttl.h at line 1, linux/netfilter_ipv6.h at line 1, linux/netfilter_ipv6/ip6_tables.h at line 1, linux/netfilter_ipv6/ip6t_LOG.h at line 1, linux/netfilter_ipv6/ip6t_NPT.h at line 1, linux/netfilter_ipv6/ip6t_REJECT.h at line 1, linux/netfilter_ipv6/ip6t_ah.h at line 1, linux/netfilter_ipv6/ip6t_frag.h at line 1, linux/netfilter_ipv6/ip6t_hl.h at line 1, linux/netfilter_ipv6/ip6t_ipv6header.h at line 1, linux/netfilter_ipv6/ip6t_mh.h at line 1, linux/netfilter_ipv6/ip6t_opts.h at line 1, linux/netfilter_ipv6/ip6t_rt.h at line 1, linux/netfilter_ipv6/ip6t_srh.h at line 1, linux/netlink.h at line 1, linux/netlink_diag.h at line 1, linux/netrom.h at line 1, linux/nexthop.h at line 1, linux/nfs.h at line 1, linux/nfs2.h at line 1, linux/nfs3.h at line 1, linux/nfs4.h at line 1, linux/nfs4_mount.h at line 1, linux/nfs_fs.h at line 1, linux/nfs_mount.h at line 1, linux/nfsacl.h at line 1, linux/nfsd/debug.h at line 1, linux/nfsd/export.h at line 1, linux/nfsd/stats.h at line 1, linux/nitro_enclaves.h at line 1, linux/nl80211-vnd-intel.h at line 1, linux/nsfs.h at line 1, linux/nsm.h at line 1, linux/ntsync.h at line 1, linux/nubus.h at line 1, linux/nvme_ioctl.h at line 1, linux/nvram.h at line 1, linux/omap3isp.h at line 1, linux/oom.h at line 1, linux/openat2.h at line 1, linux/openvswitch.h at line 1, linux/packet_diag.h at line 1, linux/papr_pdsm.h at line 1, linux/param.h at line 1, linux/patchkey.h at line 1, linux/pci.h at line 1, linux/pci_regs.h at line 1, linux/pcitest.h at line 1, linux/perf_event.h at line 1, linux/personality.h at line 1, linux/pfkeyv2.h at line 1, linux/pfrut.h at line 1, linux/phonet.h at line 1, linux/pidfd.h at line 1, linux/pkt_cls.h at line 1, linux/pkt_sched.h at line 1, linux/pktcdvd.h at line 1, linux/pmu.h at line 1, linux/posix_types.h at line 1, linux/ppp-comp.h at line 1, linux/ppp-ioctl.h at line 1, linux/ppp_defs.h at line 1, linux/pps_gen.h at line 1, linux/pr.h at line 1, linux/prctl.h at line 1, linux/psample.h at line 1, linux/psci.h at line 1, linux/ptrace.h at line 1, linux/qnx4_fs.h at line 1, linux/qnxtypes.h at line 1, linux/qrtr.h at line 1, linux/radeonfb.h at line 1, linux/random.h at line 1, linux/reboot.h at line 1, linux/resource.h at line 1, linux/romfs_fs.h at line 1, linux/rose.h at line 1, linux/rpmsg.h at line 1, linux/rpmsg_types.h at line 1, linux/rtc.h at line 1, linux/rtnetlink.h at line 1, linux/scc.h at line 1, linux/sched.h at line 1, linux/sched/types.h at line 1, linux/screen_info.h at line 1, linux/seccomp.h at line 1, linux/securebits.h at line 1, linux/sed-opal.h at line 1, linux/seg6_genl.h at line 1, linux/seg6_hmac.h at line 1, linux/selinux_netlink.h at line 1, linux/sem.h at line 1, linux/serio.h at line 1, linux/shm.h at line 1, linux/signal.h at line 1, linux/signalfd.h at line 1, linux/smc.h at line 1, linux/smc_diag.h at line 1, linux/smiapp.h at line 1, linux/snmp.h at line 1, linux/sock_diag.h at line 1, linux/socket.h at line 1, linux/sonet.h at line 1, linux/sound.h at line 1, linux/stat.h at line 1, linux/stddef.h at line 1, linux/stm.h at line 1, linux/string.h at line 1, linux/sunrpc/debug.h at line 1, linux/suspend_ioctls.h at line 1, linux/swab.h at line 1, linux/switchtec_ioctl.h at line 1, linux/sysctl.h at line 1, linux/sysinfo.h at line 1, linux/target_core_user.h at line 1, linux/tc_act/tc_connmark.h at line 1, linux/tc_act/tc_csum.h at line 1, linux/tc_act/tc_ct.h at line 1, linux/tc_act/tc_ctinfo.h at line 1, linux/tc_act/tc_defact.h at line 1, linux/tc_act/tc_gact.h at line 1, linux/tc_act/tc_ife.h at line 1, linux/tc_act/tc_mirred.h at line 1, linux/tc_act/tc_mpls.h at line 1, linux/tc_act/tc_nat.h at line 1, linux/tc_act/tc_pedit.h at line 1, linux/tc_act/tc_sample.h at line 1, linux/tc_act/tc_skbedit.h at line 1, linux/tc_ematch/tc_em_cmp.h at line 1, linux/tc_ematch/tc_em_ipt.h at line 1, linux/tc_ematch/tc_em_meta.h at line 1, linux/tc_ematch/tc_em_nbyte.h at line 1, linux/tc_ematch/tc_em_text.h at line 1, linux/tcp_metrics.h at line 1, linux/tdx-guest.h at line 1, linux/termios.h at line 1, linux/thermal.h at line 1, linux/time.h at line 1, linux/time_types.h at line 1, linux/timerfd.h at line 1, linux/times.h at line 1, linux/tiocl.h at line 1, linux/tipc_sockets_diag.h at line 1, linux/tps6594_pfsm.h at line 1, linux/trace_mmap.h at line 1, linux/tty.h at line 1, linux/tty_flags.h at line 1, linux/types.h at line 1, linux/ublk_cmd.h at line 1, linux/udf_fs_i.h at line 1, linux/udmabuf.h at line 1, linux/ultrasound.h at line 1, linux/un.h at line 1, linux/unistd.h at line 1, linux/unix_diag.h at line 1, linux/usb/audio.h at line 1, linux/usb/cdc-wdm.h at line 1, linux/usb/cdc.h at line 1, linux/usb/ch11.h at line 1, linux/usb/ch9.h at line 1, linux/usb/functionfs.h at line 1, linux/usb/gadgetfs.h at line 1, linux/usb/midi.h at line 1, linux/usb/raw_gadget.h at line 1, linux/usb/tmc.h at line 1, linux/usb/video.h at line 1, linux/usbip.h at line 1, linux/user_events.h at line 1, linux/userfaultfd.h at line 1, linux/utime.h at line 1, linux/utsname.h at line 1, linux/uvcvideo.h at line 1, linux/v4l2-dv-timings.h at line 1, linux/v4l2-mediabus.h at line 1, linux/v4l2-subdev.h at line 1, linux/vesa.h at line 1, linux/veth.h at line 1, linux/vfio.h at line 1, linux/vfio_ccw.h at line 1, linux/vfio_zdev.h at line 1, linux/vhost.h at line 1, linux/vhost_types.h at line 1, linux/virtio_gpio.h at line 1, linux/vm_sockets.h at line 1, linux/vm_sockets_diag.h at line 1, linux/vmcore.h at line 1, linux/vsockmon.h at line 1, linux/vt.h at line 1, linux/vtpm_proxy.h at line 1, linux/wait.h at line 1, linux/watch_queue.h at line 1, linux/watchdog.h at line 1, linux/wireless.h at line 1, linux/x25.h at line 1, linux/xattr.h at line 1, linux/xdp_diag.h at line 1, linux/xfrm.h at line 1, linux/xilinx-v4l2-controls.h at line 1, linux/zorro.h at line 1, linux/zorro_ids.h at line 1, misc/amd-apml.h at line 1, misc/fastrpc.h at line 1, misc/mrvl_cn10k_dpi.h at line 1, misc/pvpanic.h at line 1, mtd/inftl-user.h at line 1, rdma/rdma_netlink.h at line 1, regulator/regulator.h at line 1, scsi/fc/fc_els.h at line 1, scsi/fc/fc_fs.h at line 1, scsi/fc/fc_gs.h at line 1, scsi/fc/fc_ns.h at line 1, scsi/scsi_bsg_ufs.h at line 1, sound/asoc.h at line 1, sound/compress_offload.h at line 1, sound/fcp.h at line 1, sound/firewire.h at line 1, sound/intel/avs/tokens.h at line 1, sound/scarlett2.h at line 1, sound/skl-tplg-interface.h at line 1, sound/snd_ar_tokens.h at line 1, sound/snd_sst_tokens.h at line 1, video/edid.h at line 1, video/uvesafb.h at line 1
     License text:
         /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
     Scancode info:
@@ -234,6 +222,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/debugreg_x86.h [1:1]
         asm/e820_x86.h [1:1]
         asm/eeh_powerpc.h [1:1]
+        asm/elf_x86.h [1:1]
         asm/errno_powerpc.h [1:1]
         asm/fcntl_arm.h [1:1]
         asm/fcntl_arm64.h [1:1]
@@ -258,7 +247,12 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/msgbuf_powerpc.h [1:1]
         asm/msgbuf_x86.h [1:1]
         asm/msr_x86.h [1:1]
-        asm/papr_pdsm_powerpc.h [1:1]
+        asm/papr-indices_powerpc.h [1:1]
+        asm/papr-miscdev_powerpc.h [1:1]
+        asm/papr-physical-attestation_powerpc.h [1:1]
+        asm/papr-platform-dump_powerpc.h [1:1]
+        asm/papr-sysparm_powerpc.h [1:1]
+        asm/papr-vpd_powerpc.h [1:1]
         asm/param_arm64.h [1:1]
         asm/perf_event_powerpc.h [1:1]
         asm/perf_regs_arm.h [1:1]
@@ -282,6 +276,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/sembuf_x86.h [1:1]
         asm/setup_arm.h [1:1]
         asm/setup_arm64.h [1:1]
+        asm/setup_data_x86.h [1:1]
         asm/setup_powerpc.h [1:1]
         asm/sgx_x86.h [1:1]
         asm/shmbuf_x86.h [1:1]
@@ -314,9 +309,15 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/vm86_x86.h [1:1]
         asm/vmx_x86.h [1:1]
         asm/vsyscall_x86.h [1:1]
+        cxl/features.h [1:1]
+        drm/amdxdna_accel.h [1:1]
         drm/armada_drm.h [1:1]
         drm/etnaviv_drm.h [1:1]
         drm/omap_drm.h [1:1]
+        fwctl/cxl.h [1:1]
+        fwctl/fwctl.h [1:1]
+        fwctl/mlx5.h [1:1]
+        fwctl/pds.h [1:1]
         linux/a.out_x86.h [1:1]
         linux/acct.h [1:1]
         linux/acrn.h [1:1]
@@ -353,13 +354,15 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/bcm933xx_hcs.h [1:1]
         linux/bfs_fs.h [1:1]
         linux/binfmts.h [1:1]
+        linux/bits.h [1:1]
+        linux/blk-crypto.h [1:1]
+        linux/blkdev.h [1:1]
         linux/blkpg.h [1:1]
         linux/blktrace_api.h [1:1]
         linux/blkzoned.h [1:1]
         linux/bpf.h [1:1]
         linux/bpf_common.h [1:1]
         linux/bpf_perf_event.h [1:1]
-        linux/bpfilter.h [1:1]
         linux/bpqether.h [1:1]
         linux/bsg.h [1:1]
         linux/btf.h [1:1]
@@ -381,6 +384,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/const.h [1:1]
         linux/coresight-stm.h [1:1]
         linux/counter.h [1:1]
+        linux/counter/microchip-tcb-capture.h [1:1]
         linux/cramfs_fs.h [1:1]
         linux/cryptouser.h [1:1]
         linux/cuda.h [1:1]
@@ -402,6 +406,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/erspan.h [1:1]
         linux/ethtool.h [1:1]
         linux/eventfd.h [1:1]
+        linux/exfat.h [1:1]
         linux/ext4.h [1:1]
         linux/f2fs.h [1:1]
         linux/fadvise.h [1:1]
@@ -459,7 +464,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/inotify.h [1:1]
         linux/input.h [1:1]
         linux/ioctl.h [1:1]
-        linux/iommu.h [1:1]
         linux/iommufd.h [1:1]
         linux/ioprio.h [1:1]
         linux/ip6_tunnel.h [1:1]
@@ -492,6 +496,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/lirc.h [1:1]
         linux/loadpin.h [1:1]
         linux/lp.h [1:1]
+        linux/lsm.h [1:1]
         linux/lwtunnel.h [1:1]
         linux/magic.h [1:1]
         linux/major.h [1:1]
@@ -516,6 +521,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/mroute6.h [1:1]
         linux/msdos_fs.h [1:1]
         linux/msg.h [1:1]
+        linux/mshv.h [1:1]
         linux/mtio.h [1:1]
         linux/nbd-netlink.h [1:1]
         linux/neighbour.h [1:1]
@@ -667,6 +673,8 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/nitro_enclaves.h [1:1]
         linux/nl80211-vnd-intel.h [1:1]
         linux/nsfs.h [1:1]
+        linux/nsm.h [1:1]
+        linux/ntsync.h [1:1]
         linux/nubus.h [1:1]
         linux/nvme_ioctl.h [1:1]
         linux/nvram.h [1:1]
@@ -675,6 +683,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/openat2.h [1:1]
         linux/openvswitch.h [1:1]
         linux/packet_diag.h [1:1]
+        linux/papr_pdsm.h [1:1]
         linux/param.h [1:1]
         linux/patchkey.h [1:1]
         linux/pci.h [1:1]
@@ -694,6 +703,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/ppp-comp.h [1:1]
         linux/ppp-ioctl.h [1:1]
         linux/ppp_defs.h [1:1]
+        linux/pps_gen.h [1:1]
         linux/pr.h [1:1]
         linux/prctl.h [1:1]
         linux/psample.h [1:1]
@@ -705,8 +715,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/radeonfb.h [1:1]
         linux/random.h [1:1]
         linux/reboot.h [1:1]
-        linux/reiserfs_fs.h [1:1]
-        linux/reiserfs_xattr.h [1:1]
         linux/resource.h [1:1]
         linux/romfs_fs.h [1:1]
         linux/rose.h [1:1]
@@ -755,7 +763,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/tc_act/tc_defact.h [1:1]
         linux/tc_act/tc_gact.h [1:1]
         linux/tc_act/tc_ife.h [1:1]
-        linux/tc_act/tc_ipt.h [1:1]
         linux/tc_act/tc_mirred.h [1:1]
         linux/tc_act/tc_mpls.h [1:1]
         linux/tc_act/tc_nat.h [1:1]
@@ -778,6 +785,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/tiocl.h [1:1]
         linux/tipc_sockets_diag.h [1:1]
         linux/tps6594_pfsm.h [1:1]
+        linux/trace_mmap.h [1:1]
         linux/tty.h [1:1]
         linux/tty_flags.h [1:1]
         linux/types.h [1:1]
@@ -808,7 +816,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/v4l2-dv-timings.h [1:1]
         linux/v4l2-mediabus.h [1:1]
         linux/v4l2-subdev.h [1:1]
-        linux/vduse.h [1:1]
+        linux/vesa.h [1:1]
         linux/veth.h [1:1]
         linux/vfio.h [1:1]
         linux/vfio_ccw.h [1:1]
@@ -833,10 +841,13 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/xilinx-v4l2-controls.h [1:1]
         linux/zorro.h [1:1]
         linux/zorro_ids.h [1:1]
+        misc/amd-apml.h [1:1]
         misc/fastrpc.h [1:1]
+        misc/mrvl_cn10k_dpi.h [1:1]
         misc/pvpanic.h [1:1]
         mtd/inftl-user.h [1:1]
         rdma/rdma_netlink.h [1:1]
+        regulator/regulator.h [1:1]
         scsi/fc/fc_els.h [1:1]
         scsi/fc/fc_fs.h [1:1]
         scsi/fc/fc_gs.h [1:1]
@@ -844,8 +855,10 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         scsi/scsi_bsg_ufs.h [1:1]
         sound/asoc.h [1:1]
         sound/compress_offload.h [1:1]
+        sound/fcp.h [1:1]
         sound/firewire.h [1:1]
         sound/intel/avs/tokens.h [1:1]
+        sound/scarlett2.h [1:1]
         sound/skl-tplg-interface.h [1:1]
         sound/snd_ar_tokens.h [1:1]
         sound/snd_sst_tokens.h [1:1]
@@ -918,6 +931,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/debugreg_x86.h [1:1]
         asm/e820_x86.h [1:1]
         asm/eeh_powerpc.h [1:1]
+        asm/elf_x86.h [1:1]
         asm/errno_powerpc.h [1:1]
         asm/fcntl_arm.h [1:1]
         asm/fcntl_arm64.h [1:1]
@@ -942,7 +956,12 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/msgbuf_powerpc.h [1:1]
         asm/msgbuf_x86.h [1:1]
         asm/msr_x86.h [1:1]
-        asm/papr_pdsm_powerpc.h [1:1]
+        asm/papr-indices_powerpc.h [1:1]
+        asm/papr-miscdev_powerpc.h [1:1]
+        asm/papr-physical-attestation_powerpc.h [1:1]
+        asm/papr-platform-dump_powerpc.h [1:1]
+        asm/papr-sysparm_powerpc.h [1:1]
+        asm/papr-vpd_powerpc.h [1:1]
         asm/param_arm64.h [1:1]
         asm/perf_event_powerpc.h [1:1]
         asm/perf_regs_arm.h [1:1]
@@ -966,6 +985,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/sembuf_x86.h [1:1]
         asm/setup_arm.h [1:1]
         asm/setup_arm64.h [1:1]
+        asm/setup_data_x86.h [1:1]
         asm/setup_powerpc.h [1:1]
         asm/sgx_x86.h [1:1]
         asm/shmbuf_x86.h [1:1]
@@ -998,9 +1018,15 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         asm/vm86_x86.h [1:1]
         asm/vmx_x86.h [1:1]
         asm/vsyscall_x86.h [1:1]
+        cxl/features.h [1:1]
+        drm/amdxdna_accel.h [1:1]
         drm/armada_drm.h [1:1]
         drm/etnaviv_drm.h [1:1]
         drm/omap_drm.h [1:1]
+        fwctl/cxl.h [1:1]
+        fwctl/fwctl.h [1:1]
+        fwctl/mlx5.h [1:1]
+        fwctl/pds.h [1:1]
         linux/a.out_x86.h [1:1]
         linux/acct.h [1:1]
         linux/acrn.h [1:1]
@@ -1037,13 +1063,15 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/bcm933xx_hcs.h [1:1]
         linux/bfs_fs.h [1:1]
         linux/binfmts.h [1:1]
+        linux/bits.h [1:1]
+        linux/blk-crypto.h [1:1]
+        linux/blkdev.h [1:1]
         linux/blkpg.h [1:1]
         linux/blktrace_api.h [1:1]
         linux/blkzoned.h [1:1]
         linux/bpf.h [1:1]
         linux/bpf_common.h [1:1]
         linux/bpf_perf_event.h [1:1]
-        linux/bpfilter.h [1:1]
         linux/bpqether.h [1:1]
         linux/bsg.h [1:1]
         linux/btf.h [1:1]
@@ -1065,6 +1093,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/const.h [1:1]
         linux/coresight-stm.h [1:1]
         linux/counter.h [1:1]
+        linux/counter/microchip-tcb-capture.h [1:1]
         linux/cramfs_fs.h [1:1]
         linux/cryptouser.h [1:1]
         linux/cuda.h [1:1]
@@ -1086,6 +1115,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/erspan.h [1:1]
         linux/ethtool.h [1:1]
         linux/eventfd.h [1:1]
+        linux/exfat.h [1:1]
         linux/ext4.h [1:1]
         linux/f2fs.h [1:1]
         linux/fadvise.h [1:1]
@@ -1143,7 +1173,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/inotify.h [1:1]
         linux/input.h [1:1]
         linux/ioctl.h [1:1]
-        linux/iommu.h [1:1]
         linux/iommufd.h [1:1]
         linux/ioprio.h [1:1]
         linux/ip6_tunnel.h [1:1]
@@ -1176,6 +1205,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/lirc.h [1:1]
         linux/loadpin.h [1:1]
         linux/lp.h [1:1]
+        linux/lsm.h [1:1]
         linux/lwtunnel.h [1:1]
         linux/magic.h [1:1]
         linux/major.h [1:1]
@@ -1200,6 +1230,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/mroute6.h [1:1]
         linux/msdos_fs.h [1:1]
         linux/msg.h [1:1]
+        linux/mshv.h [1:1]
         linux/mtio.h [1:1]
         linux/nbd-netlink.h [1:1]
         linux/neighbour.h [1:1]
@@ -1351,6 +1382,8 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/nitro_enclaves.h [1:1]
         linux/nl80211-vnd-intel.h [1:1]
         linux/nsfs.h [1:1]
+        linux/nsm.h [1:1]
+        linux/ntsync.h [1:1]
         linux/nubus.h [1:1]
         linux/nvme_ioctl.h [1:1]
         linux/nvram.h [1:1]
@@ -1359,6 +1392,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/openat2.h [1:1]
         linux/openvswitch.h [1:1]
         linux/packet_diag.h [1:1]
+        linux/papr_pdsm.h [1:1]
         linux/param.h [1:1]
         linux/patchkey.h [1:1]
         linux/pci.h [1:1]
@@ -1378,6 +1412,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/ppp-comp.h [1:1]
         linux/ppp-ioctl.h [1:1]
         linux/ppp_defs.h [1:1]
+        linux/pps_gen.h [1:1]
         linux/pr.h [1:1]
         linux/prctl.h [1:1]
         linux/psample.h [1:1]
@@ -1389,8 +1424,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/radeonfb.h [1:1]
         linux/random.h [1:1]
         linux/reboot.h [1:1]
-        linux/reiserfs_fs.h [1:1]
-        linux/reiserfs_xattr.h [1:1]
         linux/resource.h [1:1]
         linux/romfs_fs.h [1:1]
         linux/rose.h [1:1]
@@ -1439,7 +1472,6 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/tc_act/tc_defact.h [1:1]
         linux/tc_act/tc_gact.h [1:1]
         linux/tc_act/tc_ife.h [1:1]
-        linux/tc_act/tc_ipt.h [1:1]
         linux/tc_act/tc_mirred.h [1:1]
         linux/tc_act/tc_mpls.h [1:1]
         linux/tc_act/tc_nat.h [1:1]
@@ -1462,6 +1494,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/tiocl.h [1:1]
         linux/tipc_sockets_diag.h [1:1]
         linux/tps6594_pfsm.h [1:1]
+        linux/trace_mmap.h [1:1]
         linux/tty.h [1:1]
         linux/tty_flags.h [1:1]
         linux/types.h [1:1]
@@ -1492,7 +1525,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/v4l2-dv-timings.h [1:1]
         linux/v4l2-mediabus.h [1:1]
         linux/v4l2-subdev.h [1:1]
-        linux/vduse.h [1:1]
+        linux/vesa.h [1:1]
         linux/veth.h [1:1]
         linux/vfio.h [1:1]
         linux/vfio_ccw.h [1:1]
@@ -1517,10 +1550,13 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         linux/xilinx-v4l2-controls.h [1:1]
         linux/zorro.h [1:1]
         linux/zorro_ids.h [1:1]
+        misc/amd-apml.h [1:1]
         misc/fastrpc.h [1:1]
+        misc/mrvl_cn10k_dpi.h [1:1]
         misc/pvpanic.h [1:1]
         mtd/inftl-user.h [1:1]
         rdma/rdma_netlink.h [1:1]
+        regulator/regulator.h [1:1]
         scsi/fc/fc_els.h [1:1]
         scsi/fc/fc_fs.h [1:1]
         scsi/fc/fc_gs.h [1:1]
@@ -1528,8 +1564,10 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
         scsi/scsi_bsg_ufs.h [1:1]
         sound/asoc.h [1:1]
         sound/compress_offload.h [1:1]
+        sound/fcp.h [1:1]
         sound/firewire.h [1:1]
         sound/intel/avs/tokens.h [1:1]
+        sound/scarlett2.h [1:1]
         sound/skl-tplg-interface.h [1:1]
         sound/snd_ar_tokens.h [1:1]
         sound/snd_sst_tokens.h [1:1]
@@ -1538,7 +1576,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: _nf/linux/netfilter/xt_C
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 0aaba463e053090a6ce63cc59b867056
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorder_powerpc.h at line 1, asm/elf_powerpc.h at line 1, asm/ipcbuf_powerpc.h at line 1, asm/ist_x86.h at line 1, asm/mman_powerpc.h at line 1, asm/nvram_powerpc.h at line 1, asm/opal-prd_powerpc.h at line 1, asm/ptrace_powerpc.h at line 1, asm/sembuf_powerpc.h at line 1, asm/shmbuf_powerpc.h at line 1, asm/sigcontext_powerpc.h at line 1, asm/socket_powerpc.h at line 1, asm/spu_info_powerpc.h at line 1, asm/stat_powerpc.h at line 1, asm/swab_powerpc.h at line 1, asm/termbits_powerpc.h at line 1, asm/termios_powerpc.h at line 1, asm/types_powerpc.h at line 1, asm/unistd_powerpc.h at line 1, asm/vas-api_powerpc.h at line 1, drm/exynos_drm.h at line 1, linux/apm_bios.h at line 1, linux/aspeed-lpc-ctrl.h at line 1, linux/aspeed-p2a-ctrl.h at line 1, linux/aspeed-video.h at line 1, linux/audit.h at line 1, linux/auto_dev-ioctl.h at line 1, linux/auto_fs.h at line 1, linux/auto_fs4.h at line 1, linux/bt-bmc.h at line 1, linux/cfm_bridge.h at line 1, linux/connector.h at line 1, linux/cycx_cfm.h at line 1, linux/devlink.h at line 1, linux/dns_resolver.h at line 1, linux/elf-fdpic.h at line 1, linux/eventpoll.h at line 1, linux/fsi.h at line 1, linux/hash_info.h at line 1, linux/hid.h at line 1, linux/hiddev.h at line 1, linux/hsr_netlink.h at line 1, linux/i2c-dev.h at line 1, linux/i2c.h at line 1, linux/i2o-dev.h at line 1, linux/i8k.h at line 1, linux/icmp.h at line 1, linux/if.h at line 1, linux/if_alg.h at line 1, linux/if_arcnet.h at line 1, linux/if_arp.h at line 1, linux/if_bridge.h at line 1, linux/if_cablemodem.h at line 1, linux/if_ether.h at line 1, linux/if_fc.h at line 1, linux/if_fddi.h at line 1, linux/if_hippi.h at line 1, linux/if_macsec.h at line 1, linux/if_plip.h at line 1, linux/if_pppol2tp.h at line 1, linux/if_pppox.h at line 1, linux/if_team.h at line 1, linux/if_tun.h at line 1, linux/if_vlan.h at line 1, linux/if_x25.h at line 1, linux/igmp.h at line 1, linux/in.h at line 1, linux/in6.h at line 1, linux/ioam6.h at line 1, linux/ioam6_genl.h at line 1, linux/ioam6_iptunnel.h at line 1, linux/ip.h at line 1, linux/ipmi.h at line 1, linux/ipmi_msgdefs.h at line 1, linux/ipv6_route.h at line 1, linux/ivtv.h at line 1, linux/ivtvfb.h at line 1, linux/joystick.h at line 1, linux/keyctl.h at line 1, linux/map_to_14segment.h at line 1, linux/map_to_7segment.h at line 1, linux/mpls_iptunnel.h at line 1, linux/mptcp.h at line 1, linux/mrp_bridge.h at line 1, linux/net.h at line 1, linux/netdevice.h at line 1, linux/netfilter/xt_connmark.h at line 1, linux/netfilter/xt_osf.h at line 1, linux/nfsd/cld.h at line 1, linux/omapfb.h at line 1, linux/phantom.h at line 1, linux/ppdev.h at line 1, linux/pps.h at line 1, linux/ptp_clock.h at line 1, linux/raid/md_p.h at line 1, linux/raid/md_u.h at line 1, linux/route.h at line 1, linux/rpl.h at line 1, linux/rpl_iptunnel.h at line 1, linux/rseq.h at line 1, linux/sctp.h at line 1, linux/seg6.h at line 1, linux/seg6_iptunnel.h at line 1, linux/serial_core.h at line 1, linux/sockios.h at line 1, linux/sonypi.h at line 1, linux/spi/spi.h at line 1, linux/spi/spidev.h at line 1, linux/surface_aggregator/cdev.h at line 1, linux/surface_aggregator/dtx.h at line 1, linux/tc_act/tc_bpf.h at line 1, linux/tc_act/tc_gate.h at line 1, linux/tc_act/tc_skbmod.h at line 1, linux/tc_act/tc_tunnel_key.h at line 1, linux/tc_act/tc_vlan.h at line 1, linux/tcp.h at line 1, linux/toshiba.h at line 1, linux/udp.h at line 1, linux/uhid.h at line 1, linux/uinput.h at line 1, linux/uio.h at line 1, linux/uleds.h at line 1, linux/usb/g_printer.h at line 1, linux/usb/g_uvc.h at line 1, linux/usbdevice_fs.h at line 1, linux/vdpa.h at line 1, misc/cxl.h at line 1, misc/ocxl.h at line 1, misc/uacce/hisi_qm.h at line 1, misc/uacce/uacce.h at line 1, misc/xilinx_sdfec.h at line 1, mtd/mtd-abi.h at line 1, mtd/mtd-user.h at line 1, mtd/nftl-user.h at line 1, mtd/ubi-user.h at line 1, scsi/cxlflash_ioctl.h at line 1, scsi/scsi_bsg_fc.h at line 1, scsi/scsi_netlink.h at line 1, scsi/scsi_netlink_fc.h at line 1, sound/asequencer.h at line 1, sound/asound.h at line 1, sound/asound_fm.h at line 1, sound/emu10k1.h at line 1, sound/hdsp.h at line 1, sound/hdspm.h at line 1, sound/sb16_csp.h at line 1, sound/sfnt_info.h at line 1, sound/tlv.h at line 1, sound/usb_stream.h at line 1, video/sisfb.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorder_powerpc.h at line 1, asm/elf_powerpc.h at line 1, asm/ipcbuf_powerpc.h at line 1, asm/ist_x86.h at line 1, asm/mman_powerpc.h at line 1, asm/nvram_powerpc.h at line 1, asm/opal-prd_powerpc.h at line 1, asm/ptrace_powerpc.h at line 1, asm/sembuf_powerpc.h at line 1, asm/shmbuf_powerpc.h at line 1, asm/sigcontext_powerpc.h at line 1, asm/socket_powerpc.h at line 1, asm/spu_info_powerpc.h at line 1, asm/stat_powerpc.h at line 1, asm/swab_powerpc.h at line 1, asm/termbits_powerpc.h at line 1, asm/termios_powerpc.h at line 1, asm/types_powerpc.h at line 1, asm/unistd_powerpc.h at line 1, asm/vas-api_powerpc.h at line 1, drm/exynos_drm.h at line 1, linux/apm_bios.h at line 1, linux/aspeed-lpc-ctrl.h at line 1, linux/aspeed-p2a-ctrl.h at line 1, linux/aspeed-video.h at line 1, linux/audit.h at line 1, linux/auto_dev-ioctl.h at line 1, linux/auto_fs.h at line 1, linux/auto_fs4.h at line 1, linux/bt-bmc.h at line 1, linux/cfm_bridge.h at line 1, linux/connector.h at line 1, linux/cycx_cfm.h at line 1, linux/devlink.h at line 1, linux/dns_resolver.h at line 1, linux/elf-fdpic.h at line 1, linux/eventpoll.h at line 1, linux/fsi.h at line 1, linux/hash_info.h at line 1, linux/hid.h at line 1, linux/hiddev.h at line 1, linux/hsr_netlink.h at line 1, linux/i2c-dev.h at line 1, linux/i2c.h at line 1, linux/i2o-dev.h at line 1, linux/i8k.h at line 1, linux/icmp.h at line 1, linux/if.h at line 1, linux/if_alg.h at line 1, linux/if_arcnet.h at line 1, linux/if_arp.h at line 1, linux/if_bridge.h at line 1, linux/if_ether.h at line 1, linux/if_fc.h at line 1, linux/if_fddi.h at line 1, linux/if_hippi.h at line 1, linux/if_macsec.h at line 1, linux/if_plip.h at line 1, linux/if_pppol2tp.h at line 1, linux/if_pppox.h at line 1, linux/if_tun.h at line 1, linux/if_vlan.h at line 1, linux/if_x25.h at line 1, linux/igmp.h at line 1, linux/in.h at line 1, linux/in6.h at line 1, linux/ioam6.h at line 1, linux/ioam6_genl.h at line 1, linux/ioam6_iptunnel.h at line 1, linux/ip.h at line 1, linux/ipmi.h at line 1, linux/ipmi_msgdefs.h at line 1, linux/ipv6_route.h at line 1, linux/ivtv.h at line 1, linux/ivtvfb.h at line 1, linux/joystick.h at line 1, linux/keyctl.h at line 1, linux/map_to_14segment.h at line 1, linux/map_to_7segment.h at line 1, linux/mpls_iptunnel.h at line 1, linux/mptcp.h at line 1, linux/mrp_bridge.h at line 1, linux/net.h at line 1, linux/netdevice.h at line 1, linux/netfilter/xt_connmark.h at line 1, linux/netfilter/xt_osf.h at line 1, linux/nfsd/cld.h at line 1, linux/npcm-video.h at line 1, linux/omapfb.h at line 1, linux/phantom.h at line 1, linux/ppdev.h at line 1, linux/pps.h at line 1, linux/ptp_clock.h at line 1, linux/raid/md_p.h at line 1, linux/raid/md_u.h at line 1, linux/route.h at line 1, linux/rpl.h at line 1, linux/rpl_iptunnel.h at line 1, linux/rseq.h at line 1, linux/sctp.h at line 1, linux/seg6.h at line 1, linux/seg6_iptunnel.h at line 1, linux/serial_core.h at line 1, linux/sockios.h at line 1, linux/sonypi.h at line 1, linux/spi/spi.h at line 1, linux/spi/spidev.h at line 1, linux/surface_aggregator/cdev.h at line 1, linux/surface_aggregator/dtx.h at line 1, linux/tc_act/tc_bpf.h at line 1, linux/tc_act/tc_gate.h at line 1, linux/tc_act/tc_skbmod.h at line 1, linux/tc_act/tc_tunnel_key.h at line 1, linux/tc_act/tc_vlan.h at line 1, linux/tcp.h at line 1, linux/toshiba.h at line 1, linux/udp.h at line 1, linux/uhid.h at line 1, linux/uinput.h at line 1, linux/uio.h at line 1, linux/uleds.h at line 1, linux/usb/g_hid.h at line 1, linux/usb/g_printer.h at line 1, linux/usb/g_uvc.h at line 1, linux/usbdevice_fs.h at line 1, linux/vdpa.h at line 1, misc/ocxl.h at line 1, misc/uacce/hisi_qm.h at line 1, misc/uacce/uacce.h at line 1, misc/xilinx_sdfec.h at line 1, mtd/mtd-abi.h at line 1, mtd/mtd-user.h at line 1, mtd/nftl-user.h at line 1, mtd/ubi-user.h at line 1, scsi/scsi_bsg_fc.h at line 1, scsi/scsi_netlink.h at line 1, scsi/scsi_netlink_fc.h at line 1, sound/asequencer.h at line 1, sound/asound.h at line 1, sound/asound_fm.h at line 1, sound/emu10k1.h at line 1, sound/hdsp.h at line 1, sound/hdspm.h at line 1, sound/sb16_csp.h at line 1, sound/sfnt_info.h at line 1, sound/tlv.h at line 1, sound/usb_stream.h at line 1, video/sisfb.h at line 1
     License text:
         /* SPDX-License-Identifier: GPL-2.0+ WITH Linux-syscall-note */
     Scancode info:
@@ -1599,7 +1637,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/if_arcnet.h [1:1]
         linux/if_arp.h [1:1]
         linux/if_bridge.h [1:1]
-        linux/if_cablemodem.h [1:1]
         linux/if_ether.h [1:1]
         linux/if_fc.h [1:1]
         linux/if_fddi.h [1:1]
@@ -1608,7 +1645,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/if_plip.h [1:1]
         linux/if_pppol2tp.h [1:1]
         linux/if_pppox.h [1:1]
-        linux/if_team.h [1:1]
         linux/if_tun.h [1:1]
         linux/if_vlan.h [1:1]
         linux/if_x25.h [1:1]
@@ -1636,6 +1672,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/netfilter/xt_connmark.h [1:1]
         linux/netfilter/xt_osf.h [1:1]
         linux/nfsd/cld.h [1:1]
+        linux/npcm-video.h [1:1]
         linux/omapfb.h [1:1]
         linux/phantom.h [1:1]
         linux/ppdev.h [1:1]
@@ -1669,11 +1706,11 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/uinput.h [1:1]
         linux/uio.h [1:1]
         linux/uleds.h [1:1]
+        linux/usb/g_hid.h [1:1]
         linux/usb/g_printer.h [1:1]
         linux/usb/g_uvc.h [1:1]
         linux/usbdevice_fs.h [1:1]
         linux/vdpa.h [1:1]
-        misc/cxl.h [1:1]
         misc/ocxl.h [1:1]
         misc/uacce/hisi_qm.h [1:1]
         misc/uacce/uacce.h [1:1]
@@ -1682,7 +1719,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         mtd/mtd-user.h [1:1]
         mtd/nftl-user.h [1:1]
         mtd/ubi-user.h [1:1]
-        scsi/cxlflash_ioctl.h [1:1]
         scsi/scsi_bsg_fc.h [1:1]
         scsi/scsi_netlink.h [1:1]
         scsi/scsi_netlink_fc.h [1:1]
@@ -1755,7 +1791,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/if_arcnet.h [1:1]
         linux/if_arp.h [1:1]
         linux/if_bridge.h [1:1]
-        linux/if_cablemodem.h [1:1]
         linux/if_ether.h [1:1]
         linux/if_fc.h [1:1]
         linux/if_fddi.h [1:1]
@@ -1764,7 +1799,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/if_plip.h [1:1]
         linux/if_pppol2tp.h [1:1]
         linux/if_pppox.h [1:1]
-        linux/if_team.h [1:1]
         linux/if_tun.h [1:1]
         linux/if_vlan.h [1:1]
         linux/if_x25.h [1:1]
@@ -1792,6 +1826,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/netfilter/xt_connmark.h [1:1]
         linux/netfilter/xt_osf.h [1:1]
         linux/nfsd/cld.h [1:1]
+        linux/npcm-video.h [1:1]
         linux/omapfb.h [1:1]
         linux/phantom.h [1:1]
         linux/ppdev.h [1:1]
@@ -1825,11 +1860,11 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         linux/uinput.h [1:1]
         linux/uio.h [1:1]
         linux/uleds.h [1:1]
+        linux/usb/g_hid.h [1:1]
         linux/usb/g_printer.h [1:1]
         linux/usb/g_uvc.h [1:1]
         linux/usbdevice_fs.h [1:1]
         linux/vdpa.h [1:1]
-        misc/cxl.h [1:1]
         misc/ocxl.h [1:1]
         misc/uacce/hisi_qm.h [1:1]
         misc/uacce/uacce.h [1:1]
@@ -1838,7 +1873,6 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/byteorde
         mtd/mtd-user.h [1:1]
         mtd/nftl-user.h [1:1]
         mtd/ubi-user.h [1:1]
-        scsi/cxlflash_ioctl.h [1:1]
         scsi/scsi_bsg_fc.h [1:1]
         scsi/scsi_netlink.h [1:1]
         scsi/scsi_netlink_fc.h [1:1]
@@ -2071,8 +2105,12 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
+        drm/asahi_drm.h [1:1]
+        drm/nova_drm.h [1:1]
         drm/panfrost_drm.h [1:1]
+        drm/panthor_drm.h [1:1]
         drm/tegra_drm.h [1:1]
+        drm/xe_drm.h [1:1]
         linux/batman_adv.h [1:1]
         linux/vbox_err.h [1:1]
 
@@ -2147,17 +2185,6 @@ BELONGS ya.make
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         drm/drm_sarea.h [12:29]
-
-KEEP     GPL-2.0-or-later WITH Linux-syscall-note 2d7a9700ba7dbda0c22883d60ef02bb6
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: GPL-2.0-or-later
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
-    Files with this license:
-        linux/if_cablemodem.h [8:12]
 
 KEEP     GPL-1.0-or-later WITH Linux-syscall-note 2e7ea89eba1259594c306cffdc0e58b4
 BELONGS ya.make
@@ -2281,8 +2308,8 @@ BELONGS ya.make
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)" 32b69adb9137b7c2f91ade8414023a9a
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/virtio_pmem.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/virtio_pmem.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/virtio_pmem.h at line 1, rdma/siw-abi.h at line 1
+FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/virtio_pmem.h at line 1, rdma/siw-abi.h at line 1
     License text:
         /* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause */
     Scancode info:
@@ -2292,6 +2319,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/virtio_pmem.h at l
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
         linux/virtio_pmem.h [1:1]
+        rdma/siw-abi.h [1:1]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 100.00
@@ -2299,6 +2327,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/virtio_pmem.h at l
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
         linux/virtio_pmem.h [1:1]
+        rdma/siw-abi.h [1:1]
     Scancode info:
         Original SPDX id: BSD-3-Clause
         Score           : 100.00
@@ -2306,6 +2335,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/virtio_pmem.h at l
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         linux/virtio_pmem.h [1:1]
+        rdma/siw-abi.h [1:1]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 3343b3510b27b2bf4268e9c65beba9a6
 BELONGS ya.make
@@ -2414,7 +2444,7 @@ BELONGS ya.make
 
 KEEP     "(GPL-2.0-or-later WITH Linux-syscall-note OR BSD-3-Clause)" 3bf22fa58a1d6eb55418ee2202eb65b7
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/epapr_hcalls_powerpc.h at line 1, linux/fsl_hypervisor.h at line 1, linux/v4l2-common.h at line 1, linux/v4l2-controls.h at line 1, linux/videodev2.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/epapr_hcalls_powerpc.h at line 1, linux/fsl_hypervisor.h at line 1, linux/v4l2-common.h at line 1, linux/v4l2-controls.h at line 1, linux/videodev2.h at line 1, linux/virtio_rtc.h at line 1
     License text:
         /* SPDX-License-Identifier: ((GPL-2.0+ WITH Linux-syscall-note) OR BSD-3-Clause) */
     Scancode info:
@@ -2428,6 +2458,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/epapr_hc
         linux/v4l2-common.h [1:1]
         linux/v4l2-controls.h [1:1]
         linux/videodev2.h [1:1]
+        linux/virtio_rtc.h [1:1]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 100.00
@@ -2439,6 +2470,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/epapr_hc
         linux/v4l2-common.h [1:1]
         linux/v4l2-controls.h [1:1]
         linux/videodev2.h [1:1]
+        linux/virtio_rtc.h [1:1]
     Scancode info:
         Original SPDX id: BSD-3-Clause
         Score           : 100.00
@@ -2450,6 +2482,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: asm/epapr_hc
         linux/v4l2-common.h [1:1]
         linux/v4l2-controls.h [1:1]
         linux/videodev2.h [1:1]
+        linux/virtio_rtc.h [1:1]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 40893c88c24072e02a822e0e1f41b3c0
 BELONGS ya.make
@@ -2622,7 +2655,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-copyleft.LICENSE
     Files with this license:
-        linux/bpf.h [6410:6410]
+        linux/bpf.h [6592:6592]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 534ccb3153742b07bce86782a49733fc
 BELONGS ya.make
@@ -2703,7 +2736,6 @@ BELONGS ya.make
         linux/nfc.h [8:18]
         linux/nl80211.h [16:26]
         linux/rfkill.h [6:16]
-        linux/um_timetravel.h [2:12]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note 5825cf829d71fe773517984a9b9f21f1
 BELONGS ya.make
@@ -2737,13 +2769,11 @@ BELONGS ya.make
         linux/i2o-dev.h [7:10]
         linux/keyctl.h [7:10]
         linux/ppdev.h [9:12]
-        misc/cxl.h [5:8]
-        scsi/cxlflash_ioctl.h [10:13]
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" 59b2167fbd54495820591724b17ffb6e
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/lima_drm.h at line 1, linux/io_uring.h at line 1, linux/kfd_sysfs.h at line 1, linux/wireguard.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: drm/lima_drm.h at line 1, linux/io_uring.h at line 1, linux/kfd_sysfs.h at line 1, linux/wireguard.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/lima_drm.h at line 1, drm/vmwgfx_drm.h at line 1, linux/io_uring.h at line 1, linux/kfd_sysfs.h at line 1, linux/wireguard.h at line 1
+FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: drm/lima_drm.h at line 1, drm/vmwgfx_drm.h at line 1, linux/io_uring.h at line 1, linux/kfd_sysfs.h at line 1, linux/wireguard.h at line 1
     License text:
         /* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) OR MIT */
     Scancode info:
@@ -2753,6 +2783,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: drm/lima_drm.h at line 1
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
         drm/lima_drm.h [1:1]
+        drm/vmwgfx_drm.h [1:1]
         linux/io_uring.h [1:1]
         linux/kfd_sysfs.h [1:1]
         linux/wireguard.h [1:1]
@@ -2763,6 +2794,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: drm/lima_drm.h at line 1
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
         drm/lima_drm.h [1:1]
+        drm/vmwgfx_drm.h [1:1]
         linux/io_uring.h [1:1]
         linux/kfd_sysfs.h [1:1]
         linux/wireguard.h [1:1]
@@ -2773,6 +2805,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: drm/lima_drm.h at line 1
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         drm/lima_drm.h [1:1]
+        drm/vmwgfx_drm.h [1:1]
         linux/io_uring.h [1:1]
         linux/kfd_sysfs.h [1:1]
         linux/wireguard.h [1:1]
@@ -2900,6 +2933,18 @@ BELONGS ya.make
     Files with this license:
         linux/max2175.h [10:17]
 
+KEEP     GPL-2.0-or-later WITH Linux-syscall-note 66b0678cc1e630066300794fc75fb5fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
+    Files with this license:
+        linux/raid/md_p.h [6:9]
+        linux/raid/md_u.h [6:9]
+
 KEEP     GPL-1.0-or-later WITH Linux-syscall-note 67554a5538d9ed1b357a2cf2931d6dbf
 BELONGS ya.make
     License text:
@@ -2978,34 +3023,6 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         linux/quota.h [8:30]
-
-KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)" 6f929c51e7b0959cd2dcf6a57bb1aed1
-BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: rdma/siw-abi.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: rdma/siw-abi.h at line 1
-    License text:
-        /* SPDX-License-Identifier: (GPL-2.0 WITH Linux-syscall-note) or BSD-3-Clause */
-    Scancode info:
-        Original SPDX id: GPL-2.0-only
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
-    Files with this license:
-        rdma/siw-abi.h [1:1]
-    Scancode info:
-        Original SPDX id: Linux-syscall-note
-        Score           : 100.00
-        Match type      : TAG
-        Links           : https://spdx.org/licenses/Linux-syscall-note
-    Files with this license:
-        rdma/siw-abi.h [1:1]
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 100.00
-        Match type      : TAG
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        rdma/siw-abi.h [1:1]
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)" 7002d4a51fcfda9611808de214aa830c
 BELONGS ya.make
@@ -3243,7 +3260,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        drm/vmwgfx_drm.h [6:24]
+        drm/vmwgfx_drm.h [7:25]
 
 KEEP     GPL-2.0-only WITH Linux-syscall-note 831d33d185507b4c10011e27897d3950
 BELONGS ya.make
@@ -3494,7 +3511,7 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/rxrpc.
 
 KEEP     GPL-2.0-only WITH Linux-syscall-note 8f065979effd897c5008afa60beda79d
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_accel.h at line 1, linux/amt.h at line 1, linux/can/j1939.h at line 1, linux/can/netlink.h at line 1, linux/can/vxcan.h at line 1, linux/ccs.h at line 1, linux/dw100.h at line 1, linux/ethtool_netlink.h at line 1, linux/gpio.h at line 1, linux/input-event-codes.h at line 1, linux/netfilter/xt_IDLETIMER.h at line 1, linux/psp-dbc.h at line 1, linux/psp-sev.h at line 1, linux/remoteproc_cdev.h at line 1, linux/sev-guest.h at line 1, linux/wmi.h at line 1, linux/wwan.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_accel.h at line 1, linux/amt.h at line 1, linux/can/j1939.h at line 1, linux/can/netlink.h at line 1, linux/can/vxcan.h at line 1, linux/ccs.h at line 1, linux/dw100.h at line 1, linux/ethtool_netlink.h at line 1, linux/gpio.h at line 1, linux/input-event-codes.h at line 1, linux/media/amlogic/c3-isp-config.h at line 1, linux/media/raspberrypi/pisp_be_config.h at line 1, linux/media/raspberrypi/pisp_common.h at line 1, linux/media/raspberrypi/pisp_fe_config.h at line 1, linux/media/raspberrypi/pisp_fe_statistics.h at line 1, linux/netfilter/xt_IDLETIMER.h at line 1, linux/psp-dbc.h at line 1, linux/psp-sev.h at line 1, linux/remoteproc_cdev.h at line 1, linux/sev-guest.h at line 1, linux/thp7312.h at line 1, linux/wmi.h at line 1, linux/wwan.h at line 1
     License text:
         /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
     Scancode info:
@@ -3513,11 +3530,17 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_acc
         linux/ethtool_netlink.h [1:1]
         linux/gpio.h [1:1]
         linux/input-event-codes.h [1:1]
+        linux/media/amlogic/c3-isp-config.h [1:1]
+        linux/media/raspberrypi/pisp_be_config.h [1:1]
+        linux/media/raspberrypi/pisp_common.h [1:1]
+        linux/media/raspberrypi/pisp_fe_config.h [1:1]
+        linux/media/raspberrypi/pisp_fe_statistics.h [1:1]
         linux/netfilter/xt_IDLETIMER.h [1:1]
         linux/psp-dbc.h [1:1]
         linux/psp-sev.h [1:1]
         linux/remoteproc_cdev.h [1:1]
         linux/sev-guest.h [1:1]
+        linux/thp7312.h [1:1]
         linux/wmi.h [1:1]
         linux/wwan.h [1:1]
     Scancode info:
@@ -3536,11 +3559,17 @@ FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/ivpu_acc
         linux/ethtool_netlink.h [1:1]
         linux/gpio.h [1:1]
         linux/input-event-codes.h [1:1]
+        linux/media/amlogic/c3-isp-config.h [1:1]
+        linux/media/raspberrypi/pisp_be_config.h [1:1]
+        linux/media/raspberrypi/pisp_common.h [1:1]
+        linux/media/raspberrypi/pisp_fe_config.h [1:1]
+        linux/media/raspberrypi/pisp_fe_statistics.h [1:1]
         linux/netfilter/xt_IDLETIMER.h [1:1]
         linux/psp-dbc.h [1:1]
         linux/psp-sev.h [1:1]
         linux/remoteproc_cdev.h [1:1]
         linux/sev-guest.h [1:1]
+        linux/thp7312.h [1:1]
         linux/wmi.h [1:1]
         linux/wwan.h [1:1]
 
@@ -3769,7 +3798,6 @@ BELONGS ya.make
     Files with this license:
         linux/audit.h [7:19]
         linux/connector.h [8:20]
-        linux/serial_core.h [7:19]
         linux/usb/g_printer.h [7:19]
 
 KEEP     LGPL-2.1-or-later WITH Linux-syscall-note a1fe791907e48b7fbe6add4076b6739e
@@ -4051,7 +4079,6 @@ BELONGS ya.make
         asm/signal_arm64.h [5:15]
         asm/statfs_arm64.h [5:15]
         asm/ucontext_arm64.h [5:15]
-        asm/unistd_arm64.h [5:15]
 
 KEEP     GPL-1.0-or-later WITH Linux-syscall-note bb2e62e5ffbfa55ba83a82fd5e4300a4
 BELONGS ya.make
@@ -4174,7 +4201,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        linux/fuse.h [374:374]
+        linux/fuse.h [400:400]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note c196f33d1f74889d4f98f65f6f70ea8f
 BELONGS ya.make
@@ -4446,8 +4473,8 @@ BELONGS ya.make
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-2-Clause)" d48b313e0aef8b3710de6c719f0840ff
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/fuse.h at line 1, linux/if_infiniband.h at line 1, rdma/bnxt_re-abi.h at line 1, rdma/efa-abi.h at line 1, rdma/ocrdma-abi.h at line 1, rdma/vmw_pvrdma-abi.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/fuse.h at line 1, linux/if_infiniband.h at line 1, rdma/bnxt_re-abi.h at line 1, rdma/efa-abi.h at line 1, rdma/ocrdma-abi.h at line 1, rdma/vmw_pvrdma-abi.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/fuse.h at line 1, linux/if_infiniband.h at line 1, linux/vmclock-abi.h at line 1, rdma/bnxt_re-abi.h at line 1, rdma/efa-abi.h at line 1, rdma/ocrdma-abi.h at line 1, rdma/vmw_pvrdma-abi.h at line 1
+FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/fuse.h at line 1, linux/if_infiniband.h at line 1, linux/vmclock-abi.h at line 1, rdma/bnxt_re-abi.h at line 1, rdma/efa-abi.h at line 1, rdma/ocrdma-abi.h at line 1, rdma/vmw_pvrdma-abi.h at line 1
     License text:
         /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-2-Clause) */
     Scancode info:
@@ -4458,6 +4485,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/fuse.h at line 1, 
     Files with this license:
         linux/fuse.h [1:1]
         linux/if_infiniband.h [1:1]
+        linux/vmclock-abi.h [1:1]
         rdma/bnxt_re-abi.h [1:1]
         rdma/efa-abi.h [1:1]
         rdma/ocrdma-abi.h [1:1]
@@ -4470,6 +4498,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/fuse.h at line 1, 
     Files with this license:
         linux/fuse.h [1:1]
         linux/if_infiniband.h [1:1]
+        linux/vmclock-abi.h [1:1]
         rdma/bnxt_re-abi.h [1:1]
         rdma/efa-abi.h [1:1]
         rdma/ocrdma-abi.h [1:1]
@@ -4482,6 +4511,7 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/fuse.h at line 1, 
     Files with this license:
         linux/fuse.h [1:1]
         linux/if_infiniband.h [1:1]
+        linux/vmclock-abi.h [1:1]
         rdma/bnxt_re-abi.h [1:1]
         rdma/efa-abi.h [1:1]
         rdma/ocrdma-abi.h [1:1]
@@ -4737,6 +4767,7 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         linux/qemu_fw_cfg.h [1:1]
+        linux/um_timetravel.h [1:1]
         linux/virtio_bt.h [1:1]
         linux/virtio_iommu.h [1:1]
         linux/virtio_mem.h [1:1]
@@ -4771,7 +4802,6 @@ BELONGS ya.make
     Files with this license:
         linux/devlink.h [7:10]
         linux/if_macsec.h [7:10]
-        linux/if_team.h [6:9]
         linux/ncsi.h [4:7]
 
 KEEP     GPL-2.0-or-later WITH Linux-syscall-note ecba56244447b55aa64a4d515762567e
@@ -4895,8 +4925,8 @@ BELONGS ya.make
 
 KEEP     "(GPL-2.0-only WITH Linux-syscall-note OR BSD-3-Clause)" f6cd1a29925900ad8fb5272168f3beda
 BELONGS ya.make
-FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/cec-funcs.h at line 1, linux/cec.h at line 1, linux/fou.h at line 1, linux/handshake.h at line 1, linux/mei.h at line 1, linux/netdev.h at line 1, linux/rio_cm_cdev.h at line 1, linux/rio_mport_cdev.h at line 1, linux/scif_ioctl.h at line 1, linux/tipc.h at line 1, linux/tipc_config.h at line 1, linux/tipc_netlink.h at line 1, linux/virtio_fs.h at line 1, linux/virtio_pcidev.h at line 1, linux/virtio_scmi.h at line 1, rdma/erdma-abi.h at line 1, rdma/hfi/hfi1_ioctl.h at line 1, rdma/hfi/hfi1_user.h at line 1, rdma/rvt-abi.h at line 1, sound/sof/abi.h at line 1, sound/sof/fw.h at line 1, sound/sof/header.h at line 1, sound/sof/tokens.h at line 1
-FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/cec-funcs.h at line 1, linux/cec.h at line 1, linux/fou.h at line 1, linux/handshake.h at line 1, linux/mei.h at line 1, linux/netdev.h at line 1, linux/rio_cm_cdev.h at line 1, linux/rio_mport_cdev.h at line 1, linux/scif_ioctl.h at line 1, linux/tipc.h at line 1, linux/tipc_config.h at line 1, linux/tipc_netlink.h at line 1, linux/virtio_fs.h at line 1, linux/virtio_pcidev.h at line 1, linux/virtio_scmi.h at line 1, rdma/erdma-abi.h at line 1, rdma/hfi/hfi1_ioctl.h at line 1, rdma/hfi/hfi1_user.h at line 1, rdma/rvt-abi.h at line 1, sound/sof/abi.h at line 1, sound/sof/fw.h at line 1, sound/sof/header.h at line 1, sound/sof/tokens.h at line 1
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: linux/cec-funcs.h at line 1, linux/cec.h at line 1, linux/dpll.h at line 1, linux/ethtool_netlink_generated.h at line 1, linux/fou.h at line 1, linux/handshake.h at line 1, linux/if_team.h at line 1, linux/lockd_netlink.h at line 1, linux/mei.h at line 1, linux/mptcp_pm.h at line 1, linux/net_shaper.h at line 1, linux/netdev.h at line 1, linux/nfsd_netlink.h at line 1, linux/ovpn.h at line 1, linux/rio_cm_cdev.h at line 1, linux/rio_mport_cdev.h at line 1, linux/scif_ioctl.h at line 1, linux/tipc.h at line 1, linux/tipc_config.h at line 1, linux/tipc_netlink.h at line 1, linux/vduse.h at line 1, linux/virtio_fs.h at line 1, linux/virtio_pcidev.h at line 1, linux/virtio_scmi.h at line 1, rdma/erdma-abi.h at line 1, rdma/hfi/hfi1_ioctl.h at line 1, rdma/hfi/hfi1_user.h at line 1, rdma/rvt-abi.h at line 1, sound/sof/abi.h at line 1, sound/sof/fw.h at line 1, sound/sof/header.h at line 1, sound/sof/tokens.h at line 1
+FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/cec-funcs.h at line 1, linux/cec.h at line 1, linux/dpll.h at line 1, linux/ethtool_netlink_generated.h at line 1, linux/fou.h at line 1, linux/handshake.h at line 1, linux/if_team.h at line 1, linux/lockd_netlink.h at line 1, linux/mei.h at line 1, linux/mptcp_pm.h at line 1, linux/net_shaper.h at line 1, linux/netdev.h at line 1, linux/nfsd_netlink.h at line 1, linux/ovpn.h at line 1, linux/rio_cm_cdev.h at line 1, linux/rio_mport_cdev.h at line 1, linux/scif_ioctl.h at line 1, linux/tipc.h at line 1, linux/tipc_config.h at line 1, linux/tipc_netlink.h at line 1, linux/vduse.h at line 1, linux/virtio_fs.h at line 1, linux/virtio_pcidev.h at line 1, linux/virtio_scmi.h at line 1, rdma/erdma-abi.h at line 1, rdma/hfi/hfi1_ioctl.h at line 1, rdma/hfi/hfi1_user.h at line 1, rdma/rvt-abi.h at line 1, sound/sof/abi.h at line 1, sound/sof/fw.h at line 1, sound/sof/header.h at line 1, sound/sof/tokens.h at line 1
     License text:
         /* SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause) */
     Scancode info:
@@ -4907,16 +4937,25 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/cec-funcs.h at lin
     Files with this license:
         linux/cec-funcs.h [1:1]
         linux/cec.h [1:1]
+        linux/dpll.h [1:1]
+        linux/ethtool_netlink_generated.h [1:1]
         linux/fou.h [1:1]
         linux/handshake.h [1:1]
+        linux/if_team.h [1:1]
+        linux/lockd_netlink.h [1:1]
         linux/mei.h [1:1]
+        linux/mptcp_pm.h [1:1]
+        linux/net_shaper.h [1:1]
         linux/netdev.h [1:1]
+        linux/nfsd_netlink.h [1:1]
+        linux/ovpn.h [1:1]
         linux/rio_cm_cdev.h [1:1]
         linux/rio_mport_cdev.h [1:1]
         linux/scif_ioctl.h [1:1]
         linux/tipc.h [1:1]
         linux/tipc_config.h [1:1]
         linux/tipc_netlink.h [1:1]
+        linux/vduse.h [1:1]
         linux/virtio_fs.h [1:1]
         linux/virtio_pcidev.h [1:1]
         linux/virtio_scmi.h [1:1]
@@ -4936,16 +4975,25 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/cec-funcs.h at lin
     Files with this license:
         linux/cec-funcs.h [1:1]
         linux/cec.h [1:1]
+        linux/dpll.h [1:1]
+        linux/ethtool_netlink_generated.h [1:1]
         linux/fou.h [1:1]
         linux/handshake.h [1:1]
+        linux/if_team.h [1:1]
+        linux/lockd_netlink.h [1:1]
         linux/mei.h [1:1]
+        linux/mptcp_pm.h [1:1]
+        linux/net_shaper.h [1:1]
         linux/netdev.h [1:1]
+        linux/nfsd_netlink.h [1:1]
+        linux/ovpn.h [1:1]
         linux/rio_cm_cdev.h [1:1]
         linux/rio_mport_cdev.h [1:1]
         linux/scif_ioctl.h [1:1]
         linux/tipc.h [1:1]
         linux/tipc_config.h [1:1]
         linux/tipc_netlink.h [1:1]
+        linux/vduse.h [1:1]
         linux/virtio_fs.h [1:1]
         linux/virtio_pcidev.h [1:1]
         linux/virtio_scmi.h [1:1]
@@ -4965,16 +5013,25 @@ FILE_INCLUDE LICENSES/preferred/GPL-2.0 found in files: linux/cec-funcs.h at lin
     Files with this license:
         linux/cec-funcs.h [1:1]
         linux/cec.h [1:1]
+        linux/dpll.h [1:1]
+        linux/ethtool_netlink_generated.h [1:1]
         linux/fou.h [1:1]
         linux/handshake.h [1:1]
+        linux/if_team.h [1:1]
+        linux/lockd_netlink.h [1:1]
         linux/mei.h [1:1]
+        linux/mptcp_pm.h [1:1]
+        linux/net_shaper.h [1:1]
         linux/netdev.h [1:1]
+        linux/nfsd_netlink.h [1:1]
+        linux/ovpn.h [1:1]
         linux/rio_cm_cdev.h [1:1]
         linux/rio_mport_cdev.h [1:1]
         linux/scif_ioctl.h [1:1]
         linux/tipc.h [1:1]
         linux/tipc_config.h [1:1]
         linux/tipc_netlink.h [1:1]
+        linux/vduse.h [1:1]
         linux/virtio_fs.h [1:1]
         linux/virtio_pcidev.h [1:1]
         linux/virtio_scmi.h [1:1]
@@ -4997,6 +5054,33 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
     Files with this license:
         linux/uleds.h [5:13]
+
+KEEP     GPL-2.0-only WITH Linux-syscall-note AND MIT f7cd053e3520381be5b812be5402b47c
+BELONGS ya.make
+FILE_INCLUDE LICENSES/exceptions/Linux-syscall-note found in files: drm/pvr_drm.h at line 1
+    License text:
+        /* SPDX-License-Identifier: (GPL-2.0-only WITH Linux-syscall-note) OR MIT */
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        drm/pvr_drm.h [1:1]
+    Scancode info:
+        Original SPDX id: Linux-syscall-note
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://spdx.org/licenses/Linux-syscall-note
+    Files with this license:
+        drm/pvr_drm.h [1:1]
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        drm/pvr_drm.h [1:1]
 
 KEEP     GPL-1.0-or-later WITH Linux-syscall-note fa374a90714925f73d68fd16890fdca0
 BELONGS ya.make

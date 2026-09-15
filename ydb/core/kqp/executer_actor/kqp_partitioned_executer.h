@@ -8,14 +8,14 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/aclib/user_context.h>
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 
 namespace NKikimr::NKqp {
 
 struct TKqpPartitionedExecuterSettings {
-    IKqpGateway::TExecPhysicalRequest&& LiteralRequest;
-    IKqpGateway::TExecPhysicalRequest&& PhysicalRequest;
+    IKqpGateway::TExecPhysicalRequest&& Request;
     TActorId SessionActorId;
     const NMiniKQL::IFunctionRegistry* FuncRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -33,8 +33,10 @@ struct TKqpPartitionedExecuterSettings {
     const TShardIdToTableInfoPtr& ShardIdToTableInfo;
     ui64 WriteBufferInitialMemoryLimit;
     ui64 WriteBufferMemoryLimit;
+    ui64 QuerySpanId = 0;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 };
 
-NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings);
+NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 }  // namespace NKikimr::NKqp

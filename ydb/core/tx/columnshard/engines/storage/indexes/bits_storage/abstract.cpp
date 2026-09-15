@@ -1,5 +1,5 @@
 #include "abstract.h"
-#include "string.h"
+#include "fix_string.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TString IBitsStorage::DebugString() const {
+TString IBitsStorageViewer::DebugString() const {
     TStringBuilder sb;
     ui32 count1 = 0;
     ui32 count0 = 0;

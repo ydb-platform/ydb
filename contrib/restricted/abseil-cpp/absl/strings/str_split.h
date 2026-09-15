@@ -127,7 +127,7 @@ class ByString {
   absl::string_view Find(absl::string_view text, size_t pos) const;
 
  private:
-  const std::string delimiter_;
+  std::string delimiter_;
 };
 
 // ByAsciiWhitespace
@@ -277,7 +277,7 @@ template <typename Delimiter>
 class MaxSplitsImpl {
  public:
   MaxSplitsImpl(Delimiter delimiter, int limit)
-      : delimiter_(delimiter), limit_(limit), count_(0) {}
+      : delimiter_(std::move(delimiter)), limit_(limit), count_(0) {}
   absl::string_view Find(absl::string_view text, size_t pos) {
     if (count_++ == limit_) {
       return absl::string_view(text.data() + text.size(),
@@ -382,16 +382,16 @@ struct SkipEmpty {
 //   // v[0] == " a ", v[1] == " ", v[2] == "b"
 struct SkipWhitespace {
   bool operator()(absl::string_view sp) const {
-    sp = absl::StripAsciiWhitespace(sp);
+    sp = absl::StripLeadingAsciiWhitespace(sp);
     return !sp.empty();
   }
 };
 
 template <typename T>
 using EnableSplitIfString =
-    typename std::enable_if<std::is_same<T, std::string>::value ||
-                            std::is_same<T, const std::string>::value,
-                            int>::type;
+    std::enable_if_t<std::is_same_v<T, std::string> ||
+                         std::is_same_v<T, const std::string>,
+                     int>;
 
 //------------------------------------------------------------------------------
 //                                  StrSplit()
@@ -399,11 +399,16 @@ using EnableSplitIfString =
 
 // StrSplit()
 //
-// Splits a given string based on the provided `Delimiter` object, returning the
-// elements within the type specified by the caller. Optionally, you may pass a
-// `Predicate` to `StrSplit()` indicating whether to include or exclude the
-// resulting element within the final result set. (See the overviews for
-// Delimiters and Predicates above.)
+// Splits a string into a sequence of substrings identified by `Delimiter`. The
+// input is processed sequentially from beginning to end, and each resulting
+// substring is filtered by an optional `Predicate` before inclusion in the
+// result set. `StrSplit()` returns a lazy range that preserves the substrings
+// original order and is convertible to the collection type specified by the
+// caller.
+//
+// Optionally, you may pass a `Predicate` to `StrSplit()` indicating whether to
+// include or exclude the resulting element within the final result set. (See
+// the overviews for Delimiters and Predicates above.)
 //
 // Example:
 //

@@ -1,4 +1,5 @@
 #include "yql_yt_table_data_service_reader.h"
+#include <library/cpp/threading/future/wait/wait.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
@@ -9,12 +10,16 @@ TFmrTableDataServiceReader::TFmrTableDataServiceReader(
     const TString& tableId,
     const std::vector<TTableRange>& tableRanges,
     ITableDataService::TPtr tableDataService,
+    const std::vector<TString>& neededColumns,
+    const TString& columnGroupSpec,
     const TFmrReaderSettings& settings
 )
     : TableId_(tableId),
     TableRanges_(tableRanges),
     TableDataService_(tableDataService),
-    ReadAheadChunks_(settings.ReadAheadChunks)
+    ReadAheadChunks_(settings.ReadAheadChunks),
+    NeededColumns_(neededColumns),
+    ColumnGroupSpec_(GetColumnGroupsFromSpec(columnGroupSpec))
 {
     SetMinChunkInNewRange();
     ReadAhead();
@@ -41,12 +46,12 @@ size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
             try {
                 data = chunk.Data.GetValueSync();
             } catch (...) {
-                ythrow yexception() << "Error reading chunk: " << chunk.Meta.ToString() << "Error: " << CurrentExceptionMessage();
+                throw TFmrNonRetryableJobException() << "Error reading chunk: " << chunk.Meta.ToString() << "Error: " << CurrentExceptionMessage();
             }
             if (data) {
                 DataBuffer_.Assign(data->data(), data->size());
             } else {
-                ythrow yexception() << "No data for chunk:" << chunk.Meta.ToString();
+                throw TFmrNonRetryableJobException() << "No data for chunk:" << chunk.Meta.ToString();
             }
 
             PendingChunks_.pop();
@@ -67,8 +72,8 @@ void TFmrTableDataServiceReader::ReadAhead() {
         }
         auto currentPartId = TableRanges_[CurrentRange_].PartId;
         if (CurrentChunk_ < TableRanges_[CurrentRange_].MaxChunk) {
-            auto key = GetTableDataServiceKey(TableId_, currentPartId, CurrentChunk_);
-            PendingChunks_.push({.Data=TableDataService_->Get(key), .Meta={TableId_, currentPartId, CurrentChunk_}});
+            auto tableDataServiceGetFuture = GetTableDataServiceValueFuture(currentPartId, CurrentChunk_);
+            PendingChunks_.push({.Data=tableDataServiceGetFuture, .Meta={TableId_, currentPartId, CurrentChunk_}});
             CurrentChunk_++;
         } else {
             CurrentRange_++;
@@ -77,9 +82,76 @@ void TFmrTableDataServiceReader::ReadAhead() {
     }
 }
 
+NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataServiceValueFuture(const TString& partId, ui64 chunkNum) {
+    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, partId);
+    std::vector<NThreading::TFuture<TMaybe<TString>>> getTableDataServiceColumnGroupValueFutures;
+    if (ColumnGroupSpec_.IsEmpty()) {
+        auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, TString());
+        getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId));
+    } else {
+        bool needDefaultGroup = NeededColumns_.empty();
+        std::vector<TString> requestedGroupNames;
+        for (auto& [groupName, cols]: ColumnGroupSpec_.ColumnGroups) {
+            bool needToGetCurrentColumnGroupData = false;
+            if (NeededColumns_.empty()) {
+                needToGetCurrentColumnGroupData = true;
+            } else {
+                for (auto& neededColumn: NeededColumns_) {
+                    if (cols.contains(neededColumn)) {
+                        needToGetCurrentColumnGroupData = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needToGetCurrentColumnGroupData) {
+                auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, groupName);
+                requestedGroupNames.push_back(groupName);
+                getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId));
+            }
+        }
+
+        if (!needDefaultGroup && !NeededColumns_.empty()) {
+            for (auto& neededColumn: NeededColumns_) {
+                bool foundInNamedGroup = false;
+                for (auto& [groupName, cols]: ColumnGroupSpec_.ColumnGroups) {
+                    if (cols.contains(neededColumn)) {
+                        foundInNamedGroup = true;
+                        break;
+                    }
+                }
+                if (!foundInNamedGroup) {
+                    needDefaultGroup = true;
+                    YQL_CLOG(INFO, FastMapReduce) << "TFmrTableDataServiceReader::Get: column '" << neededColumn
+                        << "' not found in any named group, requesting default group '" << ColumnGroupSpec_.DefaultColumnGroupName << "'";
+                    break;
+                }
+            }
+        }
+
+        if (needDefaultGroup) {
+            requestedGroupNames.push_back(ColumnGroupSpec_.DefaultColumnGroupName);
+            getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, GetTableDataServiceChunkId(chunkNum, ColumnGroupSpec_.DefaultColumnGroupName)));
+        }
+    }
+
+    auto sharedFutures = std::make_shared<std::vector<NThreading::TFuture<TMaybe<TString>>>>(std::move(getTableDataServiceColumnGroupValueFutures));
+    return NThreading::WaitExceptionOrAll(*sharedFutures).Apply([sharedFutures, this] (const auto& f) {
+        f.GetValue(); // rethrow error if any
+        std::vector<TString> columnGroupsYsonValues;
+        for (auto& future: *sharedFutures) {
+            TMaybe<TString> colGroupYsonValue = future.GetValue();
+            YQL_ENSURE(colGroupYsonValue.Defined());
+            columnGroupsYsonValues.emplace_back(*colGroupYsonValue);
+        }
+        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnionRaw(columnGroupsYsonValues, NeededColumns_));
+    });
+
+}
+
 void TFmrTableDataServiceReader::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
-        CurrentChunk_ = TableRanges_[0].MinChunk;
+        CurrentChunk_ = TableRanges_[CurrentRange_].MinChunk;
     }
 }
 

@@ -3,6 +3,8 @@
 
 #include <util/generic/set.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 
@@ -21,18 +23,18 @@ protected:
         // load data
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks,
                                             TabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
         // wait for compaction
         if (WaitForCompaction) {
             SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+            YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
         }
 
         // read
         SyncRunner->Run(ctx, CreateGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgPacks, TabletId, 0, 1, Shift,
                                        WithErrorResponse));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done");
+        YDB_LOG_NOTICE_CTX(ctx, "GET done");
     }
 
 
@@ -83,18 +85,18 @@ protected:
         // load data
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             TabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
         // wait for compaction
         if (WaitForCompaction) {
             SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+            YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
         }
 
         // read
         SyncRunner->Run(ctx, CreateManyGets(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             TabletId, 0, 1, BadSteps));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done");
+        YDB_LOG_NOTICE_CTX(ctx, "GET done");
     }
 
 
@@ -131,18 +133,18 @@ protected:
         SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0),
                                             MsgSize, MsgNum, BatchSize, TabletId, 0, 1, HandleClassGen,
                                             BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
         // wait for compaction
         if (WaitForCompaction) {
             SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+            YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
         }
 
         // read
         SyncRunner->Run(ctx, CreateManyGets(SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             TabletId, 0, 1, BadSteps));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  GET done");
+        YDB_LOG_NOTICE_CTX(ctx, "GET done");
     }
 
 
@@ -179,19 +181,19 @@ protected:
         // load data
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             DefaultTestTabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
 
         // wait for compaction
         if (WaitForCompaction) {
             SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+            YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
         }
 
         // range read
         TLogoBlobID readFrom(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID readTo  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         SyncRunner->Run(ctx, CreateRangeGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), readFrom, readTo, IndexOnly, MsgNum));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  RANGE GET done");
+        YDB_LOG_NOTICE_CTX(ctx, "RANGE GET done");
     }
 
 
@@ -231,24 +233,24 @@ protected:
         // load data 1
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             DefaultTestTabletId, 0, 1, HandleClassGen1, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data1 is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data1 is loaded");
 
         // load data 2
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
                                             DefaultTestTabletId, 1, 1, HandleClassGen2, BadSteps, TDuration::Seconds(0)));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data2 is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data2 is loaded");
 
         // wait for compaction
         if (WaitForCompaction) {
             SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
+            YDB_LOG_NOTICE_CTX(ctx, "COMPACTION done");
         }
 
         // range read
         TLogoBlobID readFrom(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID readTo  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         SyncRunner->Run(ctx, CreateRangeGet(SyncRunner->NotifyID(), Conf->VDisks->Get(0), readFrom, readTo, IndexOnly, MsgNum));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  RANGE GET done");
+        YDB_LOG_NOTICE_CTX(ctx, "RANGE GET done");
     }
 
 public:

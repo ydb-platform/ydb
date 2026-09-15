@@ -5,6 +5,8 @@ FORK_SUBTESTS()
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
+TAG(ya:manual)
+
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx

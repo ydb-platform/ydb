@@ -1,28 +1,107 @@
 #include "tx_internal_scan.h"
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
-#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/policy.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/constructor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader {
 
+LWTRACE_USING(YDB_CS_SCAN);
+
 void TTxInternalScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan failed")("problem", problem)("details", details);
-    auto& request = *InternalScanEvent->Get();
-    auto scanComputeActor = InternalScanEvent->Sender;
+    const auto& request = *InternalScanEvent->Get();
+    SendScanError(Self->TabletID(), InternalScanEvent->Sender, ScanGen, TStringBuilder() << request.GetPathId(), problem, details, ctx);
+}
 
-    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, Self->TabletID());
-    ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-        TStringBuilder() << "Table " << request.GetPathId() << " (shard " << Self->TabletID() << ") scan failed, reason: " << problem << "/"
-                         << details);
-    NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+TSnapshot TTxInternalScan::GetSnapshot() const {
+    const auto& request = *InternalScanEvent->Get();
+    return Self->TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
+}
 
-    ctx.Send(scanComputeActor, ev.Release());
+ERequestSorting TTxInternalScan::GetRequestSorting() const {
+    return InternalScanEvent->Get()->GetReverse() ? ERequestSorting::DESC : ERequestSorting::ASC;
+}
+
+TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
+    const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
+    const auto& request = *InternalScanEvent->Get();
+    AFL_VERIFY(Self->GetIndexOptional());
+    // An internal scan always deduplicates, always through the trivial reader, and never resumes from
+    // a cursor
+    TReadDescription read(Self->TabletID(), snapshot, requestSorting, true, EReaderClass::Trivial, tableMetadataAccessor, std::nullopt);
+    read.SetScanIdentifier(request.TaskIdentifier);
+    // the parent write has already subscribed to the lock, so no need to subscribe again
+    read.SetLock(request.GetLockId(), std::nullopt, NKikimrDataEvents::OPTIMISTIC,
+        request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
+        request.GetReadOnlyConflicts());
+    read.ColumnIds = request.GetColumnIds();
+    read.SetScanCursor(nullptr);
+    if (request.RangesFilter) {
+        read.PKRangesFilter = request.RangesFilter;
+    }
+    TProgramContainer program;
+    program.OverrideProcessingColumns(read.ColumnIds);
+    read.SetProgram(std::move(program));
+    return read;
+}
+
+TConclusion<std::shared_ptr<ITableMetadataAccessor>> TTxInternalScan::MakeTableAccessor(const TSnapshot& snapshot) const {
+    const auto& request = *InternalScanEvent->Get();
+    return Self->TablesManager.BuildTableMetadataAccessor(
+        "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), snapshot);
+}
+
+std::unique_ptr<TTxInternalScan::TDiagnosticsEvent> TTxInternalScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
+    if (!AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
+        return nullptr;
+    }
+    auto graphOptional = read.GetProgram().GetGraphOptional();
+    TString dotGraph = graphOptional ? graphOptional->DebugDOT() : "";
+    TString ssaProgram = read.GetProgram().ProtoDebugString();
+    auto requestMessage = InternalScanEvent->Get()->ToString();
+    auto pkRangesFilter = read.PKRangesFilter->DebugString();
+    if (pkRangesFilter.size() > 1024) {
+        pkRangesFilter = pkRangesFilter.substr(0, 1024) + "...";
+    }
+    return std::make_unique<TDiagnosticsEvent>(
+        std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), false);
+}
+
+void TTxInternalScan::StartScanActor(
+    const TReadMetadataBase::TConstPtr& readMetadataRange, std::unique_ptr<TDiagnosticsEvent>&& diagnostics, const TActorContext& ctx) const {
+    const auto& request = *InternalScanEvent->Get();
+    TStringBuilder detailedInfo;
+    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
+        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";
+    }
+
+    const TVersionedIndex* index = Self->HasIndex() ? &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex() : nullptr;
+    readMetadataRange->OnBeforeStartReading(*Self);
+
+    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
+    if (diagnostics) {
+        diagnostics->RequestId = requestCookie;
+        ctx.Send(Self->ScanDiagnosticsActorId, std::move(diagnostics));
+    }
+    auto orbit = std::make_shared<NLWTrace::TOrbit>();
+    LWTRACK(StartScan, *orbit, request.GetPathId().GetInternalPathId().GetRawValue(), Self->TabletID(), request.GetLockId().value_or(0), ScanId);
+    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), InternalScanEvent->Sender, Self->ScanDiagnosticsActorId,
+        Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
+        TComputeShardingPolicy(), ScanId, request.GetLockId().value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(),
+        readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}, std::move(orbit)));
+
+    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
+    YDB_LOG_DEBUG("",
+        {"event", "TTxInternalScan started"},
+        {"actorId", scanActorId},
+        {"traceDetailed", detailedInfo});
 }
 
 bool TTxInternalScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
@@ -31,66 +110,29 @@ bool TTxInternalScan::Execute(TTransactionContext& /*txc*/, const TActorContext&
 
 void TTxInternalScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxInternalScan::Complete");
+    const auto& request = *InternalScanEvent->Get();
+    const TSnapshot snapshot = GetSnapshot();
+    YDB_LOG_CREATE_CONTEXT(
+        {"tablet", Self->TabletID()},
+        {"snapshot", snapshot.DebugString()},
+        {"taskId", request.TaskIdentifier});
+    const ERequestSorting requestSorting = GetRequestSorting();
+    const TScannerConstructorContext context(snapshot, 0);
 
-    auto& request = *InternalScanEvent->Get();
-    auto scanComputeActor = InternalScanEvent->Sender;
-    const TSnapshot snapshot = request.GetSnapshot();
-    const NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString())("task_id", request.TaskIdentifier);
-    TReadMetadataPtr readMetadataRange;
-    const TReadMetadataBase::ESorting sorting = [&]() {
-        return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
-    }();
-
-    TScannerConstructorContext context(snapshot, 0, sorting);
-    {
-        TReadDescription read(Self->TabletID(), snapshot, sorting);
-        read.SetScanIdentifier(request.TaskIdentifier);
-        read.PathId = request.GetPathId();
-        read.LockId = LockId;
-        read.ReadNothing = !Self->TablesManager.HasTable(read.PathId.InternalPathId);
-        read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
-        std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
-        read.ColumnIds = request.GetColumnIds();
-        if (request.RangesFilter) {
-            read.PKRangesFilter = request.RangesFilter;
-        }
-
-        const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
-        AFL_VERIFY(vIndex);
-        {
-            TProgramContainer pContainer;
-            pContainer.OverrideProcessingColumns(read.ColumnIds);
-            read.SetProgram(std::move(pContainer));
-        }
-
-        {
-            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-            if (!newRange) {
-                return SendError("cannot create read metadata", newRange.GetErrorMessage(), ctx);
-            }
-            readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
-        }
+    auto accessorConclusion = MakeTableAccessor(snapshot);
+    if (accessorConclusion.IsFail()) {
+        return SendError("cannot build table metadata accessor for request: " + accessorConclusion.GetErrorMessage(),
+            AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
     }
-    TStringBuilder detailedInfo;
-    if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
-        detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, accessorConclusion.DetachResult());
+
+    const NTrivial::TIndexScannerConstructor scannerConstructor(context);
+    auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), scannerConstructor, read);
+    if (metadataConclusion.IsFail()) {
+        return SendError("cannot create read metadata", metadataConclusion.GetErrorMessage(), ctx);
     }
 
-    const TVersionedIndex* index = nullptr;
-    if (Self->HasIndex()) {
-        index = &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
-    }
-    readMetadataRange->OnBeforeStartReading(*Self);
-
-    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(),
-        TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
-
-    Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);
+    StartScanActor(metadataConclusion.DetachResult(), MakeDiagnosticsEvent(read), ctx);
 }
 
 }   // namespace NKikimr::NOlap::NReader

@@ -30,8 +30,17 @@ public:
         YDB_READONLY_DEF(TString, ColumnName);
         std::optional<bool> IsFullColumn;
         THashSet<TString> SubColumnNames;
+        bool UseDictionaryOnly = false;
 
     public:
+        bool GetUseDictionaryOnly() const {
+            return UseDictionaryOnly;
+        }
+
+        void SetUseDictionaryOnly(const bool value) {
+            UseDictionaryOnly = value;
+        }
+
         TDataAddress SelectSubColumns(const THashSet<TString>& selected) const {
             AFL_VERIFY(selected.size());
             TDataAddress result(ColumnId, ColumnName, std::nullopt);
@@ -42,6 +51,9 @@ public:
                 }
                 AFL_VERIFY(SubColumnNames.contains(i));
                 result.AddSubColumnName(i);
+            }
+            if (UseDictionaryOnly) {
+                result.SetUseDictionaryOnly(true);
             }
             return result;
         }
@@ -71,6 +83,9 @@ public:
         void MergeFrom(const TDataAddress& addr) {
             AFL_VERIFY(ColumnId == addr.ColumnId);
             AFL_VERIFY(ColumnName == addr.ColumnName);
+            if (addr.UseDictionaryOnly) {
+                UseDictionaryOnly = true;
+            }
             if (IsFullColumn) {
                 AFL_VERIFY(!!addr.IsFullColumn);
                 if (IsFullColumn == addr.IsFullColumn && !*IsFullColumn) {
@@ -102,6 +117,9 @@ public:
             result.InsertValue("name", ColumnName);
             if (SubColumnNames.size()) {
                 result.InsertValue("sub", JoinSeq(",", SubColumnNames));
+            }
+            if (UseDictionaryOnly) {
+                result.InsertValue("dict_only", true);
             }
             return result;
         }
@@ -225,12 +243,15 @@ public:
         YDB_READONLY(ui32, ColumnId, 0);
         YDB_READONLY_DEF(TString, SubColumnName);
         TIndexCheckOperation Operation;
+        YDB_READONLY_DEF(TString, ColumnName);
 
     public:
-        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation)
+        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation,
+            const TString& columnName = {})
             : ColumnId(columnId)
             , SubColumnName(subColumnName)
-            , Operation(operation) {
+            , Operation(operation)
+            , ColumnName(columnName) {
         }
 
         const TIndexCheckOperation& GetOperation() const {
@@ -262,7 +283,7 @@ public:
 private:
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& context, const TDataAddress& addr) = 0;
-    virtual void DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) = 0;
+    virtual TConclusionStatus DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) = 0;
 
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& context, const TFetchIndexContext& fetchContext) = 0;
@@ -322,19 +343,44 @@ public:
         return DoStartFetchData(context, addr);
     }
 
-    void AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
-        DoAssembleAccessor(context, columnId, subColumnName);
+    TConclusionStatus AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+        return DoAssembleAccessor(context, columnId, subColumnName);
     }
 };
 
 class TProcessorContext {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NAccessor::TAccessorsCollection>, Resources);
+    std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
     YDB_READONLY_DEF(std::weak_ptr<IDataSource>, DataSource);
     YDB_READONLY_DEF(std::optional<ui32>, Limit);
     YDB_READONLY(bool, Reverse, false);
+    bool Extracted = false;
 
 public:
+    bool HasResources() const {
+        return !Extracted && !!Resources;
+    }
+
+    const NAccessor::TAccessorsCollection* GetResourcesOptional() const {
+        return HasResources() ? Resources.get() : nullptr;
+    }
+
+    const NAccessor::TAccessorsCollection& GetResources() const {
+        AFL_VERIFY(HasResources());
+        return *Resources;
+    }
+
+    NAccessor::TAccessorsCollection& MutableResources() const {
+        AFL_VERIFY(HasResources());
+        return *Resources;
+    }
+
+    std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
+        AFL_VERIFY(HasResources());
+        Extracted = true;
+        return std::move(Resources);
+    }
+
     template <class T>
     std::shared_ptr<T> GetDataSourceVerifiedAs() const {
         auto result = std::static_pointer_cast<T>(DataSource.lock());
@@ -342,12 +388,13 @@ public:
         return result;
     }
 
-    TProcessorContext(const std::weak_ptr<IDataSource>& dataSource, const std::shared_ptr<NAccessor::TAccessorsCollection>& resources,
+    TProcessorContext(std::weak_ptr<IDataSource>&& dataSource, std::unique_ptr<NAccessor::TAccessorsCollection>&& resources,
         const std::optional<ui32> limit, const bool reverse)
-        : Resources(resources)
-        , DataSource(dataSource)
+        : Resources(std::move(resources))
+        , DataSource(std::move(dataSource))
         , Limit(limit)
         , Reverse(reverse) {
+        AFL_VERIFY(!!Resources);
     }
 };
 
@@ -373,8 +420,10 @@ private:
         AFL_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusionStatus DoAssembleAccessor(
+        const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
+        return TConclusionStatus::Fail("unreachable");
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
@@ -406,7 +455,9 @@ private:
         const TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusionStatus DoAssembleAccessor(
+        const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+        return TConclusionStatus::Success();
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
@@ -445,7 +496,7 @@ private:
 
     mutable THashMap<TBlobAddress, TString> Blobs;
     mutable THashMap<ui32, NAccessor::TChunkConstructionData> Info;
-    std::shared_ptr<NAccessor::TAccessorsCollection> Resources;
+    std::unique_ptr<NAccessor::TAccessorsCollection> Resources;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& /*context*/, const TDataAddress& addr) override {
@@ -454,7 +505,7 @@ private:
         }
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual void DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusionStatus DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
@@ -482,12 +533,29 @@ private:
     }
 
 public:
-    const std::shared_ptr<NAccessor::TAccessorsCollection>& GetResources() const {
-        return Resources;
+    const NAccessor::TAccessorsCollection& GetResources() const {
+        AFL_VERIFY(!!Resources);
+        return *Resources;
+    }
+
+    NAccessor::TAccessorsCollection& MutableResources() const {
+        AFL_VERIFY(!!Resources);
+        return *Resources;
+    }
+
+    std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
+        AFL_VERIFY(!!Resources);
+        return std::move(Resources);
+    }
+
+    void ReturnResources(std::unique_ptr<NAccessor::TAccessorsCollection>&& res) {
+        AFL_VERIFY(!Resources);
+        AFL_VERIFY(!!res);
+        Resources = std::move(res);
     }
 
     TSimpleDataSource() {
-        Resources = std::make_shared<NAccessor::TAccessorsCollection>();
+        Resources = std::make_unique<NAccessor::TAccessorsCollection>();
     }
 
     void AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data);

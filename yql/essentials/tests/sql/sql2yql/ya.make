@@ -12,7 +12,7 @@ IF (SANITIZER_TYPE OR NOT OPENSOURCE)
 ENDIF()
 
 IF (SANITIZER_TYPE)
-    TIMEOUT(1800)
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
 ELSE()
@@ -23,7 +23,8 @@ ENDIF()
 
     FORK_TESTS()
     FORK_SUBTESTS()
-    SPLIT_FACTOR(5)
+    SPLIT_FACTOR(10)
+
     DEPENDS(
         yql/essentials/tools/sql2yql
         yql/essentials/tools/sql_formatter

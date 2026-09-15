@@ -13,7 +13,7 @@ TFuture<void> TReadyEventReaderBase::GetReadyEvent() const
     return ReadyEvent_;
 }
 
-TFuture<void> TReadyEventReaderBase::ReadyEvent() const
+TFuture<void> TReadyEventReaderBase::InternalGetReadyEvent() const
 {
     auto guard = Guard(SpinLock_);
     return ReadyEvent_;
@@ -22,7 +22,7 @@ TFuture<void> TReadyEventReaderBase::ReadyEvent() const
 bool TReadyEventReaderBase::IsReadyEventSetAndOK() const
 {
     auto guard = Guard(SpinLock_);
-    return ReadyEvent_.IsSet() && ReadyEvent_.Get().IsOK();
+    return ReadyEvent_.IsSet() && ReadyEvent_.GetOrCrash().IsOK();
 }
 
 void TReadyEventReaderBase::SetReadyEvent(TFuture<void> readyEvent)
@@ -34,8 +34,10 @@ void TReadyEventReaderBase::SetReadyEvent(TFuture<void> readyEvent)
         }
     }));
 
-    auto guard = Guard(SpinLock_);
-    ReadyEvent_ = std::move(newReadyEvent);
+    {
+        auto guard = Guard(SpinLock_);
+        std::swap(ReadyEvent_, newReadyEvent);
+    }
 }
 
 TDuration TReadyEventReaderBase::GetWaitTime() const

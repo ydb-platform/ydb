@@ -1,3 +1,5 @@
+#pragma clang system_header
+
 // Copyright (C) 2003-2004 Jeremy B. Maitin-Shepard.
 // Copyright (C) 2005-2016 Daniel James
 //

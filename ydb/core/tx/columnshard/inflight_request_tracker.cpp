@@ -21,7 +21,7 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
         AFL_VERIFY(it != SnapshotsLive.end());
         Y_UNUSED(it->second.DelRequest(cookie, now));
     }
-    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
 
     RequestsMeta.erase(cookie);
     return readMetaBase;
@@ -30,16 +30,6 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
 void TInFlightReadsTracker::AddToInFlightRequest(
     const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
     AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
-
-    auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
-
-    if (!readMeta) {
-        return;
-    }
-
-    auto selectInfo = readMeta->SelectInfo;
-    Y_ABORT_UNLESS(selectInfo);
-    SelectStatsDelta += selectInfo->Stats();
 }
 
 namespace {
@@ -48,6 +38,7 @@ private:
     using TBase = TExtendedTransactionBase;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
     const std::set<NOlap::TSnapshot> RemoveSnapshots;
+
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -66,9 +57,10 @@ private:
 public:
     TTransactionSavePersistentSnapshots(
         NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
-        : TBase(self)
+        : TBase(self, "save_persistent_snapshots")
         , SaveSnapshots(std::move(saveSnapshots))
-        , RemoveSnapshots(std::move(removeSnapshots)) {
+        , RemoveSnapshots(std::move(removeSnapshots))
+    {
         AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };
@@ -94,7 +86,7 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     for (auto&& i : snapshotsToFreeInMem) {
         SnapshotsLive.erase(i);
     }
-    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
     if (snapshotsToFreeInDB.size() || snapshotsToSave.size()) {
         NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFreeInMem);
         return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFreeInDB));
@@ -119,7 +111,7 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
             return false;
         }
     }
-    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+    Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
     return true;
 }
 
@@ -128,7 +120,7 @@ ui64 TInFlightReadsTracker::AddInFlightRequest(NOlap::NReader::TReadMetadataBase
     auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
     if (it == SnapshotsLive.end()) {
         it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
-        Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
+        Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
     }
     it->second.AddRequest(cookie);
     AddToInFlightRequest(cookie, readMeta, index);

@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause WITH Google-Patent-License-Webm)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.5.0)
+VERSION(1.6.0)
 
-ORIGINAL_SOURCE(https://github.com/webmproject/libwebp/archive/v1.5.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/webmproject/libwebp/archive/v1.6.0.tar.gz)
 
 PEERDIR(
     contrib/libs/libwebp/sharpyuv

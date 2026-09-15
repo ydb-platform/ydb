@@ -162,9 +162,9 @@ inline const char * deserializeDecimalFromArena(MutableColumnDecimal & column, c
     return pos + column.byte_width();
 }
 
-bool insertData(MutableColumn & column, const StringRef & value);
+bool insertData(MutableColumn & column, const StringRef & value, const arrow::Type::type typeId);
 StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & pool, char const *& begin);
-const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos);
+const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow::Type::type typeId);
 void updateHashWithValue(const IColumn& column, size_t row, SipHash & hash);
 MutableColumnPtr createMutableColumn(const DataTypePtr & type);
 uint32_t fixedContiguousSize(const DataTypePtr & type);

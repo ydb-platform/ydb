@@ -12,11 +12,19 @@
 
 #include <yt/yt/client/tablet_client/public.h>
 
+#include <yt/yt/client/query_client/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EClientPriority,
+    ((Local)            (0))
+    ((Remote)           (1))
+    ((Undefined)        (2))
+);
 
 struct TMutatingOptions
 {
@@ -60,8 +68,11 @@ struct TTransactionalOptions
     //! Setting it to |true| may result in loss of consistency.
     bool SuppressTransactionCoordinatorSync = false;
     //! For internal use only.
-    //! Setting it to |true| may result in loss of consistency .
+    //! Setting it to |true| may result in loss of consistency.
     bool SuppressUpstreamSync = false;
+    //! For internal use only.
+    //! Setting it to |true| may result in loss of consistency.
+    bool SuppressStronglyOrderedTransactionBarrier = false;
 };
 
 struct TMasterReadOptions
@@ -140,7 +151,7 @@ struct TSelectRowsOptionsBase
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;
-    //! Add |$timestamp:columnName| to result if ReadMode is latest_timestamp.
+    //! Adds |$timestamp:columnName| to result if ReadMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Limits range expanding.
     ui64 RangeExpansionLimit = 200'000;
@@ -158,7 +169,12 @@ struct TSelectRowsOptionsBase
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
     //! Typed expression builder version.
-    int ExpressionBuilderVersion = 1;
+    std::optional<int> ExpressionBuilderVersion = 1;
+    //! The quality of the the "cardinality" aggregate function estimates.
+    //! 2^HyperLogLogPrecision 8-bit cells will be used.
+    std::optional<int> HyperLogLogPrecision;
+    //! Perform the final aggregation on proxy in parallel.
+    std::optional<bool> EnableParallelizeUnorderedGroupBy;
 };
 
 struct TSelectRowsOptions
@@ -169,7 +185,7 @@ struct TSelectRowsOptions
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
     //! Execution pool.
-    std::optional<TString> ExecutionPool;
+    std::optional<std::string> ExecutionPool;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.
@@ -180,8 +196,20 @@ struct TSelectRowsOptions
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
     std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
+    //! JIT optimization level hint.
+    std::optional<NCodegen::EOptimizationLevel> OptimizationLevel;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
+    //! Tune batch sizes for row processing.
+    std::optional<i64> RowsetProcessingBatchSize;
+    //! Tune write row batch size.
+    std::optional<i64> WriteRowsetSize;
+    //! Tune join row batch size.
+    std::optional<i64> MaxJoinBatchSize;
+    //! Determines the way statistics are aggregated across subqueries.
+    std::optional<NQueryClient::EStatisticsAggregation> StatisticsAggregation;
+    //! Minimizes request rate to dictionary tables when executing joins.
+    std::optional<bool> UseOrderByInJoinSubqueries;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.

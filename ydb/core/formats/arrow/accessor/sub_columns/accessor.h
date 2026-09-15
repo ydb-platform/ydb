@@ -7,9 +7,10 @@
 
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -44,8 +45,8 @@ protected:
         return 0;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        return nullptr;
+    virtual TMinMax DoGetMinMaxScalars() const override { 
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
@@ -73,8 +74,8 @@ public:
     }
 
     bool HasSubColumn(const TString& subColumnName) const {
-        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
-               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+        return ColumnsData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyOrPrefixIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
     void StoreSourceString(const TString& sourceDeserializationString) {
@@ -111,13 +112,32 @@ public:
         return nullptr;
     }
 
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
-        auto accResult = ColumnsData.GetPathAccessor(svPath);
-        if (accResult) {
-            return accResult;
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+        auto pathResult = NSubColumns::ResolveBestPath(ColumnsData.GetStats(), OthersData.GetStats(), svPath);
+        if (pathResult.IsFail()) {
+            return TConclusionStatus::Fail(pathResult.GetErrorMessage());
         }
-        return OthersData.GetPathAccessor(svPath, recordsCount);
+        auto path = pathResult.DetachResult();
+        if (path && path->IsColumn) {
+            return ColumnsData.GetPathAccessor(std::move(path->Path));
+        }
+        if (path) {
+            return OthersData.GetPathAccessor(std::move(path->Path), recordsCount);
+        }
+        return NSubColumns::TOthersData::BuildEmptyPathAccessor(recordsCount);
     }
+};
+
+class TJsonRestorer {
+private:
+    NJson::TJsonValue Result;
+
+public:
+    bool IsNull() const;
+
+    const NJson::TJsonValue& GetResult() const;
+
+    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue);
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

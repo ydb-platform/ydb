@@ -30,9 +30,6 @@ public:
 
         if (auto& dataTx = tx->GetDataTx()) {
             // Restore transaction type flags
-            if (dataTx->IsKqpDataTx() && !tx->IsKqpDataTransaction())
-                tx->SetKqpDataTransactionFlag();
-            Y_ENSURE(!dataTx->IsKqpScanTx(), "unexpected kqp scan tx");
         }
 
         tx->FinalizeDataTxPlan();

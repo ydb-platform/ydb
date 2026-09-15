@@ -1,38 +1,50 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Аналитические возможности
+  include:
+    path: analytics/toc_p.yaml
+    mode: link
+- name: Потоковая обработка
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
+- name: Архитектура
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
 - name: Соединение с БД
   href: connect.md
-- name: Структура кластера
+- name: Схемные объекты
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
     mode: link
 - name: Топология кластера
   href: topology.md
+- name: Выполнение запросов
+  href: query_execution/index.md
+  include:
+    path: query_execution/toc_p.yaml
+    mode: link
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
   href: secondary_indexes.md
-- name: Векторный поиск
-  href: vector_search.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
 - name: Time to Live (TTL) и вытеснение данных во внешнее хранилище
   href: ttl.md
-- name: Скан запросы
-  href: scan_query.md
 - name: Ограничения базы данных
   href: limits-ydb.md
-- name: Многоверсионное управление конкурентным доступом (MVCC)
-  href: mvcc.md
+- name: Резервное копирование и восстановление
+  href: backup.md
 - name: Асинхронная репликация
   href: async-replication.md
-  when: feature_async_replication
-- name: Оптимизатор запросов
-  href: optimizer.md
-- name: Федеративные запросы
-  include:
-    path: federated_query/toc_p.yaml
-    mode: link
+- name: Режим bridge
+  href: bridge.md
+- name: Трансфер данных
+  href: transfer.md

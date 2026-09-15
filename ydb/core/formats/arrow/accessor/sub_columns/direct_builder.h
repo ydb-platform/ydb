@@ -1,4 +1,5 @@
 #pragma once
+#include "types.h"
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"
@@ -8,7 +9,13 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/xxhash/xxhash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+
+#include <optional>
+#include <yql/essentials/types/binary_json/format.h>
+#include <yql/essentials/types/binary_json/write.h>
+
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -19,7 +26,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
-    YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
+    YDB_READONLY_DEF(std::deque<NBinaryJson::TBinaryJson>, Values);
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
@@ -30,14 +37,15 @@ public:
         return Accessor;
     }
 
-    void BuildSparsedAccessor(const ui32 recordsCount);
-    void BuildPlainAccessor(const ui32 recordsCount);
+    void BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType);
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
     }
 
-    void AddData(const TStringBuf sb, const ui32 index) {
+    void AddData(const NBinaryJson::TBinaryJson& sb, const ui32 index) {
         Values.emplace_back(sb);
         AFL_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
         RecordIndexes.emplace_back(index);
@@ -46,12 +54,6 @@ public:
 };
 
 class TDataBuilder {
-public:
-    class IBuffers {
-    public:
-        virtual ~IBuffers() = default;
-    };
-
 private:
     class TStorageAddress {
     private:
@@ -66,7 +68,7 @@ private:
             , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size())) {
         }
 
-        operator size_t() const {
+        explicit operator size_t() const {
             return Hash;
         }
 
@@ -82,14 +84,9 @@ private:
     std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
-    std::vector<std::shared_ptr<IBuffers>> Buffers;
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings);
-
-    void StoreBuffer(const std::shared_ptr<IBuffers>& data) {
-        Buffers.emplace_back(data);
-    }
 
     void StartNextRecord() {
         ++CurrentRecordIndex;
@@ -103,7 +100,15 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(GetNullString(), CurrentRecordIndex);
+        itElements->second.AddData(GetNullBinaryJson(), CurrentRecordIndex);
+    }
+
+    static const NBinaryJson::TBinaryJson& GetNullBinaryJson() {
+        const static auto res = NBinaryJson::SerializeToBinaryJson("null", false);
+        const static auto nullBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res);
+        AFL_VERIFY(nullBinaryJson);
+
+        return *nullBinaryJson;
     }
 
     static const TString& GetNullString() {
@@ -115,30 +120,12 @@ public:
         return std::string_view(GetNullString().data(), GetNullString().size());
     }
 
-    void AddKV(const TStringBuf key, const TStringBuf value) {
+    void AddKV(const TStringBuf key, const NBinaryJson::TBinaryJson& value) {
         auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
         itElements->second.AddData(value, CurrentRecordIndex);
-    }
-
-    void AddKVOwn(const TStringBuf key, std::string&& value) {
-        Storage.emplace_back(std::move(value));
-        auto itElements = Elements.find(key);
-        if (itElements == Elements.end()) {
-            itElements = Elements.emplace(key, key).first;
-        }
-        itElements->second.AddData(Storage.back(), CurrentRecordIndex);
-    }
-
-    void AddKVOwn(const TStringBuf key, TString&& value) {
-        StorageStrings.emplace_back(std::move(value));
-        auto itElements = Elements.find(key);
-        if (itElements == Elements.end()) {
-            itElements = Elements.emplace(key, key).first;
-        }
-        itElements->second.AddData(StorageStrings.back(), CurrentRecordIndex);
     }
 
     class THeapElements {
@@ -166,7 +153,7 @@ public:
             return KeyIndex;
         }
 
-        const TStringBuf* GetValuePointer() const {
+        const NBinaryJson::TBinaryJson* GetValuePointer() const {
             return &Elements->GetValues()[Index];
         }
 
@@ -187,12 +174,30 @@ public:
         }
     };
 
-    TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
+    TDictStats BuildStats(
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool separateColumns) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(),
-                settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
-                                                                               : IChunkedArray::EType::Array);
+            const ui32 presentCount = i->GetRecordIndexes().size();
+            // All stored values count toward the distinct set, nulls included (a null is one value).
+            const auto enumerateValues = [i](const auto& consumer) {
+                for (const auto& v : i->GetValues()) {
+                    if (!consumer(TStringBuf(v.data(), v.size()))) {
+                        break;
+                    }
+                }
+            };
+            // Native scalar storage applies only to separated columns, the Others store is always BinaryJson.
+            EValueType valueType = EValueType::BinaryJson;
+            if (separateColumns && settings.GetEnableNativeColumnsResolved()) {
+                valueType = DetectValueTypeForArray(i->GetValues());
+            }
+            auto accessorType = settings.IsSparsed(presentCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+            if (separateColumns && CanBeDictionaryEncoded(valueType) &&
+                       settings.IsDictionary(presentCount, enumerateValues)) {
+                accessorType = IChunkedArray::EType::Dictionary;
+            }
+            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }
         return builder.Finish();
     }

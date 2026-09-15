@@ -19,10 +19,10 @@ namespace NRedo {
     struct TQueue {
         using TStamp = NTable::TTxStamp;
         using TAffects = TArrayRef<const ui32>;
+        using TLog = TQueueInplace<std::unique_ptr<TEntry>, 4096>;
 
         TQueue(THashMap<ui32, NTable::TSnapEdge> edges)
-            : Log(new TLog)
-            , Edges(std::move(edges))
+            : Edges(std::move(edges))
         {
 
         }
@@ -45,13 +45,14 @@ namespace NRedo {
                 << " (" << Memory << " mem" << ", " << LargeGlobIdsBytes << " raw)b }";
         }
 
-        void Push(TEntry *entry)
+        void Push(std::unique_ptr<TEntry>&& entryPtr)
         {
+            TEntry* entry = entryPtr.get();
             if (bool(entry->Embedded) == bool(entry->LargeGlobId)) {
                 Y_TABLET_ERROR(NFmt::Do(*entry) << " has incorrect payload");
             }
 
-            Log->Push(entry);
+            Log.Push(std::move(entryPtr));
 
             Items++;
             Memory += entry->BytesMem();
@@ -92,7 +93,7 @@ namespace NRedo {
             for (auto &it : Overhead)
                 it.second.Clear();
 
-            auto was = std::exchange(Log, new TLog);
+            TLog was = std::exchange(Log, TLog{});
 
             Items = 0;
             Memory = 0;
@@ -100,7 +101,7 @@ namespace NRedo {
 
             auto logos = snap.MutableNonSnapLogBodies();
 
-            while (TAutoPtr<TEntry> entry = was->Pop()) {
+            while (auto entry = was.PopDefault()) {
                 if (entry->FilterTables(Edges)) {
                     for (const auto& blobId : entry->LargeGlobId.Blobs()) {
                         LogoBlobIDFromLogoBlobID(blobId, logos->Add());
@@ -116,7 +117,7 @@ namespace NRedo {
 
                     entry->References = 0;
 
-                    Push(entry.Release());
+                    Push(std::move(entry));
                 } else {
                     Y_ENSURE(entry->References == 0);
                 }
@@ -134,9 +135,7 @@ namespace NRedo {
             return Usage;
         }
 
-        using TLog = TOneOneQueueInplace<NRedo::TEntry *, 4096>;
-
-        TAutoPtr<TLog, TLog::TPtrCleanInplaceMallocDestructor> Log;
+        TLog Log;
         THashMap<ui32, NTable::TSnapEdge> Edges;
         THashMap<ui32, TOverhead> Overhead;
         TIntrusiveList<TOverhead> Changes;

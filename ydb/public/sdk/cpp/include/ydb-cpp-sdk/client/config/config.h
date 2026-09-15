@@ -29,7 +29,9 @@ struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchA
     FLUENT_SETTING_DEFAULT(EFetchAllConfigsTransform, Transform, EFetchAllConfigsTransform::NONE);
 };
 
-struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
+struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {
+    FLUENT_SETTING_FLAG(AllowUnknownFields);
+};
 
 struct TMainConfigIdentity {
     std::uint64_t Version;
@@ -62,17 +64,24 @@ struct TConfig {
 struct TFetchConfigResult : public TStatus {
     TFetchConfigResult(
             TStatus&& status,
-            std::vector<TConfig>&& configs)
+            std::vector<TConfig>&& configs,
+            bool transient)
         : TStatus(std::move(status))
         , Configs_(std::move(configs))
+        , Transient_(transient)
     {}
 
     const std::vector<TConfig>& GetConfigs() const {
         return Configs_;
     }
 
+    bool Transient() const {
+        return Transient_;
+    }
+
 private:
     std::vector<TConfig> Configs_;
+    bool Transient_;
 };
 
 using TAsyncFetchConfigResult = NThreading::TFuture<TFetchConfigResult>;
@@ -107,6 +116,11 @@ public:
 
     // Fetch current cluster storage config
     TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {});
+
+    // Fetch current cluster storage config
+    TAsyncFetchConfigResult FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
+        std::int32_t requestor_port,
+        const TFetchAllConfigsSettings& settings = {});
 
     // Bootstrap cluster with automatic configuration
     TAsyncStatus BootstrapCluster(

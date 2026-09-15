@@ -83,9 +83,11 @@ namespace NKikimr {
         ui64 GetHugeDataSize() const { return HugeDataSize; }
 
         // put newly received item into fresh segment
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+            std::optional<ui64> checksum);
         const TRope& GetLogoBlobData(const TMemPart& memPart) const;
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
+        template <class TCallback> void ForEachHugeBlob(TCallback&& callback) const;
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const;
 
@@ -242,8 +244,9 @@ namespace NKikimr {
         }
 
         // put newly received item into fresh segment
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
-            IndexAndData->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+                std::optional<ui64> checksum) {
+            IndexAndData->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer), checksum);
         }
         const TRope& GetLogoBlobData(const TMemPart& memPart) const { return IndexAndData->GetLogoBlobData(memPart); }
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec) { return IndexAndData->Put(lsn, key, memRec); }
@@ -252,6 +255,12 @@ namespace NKikimr {
         }
         void OutputHtml(const TString &which, IOutputStream &str) const;
         void OutputProto(NKikimrVDisk::FreshSegmentStat *stat) const;
+        // AppendixTree is deliberately not walked: appendices only ever carry sync data from peer disks, which is
+        // ingress metadata with no local disk address, so no huge blob can reach one.
+        template <class TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
+            return IndexAndData->ForEachHugeBlob(std::forward<TCallback>(callback));
+        }
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { return IndexAndData->GetOwnedChunks(chunks); }
         void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const { return IndexAndData->GetHugeBlobs(hugeBlobs); }
         // Appendix Compact/ApplyCompactionResult

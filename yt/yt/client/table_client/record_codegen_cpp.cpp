@@ -1,6 +1,13 @@
 #include "record_codegen_cpp.h"
 
+#include <yt/yt/core/json/json_parser.h>
+
+#include <yt/yt/core/ytree/convert.h>
+
 namespace NYT::NTableClient::NDetail {
+
+using namespace NJson;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,6 +36,17 @@ void ValidateRowValueCount(TUnversionedRow row, int id)
             id,
             row.GetCount());
     }
+}
+
+TLogicalTypePtr FromRecordCodegenTypeV3(TStringBuf data)
+{
+    auto producer = TYsonProducer(BIND([&] (IYsonConsumer* consumer) {
+        TMemoryInput input(data);
+
+        ParseJson(&input, consumer);
+    }));
+
+    return ConvertTo<TLogicalTypePtr>(producer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

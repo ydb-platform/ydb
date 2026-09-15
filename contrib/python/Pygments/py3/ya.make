@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.18.0)
+VERSION(2.20.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -43,6 +43,7 @@ PY_SRCS(
     pygments/lexers/_cocoa_builtins.py
     pygments/lexers/_csound_builtins.py
     pygments/lexers/_css_builtins.py
+    pygments/lexers/_googlesql_builtins.py
     pygments/lexers/_julia_builtins.py
     pygments/lexers/_lasso_builtins.py
     pygments/lexers/_lilypond_builtins.py
@@ -58,6 +59,7 @@ PY_SRCS(
     pygments/lexers/_scheme_builtins.py
     pygments/lexers/_scilab_builtins.py
     pygments/lexers/_sourcemod_builtins.py
+    pygments/lexers/_sql_builtins.py
     pygments/lexers/_stan_builtins.py
     pygments/lexers/_stata_builtins.py
     pygments/lexers/_tsql_builtins.py
@@ -96,6 +98,7 @@ PY_SRCS(
     pygments/lexers/cddl.py
     pygments/lexers/chapel.py
     pygments/lexers/clean.py
+    pygments/lexers/codeql.py
     pygments/lexers/comal.py
     pygments/lexers/compiled.py
     pygments/lexers/configs.py
@@ -136,6 +139,7 @@ PY_SRCS(
     pygments/lexers/futhark.py
     pygments/lexers/gcodelexer.py
     pygments/lexers/gdscript.py
+    pygments/lexers/gleam.py
     pygments/lexers/go.py
     pygments/lexers/grammar_notation.py
     pygments/lexers/graph.py
@@ -143,6 +147,7 @@ PY_SRCS(
     pygments/lexers/graphql.py
     pygments/lexers/graphviz.py
     pygments/lexers/gsql.py
+    pygments/lexers/hare.py
     pygments/lexers/haskell.py
     pygments/lexers/haxe.py
     pygments/lexers/hdl.py
@@ -158,6 +163,7 @@ PY_SRCS(
     pygments/lexers/javascript.py
     pygments/lexers/jmespath.py
     pygments/lexers/jslt.py
+    pygments/lexers/json5.py
     pygments/lexers/jsonnet.py
     pygments/lexers/jsx.py
     pygments/lexers/julia.py
@@ -170,6 +176,7 @@ PY_SRCS(
     pygments/lexers/lisp.py
     pygments/lexers/macaulay2.py
     pygments/lexers/make.py
+    pygments/lexers/maple.py
     pygments/lexers/markup.py
     pygments/lexers/math.py
     pygments/lexers/matlab.py
@@ -188,6 +195,7 @@ PY_SRCS(
     pygments/lexers/nimrod.py
     pygments/lexers/nit.py
     pygments/lexers/nix.py
+    pygments/lexers/numbair.py
     pygments/lexers/oberon.py
     pygments/lexers/objective.py
     pygments/lexers/ooc.py
@@ -197,6 +205,7 @@ PY_SRCS(
     pygments/lexers/parsers.py
     pygments/lexers/pascal.py
     pygments/lexers/pawn.py
+    pygments/lexers/pddl.py
     pygments/lexers/perl.py
     pygments/lexers/phix.py
     pygments/lexers/php.py
@@ -215,6 +224,8 @@ PY_SRCS(
     pygments/lexers/r.py
     pygments/lexers/rdf.py
     pygments/lexers/rebol.py
+    pygments/lexers/rego.py
+    pygments/lexers/rell.py
     pygments/lexers/resource.py
     pygments/lexers/ride.py
     pygments/lexers/rita.py
@@ -244,6 +255,7 @@ PY_SRCS(
     pygments/lexers/srcinfo.py
     pygments/lexers/stata.py
     pygments/lexers/supercollider.py
+    pygments/lexers/tablegen.py
     pygments/lexers/tact.py
     pygments/lexers/tal.py
     pygments/lexers/tcl.py

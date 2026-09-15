@@ -31,7 +31,7 @@ enum t_test_result {
  * To avoid making large changes in tests, define a helper
  * function that wraps posix_memalign as our own aligned_alloc.
  */
-void *aligned_alloc(size_t alignment, size_t size);
+void *t_aligned_alloc(size_t alignment, size_t size);
 
 /*
  * Helper for binding socket to an ephemeral port.
@@ -99,6 +99,8 @@ enum t_setup_ret t_register_buffers(struct io_uring *ring,
 				    unsigned nr_iovecs);
 
 bool t_probe_defer_taskrun(void);
+void t_set_nonblock(int fd);
+void t_clear_nonblock(int fd);
 
 unsigned __io_uring_flush_sq(struct io_uring *ring);
 
@@ -119,6 +121,13 @@ unsigned long long mtime_since(const struct timeval *s, const struct timeval *e)
 unsigned long long mtime_since_now(struct timeval *tv);
 unsigned long long utime_since(const struct timeval *s, const struct timeval *e);
 unsigned long long utime_since_now(struct timeval *tv);
+
+int t_submit_and_wait_single(struct io_uring *ring, struct io_uring_cqe **cqe);
+
+size_t t_iovec_data_length(struct iovec *iov, unsigned iov_len);
+
+unsigned long t_compare_data_iovec(struct iovec *iov_src, unsigned nr_src,
+				   struct iovec *iov_dst, unsigned nr_dst);
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,8 @@
 #include <string>
 #include "simdjson/common_defs.h"
 
+#include <utility>
+
 namespace simdjson {
 /**
  * Converts JSONPath to JSON Pointer.
@@ -12,12 +14,12 @@ namespace simdjson {
  */
 inline std::string json_path_to_pointer_conversion(std::string_view json_path) {
   size_t i = 0;
-
   // if JSONPath starts with $, skip it
+   // json_path.starts_with('$') requires C++20.
   if (!json_path.empty() && json_path.front() == '$') {
     i = 1;
   }
-  if (json_path.empty() || (json_path[i] != '.' &&
+  if (i >= json_path.size() || (json_path[i] != '.' &&
       json_path[i] != '[')) {
     return "-1"; // This is just a sentinel value, the caller should check for this and return an error.
   }
@@ -60,5 +62,60 @@ inline std::string json_path_to_pointer_conversion(std::string_view json_path) {
 
   return result;
 }
+
+inline std::pair<std::string_view, std::string_view> get_next_key_and_json_path(std::string_view& json_path) {
+  std::string_view key;
+
+  if (json_path.empty()) {
+    return {key, json_path};
+  }
+  size_t i = 0;
+
+  // if JSONPath starts with $, skip it
+  if (json_path.front() == '$') {
+    i = 1;
+  }
+
+
+  if (i < json_path.length() && json_path[i] == '.') {
+    i += 1;
+    size_t key_start = i;
+
+    while (i < json_path.length() && json_path[i] != '[' && json_path[i] != '.') {
+      ++i;
+    }
+
+    key = json_path.substr(key_start, i - key_start);
+  } else if ((i + 1 < json_path.size()) && json_path[i] == '[' &&
+             (json_path[i + 1] == '\'' || json_path[i + 1] == '"')) {
+    // Bracket-quoted key: ['key'] or ["key"].
+    // Require a matching closing quote and a following ']'. If either is
+    // missing, return an empty key and the original path so callers can treat
+    // this as a parse failure (e.g. INVALID_JSON_POINTER) without advancing.
+    // Without this check, i += 2 can make i > size() and substr throws
+    // std::out_of_range, which aborts noexcept callers such as
+    // at_path_with_wildcard / for_each_at_path_with_wildcard.
+    const char quote = json_path[i + 1];
+    i += 2;
+    const size_t key_start = i;
+    while (i < json_path.length() && json_path[i] != quote) {
+      ++i;
+    }
+    if (i >= json_path.length() ||               // missing closing quote
+        i + 1 >= json_path.length() ||           // missing ]
+        json_path[i + 1] != ']') {
+      return {key, json_path};
+    }
+    key = json_path.substr(key_start, i - key_start);
+    i += 2; // past quote and ]
+  } else if ((i+2 < json_path.size()) && json_path[i] == '[' && json_path[i+1] == '*' && json_path[i+2] == ']') { // i.e [*].additional_keys or [*]["additional_keys"]
+    key = "*";
+    i += 3;
+  }
+
+
+  return std::make_pair(key, json_path.substr(i));
+}
+
 } // namespace simdjson
 #endif // SIMDJSON_JSONPATHUTIL_H

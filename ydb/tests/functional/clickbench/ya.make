@@ -11,9 +11,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_FEATURE_FLAGS="enable_resource_pools")
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(
     ydb/apps/ydb

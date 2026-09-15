@@ -664,6 +664,10 @@ class basic_format_parse_context : private ErrorHandler {
     format_str_.remove_prefix(detail::to_unsigned(it - begin()));
   }
 
+  constexpr void reset_str(basic_string_view<Char> format_str) {
+    format_str_ = format_str;
+  }
+
   /**
     Reports an error if using the manual argument indexing; otherwise returns
     the next argument index and switches to the automatic indexing.
@@ -2925,9 +2929,9 @@ class format_string_checker {
 
   FMT_CONSTEXPR void on_replacement_field(int, const Char*) {}
 
-  FMT_CONSTEXPR auto on_format_specs(int id, const Char* begin, const Char*)
+  FMT_CONSTEXPR auto on_format_specs(int id, const Char* begin, const Char* end)
       -> const Char* {
-    context_.advance_to(context_.begin() + (begin - &*context_.begin()));
+    context_.reset_str(basic_string_view<Char>(begin, end - begin));
     // id >= 0 check is a workaround for gcc 10 bug (#2065).
     return id >= 0 && id < num_args ? parse_funcs_[id](context_) : begin;
   }

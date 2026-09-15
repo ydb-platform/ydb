@@ -9,6 +9,10 @@
 
 #include <util/generic/maybe.h>
 
+namespace NACLib {
+    class TUserContext;
+}
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -27,7 +31,8 @@ public:
 public:
     virtual TVersionState GetVersionState() = 0;
     virtual void SetVersionState(const TVersionState& state) = 0;
-    virtual void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body) = 0;
+    virtual void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body,
+        TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 
 protected:
     ~IBaseChangeCollectorSink() = default;
@@ -41,7 +46,7 @@ public:
     virtual bool NeedToReadKeys() const = 0;
 
     virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) = 0;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
 };
 
 class TBaseChangeCollector

@@ -163,6 +163,8 @@ struct TEvControlPlaneStorage {
         EvCreateRateLimiterResourceResponse,
         EvDeleteRateLimiterResourceRequest,
         EvDeleteRateLimiterResourceResponse,
+        EvDeleteFolderResourcesRequest,
+        EvDeleteFolderResourcesResponse,
         EvDbRequestResult, // private // internal_events.h
         EvCreateDatabaseRequest,
         EvCreateDatabaseResponse,
@@ -389,6 +391,8 @@ struct TEvControlPlaneStorage {
     using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
     using TEvDeleteBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;
+    using TEvDeleteFolderResourcesRequest = TControlPlaneRequest<google::protobuf::Empty, EvDeleteFolderResourcesRequest>;
+    using TEvDeleteFolderResourcesResponse = TControlPlaneNonAuditableResponse<Ydb::Operations::Operation, EvDeleteFolderResourcesResponse>;
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
@@ -853,4 +857,4 @@ struct TEvControlPlaneStorage {
     };
 };
 
-}
+} // namespace NFq {

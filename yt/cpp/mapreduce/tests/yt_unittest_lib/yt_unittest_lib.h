@@ -43,6 +43,12 @@ void WriteProtoTable(const IClientBasePtr& client, const TString& tablePath, con
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool UseRpcClient();
+
+bool UseDefaultHttpClient();
+
+////////////////////////////////////////////////////////////////////////////////
+
 // TODO: should be removed, usages should be replaced with TConfigSaverGuard
 class TZeroWaitLockPollIntervalGuard
 {
@@ -94,7 +100,7 @@ struct TOwningYaMRRow
     operator TYaMRRow() const;
 };
 
-bool operator == (const TOwningYaMRRow& row1, const TOwningYaMRRow& row2);
+bool operator==(const TOwningYaMRRow& row1, const TOwningYaMRRow& row2);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -199,6 +205,23 @@ void Out<NYT::NTesting::TOwningYaMRRow>(IOutputStream& out, const NYT::NTesting:
 
 #define ASSERT_SERIALIZABLES_NE(a, b) \
     ASSERT_NE(a, b) << NYT::NTesting::ToYson(a) << " == " << NYT::NTesting::ToYson(b)
+
+#define SKIP_TEST_IF(condition, message) \
+    do { \
+        if (condition) { \
+            GTEST_SKIP() << "Skipping test: " \
+                << ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name() \
+                << "::" << ::testing::UnitTest::GetInstance()->current_test_info()->name() \
+                << " - " << message; \
+            return; \
+        } \
+    } while (0)
+
+#define SKIP_IF_RPC() \
+    SKIP_TEST_IF(UseRpcClient(), "Unsupported test for RPC Client")
+
+#define SKIP_IF_DEFAULT_HTTP() \
+    SKIP_TEST_IF(UseDefaultHttpClient(), "Unsupported test for default (sync) HTTP Client")
 
 #define YT_UNITTEST_LIB_H_
 #include "yt_unittest_lib-inl.h"

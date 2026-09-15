@@ -92,6 +92,13 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
   }
   if ((uintptr_t)new_sp % kStackAlignment != 0) return nullptr;
 
+  // Verify readability before using new_sp.
+  if (!STRICT_UNWINDING && new_sp != nullptr &&
+      !absl::debugging_internal::AddressIsReadable(
+          StacktracePowerPCGetLRPtr(new_sp))) {
+    return nullptr;
+  }
+
 #if defined(__linux__)
   enum StackTraceKernelSymbolStatus {
       kNotInitialized = 0, kAddressValid, kAddressInvalid };
@@ -223,8 +230,9 @@ static int UnwindImpl(void **result, uintptr_t *frames, int *sizes,
         }
         if (sizes != nullptr) {
           if (next_sp > sp) {
-            sizes[n] = absl::debugging_internal::StripPointerMetadata(next_sp) -
-                       absl::debugging_internal::StripPointerMetadata(sp);
+            sizes[n] = static_cast<int>(
+                absl::debugging_internal::StripPointerMetadata(next_sp) -
+                absl::debugging_internal::StripPointerMetadata(sp));
           } else {
             // A frame-size of 0 is used to indicate unknown frame size.
             sizes[n] = 0;

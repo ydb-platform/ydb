@@ -1,5 +1,9 @@
 #include "collector_counters.h"
 
+#include <ydb/library/actors/core/mon_stats.h>
+#include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
+
+
 namespace NActors {
 
 // THistogramCounters
@@ -43,7 +47,6 @@ void TActivityStats::Init(NMonitoring::TDynamicCounterPtr group) {
     ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
     ScheduledEventsByActivityBuckets.resize(GetActivityTypeCount());
     StuckActorsByActivityBuckets.resize(GetActivityTypeCount());
-    UsageByActivityBuckets.resize(GetActivityTypeCount());
 }
 
 void TActivityStats::Set(const TExecutorThreadStats& stats) {
@@ -69,12 +72,6 @@ void TActivityStats::Set(const TExecutorThreadStats& stats) {
         *ActorsAliveByActivityBuckets[i] = actors;
         *ScheduledEventsByActivityBuckets[i] = scheduled;
         *StuckActorsByActivityBuckets[i] = stuck;
-
-        if constexpr (ActorLibCollectUsageStats) {
-            for (ui32 j = 0; j < 10; ++j) {
-                *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
-            }
-        }
     }
 
     auto setActivationTime = [&](TActivationTime activation) {
@@ -118,12 +115,6 @@ void TActivityStats::InitCountersForActivity(ui32 activityType) {
         Group->GetSubgroup("sensor", "ScheduledEventsByActivity")->GetNamedCounter("activity", bucketName, true);
     StuckActorsByActivityBuckets[activityType] =
         Group->GetSubgroup("sensor", "StuckActorsByActivity")->GetNamedCounter("activity", bucketName, false);
-
-     if constexpr (ActorLibCollectUsageStats) {
-        for (ui32 i = 0; i < 10; ++i) {
-            UsageByActivityBuckets[activityType][i] = Group->GetSubgroup("sensor", "UsageByActivity")->GetSubgroup("bin", ToString(i))->GetNamedCounter("activity", bucketName, false);
-        }
-    }
 }
 
 // TExecutorPoolCounters

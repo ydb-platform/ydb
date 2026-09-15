@@ -143,6 +143,19 @@ static int setup_buf_ring(struct buf_ring_data *data, struct io_uring *ring,
 	return T_EXIT_PASS;
 }
 
+static void dump_buf(const char *msg, uint8_t *buf, int len)
+{
+	int i;
+
+	fprintf(stderr, "Buffer %s\n", msg);
+	for (i = 0; i < len; i++) {
+		fprintf(stderr, "%3x ", buf[i]);
+		if (i && !(i & 15))
+			fprintf(stderr, "\n");
+	}
+	fprintf(stderr, "\n");
+}
+
 /**
  * Verifies that received buffer data matches expected data
  *
@@ -158,7 +171,9 @@ static int verify_received_buffer(struct buf_data *buf, uint8_t *expected_data_s
 
 	for (uint32_t i = 0; i < buf->len; i++) {
 		if (data[i] != expected_data_start[i]) {
-			fprintf(stderr, "Recv data ordering mismatch\n");
+			fprintf(stderr, "Recv data ordering mismatch, offset %d\n", i);
+			dump_buf("expected", expected_data_start, buf->len);
+			dump_buf("received", data, buf->len);
 			return 1;
 		}
 	}

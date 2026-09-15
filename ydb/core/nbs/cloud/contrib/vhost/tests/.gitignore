@@ -1,0 +1,4 @@
+work/
+libblkio/
+.pytest_cache/
+__pycache__/

@@ -29,6 +29,7 @@ enum class EYtOpProp: ui32 {
     AllowSampling         = 1 << 6,
     TemporaryChunkCombine = 1 << 7,
     PublishedChunkCombine = 1 << 8,
+    ForceApplyMaxJobCount = 1 << 9,
 };
 
 Y_DECLARE_FLAGS(EYtOpProps, EYtOpProp);
@@ -47,7 +48,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps = 0,
-    const TSet<TString>& addSecTags = {});
+    const TSet<TString>& addSecTags = {},
+    const TVector<TString>& layerPaths = {});
 
 void CheckSpecForSecretsImpl(
     const NYT::TNode& spec,
@@ -64,18 +66,15 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     ui64 fileMemUsage,
     ui64 llvmMemUsage,
     bool localRun,
-    const TString& cmdPrefix);
+    const TString& cmdPrefix,
+    NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+    const TString& bridgeBinaryPath = {});
 
 void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
     const TYtSettings::TConstPtr& settings,
     const TTransactionCache::TEntry::TPtr& entry);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace NPrivate {
-    Y_HAS_MEMBER(SecureParams);
-    Y_HAS_MEMBER(AdditionalSecurityTags);
-}
 
 template <class TOptions>
 inline void FillSpec(NYT::TNode& spec,
@@ -86,11 +85,15 @@ inline void FillSpec(NYT::TNode& spec,
     EYtOpProps opProps = 0)
 {
     TSet<TString> addSecTags = {};
-    if constexpr (NPrivate::THasAdditionalSecurityTags<TOptions>::value) {
+    if constexpr (::NYql::NPrivate::THasAdditionalSecurityTags<TOptions>::value) {
         addSecTags = execCtx.Options_.AdditionalSecurityTags();
     }
-    FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags);
-    if constexpr (NPrivate::THasSecureParams<TOptions>::value) {
+    if constexpr (::NYql::NPrivate::THasLayersPaths<TOptions>::value) {
+        FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags, execCtx.Options_.LayersPaths());
+    } else {
+        FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags, {});
+    }
+    if constexpr (::NYql::NPrivate::THasSecureParams<TOptions>::value) {
         FillSecureVault(spec, execCtx.Options_.SecureParams());
     }
 }
@@ -119,7 +122,13 @@ inline void FillUserJobSpec(NYT::TUserJobSpec& spec,
     bool localRun,
     const TString& cmdPrefix = {})
 {
-    FillUserJobSpecImpl(spec, *execCtx, execCtx->Options_.Config(), extraUsage, fileMemUsage, llvmMemUsage, localRun, cmdPrefix);
+    NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None;
+    TString bridgeBinaryPath;
+    if constexpr (::NYql::NPrivate::THasBridgeMode<decltype(execCtx->Options_)>::value) {
+        bridgeMode = execCtx->Options_.BridgeMode();
+        bridgeBinaryPath = execCtx->Options_.BridgeBinaryPath();
+    }
+    FillUserJobSpecImpl(spec, *execCtx, execCtx->Options_.Config(), extraUsage, fileMemUsage, llvmMemUsage, localRun, cmdPrefix, bridgeMode, bridgeBinaryPath);
 }
 
 template <class TExecParamsPtr>

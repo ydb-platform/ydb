@@ -1,14 +1,17 @@
 pkgs: attrs: with pkgs; rec {
-  version = "3.13.0";
+  version = "4.6.9";
 
   src = fetchFromGitHub {
     owner = "simdjson";
     repo = "simdjson";
     rev = "v${version}";
-    hash = "sha256-Vzw1FpFjg3Tun1Sfk7H4h4tY7lfnjE1Wk+W82K7dcW0=";
+    hash = "sha256-0Yowwkq8H+6wwqI+IZZ95r/YIAv/yphl7ctan0Nwt64=";
   };
 
-  cmakeFlags = attrs.cmakeFlags ++ [
+  cmakeFlags = [
+    "-DBUILD_SHARED_LIBS=OFF"
+    "-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON"
     "-DSIMDJSON_ENABLE_THREADS=OFF"
+    "-DSIMDJSON_DEVELOPER_MODE=OFF"
   ];
 }

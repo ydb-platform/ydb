@@ -1,3 +1,16 @@
+- 6/30/2025 version 1.6.0
+  This is a binary compatible release.
+  API changes:
+    - libwebp: WebPValidateDecoderConfig
+  * additional x86 (AVX2, SSE2), general optimizations and compression
+    improvements for lossless
+  * `-mt` returns same results as single-threaded lossless (regressed in
+    1.5.0, #426506716)
+  * miscellaneous warning, bug & build fixes (#393104377, #397130631,
+    #398288323, #398066379, #427503509)
+  Tool updates:
+    * cwebp can restrict the use of `-resize` with `-resize_mode` (#405437935)
+
 - 12/19/2024 version 1.5.0
   This is a binary compatible release.
   API changes:

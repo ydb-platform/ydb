@@ -31,7 +31,7 @@ public:
 
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) override;
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const override;
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) override;
 
     TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) override;
 
@@ -50,6 +50,8 @@ public:
     TString GetDefaultClusterName() const override;
 
     TString GetClusterServer(const TString& cluster) const override;
+
+    TString GetClusterYtName(const TString& cluster) const override;
 
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const override;
 
@@ -71,9 +73,19 @@ public:
 
     void AddCluster(const TYtClusterConfig& config) override;
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override;
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const override;
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
+
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override;
+
+    NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) override;
+
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override;
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override;
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override;
 
 protected:
     IYtGateway::TPtr Slave_;

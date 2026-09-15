@@ -2,7 +2,7 @@
 
 To deploy a new {{ ydb-short-name }} cluster, to add new nodes to an existing cluster, or to change parameters, a configuration is required.
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 {{ ydb-short-name }} cluster configuration V2 is a text file in [YAML](https://en.wikipedia.org/wiki/YAML) format. In its minimal form, it contains a `config` section with various parameters necessary for starting and configuring cluster nodes, as well as a section with `metadata`. Extended capabilities for flexible configuration are described in the article [{#T}](dynamic-config-selectors.md). You can learn more about available parameters in the [configuration reference](config-settings.md).
 
@@ -29,7 +29,7 @@ config:
 
 ![High-level overview of configuration V2 management](_assets/config-v2-overview.png)
 
-The {{ ydb-short-name }} cluster itself is responsible for managing the state of the configuration file, and it is also the single source of truth about how it is currently configured. The [distributed configuration](../../../concepts/glossary.md#distributed-configuration) mechanism is responsible for reliable storage of the current state. You can see the current state of the cluster configuration using the console command [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md), and the state of each specific node through its [Embedded UI](../../../reference/embedded-ui/index.md).
+The {{ ydb-short-name }} cluster itself is responsible for managing the state of the configuration file, and it is also the single source of truth about how it is currently configured. The [distributed configuration](../../../concepts/glossary.md#distributed-configuration) mechanism is responsible for reliable storage of the current state. You can see the current state of the cluster configuration using the console command [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md), and the state of each specific node through its [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
 
 Changing the {{ ydb-short-name }} cluster configuration is performed by the administrator as follows:
 
@@ -69,9 +69,9 @@ The above describes the main mechanism for managing {{ ydb-short-name }} configu
 
 For cluster configuration during initial deployment, it is recommended to use instructions for the selected infrastructure management method:
 
-- [{#T}](../../deployment-options/ansible/initial-deployment.md);
+- [{#T}](../../deployment-options/ansible/initial-deployment/index.md);
 - [{#T}](../../deployment-options/kubernetes/initial-deployment.md);
-- [{#T}](../../deployment-options/manual/initial-deployment.md).
+- [{#T}](../../deployment-options/manual/initial-deployment/index.md).
 
 ### Configuration Update {#update-config}
 

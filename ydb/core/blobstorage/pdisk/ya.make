@@ -1,11 +1,11 @@
 LIBRARY()
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
     )
 ENDIF()
-IF (YDB_DISABLE_PDISK_ENCRYPTION) 
+IF (YDB_DISABLE_PDISK_ENCRYPTION)
     CFLAGS(
         -DDISABLE_PDISK_ENCRYPTION
     )
@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/pdisk/subsystem
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/lwtrace_probes
@@ -74,6 +75,7 @@ SRCS(
 END()
 
 RECURSE(
+    metadata
     mock
 )
 

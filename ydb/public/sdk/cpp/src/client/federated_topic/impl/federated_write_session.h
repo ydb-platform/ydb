@@ -27,7 +27,7 @@ public:
                                const TFederatedTopicClientSettings& clientSetttings,
                                std::shared_ptr<TFederatedDbObserver> observer,
                                std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
-                               NTopic::IExecutor::TPtr subsessionHandlersExecutor);
+                               IExecutor::TPtr subsessionHandlersExecutor);
 
     ~TFederatedWriteSessionImpl() = default;
 
@@ -36,6 +36,7 @@ public:
     std::vector<NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount);
 
     NThreading::TFuture<uint64_t> GetInitSeqNo();
+    NThreading::TFuture<bool> Flush();
 
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message);
 
@@ -54,6 +55,9 @@ private:
     struct TWrappedWriteMessage {
         const std::string Data;
         NTopic::TWriteMessage Message;
+        NThreading::TPromise<bool> FlushPromise;
+        std::shared_ptr<TGRpcConnectionsImpl> FlushPromiseConnections;
+
         TWrappedWriteMessage(NTopic::TWriteMessage&& message)
             : Data(message.Data)
             , Message(std::move(message))
@@ -64,6 +68,8 @@ private:
         explicit TWrappedWriteMessage(const TWrappedWriteMessage& other)
             : Data(other.Data)
             , Message(other.Message)
+            , FlushPromise(other.FlushPromise)
+            , FlushPromiseConnections(other.FlushPromiseConnections)
         {
             Message.Data = Data;
         }
@@ -71,6 +77,8 @@ private:
         explicit TWrappedWriteMessage(TWrappedWriteMessage&& other)
             : Data(std::move(other.Data))
             , Message(std::move(other.Message))
+            , FlushPromise(std::move(other.FlushPromise))
+            , FlushPromiseConnections(std::move(other.FlushPromiseConnections))
         {
             Message.Data = Data;
         }
@@ -78,7 +86,27 @@ private:
         TWrappedWriteMessage& operator=(const TWrappedWriteMessage& other) = delete;
         TWrappedWriteMessage& operator=(TWrappedWriteMessage&& other) = delete;
 
-        ~TWrappedWriteMessage() = default;
+        ~TWrappedWriteMessage() {
+            CompleteFlush(true);
+        }
+
+        void InitFlushPromise(const std::shared_ptr<TGRpcConnectionsImpl>& connections) {
+            FlushPromise = NThreading::NewPromise<bool>();
+            FlushPromiseConnections = connections;
+        }
+
+        void CompleteFlush(bool value) noexcept {
+            if (!FlushPromise.Initialized()) {
+                return;
+            }
+
+            NThreading::TPromise<bool> promise;
+            FlushPromise.Swap(promise);
+            auto connections = std::move(FlushPromiseConnections);
+            connections->PostToResponseQueue([promise = std::move(promise), value]() mutable {
+                promise.TrySetValue(value);
+            });
+        }
     };
 
 private:
@@ -108,7 +136,7 @@ private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubclientSettings;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> ProvidedCodecs;
-    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
+    IExecutor::TPtr SubsessionHandlersExecutor;
 
     NTopic::IRetryPolicy::IRetryState::TPtr RetryState;
     std::shared_ptr<TFederatedDbObserver> Observer;
@@ -150,6 +178,7 @@ private:
 class TFederatedWriteSession : public NTopic::IWriteSession,
                                public NTopic::TContextOwner<TFederatedWriteSessionImpl> {
     friend class TFederatedTopicClient::TImpl;
+    friend class TSimpleBlockingFederatedWriteSession;
 
 public:
 
@@ -158,8 +187,12 @@ public:
                            const TFederatedTopicClientSettings& clientSettings,
                            std::shared_ptr<TFederatedDbObserver> observer,
                            std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
-                           NTopic::IExecutor::TPtr subsessionHandlersExecutor)
+                           IExecutor::TPtr subsessionHandlersExecutor)
         : TContextOwner(settings, std::move(connections), clientSettings, std::move(observer), codecs, subsessionHandlersExecutor) {}
+
+    ~TFederatedWriteSession() {
+        TryGetImpl()->Close(TDuration::Zero());
+    }
 
     NThreading::TFuture<void> WaitEvent() override {
         return TryGetImpl()->WaitEvent();
@@ -173,14 +206,17 @@ public:
     NThreading::TFuture<uint64_t> GetInitSeqNo() override {
         return TryGetImpl()->GetInitSeqNo();
     }
+    NThreading::TFuture<bool> Flush() override {
+        return TryGetImpl()->Flush();
+    }
     void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || message.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
     void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, TTransactionBase* tx = nullptr) override {
-        if (tx) {
+        if (tx || params.GetTxPtr()) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->WriteEncoded(std::move(continuationToken), std::move(params));
@@ -204,6 +240,42 @@ private:
     void Start() {
         TryGetImpl()->Start();
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSimpleBlockingFederatedWriteSession
+
+class TSimpleBlockingFederatedWriteSession : public NTopic::ISimpleBlockingWriteSession {
+public:
+    TSimpleBlockingFederatedWriteSession(
+            const TFederatedWriteSessionSettings& settings,
+            std::shared_ptr<TGRpcConnectionsImpl> connections,
+            const TFederatedTopicClientSettings& clientSettings,
+            std::shared_ptr<TFederatedDbObserver> observer,
+            std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
+            IExecutor::TPtr subsessionHandlersExecutor);
+
+    bool Write(std::string_view data, std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt,
+               const TDuration& blockTimeout = TDuration::Max()) override;
+
+    bool Write(NTopic::TWriteMessage&& message,
+               TTransactionBase* tx = nullptr,
+               const TDuration& blockTimeout = TDuration::Max()) override;
+
+    uint64_t GetInitSeqNo() override;
+
+    bool Close(TDuration closeTimeout = TDuration::Max()) override;
+
+    ~TSimpleBlockingFederatedWriteSession();
+    bool IsAlive() const override;
+
+    NTopic::TWriterCounters::TPtr GetCounters() override;
+
+private:
+    std::optional<NTopic::TContinuationToken> WaitForToken(const TDuration& timeout);
+
+    std::shared_ptr<TFederatedWriteSession> Writer;
+    std::atomic_bool Closed = false;
 };
 
 } // namespace NYdb::NFederatedTopic

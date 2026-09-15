@@ -18,7 +18,7 @@ IGraphTransformer::TStatus TExprOutputTransformer::operator()(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(*ExprRoot_, ctx, WithTypes_ ? TExprAnnotationFlags::Types : TExprAnnotationFlags::None, /*refAtoms=*/true);
     ui32 prettyFlags = TAstPrintFlags::ShortQuote;
     if (!WithTypes_) {
         prettyFlags |= TAstPrintFlags::PerLine;
@@ -59,9 +59,10 @@ IGraphTransformer::TStatus TExprLogTransformer::operator()(
         auto ast = ConvertToAst(*input, ctx, settings);
         TStringStream out;
         ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        YQL_CVLOG(Level_, Component_) << Description_ << ":\n" << out.Str();
+        YQL_CVLOG(Level_, Component_) << Description_ << ":\n"
+                                      << out.Str();
     }
     return IGraphTransformer::TStatus::Ok;
 }
 
-}
+} // namespace NYql

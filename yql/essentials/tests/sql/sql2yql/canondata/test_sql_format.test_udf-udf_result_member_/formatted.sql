@@ -1,4 +1,3 @@
-/* postgres can not */
 $person = Person::New('Vasya', 'Pupkin', 33);
 
 SELECT

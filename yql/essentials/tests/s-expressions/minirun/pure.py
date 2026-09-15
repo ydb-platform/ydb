@@ -30,11 +30,11 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if langver is None:
         langver = DEFAULT_LANG_VER
 
-    xfail = is_xfail(config)
+    program_sql = os.path.join(DATA_PATH, suite, '%s.yqls' % case)
+    xfail = is_xfail(config, program_sql)
     if xfail and what != 'Results':
         pytest.skip('xfail is not supported in this mode')
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.yqls' % case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 
@@ -43,7 +43,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH,
-                                 run_sql=False, langver=langver)
+                                 run_sql=False, langver=langver, fuzz_universal=True)
 
     to_canonize = []
     assert not tables_res
@@ -64,13 +64,15 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
-    if what == 'RunOnOpt' or what == 'LLVM':
+    if what == 'RunOnOpt' or what == 'LLVM' or what == 'PartialTypeCheck':
+        is_on_opt = (what == 'RunOnOpt')
         is_llvm = (what == 'LLVM')
+        is_typecheck = (what == 'PartialTypeCheck')
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
         parameters = get_parameters_json(suite, config, DATA_PATH)
-        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH, template='.yqls') if is_llvm else None
+        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH, template='.yqls') if not is_on_opt else None
 
         yqlrun = YQLRun(
             prov='pure',
@@ -78,12 +80,13 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             gateway_config=get_gateways_config(http_files, yql_http_file_server, allow_llvm=is_llvm),
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
-            langver=langver
+            langver=langver,
+            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else []
         )
 
         opt_res, opt_tables_res = execute(
             yqlrun,
-            program=res.opt if not is_llvm else query_sql,
+            program=res.opt if is_on_opt else query_sql,
             run_sql=False,
             files=files,
             urls=http_files_urls,
@@ -91,17 +94,18 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             verbose=True,
             parameters=parameters)
 
-        assert os.path.exists(opt_res.results_file) == os.path.exists(res.results_file)
-        assert not opt_tables_res
+        if not is_typecheck:
+            assert os.path.exists(opt_res.results_file) == os.path.exists(res.results_file)
+            assert not opt_tables_res
 
-        if os.path.exists(res.results_file):
-            base_res_yson = normalize_result(stable_result_file(res), False)
-            opt_res_yson = normalize_result(stable_result_file(opt_res), False)
+            if os.path.exists(res.results_file):
+                base_res_yson = normalize_result(stable_result_file(res), False)
+                opt_res_yson = normalize_result(stable_result_file(opt_res), False)
 
-            # Compare results
-            assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER\n' \
-                'Result:\n %(opt_res_yson)s\n\n' \
-                'Base result:\n %(base_res_yson)s\n' % locals()
+                # Compare results
+                assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER\n' \
+                    'Result:\n %(opt_res_yson)s\n\n' \
+                    'Base result:\n %(base_res_yson)s\n' % locals()
 
         return None
 

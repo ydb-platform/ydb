@@ -1,23 +1,11 @@
 #include "executor_impl.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/internal/thread_pool/pool.h>
+
 namespace NYdb::inline Dev::NTopic {
 
 void IAsyncExecutor::Post(TFunction&& f) {
     PostImpl(std::move(f));
-}
-
-IAsyncExecutor::TPtr CreateDefaultExecutor() {
-    return CreateThreadPoolExecutor(1);
-}
-
-void TThreadPoolExecutor::PostImpl(std::vector<TFunction>&& fs) {
-    for (auto& f : fs) {
-        ThreadPool->SafeAddFunc(std::move(f));
-    }
-}
-
-void TThreadPoolExecutor::PostImpl(TFunction&& f) {
-    ThreadPool->SafeAddFunc(std::move(f));
 }
 
 TSerialExecutor::TSerialExecutor(IAsyncExecutor::TPtr executor)
@@ -65,34 +53,9 @@ void TSerialExecutor::PostNext() {
     Busy = true;
 }
 
-IExecutor::TPtr CreateThreadPoolExecutor(size_t threads) {
-    return MakeIntrusive<TThreadPoolExecutor>(threads);
-}
-
-IExecutor::TPtr CreateGenericExecutor() {
-    return CreateThreadPoolExecutor(1);
-}
-
-IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool) {
-    return MakeIntrusive<TThreadPoolExecutor>(std::move(threadPool));
-}
-
-TThreadPoolExecutor::TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool)
-    : ThreadPool(std::move(threadPool))
-{
-    IsFakeThreadPool = dynamic_cast<TFakeThreadPool*>(ThreadPool.get()) != nullptr;
-}
-
-TThreadPoolExecutor::TThreadPoolExecutor(size_t threadsCount)
-    : TThreadPoolExecutor(CreateThreadPool(threadsCount))
-{
-    Y_ABORT_UNLESS(threadsCount > 0);
-    ThreadsCount = threadsCount;
-}
-
 IExecutor::TPtr CreateSyncExecutor()
 {
-    return MakeIntrusive<TSyncExecutor>();
+    return std::make_shared<TSyncExecutor>();
 }
 
 }  // namespace NYdb::NTopic

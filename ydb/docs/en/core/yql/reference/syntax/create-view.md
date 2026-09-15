@@ -1,6 +1,6 @@
 # CREATE VIEW
 
-`CREATE VIEW` defines a [view](concepts/datamodel/view) with a given query.
+`CREATE VIEW` defines a [view](../../../concepts/datamodel/view.md) with a given query.
 
 A view logically represents a table formed by a given query. The view does not physically store the table but executes the query to produce the data whenever the view is accessed.
 
@@ -21,7 +21,11 @@ AS <query>
 
   * `security_invoker` (Bool) causes the underlying base relations to be checked against the privileges of the user of the view rather than the view owner. {#security_invoker}
 
-{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
+{% note info %}
+
+When choosing a name for the view, consider the common [schema object naming rules](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Notes {#notes}
 

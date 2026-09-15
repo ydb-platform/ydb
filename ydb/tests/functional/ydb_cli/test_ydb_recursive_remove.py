@@ -1,24 +1,15 @@
 from hamcrest import assert_that, only_contains
-import os
 import pytest
 
 import yatest
+
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin
 
 CLUSTER_CONFIG = dict(
     extra_feature_flags=["enable_external_data_sources"],
     query_service_config=dict(
         available_external_data_sources=["ObjectStorage"]
     ))
-
-
-def bin_from_env(var):
-    if os.getenv(var):
-        return yatest.common.binary_path(os.getenv(var))
-    raise RuntimeError(f"{var} environment variable is not specified")
-
-
-def ydb_bin():
-    return bin_from_env("YDB_CLI_BINARY")
 
 
 def execute_ydb_cli_command(node, database, args, stdin=None):

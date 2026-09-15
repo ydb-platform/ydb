@@ -20,17 +20,15 @@ namespace NYT::NClient::NFederated {
 
 namespace {
 
-std::string MakeConnectionLoggingTag(const std::vector<NApi::IConnectionPtr>& connections, TGuid connectionId)
+NLogging::TLoggingTagList MakeConnectionLoggingTags(const std::vector<NApi::IConnectionPtr>& connections, TGuid connectionId)
 {
-    TStringBuilder builder;
-    builder.AppendString("Clusters: (");
-    TDelimitedStringBuilderWrapper delimitedBuilder(&builder, "; ");
-    for (const auto& connection : connections) {
-        delimitedBuilder->AppendString(connection->GetLoggingTag());
-    }
-    builder.AppendString("), ");
-    builder.AppendFormat("ConnectionId: %v", connectionId);
-    return builder.Flush();
+    return NLogging::TLoggingTagList()
+        .With(
+            "Clusters",
+            MakeFormattableView(connections, [] (TStringBuilderBase* builder, const NApi::IConnectionPtr& connection) {
+                FormatValue(builder, connection->GetLoggingTags(), "v"_sb);
+            }))
+        .With("ConnectionId", connectionId);
 }
 
 class TConnection
@@ -45,14 +43,14 @@ public:
         , Connections_(std::move(connections))
         , ActionQueue_(std::move(actionQueue))
         , ConnectionId_(TGuid::Create())
-        , LoggingTag_(MakeConnectionLoggingTag(Connections_, ConnectionId_))
+        , LoggingTags_(MakeConnectionLoggingTags(Connections_, ConnectionId_))
     {
         YT_VERIFY(!Connections_.empty());
     }
 
-    const std::string& GetLoggingTag() const override
+    const NLogging::TLoggingTagList& GetLoggingTags() const override
     {
-        return LoggingTag_;
+        return LoggingTags_;
     }
 
     IInvokerPtr GetInvoker() override
@@ -103,6 +101,7 @@ public:
     UNIMPLEMENTED_CONST_METHOD(NApi::TClusterTag, GetClusterTag, ());
     UNIMPLEMENTED_CONST_METHOD(const std::string&, GetClusterId, ());
     UNIMPLEMENTED_CONST_METHOD(const std::optional<std::string>&, GetClusterName, ());
+    UNIMPLEMENTED_CONST_METHOD(const std::optional<NAuth::TTvmId>&, GetTvmId, ());
     UNIMPLEMENTED_CONST_METHOD(bool, IsSameCluster, (const NApi::IConnectionPtr&));
     UNIMPLEMENTED_METHOD(
         NHiveClient::ITransactionParticipantPtr,
@@ -114,7 +113,7 @@ private:
     const std::vector<NApi::IConnectionPtr> Connections_;
     const NConcurrency::TActionQueuePtr ActionQueue_;
     const TGuid ConnectionId_;
-    const std::string LoggingTag_;
+    const NLogging::TLoggingTagList LoggingTags_;
 
     std::atomic<bool> Terminated_ = false;
 };
@@ -126,7 +125,7 @@ NApi::IConnectionPtr CreateConnection(std::vector<NApi::IConnectionPtr> connecti
     return New<TConnection>(std::move(connections), nullptr, std::move(config));
 }
 
-NApi::IConnectionPtr CreateConnection(TConnectionConfigPtr config, NApi::NRpcProxy::TConnectionOptions options)
+NApi::IConnectionPtr CreateConnection(TConnectionConfigPtr config, NApi::TConnectionOptions options)
 {
     NConcurrency::TActionQueuePtr actionQueue;
     if (!options.ConnectionInvoker) {

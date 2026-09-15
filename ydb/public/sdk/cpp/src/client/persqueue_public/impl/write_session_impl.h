@@ -325,6 +325,7 @@ private:
     TStringBuilder LogPrefix() const;
 
     void UpdateTokenIfNeededImpl();
+    void UpdateTokenImpl(const NThreading::TFuture<std::string>& future);
 
     void WriteInternal(TContinuationToken&& continuationToken, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                std::optional<ui64> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt);
@@ -356,7 +357,7 @@ private:
 
     //std::string GetDebugIdentity() const;
     Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 id);
+    bool CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult& processResult);
     bool IsReadyToSendNextImpl();
     void DumpState();
     ui64 GetNextIdImpl(const std::optional<ui64>& seqNo);
@@ -387,7 +388,7 @@ private:
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     std::string PrevToken;
-    bool UpdateTokenInProgress = false;
+    std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.

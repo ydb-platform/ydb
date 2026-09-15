@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap::NChanges {
 
-enum class EStage : ui32 {
+enum class EStage: ui32 {
     Created = 0,
     Started,
     AskAccessorResources,
@@ -57,12 +57,14 @@ public:
         TTaskCounters(const NColumnShard::TCommonCountersOwner& owner)
             : TBase(owner)
             , TasksChanges(TBase::GetDeriviative("Tasks/Count"))
-            , TasksCount(TBase::GetValue("Tasks/Count")) {
+            , TasksCount(TBase::GetValue("Tasks/Count"))
+        {
         }
     };
 
 private:
-    std::array<std::shared_ptr<NCounters::TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)> StagesByConsumer;
+    std::array<std::shared_ptr<NCounters::TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)>
+        StagesByConsumer;
 
     std::shared_ptr<NCounters::TStateSignalsOperator<EStage>> GetStageCountersImpl(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY((ui64)consumerId < StagesByConsumer.size())("index", consumerId)("size", StagesByConsumer.size());
@@ -71,11 +73,11 @@ private:
 
 public:
     TChangesCounters()
-        : TBase("ColumnEngineChanges") {
+        : TBase("ColumnEngineChanges")
+    {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
             auto base = this->CreateSubGroup("consumer", ::ToString(static_cast<NBlobOperations::EConsumer>(i)));
-            StagesByConsumer[i] = std::make_shared<NCounters::TStateSignalsOperator<EStage>>(
-                base, "indexation_stage");
+            StagesByConsumer[i] = std::make_shared<NCounters::TStateSignalsOperator<EStage>>(base, "indexation_stage");
         }
     }
 

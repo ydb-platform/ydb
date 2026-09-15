@@ -41,7 +41,6 @@ public:
 
 private:
     TYamrFormatConfigPtr Config;
-
 };
 
 } // namespace

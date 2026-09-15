@@ -10,8 +10,13 @@
 #include "mkql_block_coalesce.h"
 #include "mkql_block_container.h"
 #include "mkql_block_decimal.h"
+#include "mkql_block_dynamic_variant.h"
 #include "mkql_block_exists.h"
 #include "mkql_block_getelem.h"
+#include "mkql_block_guess.h"
+#include "mkql_block_variant.h"
+#include "mkql_block_variant_item.h"
+#include "mkql_block_way.h"
 #include "mkql_block_if.h"
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
@@ -27,6 +32,7 @@
 #include "mkql_collect.h"
 #include "mkql_combine.h"
 #include "mkql_contains.h"
+#include "mkql_decimal_add_sub.h"
 #include "mkql_decimal_div.h"
 #include "mkql_decimal_mod.h"
 #include "mkql_decimal_mul.h"
@@ -36,7 +42,9 @@
 #include "mkql_element.h"
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
+#include "mkql_erased.h"
 #include "mkql_exists.h"
+#include "mkql_expand_map.h"
 #include "mkql_extend.h"
 #include "mkql_filter.h"
 #include "mkql_flatmap.h"
@@ -61,7 +69,9 @@
 #include "mkql_grace_join.h"
 #include "mkql_lazy_list.h"
 #include "mkql_length.h"
+#include "mkql_linear.h"
 #include "mkql_listfromrange.h"
+#include "mkql_list_join.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
@@ -69,10 +79,13 @@
 #include "mkql_map_join.h"
 #include "mkql_match_recognize.h"
 #include "mkql_multimap.h"
+#include "mkql_mutdict.h"
+#include "mkql_narrow_map.h"
 #include "mkql_next_value.h"
 #include "mkql_nop.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
+#include "mkql_runtime_feature.h"
 #include "mkql_pickle.h"
 #include "mkql_prepend.h"
 #include "mkql_queue.h"
@@ -118,13 +131,12 @@
 #include "mkql_withcontext.h"
 #include "mkql_zip.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 #include <string_view>
 #include <unordered_map>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapArg(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
@@ -143,8 +155,7 @@ using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, 
 namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
-    TCallableComputationNodeBuilderFuncMapFiller()
-    {}
+    TCallableComputationNodeBuilderFuncMapFiller() = default;
 
     const TCallableComputationNodeBuilderMap Map = {
         {"Append", &WrapAppend},
@@ -240,6 +251,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"GraceSelfJoinWithSpilling", &WrapGraceSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
+        {"ListJoinCore", &WrapListJoinCore},
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
@@ -247,10 +259,14 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromBytes", &WrapFromBytes},
         {"NewMTRand", &WrapNewMTRand},
         {"NextMTRand", &WrapNextMTRand},
+        {"AsErased", &WrapAsErased},
+        {"PeekErased", &WrapPeekErased},
         {"Random", &WrapRandom<ERandom::Double>},
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},
         {"Now", &WrapNow},
+        {"HostRuntimeSetting", &WrapHostRuntimeSetting},
+        {"UdfRuntimeSetting", &WrapUdfRuntimeSetting},
         {"Pickle", &WrapPickle},
         {"StablePickle", &WrapStablePickle},
         {"Unpickle", &WrapUnpickle},
@@ -270,11 +286,15 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"QueueRange", &WrapQueueRange},
         {"Seq", &WrapSeq},
         {"PreserveStream", &WrapPreserveStream},
+        {"WinFramesCollector", &WrapWinFramesCollector},
+        {"WinFrame", &WrapWinFrame},
         {"FromYsonSimpleType", &WrapFromYsonSimpleType},
         {"TryWeakMemberFromDict", &WrapTryWeakMemberFromDict},
         {"TimezoneId", &WrapTimezoneId},
         {"TimezoneName", &WrapTimezoneName},
         {"AddTimezone", &WrapAddTimezone},
+        {"DecimalIntegralAdd", &WrapDecimalIntegralAdd},
+        {"DecimalIntegralSub", &WrapDecimalIntegralSub},
         {"DecimalDiv", &WrapDecimalDiv},
         {"DecimalMod", &WrapDecimalMod},
         {"DecimalMul", &WrapDecimalMul},
@@ -296,6 +316,11 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},
         {"BlockExists", &WrapBlockExists},
+        {"BlockGuess", &WrapBlockGuess},
+        {"BlockVariant", &WrapBlockVariant},
+        {"BlockVariantItem", &WrapBlockVariantItem},
+        {"BlockDynamicVariant", &WrapBlockDynamicVariant},
+        {"BlockWay", &WrapBlockWay},
         {"BlockIf", &WrapBlockIf},
         {"BlockAnd", &WrapBlockAnd},
         {"BlockOr", &WrapBlockOr},
@@ -351,6 +376,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTop", &WrapWideTop},
         {"WideTopSort", &WrapWideTopSort},
         {"WideSort", &WrapWideSort},
+        {"WideSortWithSpilling", &WrapWideSort},
         {"WideFlowArg", &WrapWideFlowArg},
         {"Source", &WrapSource},
         {"RangeCreate", &WrapRangeCreate},
@@ -363,18 +389,35 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"NextValue", &WrapNextValue},
         {"Nop", &WrapNop},
         {"MatchRecognizeCore", &WrapMatchRecognizeCore},
-        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)}
-    };
+        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)},
+        {"ToDynamicLinear", &WrapToDynamicLinear},
+        {"FromDynamicLinear", &WrapFromDynamicLinear},
+        {"ToMutDict", &WrapToMutDict},
+        {"MutDictCreate", &WrapMutDictCreate},
+        {"MutDictInsert", &WrapMutDictInsert},
+        {"MutDictUpsert", &WrapMutDictUpsert},
+        {"MutDictUpdate", &WrapMutDictUpdate},
+        {"MutDictRemove", &WrapMutDictRemove},
+        {"MutDictPop", &WrapMutDictPop},
+        {"MutDictContains", &WrapMutDictContains},
+        {"MutDictLookup", &WrapMutDictLookup},
+        {"MutDictLength", &WrapMutDictLength},
+        {"MutDictHasItems", &WrapMutDictHasItems},
+        {"MutDictItems", &WrapMutDictItems},
+        {"MutDictKeys", &WrapMutDictKeys},
+        {"MutDictPayloads", &WrapMutDictPayloads},
+        {"FromMutDict", &WrapFromMutDict}};
 };
 
-}
+} // namespace
 
 TComputationNodeFactory GetBuiltinFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const auto& map = Singleton<TCallableComputationNodeBuilderFuncMapFiller>()->Map;
         const auto it = map.find(callable.GetType()->GetName());
-        if (it == map.end())
+        if (it == map.end()) {
             return nullptr;
+        }
 
         return it->second(callable, ctx);
     };
@@ -382,7 +425,7 @@ TComputationNodeFactory GetBuiltinFactory() {
 
 TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories) {
     return [factories = std::move(factories), builtins = GetBuiltinFactory()](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        for (auto& f: factories) {
+        for (auto& f : factories) {
             if (auto res = f(callable, ctx)) {
                 return res;
             }
@@ -392,5 +435,4 @@ TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeF
     };
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

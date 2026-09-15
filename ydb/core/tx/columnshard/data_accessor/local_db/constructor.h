@@ -14,6 +14,7 @@ private:
     bool FetchOnStart = false;
 
     virtual TConclusion<std::shared_ptr<IMetadataMemoryManager>> DoBuild(const TManagerConstructionContext& context) const override;
+
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonValue) override {
         if (jsonValue.Has("memory_cache_size")) {
             if (!jsonValue["memory_cache_size"].IsUInteger()) {
@@ -31,6 +32,7 @@ private:
 
         return TConclusionStatus::Success();
     }
+
     virtual bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasLocalDB()) {
             return true;
@@ -41,14 +43,16 @@ private:
         if (proto.GetLocalDB().HasFetchOnStart()) {
             FetchOnStart = proto.GetLocalDB().GetFetchOnStart();
         }
-        
+
         return true;
     }
+
     virtual void DoSerializeToProto(TProto& proto) const override {
         proto.MutableLocalDB()->SetMemoryCacheSize(MemoryCacheSize);
         proto.MutableLocalDB()->SetFetchOnStart(FetchOnStart);
         return;
     }
+
     static const inline TFactory::TRegistrator<TManagerConstructor> Registrator =
         TFactory::TRegistrator<TManagerConstructor>(GetClassNameStatic());
 

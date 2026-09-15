@@ -20,6 +20,10 @@ AWS_CHECKSUMS_API uint32_t aws_checksums_crc32_sw(const uint8_t *input, int leng
 /* Computes the Castagnoli CRC32c (iSCSI) using a (slow) reference implementation. */
 AWS_CHECKSUMS_API uint32_t aws_checksums_crc32c_sw(const uint8_t *input, int length, uint32_t previousCrc32c);
 
+AWS_CHECKSUMS_API uint32_t aws_checksums_crc32_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len);
+
+AWS_CHECKSUMS_API uint32_t aws_checksums_crc32c_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len);
+
 #if defined(AWS_USE_CPU_EXTENSIONS) && defined(AWS_ARCH_ARM64)
 uint32_t aws_checksums_crc32_armv8(const uint8_t *input, int length, uint32_t previous_crc32);
 uint32_t aws_checksums_crc32c_armv8(const uint8_t *input, int length, uint32_t previous_crc32c);
@@ -44,6 +48,14 @@ uint32_t aws_checksums_crc32c_intel_avx512_with_sse_fallback(
     uint32_t previous_crc32c);
 
 #endif
+
+typedef struct {
+    uint64_t mu_poly[2]; /* Barrett mu / polynomial P(x) */
+    uint64_t shift_factors[16][16][2];
+} aws_checksums_crc32_constants_t;
+
+extern aws_checksums_crc32_constants_t aws_checksums_crc32_constants;
+extern aws_checksums_crc32_constants_t aws_checksums_crc32c_constants;
 
 AWS_EXTERN_C_END
 

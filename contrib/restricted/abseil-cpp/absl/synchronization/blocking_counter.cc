@@ -16,8 +16,10 @@
 
 #include <atomic>
 
+#include "absl/base/config.h"
 #include "absl/base/internal/raw_logging.h"
 #include "absl/base/internal/tracing.h"
+#include "absl/synchronization/mutex.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -42,7 +44,7 @@ bool BlockingCounter::DecrementCount() {
                  "BlockingCounter::DecrementCount() called too many times");
   if (count == 0) {
     base_internal::TraceSignal(this, TraceObjectKind());
-    MutexLock l(&lock_);
+    MutexLock l(lock_);
     done_ = true;
     return true;
   }
@@ -52,7 +54,7 @@ bool BlockingCounter::DecrementCount() {
 void BlockingCounter::Wait() {
   base_internal::TraceWait(this, TraceObjectKind());
   {
-    MutexLock l(&this->lock_);
+    MutexLock l(this->lock_);
 
     // only one thread may call Wait(). To support more than one thread,
     // implement a counter num_to_exit, like in the Barrier class.

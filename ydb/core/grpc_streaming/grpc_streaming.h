@@ -17,27 +17,14 @@
 namespace NKikimr {
 namespace NGRpcServer {
 
-/**
- * Context for performing operations on a bidirectional stream
- *
- * Only one thread is allowed to call methods on this class at any time
- */
-template<class TIn, class TOut>
-class IGRpcStreamingContext : public TThrRefBase {
+class IGRpcStreamingContextBase : public TThrRefBase {
 public:
-    using ISelf = IGRpcStreamingContext<TIn, TOut>;
-
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_GRPC_STREAMING),
 
         EvReadFinished,
         EvWriteFinished,
         EvNotifiedWhenDone,
-    };
-
-    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
-        TIn Record;
-        bool Success;
     };
 
     struct TEvWriteFinished : public TEventLocal<TEvWriteFinished, EvWriteFinished> {
@@ -53,9 +40,8 @@ public:
     };
 
 public:
-    virtual ~IGRpcStreamingContext() = default;
+    virtual ~IGRpcStreamingContextBase() = default;
 
-public:
     /**
      * Asynchronously cancels the request
      *
@@ -80,6 +66,38 @@ public:
     virtual bool Read() = 0;
 
     /**
+     * Schedules stream termination with the specified status
+     *
+     * Only the first call is accepted, after which new Read or Write calls
+     * are no longer permitted and ignored.
+     */
+    virtual bool Finish(const grpc::Status& status) = 0;
+
+    virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
+    virtual TString GetPeerName() const = 0;
+    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
+    virtual grpc_compression_level GetCompressionLevel() const = 0;
+    virtual void UseDatabase(const TString& database) = 0;
+    virtual TString GetRpcMethodName() const = 0;
+};
+
+/**
+ * Context for performing operations on a bidirectional stream
+ *
+ * Only one thread is allowed to call methods on this class at any time
+ */
+template<class TIn, class TOut>
+class IGRpcStreamingContext : public IGRpcStreamingContextBase {
+public:
+    using ISelf = IGRpcStreamingContext<TIn, TOut>;
+
+    struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
+        TIn Record;
+        bool Success;
+    };
+
+public:
+    /**
      * Schedules the next message write
      *
      * May be called multiple times, in which case multiple writes will be
@@ -87,14 +105,6 @@ public:
      * corresponding TEvWriteFinished event.
      */
     virtual bool Write(TOut&& message, const grpc::WriteOptions& options = { }) = 0;
-
-    /**
-     * Schedules stream termination with the specified status
-     *
-     * Only the first call is accepted, after which new Read or Write calls
-     * are no longer permitted and ignored.
-     */
-    virtual bool Finish(const grpc::Status& status) = 0;
 
     /**
      * Schedules the next message write combined with the status
@@ -109,13 +119,6 @@ public:
      * This is similar to Write and Finish combined into a more efficient call.
      */
     virtual bool WriteAndFinish(TOut&& message, const grpc::WriteOptions& options, const grpc::Status& status) = 0;
-
-public:
-    virtual NYdbGrpc::TAuthState& GetAuthState() const = 0;
-    virtual TString GetPeerName() const = 0;
-    virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const = 0;
-    virtual grpc_compression_level GetCompressionLevel() const = 0;
-    virtual void UseDatabase(const TString& database) = 0;
 };
 
 template<class TIn, class TOut, class TServer, int LoggerServiceId>
@@ -221,10 +224,11 @@ private:
             return;
         }
 
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream accepted Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream accepted",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         if (status == NYdbGrpc::EQueueEventStatus::ERROR) {
             // Don't bother registering if accept failed
@@ -237,8 +241,9 @@ private:
 
         if (!Server->RegisterRequestCtx(this)) {
             // It's unsafe to send replies, so just cancel the request
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] dropping request Name# %s due to shutdown",
-                this, Name);
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Dropping request due to shutdown",
+                {"this", static_cast<void*>(this)},
+                {"name", Name});
             this->Context.TryCancel();
             return;
         }
@@ -262,10 +267,11 @@ private:
     }
 
     void OnDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream done notification Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream done notification",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         bool success = status == NYdbGrpc::EQueueEventStatus::OK;
 
@@ -283,9 +289,10 @@ private:
     }
 
     void Cancel() {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade cancel Name# %s peer# %s",
-            this, Name,
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade cancel",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()});
 
         this->Context.TryCancel();
     }
@@ -295,10 +302,11 @@ private:
     }
 
     void Attach(TActorId actor) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade attach Name# %s actor# %s peer# %s",
-            this, Name,
-            actor.ToString().c_str(),
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade attach",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"actor", actor},
+            {"peer", this->GetPeer()});
 
         auto guard = SingleThreaded.Enforce();
 
@@ -320,9 +328,10 @@ private:
     }
 
     bool Read() {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade read Name# %s peer# %s",
-            this, Name,
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade read",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()});
 
         auto guard = SingleThreaded.Enforce();
 
@@ -346,11 +355,12 @@ private:
     }
 
     void OnReadDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] read finished Name# %s ok# %s data# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK).c_str(),
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Read finished",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"readInProgress", NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK)},
+            {"peer", this->GetPeer()});
 
         // Take current in-progress read first
         auto read = std::move(ReadInProgress);
@@ -372,8 +382,10 @@ private:
             while ((flags & FlagRegistered) && (flags & FlagFinishDone) && ReadQueue.load() == 0) {
                 Y_DEBUG_ABORT_UNLESS(flags & FlagFinishCalled);
                 if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
-                    LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] deregistering request Name# %s peer# %s (read done)",
-                        this, Name, this->GetPeer().c_str());
+                    YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (read done)",
+                        {"this", static_cast<void*>(this)},
+                        {"name", Name},
+                        {"peer", this->GetPeer()});
                     Server->DeregisterRequestCtx(this);
                     break;
                 }
@@ -388,17 +400,19 @@ private:
 
     bool Write(TOut&& message, const grpc::WriteOptions& options = { }, const grpc::Status* status = nullptr) {
         if (status) {
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s grpc status# (%d) message# %s",
-                this, Name,
-                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
-                this->GetPeer().c_str(),
-                static_cast<int>(status->error_code()),
-                status->error_message().c_str());
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write grpc",
+                {"this", static_cast<void*>(this)},
+                {"name", Name},
+                {"message", NYdbGrpc::FormatMessage<TOut>(message)},
+                {"peer", this->GetPeer()},
+                {"errorCode", static_cast<int>(status->error_code())},
+                {"errorMessage", status->error_message()});
         } else {
-            LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade write Name# %s data# %s peer# %s",
-                this, Name,
-                NYdbGrpc::FormatMessage<TOut>(message).c_str(),
-                this->GetPeer().c_str());
+            YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write",
+                {"this", static_cast<void*>(this)},
+                {"name", Name},
+                {"message", NYdbGrpc::FormatMessage<TOut>(message)},
+                {"peer", this->GetPeer()});
         }
 
         Y_ABORT_UNLESS(!options.is_corked(),
@@ -450,10 +464,11 @@ private:
     }
 
     void OnWriteDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] write finished Name# %s ok# %s peer# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Write finished",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()});
 
         auto event = MakeHolder<typename IContext::TEvWriteFinished>();
         event->Success = status == NYdbGrpc::EQueueEventStatus::OK;
@@ -504,11 +519,12 @@ private:
     }
 
     bool Finish(const grpc::Status& status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] facade finish Name# %s peer# %s grpc status# (%d) message# %s",
-            this, Name,
-            this->GetPeer().c_str(),
-            static_cast<int>(status.error_code()),
-            status.error_message().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade finish grpc",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"peer", this->GetPeer()},
+            {"errorCode", static_cast<int>(status.error_code())},
+            {"errorMessage", status.error_message()});
 
         return FinishInternal(status);
     }
@@ -539,12 +555,13 @@ private:
     }
 
     void OnFinishDone(NYdbGrpc::EQueueEventStatus status) {
-        LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] stream finished Name# %s ok# %s peer# %s grpc status# (%d) message# %s",
-            this, Name,
-            status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false",
-            this->GetPeer().c_str(),
-            static_cast<int>(Status->error_code()),
-            Status->error_message().c_str());
+        YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream finished grpc",
+            {"this", static_cast<void*>(this)},
+            {"name", Name},
+            {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
+            {"peer", this->GetPeer()},
+            {"errorCode", static_cast<int>(Status->error_code())},
+            {"errorMessage", Status->error_message()});
 
         auto flags = (Flags |= FlagFinishDone);
         Y_ABORT_UNLESS(flags & FlagFinishCalled);
@@ -576,8 +593,10 @@ private:
 
         while ((flags & FlagRegistered) && ReadQueue.load() == 0) {
             if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
-                LOG_DEBUG(ActorSystem, LoggerServiceId, "[%p] deregistering request Name# %s peer# %s (finish done)",
-                    this, Name, this->GetPeer().c_str());
+                YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (finish done)",
+                    {"this", static_cast<void*>(this)},
+                    {"name", Name},
+                    {"peer", this->GetPeer()});
                 Server->DeregisterRequestCtx(this);
                 break;
             }
@@ -600,6 +619,10 @@ private:
         if (Limiter) {
             Limiter->DecRequest();
         }
+    }
+
+    TString GetRpcMethodName() const {
+        return TStringBuilder() << TServer::TCurrentGRpcService::service_full_name() << '/' << Name;
     }
 
 private:
@@ -659,6 +682,10 @@ private:
 
         void UseDatabase(const TString& database) override {
             Self->UseDatabase(database);
+        }
+
+        TString GetRpcMethodName() const override {
+            return Self->GetRpcMethodName();
         }
 
     private:

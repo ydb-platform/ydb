@@ -99,6 +99,7 @@ message TEvWriteResult {
     optional uint64 WriteId = 4;
     optional uint64 TableId = 5;
     optional string DedupId = 6;
+    optional uint64 OverloadSubscribed = 7;
 }
 
 message TEvRead {
@@ -146,6 +147,7 @@ enum ETransactionKind {
     TX_KIND_SHARING = 7;
     TX_KIND_COMMIT_WRITE_PRIMARY = 8;
     TX_KIND_COMMIT_WRITE_SECONDARY = 9;
+    TX_KIND_RESTORE = 10;
 }
 
 enum ETransactionFlag {
@@ -183,17 +185,22 @@ message TEvProposeTransactionResult {
     optional uint64 Step = 9;
 }
 
-message TEvCancelTransactionProposal {
+message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;
 }
 
-message TEvNotifyTxCompletion {
-    optional uint64 TxId = 1;
+message TShardOpResult {
+    optional bool Success = 1;
+    optional string Explain = 2;
+    optional uint64 BytesProcessed = 3;
+    optional uint64 RowsProcessed = 4;
 }
 
 message TEvNotifyTxCompletionResult {
     optional uint64 Origin = 1;
     optional uint64 TxId = 2;
+    
+    optional TShardOpResult OpResult = 3;
 }
 
 message TCommitTxBody {
@@ -203,6 +210,10 @@ message TCommitTxBody {
 
 message TBackupTxBody {
     optional NKikimrSchemeOp.TBackupTask BackupTask = 1;
+}
+
+message TRestoreTxBody {
+    optional NKikimrSchemeOp.TRestoreTask RestoreTask = 1;
 }
 
 message TCommitWriteTxBody {
@@ -269,6 +280,12 @@ message TCreateTable {
 message TMoveTable {
     optional uint64 SrcPathId = 1;
     optional uint64 DstPathId = 2;
+    optional string DstPath = 3;
+}
+
+message TCopyTable {
+    optional uint64 SrcPathId = 1;
+    optional uint64 DstPathId = 2;
 }
 
 message TInitShard {
@@ -321,6 +338,7 @@ message TSchemaTxBody {
         TAlterTable AlterTable = 5;
         TAlterStore AlterStore = 6;
         TMoveTable MoveTable = 7;
+        TCopyTable CopyTable = 8;
     }
 
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;
@@ -352,6 +370,36 @@ message TEvReadBlobRangesResult {
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
     optional uint32 ModificationType = 2;
-    optional uint64 PathId = 3;
+    optional uint64 PathId = 3; // InternalPathId
     optional bool WritePortions = 4;
+    optional bool IsBulk = 5;
+    optional uint64 SchemeShardLocalPathId = 6;
+}
+
+// Sent by columnshard when some overload reason stopped being relevant
+message TEvOverloadReady {
+    optional uint64 TabletID = 1;
+    optional uint64 SeqNo = 2;
+}
+
+// Sent by overload subscribers to unsubscribe and free memory
+message TEvOverloadUnsubscribe {
+    optional uint64 SeqNo = 1;
+}
+
+// Sent by OverloadManager to FlowControlManagers when local node overload status changes.
+// The publishing node is ev->Sender.NodeId() (local-service Sender.NodeId()==0 means this node).
+message TEvNodeOverloadStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_OVERLOADED = 1;
+        STATUS_READY = 2;
+    }
+    optional EStatus Status = 1;
+    optional uint64 Generation = 2;
+}
+
+message TCompletedBackupTransaction {
+    optional uint64 TxId = 1;
+    optional TShardOpResult OpResult = 2;
 }

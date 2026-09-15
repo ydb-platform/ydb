@@ -7,9 +7,11 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/signals/owner.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 
@@ -45,6 +47,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr GlobalTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightLimit;
 
 public:
     TCSUploadCounters()
@@ -61,6 +67,10 @@ public:
         , FailsCount(TBase::GetDeriviative("Fails"))
         , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
+        , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
+        , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
+        , MemoryInflightBytes(TBase::GetValue("MemoryInflightBytes"))
+        , MemoryInflightLimit(TBase::GetValue("MemoryInflightLimit"))
     {
     }
 
@@ -70,6 +80,14 @@ public:
 
     void OnRetryTimeout() const {
         RetryTimeoutCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverload() const {
+        RetryBySubscribeOnOverloadCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverloadLimitExceeded() const {
+        RetryBySubscribeOnOverloadLimitExceededCount->Inc();
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {
@@ -98,6 +116,11 @@ public:
     void OnFailedFullReply(const TDuration d) const {
         FailedFullReplyDuration->Collect(d.MilliSeconds());
     }
+
+    void OnMemoryInflight(const ui64 bytes, const ui64 limit) const {
+        MemoryInflightBytes->Set(bytes);
+        MemoryInflightLimit->Set(limit);
+    }
 };
 // External transaction controller class
 class TWritersController {
@@ -114,7 +137,7 @@ private:
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
-    YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
+    YDB_READONLY_DEF(std::shared_ptr<TCSUploadCounters>, Counters);
     void SendReply() {
         if (FailsCount.Val()) {
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
@@ -149,7 +172,8 @@ public:
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
+                      std::shared_ptr<TCSUploadCounters> counters);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -172,29 +196,40 @@ private:
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
     const std::optional<TDuration> Timeout;
+    const bool RetryBySubscription;
+    ui64 LastOverloadSeqNo = 0;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
+    // Sticky: set when the shard ever answered STATUS_OVERLOADED, even if a later retry
+    // succeeded. Reported to FCM so retry-by-subscription cannot launder overload into
+    // success (which would grow the drain rate exactly when it must not).
+    bool WasEverOverloaded = false;
+    // Node that served the last write reply (0 until the first reply arrives).
+    ui32 LastResultNodeId = 0;
+    bool WriteOutcomeReported = false;
 
     void SendWriteRequest();
-    static TDuration OverloadTimeout() {
-        return TDuration::MilliSeconds(OverloadedDelayMs);
-    }
+    static TDuration OverloadTimeout() noexcept;
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
     }
-    virtual void PassAway() override {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-        TBase::PassAway();
-    }
+
+    void ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId);
+    void ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId);
+    // Terminal, exactly-once per shard write. Drives FCM cohort/outcome rate control.
+    void ReportWriteOutcomeToFlowControl();
 
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt,
+        TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
+            hFunc(TEvColumnShard::TEvOverloadReady, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
         }
     }
@@ -204,8 +239,14 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
+    void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
+
+protected:
+    void PassAway() override;
 
 private:
     bool RetryWriteRequest(const bool delayed = true);
+    bool IsMaxRetriesReached() const;
+    ui32 GetMaxRetriesPerShard() const;
 };
 }   // namespace NKikimr::NEvWrite

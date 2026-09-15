@@ -12,7 +12,10 @@
 #
 ##############################################################################
 """Resolution ordering utility tests"""
+import doctest
+import re
 import unittest
+
 
 
 # pylint:disable=blacklisted-name

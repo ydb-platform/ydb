@@ -54,7 +54,7 @@ void ExternalNodesFromInputTuple(const TComputationNodeFactoryContext& ctx, TCal
 namespace NDqHashOperatorParams
 {
     enum : ui32 {
-        Flow = 0,
+        Input = 0,
         OperatorParams = 1,
         KeyArgs = 2,
         StateArgs = 3,
@@ -79,10 +79,18 @@ namespace NDqHashOperatorParams
 struct TDqHashOperatorParams
 {
     size_t InputWidth = 0;
+    bool IsStream = false;
+    bool EnableSpilling = false;
     TKeyTypes KeyTypes;
     std::vector<TType*> KeyItemTypes;
     std::vector<TType*> StateItemTypes;
     NDqHashOperatorCommon::TCombinerNodes Nodes;
+};
+
+enum class EOperatorKind
+{
+    Combiner,
+    Aggregator,
 };
 
 TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const TComputationNodeFactoryContext& ctx);

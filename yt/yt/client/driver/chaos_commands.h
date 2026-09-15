@@ -43,7 +43,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPingChaosLeaseCommand
-    : public TTypedCommand<NApi::TPrerequisitePingOptions>
+    : public TTypedCommand<NApi::TChaosLeasePingOptions>
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TPingChaosLeaseCommand);

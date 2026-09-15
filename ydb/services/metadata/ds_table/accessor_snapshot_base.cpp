@@ -6,6 +6,8 @@
 
 #include <util/string/escape.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qResult*/, NFetcher::ISnapshot::TPtr snapshot) {
@@ -13,7 +15,8 @@ void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qRe
 }
 
 void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot: " << errorMessage;
+    YDB_LOG_ERROR("Cannot construct",
+        {"snapshot", errorMessage});
 }
 
 void TDSAccessorBase::Handle(NRequest::TEvRequestFailed::TPtr& ev) {
@@ -29,10 +32,21 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
     Y_ABORT_UNLESS(managers.size());
     Ydb::Table::ExecuteQueryResult qResultFull;
     ui32 replyIdx = 0;
+
     for (auto&& i : managers) {
         auto it = CurrentExistence.find(i->GetStorageTablePath());
+
+        // If the current dynamic path is not found (due to mutation),
+        // fallback to the pinned path that was used for this manager in the YQL request
+        if (it == CurrentExistence.end()) {
+            auto itPinnedPath = ManagerPinPath.find(i);
+            Y_ABORT_UNLESS(itPinnedPath != ManagerPinPath.end());
+            it = CurrentExistence.find(itPinnedPath->second);
+        }
+
         Y_ABORT_UNLESS(it != CurrentExistence.end());
         Y_ABORT_UNLESS(it->second.State != EState::UNKNOWN);
+
         if (it->second.State == EState::EXISTS) {
             Y_ABORT_UNLESS((int)replyIdx < qResult.result_sets().size());
             *qResultFull.add_result_sets() = std::move(qResult.result_sets()[replyIdx]);
@@ -41,9 +55,12 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
             qResultFull.add_result_sets();
         }
     }
+
     Y_ABORT_UNLESS((int)replyIdx == qResult.result_sets().size());
     Y_ABORT_UNLESS((size_t)qResultFull.result_sets().size() == SnapshotConstructor->GetManagers().size());
+    
     auto parsedSnapshot = SnapshotConstructor->ParseSnapshot(qResultFull, RequestedActuality);
+
     if (!parsedSnapshot) {
         OnConstructSnapshotError("snapshot is null after parsing");
     } else {
@@ -68,11 +85,14 @@ void TDSAccessorBase::Handle(TEvRecheckExistence::TPtr& ev) {
 void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev) {
     auto it = ExistenceChecks.find(ev->Get()->GetPath());
     if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
-        AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
-        Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
-        return;
+        YDB_LOG_ERROR("",
+            {"action", "cannot detect path existence"},
+            {"path", ev->Get()->GetPath()},
+            {"error", ev->Get()->GetErrorMessage()});
     }
-    ++it->second.RetryCount;
+    if (it != ExistenceChecks.end()) {
+        ++it->second.RetryCount;
+    }
     Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
 }
 
@@ -84,6 +104,7 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
     } else {
         it->second.State = EState::NON_EXISTS;
     }
+    it->second.RetryCount = 0;
     bool hasExists = false;
     for (auto&& i : ExistenceChecks) {
         if (i.second.State == EState::UNKNOWN) {
@@ -126,12 +147,19 @@ void TDSAccessorBase::StartSnapshotsFetchingImpl() {
     Y_ABORT_UNLESS(managers.size());
     CurrentExistence = ExistenceChecks;
     TStringBuilder sb;
+    sb << "/*UI-QUERY-EXCLUDE*/" << Endl;
     for (auto&& i : managers) {
-        auto it = CurrentExistence.find(i->GetStorageTablePath());
+        auto path = i->GetStorageTablePath();
+        auto it = CurrentExistence.find(path);
         Y_ABORT_UNLESS(it != CurrentExistence.end());
         Y_ABORT_UNLESS(it->second.State != EState::UNKNOWN);
+
+        // Pin the current path to isolate the manager from potential
+        // GetStorageTablePath mutations during the asynchronous YQL execution
+        ManagerPinPath[i] = path;
+
         if (it->second.State == EState::EXISTS) {
-            sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;" << Endl;
+            sb << "SELECT * FROM `" + EscapeC(path) + "`;" << Endl;
         }
     }
     NRequest::TYQLRequestExecutor::Execute(sb, NACLib::TSystemUsers::Metadata(), InternalController, true);

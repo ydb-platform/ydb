@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(ChannelPoolTests) {
             5, // NYdb::TCP_KEEPALIVE_COUNT, unused in UT, but is necessary in constructor
             10 // NYdb::TCP_KEEPALIVE_INTERVAL, unused in UT, but is necessary in constructor
         };
-        auto channelPool = TChannelPool(tcpKeepAliveSettings, TDuration::MilliSeconds(250));
+        auto channelPool = TChannelPool(tcpKeepAliveSettings, TDuration::MilliSeconds(250), true);
         std::vector<std::weak_ptr<grpc::ChannelInterface>> ChannelInterfacesWeak;
 
         {

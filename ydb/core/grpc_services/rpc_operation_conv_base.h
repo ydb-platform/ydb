@@ -45,7 +45,6 @@ protected:
         TResult result;
         out.mutable_result()->PackFrom(result);
     }
-
 }; // TOperationConv
 
 }

@@ -2,6 +2,8 @@
 #include "private_events.h"
 #include "secret_resolver.h"
 
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -9,6 +11,10 @@
 #include <ydb/services/metadata/secret/secret.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
+
+#include <util/generic/ptr.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -23,15 +29,16 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 
@@ -39,9 +46,30 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             return Reply(false, "Empty security object");
         }
 
-        SecretId = NMetadata::NSecret::TSecretId(entry.SecurityObject->GetOwnerSID(), SecretName);
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
+        const auto& userSID = entry.SecurityObject->GetOwnerSID();
+        SecretId = NMetadata::NSecret::TSecretId(userSID, SecretName);
+
+        if (NSecret::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
+            const TVector<TString> secretNames{SecretId.GetSecretId()};
+            auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(userSID, TVector<TString>());
+            const auto actorSystem = ActorContext().ActorSystem();
+            const auto replyActorId = SelfId();
+            auto future = NSecret::DescribeSecret(
+                secretNames,
+                userToken,
+                Database,
+                actorSystem,
+                {.RetryPolicy = NSecret::MakeLongRetryPolicy()});
+            future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
+                actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
+            });
+        } else if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+            // Just in case - when we disable old secrets, we'll make sure they are not needed any more
+            return Reply(false, "Usage of old secrets is disabled now. Please use new secrets");
+        } else {
+            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+                new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
+        }
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -55,9 +83,18 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Reply(secretValue.DetachResult());
     }
 
+    void Handle(NKqp::TEvDescribeSecretsResponse::TPtr& ev) {
+        if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
+            return Reply(false, ev->Get()->Description.Issues.ToOneLineString());
+        }
+
+        Y_ENSURE(ev->Get()->Description.SecretValues.size() == 1);
+        Reply(ev->Get()->Description.SecretValues[0]);
+    }
+
     template <typename... Args>
     void Reply(Args&&... args) {
-        Send(Parent, new TEvPrivate::TEvResolveSecretResult(ReplicationId, std::forward<Args>(args)...));
+        Send(Parent, new TEvPrivate::TEvResolveSecretResult(ReplicationId, std::forward<Args>(args)...), 0, Cookie);
         PassAway();
     }
 
@@ -66,21 +103,31 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER;
     }
 
-    explicit TSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName)
+    explicit TSecretResolver(
+            const TActorId& parent,
+            ui64 rid,
+            const TPathId& pathId,
+            const TString& secretName,
+            const ui64 cookie,
+            const TString& database)
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
         , SecretName(secretName)
-        , LogPrefix("SecretResolver", ReplicationId)
+        , Cookie(cookie)
+        , Database(database)
+        , LogPrefix(CreateActorLogPrefix("SecretResolver", ReplicationId))
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             return Reply(false, "Metadata service is not active");
         }
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = PathId;
@@ -93,9 +140,12 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+            hFunc(NKqp::TEvDescribeSecretsResponse, Handle);
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -106,15 +156,19 @@ private:
     const ui64 ReplicationId;
     const TPathId PathId;
     const TString SecretName;
-    const TActorLogPrefix LogPrefix;
+    const ui64 Cookie;
+    const TString Database;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     static constexpr auto RetryInterval = TDuration::Seconds(1);
     NMetadata::NSecret::TSecretId SecretId;
 
 }; // TSecretResolver
 
-IActor* CreateSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName) {
-    return new TSecretResolver(parent, rid, pathId, secretName);
+IActor* CreateSecretResolver(const TActorId& parent, ui64 rid,
+        const TPathId& pathId, const TString& secretName, const ui64 cookie, const TString& database)
+{
+    return new TSecretResolver(parent, rid, pathId, secretName, cookie, database);
 }
 
 }

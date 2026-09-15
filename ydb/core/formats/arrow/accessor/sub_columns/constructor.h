@@ -31,7 +31,7 @@ private:
 
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoDeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const override;
-    virtual TString DoSerializeToString(
+    virtual TBlobWithAdditionalAccessorData DoSerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& chunkedArray, const TChunkConstructionData& externalInfo) const override;
     virtual NKikimrArrowAccessorProto::TConstructor DoSerializeToProto() const override;
     virtual bool DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& proto) override;
@@ -50,7 +50,7 @@ public:
         const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize);
 
     static TConclusion<std::shared_ptr<TSubColumnsPartialArray>> BuildPartialReader(
-        const TString& originalData, const TChunkConstructionData& externalInfo);
+        const TString& originalData, const TChunkConstructionData& externalInfo, const TSettings& settings);
 
     TConstructor(const TSettings& settings)
         : TBase(IChunkedArray::EType::SubColumnsArray)

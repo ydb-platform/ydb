@@ -1,10 +1,16 @@
 # Загрузка из S3-совместимого хранилища
 
-Команда `import s3` запускает на стороне сервера процесс загрузки из S3-совместимого хранилища данных и информации об объектах схемы данных, в описанном в статье [Файловая структура](../file-structure.md) формате:
+Команда `import s3` запускает на стороне сервера процесс загрузки из S3-совместимого хранилища данных и информации об объектах схемы, в описанном в статье [Файловая структура](../file-structure.md) формате:
 
 ```bash
 {{ ydb-cli }} [connection options] import s3 [options]
 ```
+
+{% note info %}
+
+Импорт таблиц из S3-совместимого хранилища данных в других форматах возможен с использованием [внешних таблиц](../../../../concepts/query_execution/federated_query/s3/external_table.md), подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
+
+{% endnote %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -16,34 +22,43 @@
 
 `[options]` - параметры команды:
 
-### Параметры соединения с S3 {#s3-conn}
+### Параметры S3 {#s3-params}
 
 Команда загрузки из S3 требует указания [параметров соединения с S3](../auth-s3.md). Так как загрузка производится в асинхронном режиме сервером {{ ydb-short-name }}, указанный эндпоинт должен быть доступен для установки соединения со стороны сервера.
 
-### Перечень загружаемых объектов {#items}
+`--source-prefix PREFIX`: Префикс загрузки в бакете S3.
 
-`--item STRING`: Описание объекта загрузки. Параметр `--item` может быть указан несколько раз, если необходимо выполнить загрузку нескольких объектов. `STRING` задается в формате `<свойство>=<значение>,...`, со следующими обязательными свойствами:
+### Загружаемые объекты схемы базы данных {#objects}
 
-- `source`, `src` или `s` — путь (префикс ключа) в S3 с загружаемой директорией или таблицей
+{% include [import-objects-params.md](./import-objects-params.md) %}
+
+{% cut "Альтернативный способ" %}
+
+{% include [import-alternative-syntax.md](./import-alternative-syntax.md) %}
+
+- `source`, `src` или `s` — префикс ключа в S3 с загружаемой директорией или таблицей.
 - `destination`, `dst`, или `d` —  путь в базе данных для размещения загружаемой директории или таблицы. Конечный элемент пути не должен существовать. Все директории на пути будут созданы, если не существуют.
+
+{% include [import-alternative-syntax-warning.md](./import-alternative-syntax-warning.md) %}
+
+{% endcut %}
 
 ### Дополнительные параметры {#aux}
 
-`--description STRING`: Текстовое описание операции, сохраняемое в истории операций.
-`--retries NUM`: Количество повторных попыток загрузки, которые будет предпринимать сервер. По умолчанию 10.
-`--skip-checksum-validation`: Пропустить этап валидации контрольных сумм загружаемых объектов.
-`--format STRING`: Формат вывода результата.
+{% include [import-additional-params.md](import-additional-params.md) %}
+- `--list`: Перечислить объекты в существующей выгрузке.
 
-- `pretty`: Человекочитаемый формат (по умолчанию)
-- `proto-json-base64`: Protobuf в формате json, бинарные строки закодированы в base64
+{% include [import-resource-broker-note.md](import-resource-broker-note.md) %}
 
 ## Выполнение загрузки {#exec}
+
+{% include [server-import-workflow.md](server-import-workflow.md) %}
 
 ### Результат запуска {#result}
 
 При успешном исполнении команда `import s3` выводит сводную информацию о поставленной в очередь операции загрузки из S3, в заданном опцией `--format` формате. Фактическая загрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
 
-- В режиме вывода `pretty` (по умолчанию) идентификатор операции показывается в выделенном псевдографикой поле id:
+{% include [import-operation-result-pretty-intro.md](import-operation-result-pretty-intro.md) %}
 
   ```text
   ┌───────────────────────────────────────────┬───────┬─────...
@@ -55,46 +70,25 @@
   ...
   ```
 
-- В режиме вывода proto-json-base64 идентификатор находится в атрибуте "id":
+{% include [import-operation-result-json-intro.md](import-operation-result-json-intro.md) %}
 
   ```json
-  {"id":"ydb://export/8?id=281474976788395&kind=s3","ready":true, ... }
+  {"id":"ydb://import/8?id=281474976788395&kind=s3","ready":true, ... }
   ```
 
 ### Статус загрузки {#status}
 
-Загрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе загрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
+{% include [import-operation-status-intro.md](import-operation-status-intro.md) %}
 
-``` bash
+```bash
 {{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=s3"
 ```
 
-Формат вывода `operation get` также устанавливается опцией `--format`.
-
-Несмотря на то, что идентификатор операции имеет формат URL, не гарантируется, что он будет сохранен в дальнейшем. Его нужно интерпретировать только как строку.
-
-Завершение загрузки отслеживается по изменению атрибута "progress":
-
-- В режиме вывода `pretty` (по умолчанию) успешно завершенная операция отражается значением "Done" в выделенном псевдографикой поле `progress`:
-
-  ```text
-  ┌───── ... ──┬───────┬─────────┬──────────┬─...
-  | id         | ready | status  | progress | ...
-  ├──────... ──┼───────┼─────────┼──────────┼─...
-  | ydb:/...   | true  | SUCCESS | Done     | ...
-  ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
-  ...
-  ```
-
-- В режиме вывода proto-json-base64 завершенная операция отражается значением `PROGRESS_DONE` атрибута `progress`:
-
-  ```json
-  {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
-  ```
+{% include [import-operation-status-after-get.md](import-operation-status-after-get.md) %}
 
 ### Завершение операции загрузки {#forget}
 
-После выполнения загрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка была удалена из перечня операций:
+{% include [import-operation-forget-intro.md](import-operation-forget-intro.md) %}
 
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=s3"
@@ -108,7 +102,7 @@
 {{ ydb-cli }} -p quickstart operation list import/s3
 ```
 
-Формат вывода `operation list` также устанавливается опцией `--format`.
+{% include [import-operation-list-tail.md](import-operation-list-tail.md) %}
 
 ## Примеры {#examples}
 
@@ -121,18 +115,45 @@
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=export1,dst=.
+  --source-prefix export1
 ```
 
 ### Загрузка нескольких директорий {#example-specific-dirs}
 
-Загрузка объектов из директорий dir1 и dir2 бакета S3 `mybucket` в одноименные директории базы данных с использованием явно заданных параметров аутентификации в S3:
+Загрузка объектов из директорий `dir1` и `dir2` выгрузки, которая находится в директории `export1` в бакете `mybucket`, в одноименные директории базы данных с использованием явно заданных параметров аутентификации в S3:
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
-  --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
+  --access-key <access-key> --secret-key <secret-key> \
+  --source-prefix export1
+  --include dir1 --include dir2
+```
+
+### Перечисление объектов в существующей зашифрованной выгрузке {#example-list}
+
+Перечисление путей всех объектов в существующей зашифрованной выгрузке, которая находится в директории `export1` в бакете `mybucket`, с использованием секретного ключа из файла `~/my_secret_key`.
+
+```bash
+{{ ydb-cli }} -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key <access-key> --secret-key <secret-key> \
+  --source-prefix export1
+  --encryption-key-file ~/my_secret_key
+  --list
+```
+
+### Загрузка зашифрованной выгрузки {#example-encryption}
+
+Загрузка одной таблицы, которая была выгружена по пути `dir/my_table`, в путь `dir1/dir/my_table` из зашифрованной выгрузки, расположенной по префиксу `export1` в бакете `mybucket`, с использованием секретного ключа из файла `~/my_secret_key`.
+
+```bash
+{{ ydb-cli }} -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key <access-key> --secret-key <secret-key> \
+  --source-prefix export1 --destination-path dir1 \
+  --include dir/my_table \
+  --encryption-key-file ~/my_secret_key
 ```
 
 ### Получение идентификаторов операций {#example-list-oneline}
@@ -156,4 +177,3 @@ ydb://import/8?id=281474976788779&kind=s3
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
-

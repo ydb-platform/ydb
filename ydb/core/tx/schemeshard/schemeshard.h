@@ -17,6 +17,12 @@
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr {
+
+// Only used below as a pointer in a factory-function declaration; a
+// forward declaration avoids pulling the heavy ydb/core/base/blobstorage.h
+// into this widely-included header.
+class TTabletStorageInfo;
+
 namespace NSchemeShard {
 
 static constexpr ui64 RootSchemeShardId = 0;
@@ -98,15 +104,15 @@ namespace TEvSchemeShard {
         EvListUsers,
         EvListUsersResult,
 
-        EvTenantDataErasureRequest,
-        EvTenantDataErasureResponse,
-        EvWakeupToRunDataErasure,
-        EvMeasureDataErasureBSC,
-        EvWakeupToRunDataErasureBSC,
-        EvCompleteDataErasure,
-        EvDataErasureInfoRequest,
-        EvDataErasureInfoResponse,
-        EvDataErasureManualStartupRequest,
+        EvTenantShredRequest,
+        EvTenantShredResponse,
+        EvWakeupToRunShred,
+        EvMeasureShredBSC,
+        EvWakeupToRunShredBSC,
+        EvCompleteShred,
+        EvShredInfoRequest,
+        EvShredInfoResponse,
+        EvShredManualStartupRequest,
 
         EvEnd
     };
@@ -410,10 +416,10 @@ namespace TEvSchemeShard {
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
 
-    struct TEvWakeupToRunDataErasure : public TEventLocal<TEvWakeupToRunDataErasure, EvWakeupToRunDataErasure> {
+    struct TEvWakeupToRunShred : public TEventLocal<TEvWakeupToRunShred, EvWakeupToRunShred> {
     };
 
-    struct TEvWakeupToRunDataErasureBSC : public TEventLocal<TEvWakeupToRunDataErasureBSC, EvWakeupToRunDataErasureBSC> {
+    struct TEvWakeupToRunShredBSC : public TEventLocal<TEvWakeupToRunShredBSC, EvWakeupToRunShredBSC> {
     };
 
     struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
@@ -689,41 +695,41 @@ namespace TEvSchemeShard {
         TEvListUsersResult() = default;
     };
 
-    struct TEvTenantDataErasureRequest : TEventPB<TEvTenantDataErasureRequest, NKikimrScheme::TEvTenantDataErasureRequest, EvTenantDataErasureRequest> {
-        TEvTenantDataErasureRequest() = default;
+    struct TEvTenantShredRequest : TEventPB<TEvTenantShredRequest, NKikimrScheme::TEvTenantShredRequest, EvTenantShredRequest> {
+        TEvTenantShredRequest() = default;
 
-        TEvTenantDataErasureRequest(ui64 generation) {
+        TEvTenantShredRequest(ui64 generation) {
             Record.SetGeneration(generation);
         }
     };
 
-    struct TEvTenantDataErasureResponse : TEventPB<TEvTenantDataErasureResponse, NKikimrScheme::TEvTenantDataErasureResponse, EvTenantDataErasureResponse> {
+    struct TEvTenantShredResponse : TEventPB<TEvTenantShredResponse, NKikimrScheme::TEvTenantShredResponse, EvTenantShredResponse> {
 
-        TEvTenantDataErasureResponse() = default;
-        TEvTenantDataErasureResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status) {
+        TEvTenantShredResponse() = default;
+        TEvTenantShredResponse(const TPathId& pathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status) {
             Record.MutablePathId()->SetOwnerId(pathId.OwnerId);
             Record.MutablePathId()->SetLocalId(pathId.LocalPathId);
             Record.SetGeneration(generation);
             Record.SetStatus(status);
         }
 
-        TEvTenantDataErasureResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantDataErasureResponse::EStatus& status)
-            : TEvTenantDataErasureResponse(TPathId(ownerId, localPathId), generation, status)
+        TEvTenantShredResponse(ui64 ownerId, ui64 localPathId, ui64 generation, const NKikimrScheme::TEvTenantShredResponse::EStatus& status)
+            : TEvTenantShredResponse(TPathId(ownerId, localPathId), generation, status)
         {}
     };
 
-    struct TEvDataErasureInfoRequest : TEventPB<TEvDataErasureInfoRequest, NKikimrScheme::TEvDataErasureInfoRequest, EvDataErasureInfoRequest> {};
+    struct TEvShredInfoRequest : TEventPB<TEvShredInfoRequest, NKikimrScheme::TEvShredInfoRequest, EvShredInfoRequest> {};
 
-    struct TEvDataErasureInfoResponse : TEventPB<TEvDataErasureInfoResponse, NKikimrScheme::TEvDataErasureInfoResponse, EvDataErasureInfoResponse> {
+    struct TEvShredInfoResponse : TEventPB<TEvShredInfoResponse, NKikimrScheme::TEvShredInfoResponse, EvShredInfoResponse> {
 
-        TEvDataErasureInfoResponse() = default;
-        TEvDataErasureInfoResponse(ui64 generation, const NKikimrScheme::TEvDataErasureInfoResponse::EStatus& status) {
+        TEvShredInfoResponse() = default;
+        TEvShredInfoResponse(ui64 generation, const NKikimrScheme::TEvShredInfoResponse::EStatus& status) {
             Record.SetGeneration(generation);
             Record.SetStatus(status);
         }
     };
 
-    struct TEvDataErasureManualStartupRequest : TEventPB<TEvDataErasureManualStartupRequest, NKikimrScheme::TEvDataErasureManualStartupRequest, EvDataErasureManualStartupRequest> {};
+    struct TEvShredManualStartupRequest : TEventPB<TEvShredManualStartupRequest, NKikimrScheme::TEvShredManualStartupRequest, EvShredManualStartupRequest> {};
 };
 
 }

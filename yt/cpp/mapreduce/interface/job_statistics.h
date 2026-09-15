@@ -43,10 +43,10 @@ public:
     TJobStatistics(const NYT::TNode& statistics);
 
     TJobStatistics(const TJobStatistics& jobStatistics);
-    TJobStatistics(TJobStatistics&& jobStatistics);
+    TJobStatistics(TJobStatistics&& jobStatistics) noexcept;
 
     TJobStatistics& operator=(const TJobStatistics& jobStatistics);
-    TJobStatistics& operator=(TJobStatistics&& jobStatistics);
+    TJobStatistics& operator=(TJobStatistics&& jobStatistics) noexcept;
 
     ~TJobStatistics();
 

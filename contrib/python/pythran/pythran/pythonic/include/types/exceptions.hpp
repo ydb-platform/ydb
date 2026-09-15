@@ -24,17 +24,17 @@ namespace types
   };
 
 // Use this to create a python exception class
-#define CLASS_EXCEPTION_DECL(name, parent)                                     \
-  class name : public parent                                                   \
-  {                                                                            \
-  public:                                                                      \
-    name() = default;                                                          \
-    name(const name &e) = default;                                             \
-    template <class... Types>                                                  \
-    name(Types const &...types) : parent(types...)                             \
-    {                                                                          \
-    }                                                                          \
-    virtual ~name() noexcept = default;                                        \
+#define CLASS_EXCEPTION_DECL(name, parent)                                                         \
+  class name : public parent                                                                       \
+  {                                                                                                \
+  public:                                                                                          \
+    name() = default;                                                                              \
+    name(const name &e) = default;                                                                 \
+    template <class... Types>                                                                      \
+    name(Types const &...types) : parent(types...)                                                 \
+    {                                                                                              \
+    }                                                                                              \
+    virtual ~name() noexcept = default;                                                            \
   };
 
   CLASS_EXCEPTION_DECL(SystemExit, BaseException);
@@ -88,34 +88,32 @@ namespace types
 PYTHONIC_NS_END
 
 #include "pythonic/include/utils/functor.hpp"
-#define PYTHONIC_EXCEPTION_DECL(name)                                          \
-  template <typename... Types>                                                 \
-  types::name name(Types const &...args);                                      \
-                                                                               \
+#define PYTHONIC_EXCEPTION_DECL(name)                                                              \
+  template <typename... Types>                                                                     \
+  types::name name(Types const &...args);                                                          \
+                                                                                                   \
   DEFINE_FUNCTOR(pythonic::builtins, name);
 
 /* pythran attribute system { */
-#define DECLARE_EXCEPTION_GETATTR(name)                                        \
-  PYTHONIC_NS_BEGIN                                                            \
-  namespace builtins                                                           \
-  {                                                                            \
-    types::none<types::dynamic_tuple<types::str>>                              \
-    getattr(types::attr::ARGS, types::name const &f);                          \
-  }                                                                            \
+#define DECLARE_EXCEPTION_GETATTR(name)                                                            \
+  PYTHONIC_NS_BEGIN                                                                                \
+  namespace builtins                                                                               \
+  {                                                                                                \
+    types::none<types::dynamic_tuple<types::str>> getattr(types::attr::ARGS,                       \
+                                                          types::name const &f);                   \
+  }                                                                                                \
   PYTHONIC_NS_END
 
-#define DECLARE_EXCEPTION_GETATTR_FULL(name)                                   \
-  PYTHONIC_NS_BEGIN                                                            \
-  namespace builtins                                                           \
-  {                                                                            \
-    types::none<types::dynamic_tuple<types::str>>                              \
-    getattr(types::attr::ARGS, types::name const &e);                          \
-    types::none<types::str> getattr(types::attr::ERRNO, types::name const &e); \
-    types::none<types::str> getattr(types::attr::STRERROR,                     \
-                                    types::name const &e);                     \
-    types::none<types::str> getattr(types::attr::FILENAME,                     \
-                                    types::name const &e);                     \
-  }                                                                            \
+#define DECLARE_EXCEPTION_GETATTR_FULL(name)                                                       \
+  PYTHONIC_NS_BEGIN                                                                                \
+  namespace builtins                                                                               \
+  {                                                                                                \
+    types::none<types::dynamic_tuple<types::str>> getattr(types::attr::ARGS,                       \
+                                                          types::name const &e);                   \
+    types::none<types::str> getattr(types::attr::ERRNO, types::name const &e);                     \
+    types::none<types::str> getattr(types::attr::STRERROR, types::name const &e);                  \
+    types::none<types::str> getattr(types::attr::FILENAME, types::name const &e);                  \
+  }                                                                                                \
   PYTHONIC_NS_END
 
 DECLARE_EXCEPTION_GETATTR(BaseException);

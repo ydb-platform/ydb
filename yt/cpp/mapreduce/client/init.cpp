@@ -2,6 +2,7 @@
 
 #include "abortable_registry.h"
 #include "job_profiler.h"
+#include "pack_jobstate.h"
 
 #include <yt/cpp/mapreduce/http/requests.h>
 
@@ -188,7 +189,7 @@ void CommonInitialize(TGuard<TMutex>& g)
 
             auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
             for (const auto& rule : coreLoggingConfig->Rules) {
-                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+                rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
             }
 
             if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
@@ -204,7 +205,7 @@ void CommonInitialize(TGuard<TMutex>& g)
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
         for (const auto& rule : coreLoggingConfig->Rules) {
-            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            rule->ExcludeCategories = THashSet<std::string>(TConfig::Get()->LogExcludeCategories.begin(), TConfig::Get()->LogExcludeCategories.end());
         }
 
         if (auto structuredLogPath = TConfig::Get()->StructuredLog) {
@@ -243,10 +244,12 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
         NDetail::OutputTableCount = static_cast<i64>(outputTableCount);
 
         std::unique_ptr<IInputStream> jobStateStream;
-        if (hasState) {
-            jobStateStream = std::make_unique<TIFStream>("jobstate");
-        } else {
+        if (!hasState) {
             jobStateStream = std::make_unique<TBufferStream>(0);
+        } else if (auto jobState = TryGetEnv("YT_JOB_STATE")) {
+            jobStateStream = std::make_unique<TStringStream>(UnpackJobState(*jobState));
+        } else {
+            jobStateStream = std::make_unique<TIFStream>("jobstate");
         }
 
         int ret = 1;

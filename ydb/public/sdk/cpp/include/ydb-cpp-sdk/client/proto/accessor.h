@@ -1,7 +1,5 @@
 #pragma once
 
-#include "private.h"
-
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -29,6 +27,10 @@ class TTableDescription;
 class TIndexDescription;
 }
 
+namespace NImport {
+class TListObjectsInS3ExportResult;
+}
+
 //! Provides access to raw protobuf values of YDB API entities. It is not recommended to use this
 //! class in client applications as it add dependency on API protobuf format which is subject to
 //! change. Use functionality provided by YDB SDK classes.
@@ -43,19 +45,21 @@ public:
     static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
     static const Ydb::Table::DescribeExternalDataSourceResult& GetProto(const NTable::TExternalDataSourceDescription&);
     static const Ydb::Table::DescribeExternalTableResult& GetProto(const NTable::TExternalTableDescription&);
+    static const Ydb::Table::DescribeSystemViewResult& GetProto(const NTable::TSystemViewDescription&);
     static const Ydb::Topic::DescribeTopicResult& GetProto(const NYdb::NTopic::TTopicDescription& topicDescription);
     static const Ydb::Topic::DescribeConsumerResult& GetProto(const NYdb::NTopic::TConsumerDescription& consumerDescription);
     static const Ydb::Monitoring::SelfCheckResult& GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult);
-    static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
-#ifdef YDB_SDK_INTERNAL_CLIENTS
-    static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
-    static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
-#endif
+    static const Ydb::Monitoring::ClusterStateResult& GetProto(const NYdb::NMonitoring::TClusterStateResult& clusterStateResult);
+    static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription& describeNodeResult);
+    static const Ydb::Import::ListObjectsInS3ExportResult& GetProto(const NYdb::NImport::TListObjectsInS3ExportResult& result);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndex& tableIndex);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc);
+
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics);
+    static NTable::TMultiColumnStatisticsDescription FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc);
 
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::Changefeed& changefeed);
     static NTable::TChangefeedDescription FromProto(const Ydb::Table::ChangefeedDescription& changefeed);
@@ -72,7 +76,11 @@ public:
     static Ydb::Export::ExportToS3Settings::StorageClass GetProto(NExport::TExportToS3Settings::EStorageClass value);
     static NExport::TExportToS3Settings::EStorageClass FromProto(Ydb::Export::ExportToS3Settings::StorageClass value);
     static NExport::EExportProgress FromProto(Ydb::Export::ExportProgress::Progress value);
+    static NExport::TYdbDumpFormat FromProto(const Ydb::Export::YdbDumpFormat& value);
+    static NExport::TParquetFormat FromProto(const Ydb::Export::ParquetFormat& value);
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
+    static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);
+    static NImport::EIndexPopulationMode FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value);
 };
 
 } // namespace NYdb

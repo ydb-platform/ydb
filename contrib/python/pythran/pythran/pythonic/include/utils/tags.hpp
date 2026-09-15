@@ -16,9 +16,7 @@ namespace purity
 
 template <class T>
 struct purity_of {
-  using type =
-      typename std::conditional<types::is_pure<T>::value, purity::pure_tag,
-                                purity::unknown_tag>::type;
+  using type = std::conditional_t<types::is_pure<T>::value, purity::pure_tag, purity::unknown_tag>;
 };
 PYTHONIC_NS_END
 

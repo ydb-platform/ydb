@@ -7,7 +7,7 @@
 #include "pycore_object.h"
 #include "pycore_pyerrors.h"
 #include "pycore_pystate.h"       // _PyThreadState_GET()
-#include "structmember.h"         // PyMemberDef
+
 
 
 #include "clinic/context.c.h"
@@ -64,12 +64,12 @@ static int
 contextvar_del(PyContextVar *var);
 
 
-#if PyContext_MAXFREELIST > 0
-static struct _Py_context_state *
-get_context_state(void)
+#ifdef WITH_FREELISTS
+static struct _Py_context_freelist *
+get_context_freelist(void)
 {
-    PyInterpreterState *interp = _PyInterpreterState_GET();
-    return &interp->context;
+    struct _Py_object_freelists *freelists = _Py_object_freelists_GET();
+    return &freelists->contexts;
 }
 #endif
 
@@ -203,6 +203,7 @@ PyContextVar_Get(PyObject *ovar, PyObject *def, PyObject **val)
         goto not_found;
     }
 
+#ifndef Py_GIL_DISABLED
     if (var->var_cached != NULL &&
             var->var_cached_tsid == ts->id &&
             var->var_cached_tsver == ts->context_ver)
@@ -210,6 +211,7 @@ PyContextVar_Get(PyObject *ovar, PyObject *def, PyObject **val)
         *val = var->var_cached;
         goto found;
     }
+#endif
 
     assert(PyContext_CheckExact(ts->context));
     PyHamtObject *vars = ((PyContext *)ts->context)->ctx_vars;
@@ -221,9 +223,11 @@ PyContextVar_Get(PyObject *ovar, PyObject *def, PyObject **val)
     }
     if (res == 1) {
         assert(found != NULL);
+#ifndef Py_GIL_DISABLED
         var->var_cached = found;  /* borrow */
         var->var_cached_tsid = ts->id;
         var->var_cached_tsver = ts->context_ver;
+#endif
 
         *val = found;
         goto found;
@@ -260,12 +264,6 @@ PyContextVar_Set(PyObject *ovar, PyObject *val)
     ENSURE_ContextVar(ovar, NULL)
     PyContextVar *var = (PyContextVar *)ovar;
 
-    if (!PyContextVar_CheckExact(var)) {
-        PyErr_SetString(
-            PyExc_TypeError, "an instance of ContextVar was expected");
-        return NULL;
-    }
-
     PyContext *ctx = context_get();
     if (ctx == NULL) {
         return NULL;
@@ -280,6 +278,9 @@ PyContextVar_Set(PyObject *ovar, PyObject *val)
     Py_XINCREF(old_val);
     PyContextToken *tok = token_new(ctx, var, old_val);
     Py_XDECREF(old_val);
+    if (tok == NULL) {
+        return NULL;
+    }
 
     if (contextvar_set(var, val)) {
         Py_DECREF(tok);
@@ -340,16 +341,12 @@ static inline PyContext *
 _context_alloc(void)
 {
     PyContext *ctx;
-#if PyContext_MAXFREELIST > 0
-    struct _Py_context_state *state = get_context_state();
-#ifdef Py_DEBUG
-    // _context_alloc() must not be called after _PyContext_Fini()
-    assert(state->numfree != -1);
-#endif
-    if (state->numfree) {
-        state->numfree--;
-        ctx = state->freelist;
-        state->freelist = (PyContext *)ctx->ctx_weakreflist;
+#ifdef WITH_FREELISTS
+    struct _Py_context_freelist *context_freelist = get_context_freelist();
+    if (context_freelist->numfree > 0) {
+        context_freelist->numfree--;
+        ctx = context_freelist->items;
+        context_freelist->items = (PyContext *)ctx->ctx_weakreflist;
         OBJECT_STAT_INC(from_freelist);
         ctx->ctx_weakreflist = NULL;
         _Py_NewReference((PyObject *)ctx);
@@ -471,16 +468,12 @@ context_tp_dealloc(PyContext *self)
     }
     (void)context_tp_clear(self);
 
-#if PyContext_MAXFREELIST > 0
-    struct _Py_context_state *state = get_context_state();
-#ifdef Py_DEBUG
-    // _context_alloc() must not be called after _PyContext_Fini()
-    assert(state->numfree != -1);
-#endif
-    if (state->numfree < PyContext_MAXFREELIST) {
-        state->numfree++;
-        self->ctx_weakreflist = (PyObject *)state->freelist;
-        state->freelist = self;
+#ifdef WITH_FREELISTS
+    struct _Py_context_freelist *context_freelist = get_context_freelist();
+    if (context_freelist->numfree >= 0 && context_freelist->numfree < PyContext_MAXFREELIST) {
+        context_freelist->numfree++;
+        self->ctx_weakreflist = (PyObject *)context_freelist->items;
+        context_freelist->items = self;
         OBJECT_STAT_INC(to_freelist);
     }
     else
@@ -566,14 +559,14 @@ _contextvars.Context.get
 
 Return the value for `key` if `key` has the value in the context object.
 
-If `key` does not exist, return `default`. If `default` is not given,
-return None.
+If `key` does not exist, return `default`.  If `default` is not
+given, return None.
 [clinic start generated code]*/
 
 static PyObject *
 _contextvars_Context_get_impl(PyContext *self, PyObject *key,
                               PyObject *default_value)
-/*[clinic end generated code: output=0c54aa7664268189 input=c8eeb81505023995]*/
+/*[clinic end generated code: output=0c54aa7664268189 input=d1be897231334ea9]*/
 {
     if (context_check_key_type(key)) {
         return NULL;
@@ -731,8 +724,10 @@ PyTypeObject PyContext_Type = {
 static int
 contextvar_set(PyContextVar *var, PyObject *val)
 {
+#ifndef Py_GIL_DISABLED
     var->var_cached = NULL;
     PyThreadState *ts = _PyThreadState_GET();
+#endif
 
     PyContext *ctx = context_get();
     if (ctx == NULL) {
@@ -747,16 +742,20 @@ contextvar_set(PyContextVar *var, PyObject *val)
 
     Py_SETREF(ctx->ctx_vars, new_vars);
 
+#ifndef Py_GIL_DISABLED
     var->var_cached = val;  /* borrow */
     var->var_cached_tsid = ts->id;
     var->var_cached_tsver = ts->context_ver;
+#endif
     return 0;
 }
 
 static int
 contextvar_del(PyContextVar *var)
 {
+#ifndef Py_GIL_DISABLED
     var->var_cached = NULL;
+#endif
 
     PyContext *ctx = context_get();
     if (ctx == NULL) {
@@ -824,9 +823,11 @@ contextvar_new(PyObject *name, PyObject *def)
     var->var_name = Py_NewRef(name);
     var->var_default = Py_XNewRef(def);
 
+#ifndef Py_GIL_DISABLED
     var->var_cached = NULL;
     var->var_cached_tsid = 0;
     var->var_cached_tsver = 0;
+#endif
 
     var->var_hash = contextvar_generate_hash(var, name);
     if (var->var_hash == -1) {
@@ -870,9 +871,11 @@ contextvar_tp_clear(PyContextVar *self)
 {
     Py_CLEAR(self->var_name);
     Py_CLEAR(self->var_default);
+#ifndef Py_GIL_DISABLED
     self->var_cached = NULL;
     self->var_cached_tsid = 0;
     self->var_cached_tsver = 0;
+#endif
     return 0;
 }
 
@@ -962,23 +965,19 @@ _contextvars.ContextVar.get
 
 Return a value for the context variable for the current context.
 
-If there is no value for the variable in the current context, the method will:
- * return the value of the default argument of the method, if provided; or
- * return the default value for the context variable, if it was created
-   with one; or
+If there is no value for the variable in the current context, the
+method will:
+ * return the value of the default argument of the method, if
+   provided; or
+ * return the default value for the context variable, if it was
+   created with one; or
  * raise a LookupError.
 [clinic start generated code]*/
 
 static PyObject *
 _contextvars_ContextVar_get_impl(PyContextVar *self, PyObject *default_value)
-/*[clinic end generated code: output=0746bd0aa2ced7bf input=30aa2ab9e433e401]*/
+/*[clinic end generated code: output=0746bd0aa2ced7bf input=83814c6aef4a9fe3]*/
 {
-    if (!PyContextVar_CheckExact(self)) {
-        PyErr_SetString(
-            PyExc_TypeError, "an instance of ContextVar was expected");
-        return NULL;
-    }
-
     PyObject *val;
     if (PyContextVar_Get((PyObject *)self, default_value, &val) < 0) {
         return NULL;
@@ -999,15 +998,16 @@ _contextvars.ContextVar.set
 
 Call to set a new value for the context variable in the current context.
 
-The required value argument is the new value for the context variable.
+The required value argument is the new value for the context
+variable.
 
-Returns a Token object that can be used to restore the variable to its previous
-value via the `ContextVar.reset()` method.
+Returns a Token object that can be used to restore the variable to
+its previous value via the `ContextVar.reset()` method.
 [clinic start generated code]*/
 
 static PyObject *
 _contextvars_ContextVar_set(PyContextVar *self, PyObject *value)
-/*[clinic end generated code: output=446ed5e820d6d60b input=c0a6887154227453]*/
+/*[clinic end generated code: output=446ed5e820d6d60b input=6ffee66796d67896]*/
 {
     return PyContextVar_Set((PyObject *)self, value);
 }
@@ -1019,13 +1019,13 @@ _contextvars.ContextVar.reset
 
 Reset the context variable.
 
-The variable is reset to the value it had before the `ContextVar.set()` that
-created the token was used.
+The variable is reset to the value it had before the
+`ContextVar.set()` that created the token was used.
 [clinic start generated code]*/
 
 static PyObject *
 _contextvars_ContextVar_reset(PyContextVar *self, PyObject *token)
-/*[clinic end generated code: output=d4ee34d0742d62ee input=ebe2881e5af4ffda]*/
+/*[clinic end generated code: output=d4ee34d0742d62ee input=dd33cfcb18c00e37]*/
 {
     if (!PyContextToken_CheckExact(token)) {
         PyErr_Format(PyExc_TypeError,
@@ -1042,7 +1042,7 @@ _contextvars_ContextVar_reset(PyContextVar *self, PyObject *token)
 
 
 static PyMemberDef PyContextVar_members[] = {
-    {"name", T_OBJECT, offsetof(PyContextVar, var_name), READONLY},
+    {"name", _Py_T_OBJECT, offsetof(PyContextVar, var_name), Py_READONLY},
     {NULL}
 };
 
@@ -1051,7 +1051,8 @@ static PyMethodDef PyContextVar_methods[] = {
     _CONTEXTVARS_CONTEXTVAR_SET_METHODDEF
     _CONTEXTVARS_CONTEXTVAR_RESET_METHODDEF
     {"__class_getitem__", Py_GenericAlias,
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
+    METH_O|METH_CLASS,
+    PyDoc_STR("ContextVars are generic over the type of their contained values")},
     {NULL, NULL}
 };
 
@@ -1190,7 +1191,8 @@ static PyGetSetDef PyContextTokenType_getsetlist[] = {
 
 static PyMethodDef PyContextTokenType_methods[] = {
     {"__class_getitem__",    Py_GenericAlias,
-    METH_O|METH_CLASS,       PyDoc_STR("See PEP 585")},
+    METH_O|METH_CLASS,
+    PyDoc_STR("Tokens are generic over the same type as the ContextVar which created them.")},
     {NULL}
 };
 
@@ -1267,7 +1269,7 @@ PyTypeObject _PyContextTokenMissing_Type = {
 static PyObject *
 get_token_missing(void)
 {
-    return Py_NewRef(&_Py_SINGLETON(context_token_missing));
+    return (PyObject *)&_Py_SINGLETON(context_token_missing);
 }
 
 
@@ -1275,27 +1277,19 @@ get_token_missing(void)
 
 
 void
-_PyContext_ClearFreeList(PyInterpreterState *interp)
+_PyContext_ClearFreeList(struct _Py_object_freelists *freelists, int is_finalization)
 {
-#if PyContext_MAXFREELIST > 0
-    struct _Py_context_state *state = &interp->context;
-    for (; state->numfree; state->numfree--) {
-        PyContext *ctx = state->freelist;
-        state->freelist = (PyContext *)ctx->ctx_weakreflist;
+#ifdef WITH_FREELISTS
+    struct _Py_context_freelist *state = &freelists->contexts;
+    for (; state->numfree > 0; state->numfree--) {
+        PyContext *ctx = state->items;
+        state->items = (PyContext *)ctx->ctx_weakreflist;
         ctx->ctx_weakreflist = NULL;
         PyObject_GC_Del(ctx);
     }
-#endif
-}
-
-
-void
-_PyContext_Fini(PyInterpreterState *interp)
-{
-    _PyContext_ClearFreeList(interp);
-#if defined(Py_DEBUG) && PyContext_MAXFREELIST > 0
-    struct _Py_context_state *state = &interp->context;
-    state->numfree = -1;
+    if (is_finalization) {
+        state->numfree = -1;
+    }
 #endif
 }
 

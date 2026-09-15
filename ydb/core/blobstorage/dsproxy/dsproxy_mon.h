@@ -144,9 +144,15 @@ public:
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
 
 protected:
+    static constexpr size_t PercentileTrackerFrameCount = 3;
+    using TResponseTimeTracker = NMonitoring::TPercentileTrackerLg<3, 4, PercentileTrackerFrameCount>;
+
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PercentileCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> ResponseGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TransitionsToDormant;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TransitionsToActive;
     ui64 GroupIdGen = Max<ui64>(); // group id:group gen
     std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
 
@@ -160,22 +166,23 @@ protected:
 
 
     // log response time
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutResponseTime; // Used by whiteboard
+    TResponseTimeTracker PutResponseTime; // Used by whiteboard
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime256;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutTabletLogResponseTime512;
+    TResponseTimeTracker PutTabletLogResponseTime;
+    TResponseTimeTracker PutTabletLogResponseTime256;
+    TResponseTimeTracker PutTabletLogResponseTime512;
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutAsyncBlobResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PutUserDataResponseTime;
+    TResponseTimeTracker PutAsyncBlobResponseTime;
+    TResponseTimeTracker PutUserDataResponseTime;
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> GetResponseTime; // Used by witheboard
+    TResponseTimeTracker GetResponseTime; // Used by witheboard
 
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> BlockResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> DiscoverResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> IndexRestoreGetResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> RangeResponseTime;
-    NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
+    TResponseTimeTracker BlockResponseTime;
+    TResponseTimeTracker GetBlockResponseTime;
+    TResponseTimeTracker DiscoverResponseTime;
+    TResponseTimeTracker IndexRestoreGetResponseTime;
+    TResponseTimeTracker RangeResponseTime;
+    TResponseTimeTracker PatchResponseTime;
 
     // event counters
     TIntrusivePtr<::NMonitoring::TDynamicCounters> EventGroup;
@@ -266,6 +273,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
+
+    // cancellation
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
 
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {
@@ -361,6 +372,11 @@ public:
         NodeMon->BlockResponseTime.Increment(duration.MilliSeconds());
     }
 
+    void CountGetBlockResponseTime(NPDisk::EDeviceType type, TDuration duration) {
+        GetBlockResponseTime.Increment(duration.MilliSeconds());
+        NodeMon->CountGetBlockResponseTime(type, duration);
+    }
+
     void CountDiscoverResponseTime(TDuration duration) {
         DiscoverResponseTime.Increment(duration.MilliSeconds());
         NodeMon->DiscoverResponseTime.Increment(duration.MilliSeconds());
@@ -383,6 +399,9 @@ public:
 
     void Update();
     void ThroughputUpdate();
+    void PrepareForDormancy();
+    void ResetThroughput();
+    void CountDormancyTransition(bool isDormant);
 };
 
 } // NKikimr

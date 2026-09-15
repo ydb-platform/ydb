@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "transaction_impl.h"
 #endif
-#undef TRANSACTION_IMPL_INL_H_
 
 namespace NYT::NApi::NRpcProxy {
 

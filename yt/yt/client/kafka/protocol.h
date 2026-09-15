@@ -11,12 +11,17 @@ namespace NYT::NKafka {
 ////////////////////////////////////////////////////////////////////////////////
 
 #define READ_KAFKA_FIELD(field, method)                                                    \
-    YT_LOG_TRACE("Parsing kafka data (Field: %v)", #field);                                \
+    YT_TLOG_TRACE("Parsing kafka data")                                                    \
+        .With("Field", #field);                                                            \
     field = reader->method();                                                              \
-    YT_LOG_TRACE("Parsing kafka data, value read (Field: %v, Value: %v)", #field, field);
+    YT_TLOG_TRACE("Parsing kafka data, value read")                                        \
+        .With("Field", #field)                                                             \
+        .With("Value", field);
 
-#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                             \
-    YT_LOG_TRACE("Writing kafka data (Field: %v, Value: %v)", #field, field);                     \
+#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                      \
+    YT_TLOG_TRACE("Writing kafka data")                                                    \
+        .With("Field", #field)                                                             \
+        .With("Value", field);                                                             \
     kafkaWriter->method(field);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -38,14 +43,14 @@ struct IKafkaProtocolReader
 
     virtual TGuid ReadUuid() = 0;
 
-    virtual TString ReadString() = 0;
-    virtual TString ReadCompactString() = 0;
-    virtual std::optional<TString> ReadNullableString() = 0;
-    virtual std::optional<TString> ReadCompactNullableString() = 0;
-    virtual void ReadString(TString* result, int length) = 0;
+    virtual std::string ReadString() = 0;
+    virtual std::string ReadCompactString() = 0;
+    virtual std::optional<std::string> ReadNullableString() = 0;
+    virtual std::optional<std::string> ReadCompactNullableString() = 0;
+    virtual void ReadString(std::string* result, int length) = 0;
 
-    virtual TString ReadBytes() = 0;
-    virtual TString ReadCompactBytes() = 0;
+    virtual std::string ReadBytes() = 0;
+    virtual std::string ReadCompactBytes() = 0;
 
     virtual i32 StartReadBytes(bool needReadSize = true) = 0;
     virtual i32 StartReadCompactBytes(bool needReadCount = true) = 0;

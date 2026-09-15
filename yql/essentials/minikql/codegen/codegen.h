@@ -7,14 +7,13 @@
 class IOutputStream;
 
 namespace llvm {
-    class Module;
-    class Function;
-    class LLVMContext;
-    class ExecutionEngine;
-}
+class Module;
+class Function;
+class LLVMContext;
+class ExecutionEngine;
+} // namespace llvm
 
-namespace NYql {
-namespace NCodegen {
+namespace NYql::NCodegen {
 
 enum class ETarget {
     Native, // Run on current processor and OS
@@ -54,7 +53,7 @@ public:
     virtual void Verify() = 0;
     virtual void GetStats(TCodegenStats& stats) = 0;
     virtual void ExportSymbol(llvm::Function* function) = 0; // to run DCE before Compile
-    virtual void Compile(const TStringBuf compileOpts = TStringBuf(), TCompileStats* compileStats = nullptr) = 0;
+    virtual void Compile(TStringBuf compileOpts = TStringBuf(), TCompileStats* compileStats = nullptr) = 0;
     virtual void* GetPointerToFunction(llvm::Function* function) = 0;
     virtual ui64 GetFunctionCodeSize(llvm::Function* function) = 0;
     virtual void ShowGeneratedFunctions(IOutputStream* out) = 0;
@@ -71,5 +70,4 @@ public:
     static bool IsCodegenAvailable();
 };
 
-}
-}
+} // namespace NYql::NCodegen

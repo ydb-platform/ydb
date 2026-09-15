@@ -35,7 +35,7 @@ void TAsyncQueueTrace::Join(i64 queueIndex)
     Join(queueIndex, traceContext);
 }
 
-std::pair<TTraceContextPtr, bool> TAsyncQueueTrace::StartSpan(i64 startIndex, const TString& spanName)
+std::pair<TTraceContextPtr, bool> TAsyncQueueTrace::StartSpan(i64 startIndex, const std::string& spanName)
 {
     auto traceContext = TTraceContext::NewRoot(spanName);
     traceContext->SetRecorded();
@@ -81,7 +81,7 @@ void TAsyncQueueTrace::FinishSpan(const TTraceContextPtr& traceContext)
     Background_.erase(traceContext);
 }
 
-TAsyncQueueTraceGuard TAsyncQueueTrace::CreateTraceGuard(const TString& spanName, i64 startIndex, std::optional<i64> endIndex)
+TAsyncQueueTraceGuard TAsyncQueueTrace::CreateTraceGuard(const std::string& spanName, i64 startIndex, std::optional<i64> endIndex)
 {
     auto [traceContext, sampled] = StartSpan(startIndex, spanName);
     if (!sampled) {
@@ -103,7 +103,7 @@ TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(
     , TraceContextGuard_(traceContext)
 { }
 
-TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other)
+TAsyncQueueTraceGuard::TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other) noexcept
     : QueueTrace_(other.QueueTrace_)
     , TraceContext_(std::move(other.TraceContext_))
     , EndIndex_(other.EndIndex_)

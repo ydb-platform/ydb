@@ -2,7 +2,8 @@
 #include "header.h"
 #include "others_storage.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -65,8 +66,8 @@ protected:
         return 0;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        return nullptr;
+    virtual TMinMax DoGetMinMaxScalars() const override {
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(
@@ -82,8 +83,8 @@ protected:
         if (OthersData) {
             others = OthersData->ApplyFilter(filter, Settings);
         }
-        return std::make_shared<TSubColumnsPartialArray>(Header,
-            PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified());
+        return std::make_shared<TSubColumnsPartialArray>(
+            Header, PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified(), Settings);
     }
 
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -92,13 +93,16 @@ protected:
             others = OthersData->Slice(offset, count, Settings);
         }
         return std::make_shared<TSubColumnsPartialArray>(
-            Header, PartialColumnsData.Slice(offset, count), std::move(others), GetDataType(), count);
+            Header, PartialColumnsData.Slice(offset, count), std::move(others), GetDataType(), count, Settings);
     }
 
 public:
-    TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType)
+    TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType,
+        const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
-        , Header(std::move(header)) {
+        , Header(std::move(header))
+        , Settings(settings)
+    {
     }
 
     virtual bool HasWholeDataVolume() const override {
@@ -112,51 +116,55 @@ public:
         return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
-    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
-        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType);
+    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(
+        const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount, const NSubColumns::TSettings& settings) {
+        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType, settings);
     }
 
     const TSubColumnsHeader& GetHeader() const {
         return Header;
     }
-    
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
-    bool NeedFetch(const std::string_view colName) const {
-        if (auto idx = Header.GetColumnStats().GetKeyIndexOptional(colName)) {
-            return !PartialColumnsData.HasColumn(*idx);
-        } else if (auto idx = Header.GetOtherStats().GetKeyIndexOptional(colName)) {
-            return !OthersData;
-        }
-        return false;
+    const NSubColumns::TSettings& GetSettings() const {
+        return Settings;
     }
 
-    void AddColumn(const TString& columnName, const std::shared_ptr<IChunkedArray>& arr) {
-        PartialColumnsData.AddColumn(Header.GetColumnStats().GetKeyIndexVerified(std::string_view(columnName.data(), columnName.size())), arr);
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
+
+    bool NeedFetch(const std::string_view colName) const {
+        auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));
+        AFL_VERIFY(pathResult.IsSuccess())("column", colName)("error", pathResult.GetErrorMessage());
+        const auto path = pathResult.DetachResult();
+        if (path && path->IsColumn) {
+            return !PartialColumnsData.HasColumn(path->Path.ColumnIndex);
+        }
+        return path && !OthersData;
+    }
+
+    void AddColumn(const ui32 columnIndex, const std::shared_ptr<IChunkedArray>& arr) {
+        PartialColumnsData.AddColumn(columnIndex, arr);
     }
 
     bool HasOthers() const {
         return !!OthersData;
     }
 
-    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
-        const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize);
-
-    bool IsOtherColumn(const TString& colName) const {
-        return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));
-    }
+    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const std::shared_ptr<NArrow::TColumnFilter>& applyFilter,
+        const bool deserialize);
 
     NSubColumns::TReadRange GetColumnReadRange(const ui32 colIndex) const {
         return Header.GetColumnReadRange(colIndex);
     }
 
     TSubColumnsPartialArray(const TSubColumnsHeader& header, TPartialColumnsData&& columnsData,
-        std::optional<NSubColumns::TOthersData>&& othersData,
-        const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount)
+        std::optional<NSubColumns::TOthersData>&& othersData, const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount,
+        const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
-        , Header(std::move(header))
+        , Header(header)
         , PartialColumnsData(std::move(columnsData))
-        , OthersData(std::move(othersData)) {
+        , OthersData(std::move(othersData))
+        , Settings(settings)
+    {
     }
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {

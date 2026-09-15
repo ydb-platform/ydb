@@ -1,6 +1,41 @@
 #include "config.h"
 
+#include <util/system/env.h>
+#include <util/stream/file.h>
+
 namespace NYT::NAuth {
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::optional<TTvmId> TTvmServiceConfig::GetClientSelfId() const
+{
+    if (ClientSelfId.has_value()) {
+        return *ClientSelfId;
+    } else if (ClientSelfIdEnv.has_value()) {
+        try {
+            return TTvmId(FromString<TTvmId::TUnderlying>(GetEnv(TString(*ClientSelfIdEnv))));
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv)
+                .With(ex);
+        }
+    } else {
+        return std::nullopt;
+    }
+}
+
+std::optional<std::string> TTvmServiceConfig::GetClientSelfSecret() const
+{
+    if (ClientSelfSecret.has_value()) {
+        return ClientSelfSecret;
+    } else if (ClientSelfSecretEnv.has_value()) {
+        return GetEnv(TString(*ClientSelfSecretEnv));
+    } else if (ClientSelfSecretPath.has_value()) {
+        TFileInput input(*ClientSelfSecretPath);
+        return input.ReadLine();
+    } else {
+        return std::nullopt;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -9,7 +44,9 @@ void TTvmServiceConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_tvm_tool", &TThis::UseTvmTool)
         .Default(false);
     registrar.Parameter("client_self_id", &TThis::ClientSelfId)
-        .Default(0);
+        .Optional();
+    registrar.Parameter("client_self_id_env", &TThis::ClientSelfIdEnv)
+        .Optional();
     registrar.Parameter("client_disk_cache_dir", &TThis::ClientDiskCacheDir)
         .Optional();
     registrar.Parameter("tvm_host", &TThis::TvmHost)
@@ -56,6 +93,24 @@ void TTvmServiceConfig::Register(TRegistrar registrar)
                 "cannot be used together");
         }
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TUserTicketAuthenticationConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_service_tickets", &TThis::CheckServiceTickets)
+        .Default(false);
+    registrar.Parameter("allowed_service_tvm_ids", &TThis::AllowedServiceTvmIds)
+        .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTvmServiceDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user_ticket_authentication", &TThis::UserTicketAuthentication)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

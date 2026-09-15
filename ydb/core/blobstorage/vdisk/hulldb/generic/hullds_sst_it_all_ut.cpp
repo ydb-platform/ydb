@@ -1,4 +1,5 @@
 #include "hullds_sst_it_all_ut.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 
 namespace NKikimr {
 
@@ -225,14 +226,14 @@ namespace NKikimr {
 
             using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
 
-            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(10, 0, 0, 0));
-            UNIT_ASSERT(high->LowRangeEndIndex == 2);
+            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(10, 0, 0, 0));
+            UNIT_ASSERT(high->GetLowRangeEndIndex() == 2);
             ++high;
-            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 0, 0));
-            UNIT_ASSERT(high->LowRangeEndIndex == 4);
+            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 0, 0));
+            UNIT_ASSERT(high->GetLowRangeEndIndex() == 4);
             ++high;
-            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 300, 0));
-            UNIT_ASSERT(high->LowRangeEndIndex == 5);
+            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 300, 0));
+            UNIT_ASSERT(high->GetLowRangeEndIndex() == 5);
             ++high;
             UNIT_ASSERT(high == indexHigh.end());
 
@@ -241,15 +242,15 @@ namespace NKikimr {
 
             using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
 
-            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 1, 0));
+            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 1, 0));
             ++low;
-            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 2, 0));
+            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 2, 0));
             ++low;
-            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 3, 0));
+            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 3, 0));
             ++low;
-            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 4, 0));
+            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 4, 0));
             ++low;
-            UNIT_ASSERT(low->Key == TLogoBlobIdLow(300, 0, 0, 5, 0));
+            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(300, 0, 0, 5, 0));
             ++low;
             UNIT_ASSERT(low == indexLow.end());
 
@@ -257,7 +258,7 @@ namespace NKikimr {
             ptr->SaveLinearIndex(&checkIndex);
 
             for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
-                UNIT_ASSERT(i->Key == c->Key);
+                UNIT_ASSERT(i->GetKey() == c->GetKey());
             }
         }
     } // TBlobStorageHullSstIt
@@ -327,6 +328,52 @@ namespace NKikimr {
         }
 
         // FIXME: not all cases covered
+    }
+
+    Y_UNIT_TEST_SUITE(TBlobStorageHullSstHeapStripe) {
+        Y_UNIT_TEST(StripeIsDerivedFromChunkOwnership) {
+            TTestContexts ctxs;
+            using TSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+            TIntrusivePtr<TSst> seg(new TSst(ctxs.GetVCtx()));
+            seg->LastPartAddr = TDiskPart(7, 4064, 80);
+            seg->HeapStripe = seg->LastPartAddr;
+            seg->AllChunks = {7};
+
+            // nothing about the stripe is written down; the SST address is the whole record
+            NKikimrVDiskData::TDiskPart pb;
+            seg->SerializeToProto(pb);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetChunkIdx(), 7u);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetOffset(), 4064u);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetSize(), 80u);
+
+            TSst loaded(ctxs.GetVCtx(), pb);
+            UNIT_ASSERT(loaded.HeapStripe.Empty());
+
+            // a chunk owned by the slot heap leaves the SST unstriped
+            loaded.ResolveHeapStripe(THashSet<TChunkIdx>{9});
+            UNIT_ASSERT(loaded.HeapStripe.Empty());
+
+            loaded.ResolveHeapStripe(THashSet<TChunkIdx>{7});
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.ChunkIdx, 7u);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.Offset, 4064u);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.Size, 80u);
+
+            TVector<ui32> ids;
+            loaded.FillInChunkIds(ids);
+            UNIT_ASSERT(ids.empty());
+
+            loaded.AllChunks = {7};
+            TSet<TChunkIdx> chunks;
+            loaded.GetOwnedChunks(chunks);
+            UNIT_ASSERT(chunks.contains(7));
+
+            // a second stripe SST in the same chunk is allowed to claim it again
+            TSst other(ctxs.GetVCtx());
+            other.AllChunks = {7};
+            other.HeapStripe = loaded.HeapStripe;
+            other.GetOwnedChunks(chunks);
+            UNIT_ASSERT_VALUES_EQUAL(chunks.size(), 1u);
+        }
     }
 
 } // NKikimr

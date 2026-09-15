@@ -94,6 +94,9 @@ private:
             case ELogicalMetatype::Decimal:
                 ValidateDecimalType(type->UncheckedAsDecimalTypeRef(), fieldId);
                 return;
+            case ELogicalMetatype::AggregateState:
+                ValidateLogicalType(type->UncheckedAsAggregateStateTypeRef().GetElement(), fieldId);
+                return;
         }
         YT_ABORT();
     }
@@ -448,7 +451,7 @@ private:
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error validating field %Qv",
                 GetDescription(fieldId))
-                << ex;
+                .With(ex);
         }
         Cursor_.Next();
     }
@@ -557,6 +560,9 @@ private:
                     case ELogicalMetatype::Tagged:
                         descriptor = descriptor.TaggedElement();
                         continue;
+                    case ELogicalMetatype::AggregateState:
+                        descriptor = descriptor.AggregateStateElement();
+                        continue;
                 }
                 YT_ABORT();
             }
@@ -605,7 +611,7 @@ public:
 
     bool OnDouble(double value) final
     {
-        if (Y_UNLIKELY(std::isinf(value))) {
+        if (std::isinf(value)) [[unlikely]] {
             ythrow TJsonException() << "infinite values are not allowed";
         }
         return true;

@@ -64,6 +64,10 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
+    ui32 DqChannelVersion() const {
+        return Proto->GetDqChannelVersion();
+    }
+
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
     }
@@ -96,6 +100,10 @@ public:
         return Proto->GetHasEffects();
     }
 
+    bool GetHasPqSources() const {
+        return Proto->GetHasPqSources();
+    }
+
     const ::google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyParamBinding> & GetParamBindings() const {
         return Proto->GetParamBindings();
     }
@@ -114,6 +122,10 @@ public:
 
     TProtoStringType DebugString() const {
         return Proto->ShortDebugString();
+    }
+
+    std::shared_ptr<const NKikimrKqp::TPreparedQuery> GetPreparedQuery() const {
+        return PreparedQuery;
     }
 
     TIntrusiveConstPtr<TTableConstInfoMap> GetTableConstInfoById() const;
@@ -140,6 +152,7 @@ public:
 class TPreparedQueryHolder {
 private:
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
+    YDB_ACCESSOR(bool, UseKqpTasksGraphV2, false);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     TVector<TString> QueryTables;

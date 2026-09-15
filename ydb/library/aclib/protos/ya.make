@@ -1,9 +1,13 @@
-PROTO_LIBRARY()
+LIBRARY()
 
-INCLUDE_TAGS(GO_PROTO)
-
-SRCS(
-    aclib.proto
+PEERDIR(
+    ydb/library/aclib/protos/identity
+    ydb/library/aclib/protos/acl
 )
 
 END()
+
+RECURSE(
+    identity
+    acl
+)

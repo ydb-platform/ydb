@@ -33,6 +33,7 @@ struct TNodeLocation {
     std::optional<uint32_t> BodyNum;
     std::optional<uint32_t> Body;
 
+    std::optional<std::string> BridgePileName;
     std::optional<std::string> DataCenter;
     std::optional<std::string> Module;
     std::optional<std::string> Rack;
@@ -48,7 +49,6 @@ struct TNodeRegistrationSettings : public TSimpleRequestSettings<TNodeRegistrati
     FLUENT_SETTING(std::string, DomainPath);
     FLUENT_SETTING_DEFAULT(bool, FixedNodeId, false);
     FLUENT_SETTING(std::string, Path);
-    FLUENT_SETTING(std::string, BridgePileName);
 };
 
 struct TEndpointInfo {
@@ -62,14 +62,25 @@ struct TEndpointInfo {
     std::vector<std::string> IPv4Addrs;
     std::vector<std::string> IPv6Addrs;
     std::string SslTargetNameOverride;
+    std::string BridgePileName;
+};
+
+struct TPileState {
+    using EState = NYdb::EPileState;
+
+    EState State;
+    std::string PileName;
 };
 
 class TListEndpointsResult : public TStatus {
 public:
     TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& endpoints);
     const std::vector<TEndpointInfo>& GetEndpointsInfo() const;
+    const std::vector<TPileState>& GetPileStates() const;
+
 private:
     std::vector<TEndpointInfo> Info_;
+    std::vector<TPileState> PileStates_;
 };
 
 using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;
@@ -79,9 +90,21 @@ public:
     TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto);
     const std::string& GetUserName() const;
     const std::vector<std::string>& GetGroups() const;
+    bool IsAdministrationAllowed() const;
+    bool IsMonitoringAllowed() const;
+    bool IsViewerAllowed() const;
+    bool IsDatabaseAllowed() const;
+    bool IsRegisterNodeAllowed() const;
+    bool IsBootstrapAllowed() const;
 private:
     std::string UserName_;
     std::vector<std::string> Groups_;
+    bool IsAdministrationAllowed_ = false;
+    bool IsMonitoringAllowed_ = false;
+    bool IsViewerAllowed_ = false;
+    bool IsDatabaseAllowed_ = false;
+    bool IsRegisterNodeAllowed_ = false;
+    bool IsBootstrapAllowed_ = false;
 };
 
 using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>;
@@ -97,7 +120,6 @@ struct TNodeInfo {
     std::string Address;
     TNodeLocation Location;
     uint64_t Expire;
-    std::optional<uint32_t> BridgePileId;
 };
 
 class TNodeRegistrationResult : public TStatus {

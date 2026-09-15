@@ -1,11 +1,21 @@
 items:
-- name: Spring Data JDBC
-  href: spring-data-jdbc.md
 - name: Hibernate
   href: hibernate.md
+- name: Spring Data JDBC
+  href: spring-data-jdbc.md
 - name: JOOQ
   href: jooq.md
 - name: Dapper
   href: dapper.md
 - name: Entity Framework
   href: entity-framework.md
+- name: Linq To Db
+  href: linq2db.md
+- name: SQLAlchemy
+  href: sqlalchemy.md
+- name: Django
+  href: django.md
+- name: Kotlin Exposed
+  href: exposed.md
+- name: Drizzle ORM
+  href: drizzle.md

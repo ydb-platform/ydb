@@ -27,12 +27,12 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TClusterDiscoveryWorker(TEvDiscoverPQClustersRequest::TPtr& ev,
+    TClusterDiscoveryWorker(THolder<NGRpcService::TEvDiscoverPQClustersRequest> ev,
                             TLabeledAddressClassifier::TConstPtr datacenterClassifier,
                             TLabeledAddressClassifier::TConstPtr cloudNetsClassifier,
                             TClustersList::TConstPtr clustersList,
                             TClusterDiscoveryCounters::TPtr counters)
-        : Request(ev->Release().Release())
+        : Request(std::move(ev))
         , DatacenterClassifier(std::move(datacenterClassifier))
         , CloudNetsClassifier(std::move(cloudNetsClassifier))
         , ClustersList(std::move(clustersList))
@@ -271,13 +271,13 @@ private:
     TClusterDiscoveryCounters::TPtr Counters;
 };
 
-IActor* CreateClusterDiscoveryWorker(TEvDiscoverPQClustersRequest::TPtr& ev,
+IActor* CreateClusterDiscoveryWorker(THolder<NGRpcService::TEvDiscoverPQClustersRequest> ev,
                                      TLabeledAddressClassifier::TConstPtr datacenterClassifier,
                                      TLabeledAddressClassifier::TConstPtr cloudNetsClassifier,
                                      TClustersList::TConstPtr clustersList,
                                      TClusterDiscoveryCounters::TPtr counters)
 {
-    return new TClusterDiscoveryWorker(ev,
+    return new TClusterDiscoveryWorker(std::move(ev),
                                        std::move(datacenterClassifier),
                                        std::move(cloudNetsClassifier),
                                        std::move(clustersList),

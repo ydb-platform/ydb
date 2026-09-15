@@ -1,11 +1,14 @@
-#include <library/cpp/json/json_reader.h>
-#include <ydb/library/actors/http/http.h>
+#include "oidc_protected_page_nebius.h"
+
+#include "context.h"
+#include "openid_connect.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "openid_connect.h"
-#include "context.h"
-#include "oidc_protected_page_nebius.h"
+
+#include <ydb/library/actors/http/http.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NMVP::NOIDC {
 
@@ -42,6 +45,7 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
         BLOG_D("Getting access token: Bad Request");
         NHttp::THeadersBuilder responseHeaders;
         SetCORS(Request, &responseHeaders);
+        SetRequestIdHeader(responseHeaders, GetRequestId());
         responseHeaders.Set("Content-Type", "text/plain");
         return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }
@@ -69,6 +73,7 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
     // don't know what to do, just forward response
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Parse(response->Headers);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body));
 }
 
@@ -118,6 +123,7 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
     BLOG_D("Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
     NHttp::THeadersBuilder responseHeaders;
     SetCORS(Request, &responseHeaders);
+    SetRequestIdHeader(responseHeaders, GetRequestId());
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
     responseHeaders.Set("Location", Request->URL);
     ReplyAndPassAway(Request->CreateResponse("307", "Temporary Redirect", responseHeaders));
@@ -125,7 +131,7 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
     BLOG_D("Request authorization code");
-    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
+    NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings, GetRequestId());
     ReplyAndPassAway(std::move(httpResponse));
 }
 
@@ -135,7 +141,7 @@ void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader
 }
 
 bool THandlerSessionServiceCheckNebius::NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const {
-    if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+    if ((response->Status == "400" || response->Status.empty()) && ProtectedPage.Scheme.empty()) {
         return !response->GetRequest()->Secure;
     }
     return false;

@@ -16,6 +16,10 @@ struct TControllerSystemViewsState {
     std::unordered_map<TVSlotId, NKikimrSysView::TVSlotInfo, THash<TVSlotId>> VSlots;
     std::unordered_map<TGroupId, NKikimrSysView::TGroupInfo, THash<TGroupId>> Groups;
     std::unordered_map<TBoxStoragePoolId, NKikimrSysView::TStoragePoolInfo, THash<TBoxStoragePoolId>> StoragePools;
+
+    explicit operator bool() const noexcept {
+        return !PDisks.empty() && !VSlots.empty() && !Groups.empty() && !StoragePools.empty();
+    } 
 };
 
 struct TEvControllerUpdateSystemViews :
@@ -26,7 +30,7 @@ struct TEvControllerUpdateSystemViews :
     std::unordered_set<TVSlotId, THash<TVSlotId>> DeletedVSlots;
     std::unordered_set<TGroupId, THash<TGroupId>> DeletedGroups;
     std::unordered_set<TBoxStoragePoolId, THash<TBoxStoragePoolId>> DeletedStoragePools;
-    TBlobStorageController::THostRecordMap HostRecords;
+    THostRecordMap HostRecords;
     ui32 GroupReserveMin;
     ui32 GroupReservePart;
 };
@@ -51,8 +55,9 @@ struct TGroupDiskInfo {
     const NKikimrBlobStorage::TPDiskMetrics *PDiskMetrics;
     const NKikimrBlobStorage::TVDiskMetrics *VDiskMetrics;
     ui32 ExpectedSlotCount;
+    ui64 ExpectedSlotSize;
 };
 
-void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type);
+void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type, ui32 groupSizeInUnits);
 
 } // NKikimr::NBsController

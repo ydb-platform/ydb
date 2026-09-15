@@ -33,7 +33,7 @@ TPath::TChecker IsParentPathValid(const TPath& parentPath) {
         .IsCommonSensePath()
         .IsLikeDirectory();
 
-    return std::move(checks);
+    return checks;
 }
 
 bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
@@ -109,35 +109,5 @@ TTxState& CreateTransaction(const TOperationId& operationId, const TOperationCon
     return txState;
 }
 
-void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
-    if (parentPath.Base()->HasActiveChanges()) {
-        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
-                                    ? parentPath.Base()->CreateTxId
-                                    : parentPath.Base()->LastTxId;
-        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
-    }
-}
-
-void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db) {
-    context.SS->ChangeTxState(db, operationId, TTxState::Propose);
-    context.OnComplete.ActivateTx(operationId);
-}
-
-void PersistResourcePool(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db, const TPathElement::TPtr& resourcePoolPath, const TResourcePoolInfo::TPtr& resourcePoolInfo, const TString& acl) {
-    const auto& resourcePoolPathId = resourcePoolPath->PathId;
-
-    if (!context.SS->ResourcePools.contains(resourcePoolPathId)) {
-        context.SS->IncrementPathDbRefCount(resourcePoolPathId);
-    }
-    context.SS->ResourcePools[resourcePoolPathId] = resourcePoolInfo;
-
-    if (!acl.empty()) {
-        resourcePoolPath->ApplyACL(acl);
-    }
-
-    context.SS->PersistPath(db, resourcePoolPathId);
-    context.SS->PersistResourcePool(db, resourcePoolPathId, resourcePoolInfo);
-    context.SS->PersistTxState(db, operationId);
-}
 
 }  // namespace NKikimr::NSchemeShard::NResourcePool

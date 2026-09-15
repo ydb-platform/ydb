@@ -23,7 +23,7 @@ from traitlets.config.loader import KVArgParseConfigLoader
 class ArgcompleteApp(Application):
     """Override loader to pass through kwargs for argcomplete testing"""
 
-    argcomplete_kwargs: t.Dict[str, t.Any]
+    argcomplete_kwargs: dict[str, t.Any]
 
     def __init__(self, *args, **kwargs):
         # For subcommands, inherit argcomplete_kwargs from parent app
@@ -99,9 +99,9 @@ class TestArgcomplete:
         self,
         app: ArgcompleteApp,
         command: str,
-        point: t.Union[str, int, None] = None,
+        point: str | int | None = None,
         **kwargs: t.Any,
-    ) -> t.List[str]:
+    ) -> list[str]:
         """Mostly borrowed from argcomplete's unit tests
 
         Modified to take an application instead of an ArgumentParser

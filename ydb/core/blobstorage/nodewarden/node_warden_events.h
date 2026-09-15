@@ -22,15 +22,8 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig,
-                bool recurseConfigUpdate) {
+        TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
-            if (committedConfig) {
-                Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
-            }
-            if (recurseConfigUpdate) {
-                Record.SetRecurseConfigUpdate(recurseConfigUpdate);
-            }
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {
@@ -167,12 +160,34 @@ namespace NKikimr::NStorage {
     };
 
     struct TEvNodeWardenUpdateConfigFromPeer
-            : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
+        : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
     {
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        NKikimrBlobStorage::TStorageConfig Config;
+        std::optional<NKikimrBlobStorage::TStorageConfig> CommittedConfig;
 
-        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig&& storageConfig)
-            : StorageConfig(std::move(storageConfig))
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config,
+                std::optional<NKikimrBlobStorage::TStorageConfig> committedConfig)
+            : Config(std::move(config))
+            , CommittedConfig(std::move(committedConfig))
+        {}
+    };
+
+    struct TEvNodeWardenNotifySyncerFinished
+        : TEventLocal<TEvNodeWardenNotifySyncerFinished, TEvBlobStorage::EvNodeWardenNotifySyncerFinished>
+    {
+        const TGroupId BridgeProxyGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::optional<TString> ErrorReason;
+
+        TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , SourceGroupId(sourceGroupId)
+            , TargetGroupId(targetGroupId)
+            , ErrorReason(errorReason)
         {}
     };
 

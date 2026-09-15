@@ -18,6 +18,7 @@
 #include <boost/math/tools/tuple.hpp>
 #include <boost/math/tools/numeric_limits.hpp>
 #include <boost/math/tools/precision.hpp>
+#include <boost/math/tools/promotion.hpp>
 #include <boost/math/constants/constants.hpp>
 #include <boost/math/distributions/complement.hpp>
 #include <boost/math/distributions/detail/common_error_handling.hpp>
@@ -56,11 +57,11 @@ BOOST_MATH_GPU_ENABLED RealType cdf_imp(const cauchy_distribution<RealType, Poli
    RealType result = 0;
    RealType location = dist.location();
    RealType scale = dist.scale();
-   if(false == detail::check_location(function, location, &result, Policy()))
+   if(!detail::check_location(function, location, &result, Policy()))
    {
      return result;
    }
-   if(false == detail::check_scale(function, scale, &result, Policy()))
+   if(!detail::check_scale(function, scale, &result, Policy()))
    {
       return result;
    }
@@ -83,7 +84,7 @@ BOOST_MATH_GPU_ENABLED RealType cdf_imp(const cauchy_distribution<RealType, Poli
      return static_cast<RealType>((complement) ? 1 : 0);
    }
    #endif
-   if(false == detail::check_x(function, x, &result, Policy()))
+   if(!detail::check_x(function, x, &result, Policy()))
    { // Catches x == NaN
       return result;
    }
@@ -110,15 +111,15 @@ BOOST_MATH_GPU_ENABLED RealType quantile_imp(
    RealType result = 0;
    RealType location = dist.location();
    RealType scale = dist.scale();
-   if(false == detail::check_location(function, location, &result, Policy()))
+   if(!detail::check_location(function, location, &result, Policy()))
    {
      return result;
    }
-   if(false == detail::check_scale(function, scale, &result, Policy()))
+   if(!detail::check_scale(function, scale, &result, Policy()))
    {
       return result;
    }
-   if(false == detail::check_probability(function, p, &result, Policy()))
+   if(!detail::check_probability(function, p, &result, Policy()))
    {
       return result;
    }
@@ -223,11 +224,11 @@ BOOST_MATH_GPU_ENABLED inline RealType pdf(const cauchy_distribution<RealType, P
    RealType result = 0;
    RealType location = dist.location();
    RealType scale = dist.scale();
-   if(false == detail::check_scale(function, scale, &result, Policy()))
+   if(!detail::check_scale(function, scale, &result, Policy()))
    {
       return result;
    }
-   if(false == detail::check_location(function, location, &result, Policy()))
+   if(!detail::check_location(function, location, &result, Policy()))
    {
       return result;
    }
@@ -241,7 +242,7 @@ BOOST_MATH_GPU_ENABLED inline RealType pdf(const cauchy_distribution<RealType, P
    //  return 0;
    //}
 
-   if(false == detail::check_x(function, x, &result, Policy()))
+   if(!detail::check_x(function, x, &result, Policy()))
    { // Catches x = NaN
       return result;
    }

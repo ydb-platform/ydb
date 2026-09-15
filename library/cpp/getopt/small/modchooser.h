@@ -7,6 +7,7 @@
 #include <util/generic/vector.h>
 
 #include <functional>
+#include <variant>
 
 //! Mode function with vector of cli arguments.
 using TMainFunctionPtrV = std::function<int(const TVector<TString>&)> ;
@@ -28,6 +29,13 @@ class TMainClass {
 public:
     virtual int operator()(int argc, const char** argv) = 0;
     virtual ~TMainClass() = default;
+
+    void SetSubcommandPath(TVector<TString> parts);
+
+    const TVector<TString>& GetSubcommandPath() const;
+
+protected:
+    TVector<TString> SubcommandPath_;
 };
 
 //! Function to handle '--version' parameter
@@ -60,6 +68,12 @@ public:
     //! Set default mode (if not specified explicitly)
     void SetDefaultMode(const TString& mode);
 
+    //! Set an unnamed action for invocations that don't select a mode.
+    //!
+    //! Unlike a default mode, the action is not addressable by a user-facing
+    //! name and does not add a synthetic component to the subcommand path.
+    void SetDefaultAction(TMainClass* action);
+
     void AddAlias(const TString& alias, const TString& mode);
 
     //! Set main program description.
@@ -89,6 +103,9 @@ public:
 
     void AddCompletions(TString progName, const TString& name = "completion", bool hidden = false, bool noCompletion = false);
 
+    void SetSubcommandPath(const TVector<TString>& subcommandPath) const;
+    const TVector<TString>& GetSubcommandPath() const;
+
     /*! Run appropriate mode.
      *
      * In this method following things happen:
@@ -98,7 +115,9 @@ public:
      *      then call it and exit with zero code.
      *   3) Find mode with the same name as first argument. If it's found then
      *      call it and return its return code.
-     *   4) If appropriate mode is not found - return non-zero code.
+     *   4) If no named mode matches, run the default action or default mode,
+     *      when configured.
+     *   5) If no fallback is configured, return non-zero code.
      */
     int Run(int argc, const char** argv) const;
 
@@ -152,7 +171,8 @@ private:
     //! Modes
     TMap<TString, TMode*> Modes;
 
-    TString DefaultMode;
+    using TDefaultBehaviour = std::variant<std::monostate, TString, TMainClass*>;
+    TDefaultBehaviour DefaultBehaviour;
 
     //! Handler for '--version' parameter
     TVersionHandlerPtr VersionHandler;
@@ -184,6 +204,8 @@ private:
      * then help message will be printed to stdout
     */
     bool HelpAlwaysToStdErr{true};
+
+    mutable TVector<TString> SubcommandPath_;
 };
 
 //! Mode class that allows introspecting its console arguments.
@@ -219,7 +241,8 @@ public:
     int Run(int argc, const char** argv);
 
     //! Get sub-modes for this mode.
-    const TModChooser& GetSubModes();
+    TModChooser& GetSubModes();
+    const TModChooser& GetSubModes() const;
 
 protected:
     //! Fill given modchooser with sub-modes.

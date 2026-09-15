@@ -102,12 +102,12 @@ public:
 
                 info->CurrentLagPenalty.store(newLagPenalty.GetValue(), std::memory_order::relaxed);
 
-                YT_LOG_INFO("Found replica (ReplicaId: %v, Cluster: %v, Table: %v) With Lag %v, Penalty %v",
-                    info->ReplicaId,
-                    cluster,
-                    Config_->TablePath,
-                    replicaLag,
-                    newLagPenalty);
+                YT_TLOG_INFO("Found replica")
+                    .With("ReplicaId", info->ReplicaId)
+                    .With("Cluster", cluster)
+                    .With("Table", Config_->TablePath)
+                    .With("Lag", replicaLag)
+                    .With("Penalty", newLagPenalty);
             };
         }
         CheckAllReplicaIdsPresent()
@@ -124,23 +124,24 @@ public:
     void UpdateCurrentLagPenalty()
     {
         try {
-            YT_LOG_INFO("Start penalty updater check (Table: %v)",
-                Config_->TablePath);
+            YT_TLOG_INFO("Start penalty updater check")
+                .With("Table", Config_->TablePath);
 
             UpdateReplicaIds();
 
             Counters_->SuccessRequestCount.Increment();
         } catch (const std::exception& ex) {
             Counters_->ErrorRequestCount.Increment();
-            YT_LOG_ERROR(ex, "Failed to update lag penalty (Table: %v)",
-                Config_->TablePath);
+            YT_TLOG_ERROR("Failed to update lag penalty")
+                .With("Table", Config_->TablePath)
+                .With(ex);
 
             if (Config_->ClearPenaltiesOnErrors) {
                 for (auto& [cluster, info] : ReplicaClusters_) {
                     info.CurrentLagPenalty.store(0, std::memory_order::relaxed);
-                    YT_LOG_INFO("Clear lag penalty for cluster replica (Cluster: %v, Table: %v)",
-                        cluster,
-                        Config_->TablePath);
+                    YT_TLOG_INFO("Clear lag penalty for cluster replica")
+                        .With("Cluster", cluster)
+                        .With("Table", Config_->TablePath);
                 }
             }
         }

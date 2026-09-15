@@ -1,5 +1,7 @@
 LIBRARY()
 
+HEADERS(common.h)
+
 PEERDIR(
     contrib/libs/protobuf
     yql/essentials/parser/common
@@ -8,7 +10,6 @@ PEERDIR(
 END()
 
 RECURSE(
-    antlr3
     antlr4
     collect_issues
     gen

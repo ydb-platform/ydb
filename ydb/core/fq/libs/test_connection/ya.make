@@ -13,11 +13,11 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/xml/document
     ydb/core/fq/libs/actors
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/test_connection/events
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/providers/solomon/actors
 )
 

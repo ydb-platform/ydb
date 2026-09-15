@@ -46,7 +46,7 @@ class TClientsCache
     : public TClientsCacheBase
 {
 public:
-    TClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthentificationOptionsPtr& clientsOptions)
+    TClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& clientsOptions)
         : Config_(GetClustersConfigWithNormalClusterName(config))
         , ClientsOptions_(clientsOptions)
     { }
@@ -60,7 +60,7 @@ protected:
 
 private:
     const TClientsCacheConfigPtr Config_;
-    const TClientsCacheAuthentificationOptionsPtr ClientsOptions_;
+    const TClientsCacheAuthenticationOptionsPtr ClientsOptions_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,14 +69,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthentificationOptionsPtr& options)
+IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const TClientsCacheAuthenticationOptionsPtr& options)
 {
     return New<TClientsCache>(config, options);
 }
 
 IClientsCachePtr CreateClientsCache(const TClientsCacheConfigPtr& config, const NApi::TClientOptions& defaultOptions)
 {
-    auto options = New<TClientsCacheAuthentificationOptions>();
+    auto options = New<TClientsCacheAuthenticationOptions>();
     options->DefaultOptions = defaultOptions;
     return New<TClientsCache>(config, options);
 }

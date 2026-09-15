@@ -3,6 +3,7 @@
 #include "error_attribute.h"
 #include "mergeable_dictionary.h"
 
+#include <library/cpp/yt/containers/ordered_hash_map.h>
 #include <library/cpp/yt/misc/optional.h>
 
 namespace NYT {
@@ -74,7 +75,7 @@ public:
     void MergeFrom(const TDictionary& dict);
 
 private:
-    THashMap<TKey, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>> Map_;
+    TOrderedHashMap<TKey, TValue, THash<TStringBuf>, TEqualTo<TStringBuf>> Map_;
 
     friend class TErrorOr<void>;
     TErrorAttributes() = default;

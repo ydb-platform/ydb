@@ -4,13 +4,20 @@
 #include "error_info.h"
 
 #include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NCms {
+
+struct TNodeLockContext {
+    i32 Priority = 0;
+    TString RequestId;
+    NKikimrCms::EAvailabilityMode Mode = NKikimrCms::MODE_MAX_AVAILABILITY;
+
+    TNodeLockContext(i32 priority, const TString& requestId, NKikimrCms::EAvailabilityMode mode = NKikimrCms::MODE_MAX_AVAILABILITY);
+};
 
 /**
  * A base class for storing the state of some group of nodes. For example, tenant nodes, state storage nodes, etc.
@@ -27,6 +34,17 @@ public:
         NODE_STATE_DOWN /* "Down" */
     };
 
+    struct TLock {
+        TLock(i32 priority);
+
+        i32 Priority = 0;
+    };
+
+    struct TNodeInfo {
+        ENodeState State = NODE_STATE_UNSPECIFIED;
+        std::list<TLock> Locks;
+    };
+
 protected:
     static ENodeState NodeState(NKikimrCms::EState state);
 
@@ -36,11 +54,11 @@ public:
     virtual void AddNode(ui32 nodeId) = 0;
     virtual void UpdateNode(ui32 nodeId, NKikimrCms::EState) = 0;
 
-    virtual bool IsNodeLocked(ui32 nodeId) const = 0;
-    virtual void LockNode(ui32 nodeId) = 0;
-    virtual void UnlockNode(ui32 nodeId) = 0;
+    virtual bool IsNodeLocked(ui32 nodeId, i32 priority) const = 0;
+    virtual void LockNode(ui32 nodeId, const TNodeLockContext& ctx) = 0;
+    virtual void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) = 0;
 
-    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const = 0;
+    virtual bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const = 0;
 };
 
 /**
@@ -48,7 +66,7 @@ public:
  */
 class TNodesCounterBase : public INodesChecker {
 protected:
-    THashMap<ui32, ENodeState> NodeToState;
+    THashMap<ui32, TNodeInfo> Nodes;
     ui32 LockedNodesCount;
     ui32 DownNodesCount;
 
@@ -62,11 +80,11 @@ public:
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
 
-    bool IsNodeLocked(ui32 nodeId) const override;
-    void LockNode(ui32 nodeId) override;
-    void UnlockNode(ui32 nodeId) override;
+    bool IsNodeLocked(ui32 nodeId, i32 priority) const override;
+    void LockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
 
-    const THashMap<ui32, ENodeState>& GetNodeToState() const;
+    const THashMap<ui32, TNodeInfo>& GetNodes() const;
 };
 
 /**
@@ -101,7 +119,7 @@ public:
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
+    bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
@@ -142,6 +160,7 @@ public:
 class TSysTabletsNodesCounter : public TNodesCounterBase {
 private:
     const NKikimrConfig::TBootstrap::ETabletType TabletType;
+    THashMap<TString, size_t> LockedByRequests;
 
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)
@@ -149,7 +168,9 @@ public:
     {
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const override final;
+    void LockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    void UnlockNode(ui32 nodeId, const TNodeLockContext& ctx) override;
+    bool TryToLockNode(ui32 nodeId, const TNodeLockContext& ctx, TReason& reason) const override final;
 };
 
 } // namespace NKikimr::NCms

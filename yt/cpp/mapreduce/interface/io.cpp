@@ -28,6 +28,16 @@ bool IReaderImplBase::IsRawReaderExhausted() const
     Y_ABORT("Unimplemented");
 }
 
+void IReaderImplBase::Abort()
+{
+    Y_ABORT("Unimplemented");
+}
+
+bool IReaderImplBase::IsAborted() const
+{
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {

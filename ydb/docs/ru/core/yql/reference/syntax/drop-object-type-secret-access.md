@@ -1,10 +1,6 @@
 # DROP OBJECT (TYPE SECRET_ACCESS)
 
-{% note warning %}
-
-Текущий систаксис работы с секретами является временным, в будущих релизах {{ydb-full-name}} он будет изменен.
-
-{% endnote %}
+{% include [deprecated_secrets_warning](./_includes/deprecated_secrets_warning.md) %}
 
 Удаляет указанное правило доступа к [секрету](../../../concepts/datamodel/secrets.md#secret_access).
 

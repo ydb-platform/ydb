@@ -7,11 +7,11 @@
 #include <ydb/core/sys_view/auth/owners.h>
 #include <ydb/core/sys_view/auth/permissions.h>
 #include <ydb/core/sys_view/auth/users.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/sys_view/compile_cache/compile_cache.h>
 #include <ydb/core/sys_view/nodes/nodes.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/sys_view/partition_stats/top_partitions.h>
-#include <ydb/core/sys_view/pg_tables/pg_tables.h>
 #include <ydb/core/sys_view/query_stats/query_metrics.h>
 #include <ydb/core/sys_view/query_stats/query_stats.h>
 #include <ydb/core/sys_view/resource_pool_classifiers/resource_pool_classifiers.h>
@@ -23,66 +23,21 @@
 #include <ydb/core/sys_view/storage/storage_pools.h>
 #include <ydb/core/sys_view/storage/storage_stats.h>
 #include <ydb/core/sys_view/storage/vslots.h>
+#include <ydb/core/sys_view/streaming_queries/streaming_queries.h>
 #include <ydb/core/sys_view/tablets/tablets.h>
+#include <ydb/core/sys_view/udf_modules/udf_modules.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
-namespace {
-    using NKikimrSysView::ESysViewType;
-
-    const THashMap<TStringBuf, ESysViewType> SYS_VIEW_TYPES_MAP = {
-        {PartitionStatsName, ESysViewType::EPartitionStats},
-        {NodesName, ESysViewType::ENodes},
-
-        {TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute},
-        {TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour},
-        {TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute},
-        {TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour},
-        {TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute},
-        {TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour},
-        {TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute},
-        {TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour},
-
-        {QuerySessions, ESysViewType::EQuerySessions},
-
-        {PDisksName, ESysViewType::EPDisks},
-        {VSlotsName, ESysViewType::EVSlots},
-        {GroupsName, ESysViewType::EGroups},
-        {StoragePoolsName, ESysViewType::EStoragePools},
-        {StorageStatsName, ESysViewType::EStorageStats},
-
-        {TabletsName, ESysViewType::ETablets},
-
-        {QueryMetricsName, ESysViewType::EQueryMetricsOneMinute},
-
-        {TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute},
-        {TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour},
-        {TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute},
-        {TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour},
-
-        {PgTablesName, ESysViewType::EPgTables},
-        {InformationSchemaTablesName, ESysViewType::EInformationSchemaTables},
-        {PgClassName, ESysViewType::EPgClass},
-
-        {ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers},
-        {ResourcePoolsName, ESysViewType::EResourcePools},
-
-        {NAuth::UsersName, ESysViewType::EAuthUsers},
-        {NAuth::GroupsName, ESysViewType::EAuthGroups},
-        {NAuth::GroupMembersName, ESysViewType::EAuthGroupMembers},
-        {NAuth::OwnersName, ESysViewType::EAuthOwners},
-        {NAuth::PermissionsName, ESysViewType::EAuthPermissions},
-        {NAuth::EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions},
-
-        {ShowCreateName, ESysViewType::EShowCreate}
-    };
-}
+using NKikimrSysView::ESysViewType;
 
 class TSysViewRangesReader : public TActor<TSysViewRangesReader> {
 public:
@@ -91,13 +46,13 @@ public:
     TSysViewRangesReader(
         const NActors::TActorId& ownerId,
         ui32 scanId,
+        const TString& database,
+        const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
         const TTableId& tableId,
         const TString& tablePath,
-        const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
         TVector<TSerializedTableRange> ranges,
         const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database,
         bool reverse)
         : TBase(&TSysViewRangesReader::ScanState)
         , OwnerId(ownerId)
@@ -128,8 +83,8 @@ public:
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
             hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -143,8 +98,8 @@ public:
         if (!ScanActorId) {
             if (CurrentRange < Ranges.size()) {
                 auto actor = CreateSystemViewScan(
-                    SelfId(), ScanId, TableId, TablePath, SysViewInfo, Ranges[CurrentRange].ToTableRange(),
-                    Columns, UserToken, Database, Reverse);
+                    SelfId(), ScanId, Database, SysViewInfo, TableId, TablePath, Ranges[CurrentRange].ToTableRange(),
+                    Columns, UserToken, Reverse);
                 ScanActorId = Register(actor.Release());
                 CurrentRange += 1;
             } else {
@@ -173,13 +128,13 @@ public:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Got abort execution event, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerId
-                << ", scan id: " << ScanId
-                << ", table id: " << TableId
-                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Handle NKqp::TEvKqp::TEvAbortExecution: scan aborted",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerId},
+            {"scanId", ScanId},
+            {"tableId", TableId},
+            {"statusCode", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {
             Send(*ScanActorId, THolder(ev->Release().Release()));
@@ -219,53 +174,56 @@ private:
 THolder<NActors::IActor> CreateSystemViewScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
+    const TString& database,
+    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableId& tableId,
     const TString& tablePath,
-    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     TVector<TSerializedTableRange> ranges,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database,
     bool reverse
 ) {
     if (ranges.size() == 1) {
-        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, sysViewInfo, ranges[0].ToTableRange(),
-                                    columns, std::move(userToken), database, reverse);
+        return CreateSystemViewScan(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges[0].ToTableRange(),
+                                    columns, std::move(userToken), reverse);
     } else {
-        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, sysViewInfo, ranges,
-                                                columns, std::move(userToken), database, reverse);
+        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, database, sysViewInfo, tableId, tablePath, ranges,
+                                                columns, std::move(userToken), reverse);
     }
 }
 
 THolder<NActors::IActor> CreateSystemViewScan(
     const NActors::TActorId& ownerId,
     ui32 scanId,
+    const TString& database,
+    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableId& tableId,
     const TString& tablePath,
-    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database,
     bool reverse
 ) {
+    Y_UNUSED(tablePath);
     NKikimrSysView::TSysViewDescription sysViewDescription;
     if (sysViewInfo) {
         sysViewDescription = *sysViewInfo;
     } else {
-        auto typesIt = SYS_VIEW_TYPES_MAP.find(tableId.SysViewInfo);
-        Y_ABORT_UNLESS(typesIt != SYS_VIEW_TYPES_MAP.end());
+        auto typesIt = Registry.SysViewTypesMap.find(tableId.SysViewInfo);
+        Y_ABORT_UNLESS(typesIt != Registry.SysViewTypesMap.end());
         sysViewDescription.SetType(typesIt->second);
         *sysViewDescription.MutableSourceObject() = tableId.PathId.ToProto();
     }
 
     switch (sysViewDescription.GetType()) {
     case ESysViewType::EPartitionStats:
-        return CreatePartitionStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreatePartitionStatsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ENodes:
-        return CreateNodesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateNodesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EQuerySessions:
-        return CreateSessionsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateSessionsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
+    case ESysViewType::ECompileCacheQueries:
+        return CreateCompileCacheQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::ETopQueriesByDurationOneMinute:
     case ESysViewType::ETopQueriesByDurationOneHour:
     case ESysViewType::ETopQueriesByReadBytesOneMinute:
@@ -274,52 +232,51 @@ THolder<NActors::IActor> CreateSystemViewScan(
     case ESysViewType::ETopQueriesByCpuTimeOneHour:
     case ESysViewType::ETopQueriesByRequestUnitsOneMinute:
     case ESysViewType::ETopQueriesByRequestUnitsOneHour:
-        return CreateQueryStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateQueryStatsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EPDisks:
-        return CreatePDisksScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreatePDisksScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EVSlots:
-        return CreateVSlotsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateVSlotsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EGroups:
-        return CreateGroupsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateGroupsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EStoragePools:
-        return CreateStoragePoolsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateStoragePoolsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EStorageStats:
-        return CreateStorageStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateStorageStatsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ETablets:
-         return CreateTabletsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+         return CreateTabletsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EQueryMetricsOneMinute:
-        return CreateQueryMetricsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateQueryMetricsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopPartitionsByCpuOneMinute:
     case ESysViewType::ETopPartitionsByCpuOneHour:
-        return CreateTopPartitionsByCpuScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+        return CreateTopPartitionsByCpuScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopPartitionsByTliOneMinute:
     case ESysViewType::ETopPartitionsByTliOneHour:
-        return CreateTopPartitionsByTliScan(ownerId, scanId, sysViewDescription, tableRange, columns);
-    case ESysViewType::EPgTables:
-        return CreatePgTablesScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
-    case ESysViewType::EInformationSchemaTables:
-        return CreateInformationSchemaTablesScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
-    case ESysViewType::EPgClass:
-        return CreatePgClassScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
+        return CreateTopPartitionsByTliScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EResourcePoolClassifiers:
-        return CreateResourcePoolClassifiersScan(ownerId, scanId, sysViewDescription, tableRange, columns,
-                                                 std::move(userToken), database, reverse);
+        return CreateResourcePoolClassifiersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns,
+                                                 std::move(userToken), reverse);
     case ESysViewType::EResourcePools:
-        return CreateResourcePoolsScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken), database, reverse);
+        return CreateResourcePoolsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns,
+                                       std::move(userToken), reverse);
     case ESysViewType::EAuthUsers:
-        return NAuth::CreateUsersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+        return NAuth::CreateUsersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthGroups:
-        return NAuth::CreateGroupsScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+        return NAuth::CreateGroupsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthGroupMembers:
-        return NAuth::CreateGroupMembersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+        return NAuth::CreateGroupMembersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthOwners:
-        return NAuth::CreateOwnersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+        return NAuth::CreateOwnersScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EAuthPermissions:
     case ESysViewType::EAuthEffectivePermissions:
         return NAuth::CreatePermissionsScan(sysViewDescription.GetType() == ESysViewType::EAuthEffectivePermissions,
-                                            ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+                                            ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EShowCreate:
-        return CreateShowCreate(ownerId, scanId, sysViewDescription, tableRange, columns, database, std::move(userToken));
+        return CreateShowCreate(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EStreamingQueries:
+        return CreateStreamingQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
+    case ESysViewType::EUdfModules:
+        return CreateUdfModulesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
     default:
         return {};
     }

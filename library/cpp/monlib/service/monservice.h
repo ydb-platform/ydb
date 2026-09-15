@@ -45,6 +45,7 @@ namespace NMonitoring {
         explicit TMonService2(const THttpServerOptions& options, TSimpleSharedPtr<IThreadPool> pool, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
 
         ~TMonService2() override {
+            Stop();
         }
 
         const char* GetStartTime() const {

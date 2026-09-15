@@ -1,33 +1,35 @@
 #include "mkql_guess.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TGuessWrapper: public TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>>;
+
 public:
     TGuessWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, ui32 index)
         : TBaseComputation(mutables, kind)
-        , VarNode(varNode)
-        , Index(index)
+        , VarNode_(varNode)
+        , Index_(index)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto var = VarNode->GetValue(compCtx);
+        auto var = VarNode_->GetValue(compCtx);
 
         if (IsOptional && !var) {
             return NUdf::TUnboxedValuePod();
         }
 
         const auto currentIndex = var.GetVariantIndex();
-        if (Index == currentIndex) {
+        if (Index_ == currentIndex) {
             return var.Release().GetVariantItem().MakeOptional();
         } else {
             return NUdf::TUnboxedValuePod();
@@ -35,14 +37,14 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
 
-        const auto var = GetNodeValue(VarNode, ctx, block);
+        const auto var = GetNodeValue(VarNode_, ctx, block);
 
-        const auto ind = ConstantInt::get(indexType, Index);
+        const auto ind = ConstantInt::get(indexType, Index_);
         const auto zero = ConstantInt::get(valueType, 0ULL);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -55,10 +57,10 @@ public:
             block = good;
         }
 
-        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr",  block);
+        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr", block);
         const auto trunc = CastInst::Create(Instruction::Trunc, lshr, indexType, "trunc", block);
 
-        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType , 0), "check", block);
+        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType, 0), "check", block);
 
         const auto boxed = BasicBlock::Create(context, "boxed", ctx.Func);
         const auto embed = BasicBlock::Create(context, "embed", ctx.Func);
@@ -70,7 +72,7 @@ public:
 
         block = embed;
 
-        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec",  block);
+        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec", block);
         index->addIncoming(dec, block);
         BranchInst::Create(step, block);
 
@@ -101,9 +103,9 @@ public:
 
         block = emb;
 
-        const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
-        const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
-        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean",  block);
+        const std::array<uint64_t, 2> init = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
+        const auto mask = ConstantInt::get(valueType, APInt(128, init));
+        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
         new StoreInst(MakeOptional(context, clean, block), pointer, block);
         ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
 
@@ -122,14 +124,14 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(VarNode);
+        this->DependsOn(VarNode_);
     }
 
-    IComputationNode *const VarNode;
-    const ui32 Index;
+    IComputationNode* const VarNode_;
+    const ui32 Index_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
@@ -149,5 +151,4 @@ IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryCo
     }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

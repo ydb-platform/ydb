@@ -122,6 +122,9 @@ void TEvBlobStorage::TEvBlock::ToSpan(NWilson::TSpan& span) const {
     span
         .Attribute("TabletId", ::ToString(TabletId))
         .Attribute("Generation", Generation);
+    if (Version) {
+        span.Attribute("Version", *Version);
+    }
 }
 
 std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse(
@@ -268,4 +271,9 @@ void Out<NKikimr::TStorageStatusFlags>(IOutputStream& o,
 template<>
 void Out<NKikimr::TPDiskCategory>(IOutputStream &str, const NKikimr::TPDiskCategory &value) {
     str << value.ToString();
+}
+
+template<>
+void Out<NKikimr::TBridgePileId>(IOutputStream& str, const NKikimr::TBridgePileId& bridgePileId) {
+    str << bridgePileId.ToString();
 }

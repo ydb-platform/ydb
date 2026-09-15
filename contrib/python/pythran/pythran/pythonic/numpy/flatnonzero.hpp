@@ -23,8 +23,7 @@ namespace numpy
     void _flatnonzero(I begin, I end, O &out, long &i, utils::int_<N>)
     {
       for (; begin != end; ++begin)
-        _flatnonzero((*begin).begin(), (*begin).end(), out, i,
-                     utils::int_<N - 1>());
+        _flatnonzero((*begin).begin(), (*begin).end(), out, i, utils::int_<N - 1>());
     }
   } // namespace
   template <class E>

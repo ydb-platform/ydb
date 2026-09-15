@@ -2,7 +2,7 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(Service-proxy-version)
+VERSION(2025b)
 
 LICENSE(Apache-2.0)
 

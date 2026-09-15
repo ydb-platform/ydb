@@ -3,6 +3,8 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/proto_duration.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NKqp {
 
 TEvKqp::TEvQueryRequest::TEvQueryRequest(
@@ -19,7 +21,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
-    const TString& poolId)
+    const TString& poolId,
+    std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -35,13 +38,53 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
     , QuerySettings(querySettings)
+    , ArrowFormatSettings(std::move(arrowFormatSettings))
 {
+
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
         if (QuerySettings.UseCancelAfter) {
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
+
+    NACLib::TUserContextBuilder builder;
+    auto token = GetUserToken();
+    if (token != nullptr) {
+        builder.WithUserSID(token->GetUserSID());
+    }
+    if (ctx->GetWilsonTraceId()) {
+        builder.WithUserTraceId(ctx->GetWilsonTraceId());
+    }
+
+    UserCtx = builder.Build();
+}
+
+TEvKqp::TEvQueryRequest::TEvQueryRequest(TIntrusivePtr<NACLib::TUserContext> userCtx) : TEvQueryRequest()
+{
+    UserCtx = userCtx;
+    if (userCtx != nullptr) {
+        NACLib::TUserToken::TUserTokenInitFields fields {
+            .UserSID = userCtx->GetUserSID()
+        };
+        Token_ = new NACLib::TUserToken(fields);
+    }
+}
+
+TIntrusivePtr<NACLib::TUserContext> TEvKqp::TEvQueryRequest::GetUserCtx()
+{
+    if (UserCtx != nullptr) {
+        return UserCtx;
+    }
+
+    NACLib::TUserContextBuilder builder;
+    auto token = GetUserToken();
+    if (token != nullptr) {
+        builder.WithUserSID(token->GetUserSID());
+    }
+
+    UserCtx = builder.Build();
+    return UserCtx;
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {
@@ -95,6 +138,10 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetDatabaseId(DatabaseId);
         }
 
+        if (ArrowFormatSettings) {
+            ArrowFormatSettings->ExportToProto(Record.MutableRequest()->MutableArrowFormatSettings());
+        }
+
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
         Record.MutableRequest()->SetSessionId(SessionId);
         Record.MutableRequest()->SetAction(QueryAction);
@@ -106,6 +153,8 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
+        Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);
+        Record.MutableRequest()->SetResultSetFormat(QuerySettings.ResultSetFormat);
 
         RequestCtx.reset();
     }

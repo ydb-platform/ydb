@@ -30,9 +30,10 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     Logic->LoadEntry(this);
 }
 
-TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletStorageInfo *info, ui64 maxBytesInFly)
+TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly)
     : Ops(ops)
     , SelfId(self)
+    , BootAttempt(bootAttempt)
     , Info(info)
     , GroupResolveCachedChannel(Max<ui32>())
     , GroupResolveCachedGeneration(Max<ui32>())
@@ -111,6 +112,18 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
 
     if (msg->DependencyGraph) {
         StartLeaseWaiter(BootTimestamp, *msg->DependencyGraph);
+
+        for (const auto &entry : msg->DependencyGraph->Entries) {
+            for (const auto &blobId : entry.References) {
+                SeenBlob(blobId);
+            }
+            for (const auto &blobId : entry.GcDiscovered) {
+                SeenBlob(blobId);
+            }
+            for (const auto &blobId : entry.GcLeft) {
+                SeenBlob(blobId);
+            }
+        }
     }
 
     Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
@@ -133,7 +146,7 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 
     State_ = new NBoot::TBack(follower, Info->TabletID, gen);
     State().Scheme = new NTable::TScheme;
-    State().PageCaches = std::move(caches.PageCaches);
+    State().PageCollections = std::move(caches.PageCollections);
     State().TxStatusCaches = std::move(caches.TxStatusCaches);
 
     Steps = new NBoot::TRoot(this, State_.Get(), logger);
@@ -173,20 +186,25 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
+        SeenBlob(blobId);
     }
 }
 
-NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
-    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
+NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoader::TFetch&& fetch) {
+    auto success = Loads.insert(std::make_pair(fetch.PageCollection.Get(), step)).second;
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
+
+    SeenBlob(fetch.PageCollection->Label());
 
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req),
-        0, (ui64)EPageCollectionRequest::BootLogic);
+            std::move(fetch.PageCollection),
+            std::move(fetch.Pages),
+            BootAttempt),
+        0, (ui64)ERequestTypeCookie::BootLogic);
 
     return NBoot::TSpawned(true);
 }
@@ -261,6 +279,12 @@ void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintp
     Steps->Execute();
 }
 
+void TExecutorBootLogic::SeenBlob(const TLogoBlobID& id) {
+    if (Result().GcLogic) {
+        Result().GcLogic->HistoryCutter.SeenBlob(id);
+    }
+}
+
 TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
 {
     if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
@@ -268,7 +292,10 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
+        if (ERequestTypeCookie(ev.Cookie) != ERequestTypeCookie::BootLogic)
+            return OpResultUnhandled;
+
+        if (msg->Cookie != BootAttempt)
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->PageCollection.Get());
@@ -288,7 +315,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
         step.Drop();
         Steps->Execute();
-    } else if (auto *msg = ev.CastAsLocal<TEvTablet::TEvLeaseDropped>()) {
+    } else if (ev.CastAsLocal<TEvTablet::TEvLeaseDropped>()) {
         if (LeaseWaiter != ev.Sender) {
             return OpResultUnhandled;
         }
@@ -303,6 +330,34 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
     Y_ENSURE(Result_->Database, "Looks like booting hasn't been done");
+    if (AppData()->FeatureFlags.GetEnableCutHistory()) {
+        for (const auto& [tableId, table] : Result_->Database->GetScheme().Tables) {
+            for (const auto& part : Result_->Database->GetTableParts(tableId)) {
+                if (!part) {
+                    continue;
+                }
+                if (part->Blobs) {
+                    for (const auto& glob : **(part->Blobs)) {
+                        SeenBlob(glob.Logo);
+                    }
+                }
+                if (const auto* partStore = part.As<const NTable::TPartStore>()) {
+                    for (const auto& pageCollection : partStore->PageCollections) {
+                        SeenBlob(pageCollection->PageCollection->Label());
+                    }
+                }
+            }
+            if (Result_->GcLogic && !Result_->Database->GetTableColdParts(tableId).empty()) {
+                for (const auto& [_, room] : table.Rooms) {
+                    Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
+                    for (auto channel : room.Blobs) {
+                        Result().GcLogic->HistoryCutter.BecomeUncertain(channel);
+                    }
+                    Result().GcLogic->HistoryCutter.BecomeUncertain(room.Outer);
+                }
+            }
+        }
+    }
     return Result_;
 }
 
@@ -320,11 +375,11 @@ void TExecutorBootLogic::FollowersSyncComplete() {
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {
     if (Result_) {
-        for (auto &x : Result().PageCaches)
-            State().PageCaches[x->Id] = x;
+        for (auto &x : Result().PageCollections)
+            State().PageCollections[x->Id] = x;
     }
     return TExecutorCaches{
-        .PageCaches = std::move(State().PageCaches),
+        .PageCollections = std::move(State().PageCollections),
         .TxStatusCaches = std::move(State().TxStatusCaches),
     };
 }

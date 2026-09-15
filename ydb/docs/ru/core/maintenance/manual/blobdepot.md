@@ -50,7 +50,7 @@ dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037
 * WORKING — группа создана и работает, готова выполнять пользовательские запросы;
 * CREATE\_FAILED — при создании группы случилась ошибка, текстовое описание которой можно увидеть в поле ErrorReason.
 
-```
+```bash
 $ dstool --cluster=$CLUSTER --direct group list --virtual-groups-only
 ┌────────────┬──────────────┬───────────────┬────────────┬────────────────┬─────────────────┬──────────────┬───────────────────┬──────────────────┬───────────────────┬─────────────┬────────────────┐
 │ GroupId    │ BoxId:PoolId │ PoolName      │ Generation │ ErasureSpecies │ OperatingStatus │ VDisks_TOTAL │ VirtualGroupState │ VirtualGroupName │ BlobDepotId       │ ErrorReason │ DecommitStatus │
@@ -97,7 +97,7 @@ BlobDepotId | Номер таблетки блобовницы, которая �
 State | [Состояние блобовницы](#vg-check-running); может быть NEW, WORKING, CREATED\_FAILED.
 HiveId | Номер таблетки Hive, внутри которой была создана указанная блобовница.
 ErrorReason | При состоянии CREATE\_FAILED содержит текстовое описание причины ошибки создания.
-DecommitStatus | [Состояние декомиссии группы](#decommit-check-running); может быть NONE, PENDING, IN\_PROGRESS, DONE.
+DecommitStatus | [Состояние декомиссии группы](blobdepot_decommit.md#decommit-check-running); может быть NONE, PENDING, IN\_PROGRESS, DONE.
 
 ### Страница мониторинга блобовницы {#diag-blobdepot}
 
@@ -221,9 +221,9 @@ BLOB\_DEPOT и BLOB\_DEPOT\_AGENT выводятся в виде структу�
 TotalStoredDataSize  | простой      | Количество сохранённых пользовательских данных нетто (если есть несколько ссылок на один блоб, он учитывается единожды).
 TotalStoredTrashSize | простой      | Количество байт в мусорных данных, которые уже не нужны, но ещё не переданы в сборку мусора.
 InFlightTrashSize    | простой      | Количество байт мусора, которые ещё ждут подтверждения записи в локальную базу (их ещё нельзя даже начать собирать).
-BytesToDecommit      | простой      | Количество байт данных, которые осталось [декомиссовать](#decommit-progress) (в случае, если эта блобовница работает в режиме декомиссии группы).
+BytesToDecommit      | простой      | Количество байт данных, которые осталось [декомиссовать](blobdepot_decommit.md#decommit-progress) (в случае, если эта блобовница работает в режиме декомиссии группы).
 Puts/Incoming        | кумулятивный | Скорость поступления запросов на запись (в штуках в единицу времени).
 Puts/Ok              | кумулятивный | Количество успешно выполненных запросов на запись.
 Puts/Error           | кумулятивный | Количество запросов на запись, завершённых с ошибкой.
-Decommit/GetBytes    | кумулятивный | Скорость чтения данных при [декомиссии](#decommit-progress).
-Decommit/PutOkBytes  | кумулятивный | Скорость записи данных при [декомиссии](#decommit-progress) (учитываются только успешно выполненные записи).
+Decommit/GetBytes    | кумулятивный | Скорость чтения данных при [декомиссии](blobdepot_decommit.md#decommit-progress).
+Decommit/PutOkBytes  | кумулятивный | Скорость записи данных при [декомиссии](blobdepot_decommit.md#decommit-progress) (учитываются только успешно выполненные записи).

@@ -24,12 +24,14 @@ public:
 
     std::uint16_t GetPort() const override;
     std::vector<std::uint32_t> GetNodeIds() override;
+
+    void RemoveDirectoryRecurive(const std::string& path) const;
 };
 
 }
 
 #ifdef PQ_EXPERIMENTAL_DIRECT_READ
-  #define TEST_NAME(name) DirectRead_##name
+    #define TEST_NAME(name) DirectRead_##name
 #else
-  #define TEST_NAME(name) name
+    #define TEST_NAME(name) name
 #endif

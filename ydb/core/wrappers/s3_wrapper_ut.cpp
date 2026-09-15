@@ -3,9 +3,9 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
@@ -57,13 +57,15 @@ public:
         Runtime = MakeHolder<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());
         Runtime->SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
-        NWrappers::IExternalStorageConfig::TPtr config = std::make_shared<NExternalStorage::TS3ExternalStorageConfig>(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port), "TEST");
-        Wrapper = Runtime->Register(NWrappers::CreateS3Wrapper(config->ConstructStorageOperator()));
+        NWrappers::IExternalStorageConfig::TPtr config = std::make_shared<NExternalStorage::TS3ExternalStorageConfig>(Aws::Auth::AWSCredentials(), MakeClientConfig(*Port), "TEST", nullptr);
+        Wrapper = Runtime->Register(NWrappers::CreateStorageWrapper(config->ConstructStorageOperator()));
     }
 
     void TearDown() override {
         Runtime.Reset();
         S3Mock.Reset();
+        Port = Nothing();
+        Edge = Nothing();
     }
 
     ui16 GetPort() const {

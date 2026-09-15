@@ -1,6 +1,7 @@
 #include "syncer_job_actor.h"
 #include "syncer_job_task.h"
 #include "syncer_context.h"
+#include "blobstorage_syncer_broker.h"
 #include "blobstorage_syncer_localwriter.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.h>
@@ -8,6 +9,8 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <library/cpp/random_provider/random_provider.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncer;
@@ -30,10 +33,23 @@ namespace NKikimr {
         const TActorId NotifyId;
         const ui64 JobId;       // just unique job id for log readability
 
+        TSjOutcome PostponedOutcome;
+        bool SyncTokenRequested = false;
+
         friend class TActorBootstrapped<TSyncerJob>;
 
         // handle outcome
         void Handle(TSjOutcome &&outcome, const TActorContext &ctx) {
+            if (outcome.EnterFullRecovery) {
+                PostponedOutcome = std::move(outcome);
+                PostponedOutcome.EnterFullRecovery = false;
+                ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId),
+                    IEventHandle::FlagTrackDelivery);
+                SyncTokenRequested = true;
+                Become(&TThis::WaitForSyncBrokerFunc);
+                return;
+            }
+
             if (outcome.Ev) {
                 SendOutcomeMsg(std::move(outcome.Ev), std::move(outcome.To), ctx);
             }
@@ -48,10 +64,12 @@ namespace NKikimr {
 
             if (outcome.Die) {
                 // if full sync, notify AnubisRunner about it
+#ifndef USE_MERGE_FULL_SYNC_SCHEME
                 if (Task->IsFullRecoveryTask()) {
                     TVDiskIdShort vd = Task->VDiskId;
                     ctx.Send(SyncerCtx->AnubisRunnerId, new TEvFullSyncedWith(vd));
                 }
+#endif
                 ctx.Send(NotifyId, new TEvSyncerJobDone(std::move(Task)));
                 Die(ctx);
             }
@@ -68,12 +86,24 @@ namespace NKikimr {
             ctx.Send(to, ev.release(), flags);
         }
 
+        void ProcessPostponedOutcome(const TActorContext &ctx) {
+            Handle(std::move(PostponedOutcome), ctx);
+            Become(&TThis::StateFunc);
+        }
+
         // overridden Die (unsubsribe from Message/Session tracking)
         void Die(const TActorContext &ctx) override {
+            if (SyncTokenRequested) {
+                ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvReleaseSyncToken(SyncerCtx->VCtx->VDiskActorId));
+            }
             // unsubscribe on session when die
             ctx.Send(TActivationContext::InterconnectProxy(NodeId),
                      new TEvents::TEvUnsubscribe);
             TBase::Die(ctx);
+        }
+
+        void Handle(TEvSyncToken::TPtr& /*ev*/, const TActorContext& ctx) {
+            ProcessPostponedOutcome(ctx);
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
@@ -82,20 +112,20 @@ namespace NKikimr {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
-            LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerJob::Handle(TEvNodeDisconnected): msg# %s",
-                            ev->Get()->ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvNodeDisconnected): msg# %s", ev->Get()->ToString().data()));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::DroppedConnection);
             Handle(std::move(outcome), ctx);
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-            LOG_DEBUG(ctx, NKikimrServices::BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerJob::Handle(TEvUndelivered): msg# %s",
-                            ev->Get()->ToString().data()));
+            // no sync broker service
+            if (ev->Get()->SourceType == TEvQuerySyncToken::EventType) {
+                ProcessPostponedOutcome(ctx);
+                return;
+            }
+
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvUndelivered): msg# %s", ev->Get()->ToString().data()));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::DroppedConnection);
             Handle(std::move(outcome), ctx);
@@ -116,9 +146,13 @@ namespace NKikimr {
             Handle(std::move(outcome), ctx);
         }
 
+        void Handle(TEvFullSyncFinished::TPtr &ev, const TActorContext &ctx) {
+            TSjOutcome outcome = Task->Handle(ev);
+            Handle(std::move(outcome), ctx);
+        }
+
         void HandleWakeup(const TActorContext &ctx) {
-            LOG_DEBUG(ctx, BS_SYNCER,
-                VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob: job timed out"));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob: job timed out"));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::Timeout);
             Handle(std::move(outcome), ctx);
@@ -135,39 +169,25 @@ namespace NKikimr {
             Y_VERIFY_S(!outcome.Die && outcome.Ev, SyncerCtx->VCtx->VDiskLogPrefix); // can't die in this case and must have event
             Handle(std::move(outcome), ctx);
 
-            // state function
-            Become(&TThis::StateFunc);
+            if (!PostponedOutcome.Ev) {
+                Become(&TThis::StateFunc);
+            }
         }
 
         // use it for debug purposes
         void HeavyDump(const TActorContext &ctx, const TString &data) const {
             // record handlers
             auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                            "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u"
-                                " id# %s ignress# %s",
-                                JobId, unsigned(Task->IsFullRecoveryTask()),
-                                rec->LogoBlobID().ToString().data(),
-                                rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(),
-                                                       SyncerCtx->VCtx->ShortSelfVDisk,
-                                                       rec->LogoBlobID()).data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u" " id# %s ignress# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->LogoBlobID().ToString().data(), rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(), SyncerCtx->VCtx->ShortSelfVDisk, rec->LogoBlobID()).data()));
             };
             auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                            "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s",
-                                JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
             auto barrierHandler = [&] (const NSyncLog::TBarrierRec *rec) {
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                            "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s",
-                                JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
             auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
-                LOG_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64
-                    " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
 
             NSyncLog::TFragmentReader fragment(data);
@@ -183,6 +203,21 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSyncFullResult, Handle)
             HFunc(TEvBlobStorage::TEvVSyncResult, Handle)
             HFunc(TEvLocalSyncDataResult, Handle)
+            HFunc(TEvFullSyncFinished, Handle)
+            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
+            HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected)
+            HFunc(TEvents::TEvUndelivered, Handle)
+            IgnoreFunc(TEvBlobStorage::TEvVWindowChange) // ignore TEvVWindowChange
+        )
+
+        STRICT_STFUNC(WaitForSyncBrokerFunc,
+            IgnoreFunc(TEvBlobStorage::TEvVSyncFullResult)
+            IgnoreFunc(TEvBlobStorage::TEvVSyncResult)
+            IgnoreFunc(TEvLocalSyncDataResult)
+            IgnoreFunc(TEvFullSyncFinished)
+            HFunc(TEvSyncToken, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)

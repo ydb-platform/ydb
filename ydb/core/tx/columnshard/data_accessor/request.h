@@ -14,25 +14,32 @@ class TDataAccessorsRequest;
 
 class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
-    THashMap<TInternalPathId, TString> ErrorsByPathId;
-    THashMap<ui64, TPortionDataAccessor> PortionsById;
+    using TErrorsByPathId = THashMap<TInternalPathId, TString>;
+    TErrorsByPathId ErrorsByPathId;
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> PortionsById;
+    THashSet<NGeneralCache::TGlobalPortionAddress> RemovedAddresses;
 
 public:
     TDataAccessorsResult() = default;
 
-    TDataAccessorsResult(std::vector<TPortionDataAccessor>&& portions) {
+    TDataAccessorsResult(std::vector<std::shared_ptr<TPortionDataAccessor>>&& portions) {
         for (auto&& i : portions) {
-            const ui64 portionId = i.GetPortionInfo().GetPortionId();
+            AFL_VERIFY(i);
+            const ui64 portionId = i->GetPortionInfo().GetPortionId();
             PortionsById.emplace(portionId, std::move(i));
         }
     }
 
-    const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
+    THashMap<ui64, std::shared_ptr<TPortionDataAccessor>> ExtractPortions() {
+        return std::move(PortionsById);
+    }
+
+    const THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>& GetPortions() const {
         return PortionsById;
     }
 
-    std::vector<TPortionDataAccessor> ExtractPortionsVector() {
-        std::vector<TPortionDataAccessor> portions;
+    std::vector<std::shared_ptr<TPortionDataAccessor>> ExtractPortionsVector() {
+        std::vector<std::shared_ptr<TPortionDataAccessor>> portions;
         portions.reserve(PortionsById.size());
         for (auto&& [_, portionInfo] : PortionsById) {
             portions.emplace_back(std::move(portionInfo));
@@ -47,15 +54,18 @@ public:
         for (auto&& i : result.PortionsById) {
             AFL_VERIFY(PortionsById.emplace(i.first, std::move(i.second)).second);
         }
+        for (auto&& i : result.RemovedAddresses) {
+            AFL_VERIFY(RemovedAddresses.emplace(i).second);
+        }
     }
 
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
-        return it->second;
+        return *it->second;
     }
 
-    TPortionDataAccessor ExtractPortionAccessorVerified(const ui64 portionId) {
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessorVerified(const ui64 portionId) {
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
         auto result = std::move(it->second);
@@ -63,11 +73,27 @@ public:
         return result;
     }
 
-    void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
-        std::deque<TPortionDataAccessor> v;
-        for (auto&& [portionId, i] : accessors) {
-            AFL_VERIFY(PortionsById.emplace(portionId, i).second);
+    void AddData(THashMap<ui64, std::shared_ptr<TPortionDataAccessor>>&& accessors) {
+        if (PortionsById.empty()) {
+            PortionsById = std::move(accessors);
+        } else {
+            for (auto&& [portionId, i] : accessors) {
+                AFL_VERIFY(i);
+                AFL_VERIFY(PortionsById.emplace(portionId, std::move(i)).second);
+            }
         }
+    }
+
+    void AddRemovedData(THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses) {
+        RemovedAddresses = std::move(removedAddresses);
+    }
+
+    bool HasRemovedData() const {
+        return !RemovedAddresses.empty();
+    }
+
+    const THashSet<NGeneralCache::TGlobalPortionAddress>& GetRemovedData() const {
+        return RemovedAddresses;
     }
 
     void AddError(const TInternalPathId pathId, const TString& errorMessage) {
@@ -75,7 +101,18 @@ public:
     }
 
     bool HasErrors() const {
-        return ErrorsByPathId.size();
+        return !ErrorsByPathId.empty();
+    }
+
+    TString GetErrorMessage() const {
+        AFL_VERIFY(HasErrors());
+        TStringBuilder sb;
+        sb << '[';
+        for (const auto& [_, error] : ErrorsByPathId) {
+            sb << error << ';';
+        }
+        sb << ']';
+        return sb;
     }
 };
 
@@ -107,6 +144,7 @@ public:
             OnRequestsFinished(std::move(*Result));
         }
     }
+
     const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
         return DoGetAbortionFlag();
     }
@@ -119,6 +157,7 @@ private:
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Default<std::shared_ptr<const TAtomicCounter>>();
     }
+
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
     }
 };
@@ -156,7 +195,8 @@ public:
     }
 
     TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
-        : Consumer(consumer) {
+        : Consumer(consumer)
+    {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
@@ -184,6 +224,15 @@ public:
 
     ui32 GetSize() const {
         return Portions.size();
+    }
+
+    std::vector<ui64> GetPortionIds() const {
+        std::vector<ui64> result;
+        result.reserve(Portions.size());
+        for (auto&& [id, _] : Portions) {
+            result.emplace_back(id);
+        }
+        return result;
     }
 
     bool IsEmpty() const {

@@ -16,14 +16,14 @@
 
 #include <cstddef>
 #include <boost/config.hpp>
-#include <boost/type_traits/integral_constant.hpp>
-#include <boost/type_traits/negation.hpp>
-#include <boost/type_traits/conjunction.hpp>
 #include <boost/type_traits/is_complete.hpp>
-#include <boost/type_traits/is_function.hpp>
+#include <boost/iterator/detail/type_traits/conjunction.hpp>
+#include <boost/iterator/detail/type_traits/negation.hpp>
 #if !defined(BOOST_NO_CXX17_ITERATOR_TRAITS)
 #include <iterator>
 #endif
+
+#include <type_traits>
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #pragma once
@@ -59,56 +59,56 @@ no_type check(...);
 
 template< typename T >
 struct is_iterator_impl :
-    public boost::integral_constant<
+    public std::integral_constant<
         bool,
-        sizeof(has_iterator_category_detail::check< T >(0)) == sizeof(has_iterator_category_detail::yes_type)
+        sizeof(has_iterator_category_detail::check<T>(0)) == sizeof(has_iterator_category_detail::yes_type)
     >
 {
 };
 
 template< typename T >
 struct is_iterator_impl< T* > :
-    public boost::conjunction<
-        boost::is_complete< T >,
-        boost::negation< boost::is_function< T > >
+    public conjunction<
+        boost::is_complete<T>,
+        negation< std::is_function< T > >
     >::type
 {
 };
 
 template< typename T, typename U >
 struct is_iterator_impl< T U::* > :
-    public boost::false_type
+    public std::false_type
 {
 };
 
 template< typename T >
-struct is_iterator_impl< T& > :
-    public boost::false_type
+struct is_iterator_impl<T&> :
+    public std::false_type
 {
 };
 
 template< typename T, std::size_t N >
 struct is_iterator_impl< T[N] > :
-    public boost::false_type
+    public std::false_type
 {
 };
 
 #if !defined(BOOST_TT_HAS_WORKING_IS_COMPLETE)
 template< typename T >
 struct is_iterator_impl< T[] > :
-    public boost::false_type
+    public std::false_type
 {
 };
 
 template< >
 struct is_iterator_impl< void > :
-    public boost::false_type
+    public std::false_type
 {
 };
 
 template< >
 struct is_iterator_impl< void* > :
-    public boost::false_type
+    public std::false_type
 {
 };
 #endif // !defined(BOOST_TT_HAS_WORKING_IS_COMPLETE)
@@ -139,9 +139,18 @@ struct is_iterator< volatile T > : public detail::is_iterator_impl< T >::type {}
 template< typename T >
 struct is_iterator< const volatile T > : public detail::is_iterator_impl< T >::type {};
 
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+template< typename T >
+BOOST_INLINE_VARIABLE constexpr bool is_iterator_v = iterators::is_iterator< T >::value;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+
 } // namespace iterators
 
 using iterators::is_iterator;
+
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+using iterators::is_iterator_v;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
 
 } // namespace boost
 

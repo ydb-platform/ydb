@@ -5,9 +5,11 @@ namespace NKikimr {
 namespace NKeyValue {
 
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
-    ALOG_TRACE(NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded",
+        {"keyValue", TabletId},
+        {"marker", "KV61"});
 
-    CleanupEmptyTrashBins(ctx);
+    VacuumEmptyTrashBins(ctx);
     auto& trashBin = GetCollectingTrashBin();
     if (CmdTrimLeakedBlobsUids || IsCollectEventSent || trashBin.empty()) { // can't start GC right now
         return;
@@ -55,22 +57,23 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     StartCollectingIfPossible(ctx);
 }
 
-void TKeyValueState::CleanupEmptyTrashBins(const TActorContext &ctx) {
+void TKeyValueState::VacuumEmptyTrashBins(const TActorContext &ctx) {
     std::optional<ui64> maxEmptyTrashBins;
 
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC239, "CleanupEmptyTrashBins",
-        (TabletId, TabletId),
-        (TrashBinsForCleanup, TrashForCleanup.size()),
-        (TrashCount, GetTrashCount()),
-        (TrashInFirstBin, (TrashForCleanup.empty() ? "Nothing" : ToString(TrashForCleanup.begin()->second.size()))),
-        (TrashInCurrentBin, (Trash.empty() ? "Nothing" : ToString(Trash.size()))));
-    while (!TrashForCleanup.empty() && TrashForCleanup.begin()->second.empty()) {
-        maxEmptyTrashBins = TrashForCleanup.begin()->first;
-        TrashForCleanup.erase(TrashForCleanup.begin());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "VacuumEmptyTrashBins",
+        {"marker", "KVC239"},
+        {"tabletId", TabletId},
+        {"trashBinsForVacuum", TrashForVacuum.size()},
+        {"trashCount", GetTrashCount()},
+        {"trashInFirstBin", (TrashForVacuum.empty() ? "Nothing" : ToString(TrashForVacuum.begin()->second.size()))},
+        {"trashInCurrentBin", (Trash.empty() ? "Nothing" : ToString(Trash.size()))});
+    while (!TrashForVacuum.empty() && TrashForVacuum.begin()->second.empty()) {
+        maxEmptyTrashBins = TrashForVacuum.begin()->first;
+        TrashForVacuum.erase(TrashForVacuum.begin());
     }
     if (maxEmptyTrashBins) {
-        CompletedCleanupTrashGeneration = *maxEmptyTrashBins;
-        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvForceTabletDataCleanup(*maxEmptyTrashBins));
+        CompletedVacuumTrashGeneration = *maxEmptyTrashBins;
+        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvForceTabletVacuum(*maxEmptyTrashBins));
     }
 }
 
@@ -89,11 +92,16 @@ bool TKeyValueState::RemoveCollectedTrash(ISimpleDb &db) {
             ++collected;
         }
 
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC240, "Remove from Trash",
-            (TabletId, TabletId), (RemovedCount, collected), (TrashBinSize, trashBin.size()), (TrashBinToCleanup, TrashForCleanup.size()), (TrashCount, GetTrashCount()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "Remove from Trash",
+            {"marker", "KVC240"},
+            {"tabletId", TabletId},
+            {"removedCount", collected},
+            {"trashBinSize", trashBin.size()},
+            {"trashBinToVacuum", TrashForVacuum.size()},
+            {"trashCount", GetTrashCount()});
 
         const TActorContext &ctx = TActivationContext::AsActorContext();
-        CleanupEmptyTrashBins(ctx); // trashBin is invalidated by this call
+        VacuumEmptyTrashBins(ctx); // trashBin is invalidated by this call
 
         return trash.empty();
     }
@@ -121,10 +129,11 @@ void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &/*ctx
 
 void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
     if (RepeatGCTX) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC20, "Repeat CompleteGC",
-            (TabletId, TabletId),
-            (TrashBinSize, GetCollectingTrashBin().size()),
-            (TrashCount, GetTrashCount()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "Repeat CompleteGC",
+            {"marker", "KVC20"},
+            {"tabletId", TabletId},
+            {"trashBinSize", GetCollectingTrashBin().size()},
+            {"trashCount", GetTrashCount()});
         ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCompleteGC(true));
         RepeatGCTX = false;
         return;
@@ -132,34 +141,49 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
     Y_ABORT_UNLESS(CollectOperation);
     CollectOperation.Reset();
     IsCollectEventSent = false;
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC22, "CompleteGC Complete",
-        (TabletId, TabletId),
-        (TrashBinSize, GetCollectingTrashBin().size()),
-        (TrashCount, GetTrashCount()));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "CompleteGC Complete",
+        {"marker", "KVC22"},
+        {"tabletId", TabletId},
+        {"trashBinSize", GetCollectingTrashBin().size()},
+        {"trashCount", GetTrashCount()});
     ProcessPostponedTrims(ctx, info);
     PrepareCollectIfNeeded(ctx);
+
+    if (MoveDataTrashCheckingWaitingForGC) {
+        MoveDataTrashCheckingWaitingForGC = false;
+        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCheckTrash);
+    }
 }
 
-bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC242, "StartCleanupData",
-        (TabletId, TabletId), (generation, generation), (sender, sender));
+bool TKeyValueState::StartVacuum(ui64 generation, TActorId sender) {
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "StartVacuum",
+        {"marker", "KVC242"},
+        {"tabletId", TabletId},
+        {"generation", generation},
+        {"sender", sender});
     const auto &ctx = TActivationContext::AsActorContext();
-    if (CompletedCleanupGeneration >= generation) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC243, "StartCleanupData already completed",
-            (TabletId, TabletId), (generation, generation), (sender, sender));
-        ctx.Send(sender, TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration, TabletId));
+    if (CompletedVacuumGeneration >= generation) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "StartVacuum already completed",
+            {"marker", "KVC243"},
+            {"tabletId", TabletId},
+            {"generation", generation},
+            {"sender", sender});
+        ctx.Send(sender, TEvKeyValue::TEvVacuumResponse::MakeAlreadyCompleted(generation, CompletedVacuumGeneration, TabletId));
         return false;
     }
 
-    CleanupGenerationToSender[generation].insert(sender);
-    if (CompletedCleanupTrashGeneration >= generation) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC244, "StartCleanupData already completed trash generation",
-            (TabletId, TabletId), (generation, generation), (sender, sender));
+    VacuumGenerationToSender[generation].insert(sender);
+    if (CompletedVacuumTrashGeneration >= generation) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "StartVacuum already completed trash generation",
+            {"marker", "KVC244"},
+            {"tabletId", TabletId},
+            {"generation", generation},
+            {"sender", sender});
         return false;
     }
 
-    if (TrashForCleanup.empty() || TrashForCleanup.rbegin()->first < generation) {
-        auto it = TrashForCleanup.emplace(generation, TSet<TLogoBlobID>()).first;
+    if (TrashForVacuum.empty() || TrashForVacuum.rbegin()->first < generation) {
+        auto it = TrashForVacuum.emplace(generation, TSet<TLogoBlobID>()).first;
         it->second.swap(Trash);
     }
 
@@ -167,68 +191,70 @@ bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
     return true;
 }
 
-void TKeyValueState::ResetCleanupGeneration(const TActorContext &ctx, ui64 generation) {
-    for (const auto& [_, trash] : TrashForCleanup) {
+void TKeyValueState::ResetVacuumGeneration(const TActorContext &ctx, ui64 generation) {
+    for (const auto& [_, trash] : TrashForVacuum) {
         Trash.insert(trash.begin(), trash.end());
     }
-    TrashForCleanup.clear();
-    for (const auto& [requestedGeneration, recipients] : CleanupGenerationToSender) {
+    TrashForVacuum.clear();
+    for (const auto& [requestedGeneration, recipients] : VacuumGenerationToSender) {
         for (const auto& recipient : recipients) {
-            ctx.Send(recipient, TEvKeyValue::TEvCleanUpDataResponse::MakeAborted(requestedGeneration, "Cleanup generation was reset", generation, TabletId));
+            ctx.Send(recipient, TEvKeyValue::TEvVacuumResponse::MakeAborted(requestedGeneration, "Vacuum generation was reset", generation, TabletId));
         }
     }
-    CleanupGenerationToSender.clear();
-    CompletedCleanupGeneration = generation;
-    CompletedCleanupTrashGeneration = generation;
+    VacuumGenerationToSender.clear();
+    CompletedVacuumGeneration = generation;
+    CompletedVacuumTrashGeneration = generation;
 
-    CleanupResetGeneration += 1;
+    VacuumResetGeneration += 1;
 }
 
-void TKeyValueState::UpdateCleanupGeneration(ISimpleDb &db, ui64 generation) {
-    THelpers::DbUpdateCleanUpGeneration(generation, db);
+void TKeyValueState::UpdateVacuumGeneration(ISimpleDb &db, ui64 generation) {
+    THelpers::DbUpdateVacuumGeneration(generation, db);
 }
 
-void TKeyValueState::CompleteCleanupDataExecute(ISimpleDb &db, const TActorContext& /*ctx*/, ui64 cleanupGeneration) {
-    if (CompletedCleanupGeneration < cleanupGeneration) {
-        UpdateCleanupGeneration(db, cleanupGeneration);
+void TKeyValueState::CompleteVacuumExecute(ISimpleDb &db, const TActorContext& /*ctx*/, ui64 vacuumGeneration) {
+    if (CompletedVacuumGeneration < vacuumGeneration) {
+        UpdateVacuumGeneration(db, vacuumGeneration);
     }
 }
 
-void TKeyValueState::CompleteCleanupDataComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/, ui64 cleanupGeneration) {
-    if (CompletedCleanupGeneration >= cleanupGeneration) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC247, "CompleteCleanupDataComplete nothing to do",
-            (CompletedCleanupGeneration, CompletedCleanupGeneration),
-            (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration),
-            (cleanupGeneration, cleanupGeneration));
+void TKeyValueState::CompleteVacuumComplete(const TActorContext& /*ctx*/, const TTabletStorageInfo* /*info*/, ui64 vacuumGeneration) {
+    if (CompletedVacuumGeneration >= vacuumGeneration) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "CompleteVacuumComplete nothing to do",
+            {"marker", "KVC247"},
+            {"completedVacuumGeneration", CompletedVacuumGeneration},
+            {"completedVacuumTrashGeneration", CompletedVacuumTrashGeneration},
+            {"vacuumGeneration", vacuumGeneration});
         return;
     }
-    CompletedCleanupGeneration = cleanupGeneration;
+    CompletedVacuumGeneration = vacuumGeneration;
 
-    auto maxCleanedGenerationIt = CleanupGenerationToSender.upper_bound(cleanupGeneration);
-    if (maxCleanedGenerationIt == CleanupGenerationToSender.begin()) {
+    auto maxCleanedGenerationIt = VacuumGenerationToSender.upper_bound(vacuumGeneration);
+    if (maxCleanedGenerationIt == VacuumGenerationToSender.begin()) {
         return;
     }
     maxCleanedGenerationIt--;
 
-    while (CleanupGenerationToSender.size() && CleanupGenerationToSender.begin()->first <= CompletedCleanupGeneration) {
-        bool last = (maxCleanedGenerationIt == CleanupGenerationToSender.begin());
-        auto &[generation, recipients] = *CleanupGenerationToSender.begin();
+    while (VacuumGenerationToSender.size() && VacuumGenerationToSender.begin()->first <= CompletedVacuumGeneration) {
+        bool last = (maxCleanedGenerationIt == VacuumGenerationToSender.begin());
+        auto &[generation, recipients] = *VacuumGenerationToSender.begin();
         for (const auto& sender : recipients) {
-            std::unique_ptr<TEvKeyValue::TEvCleanUpDataResponse> response;
+            std::unique_ptr<TEvKeyValue::TEvVacuumResponse> response;
             if (last) {
-                response = TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(generation, TabletId);
+                response = TEvKeyValue::TEvVacuumResponse::MakeSuccess(generation, TabletId);
             } else {
-                response = TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration, TabletId);
+                response = TEvKeyValue::TEvVacuumResponse::MakeAlreadyCompleted(generation, CompletedVacuumGeneration, TabletId);
             }
             TActivationContext::AsActorContext().Send(sender, response.release());
         }
-        CleanupGenerationToSender.erase(CleanupGenerationToSender.begin());
+        VacuumGenerationToSender.erase(VacuumGenerationToSender.begin());
     }
 
-    STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC249, "CompleteCleanupDataComplete",
-        (CompletedCleanupGeneration, CompletedCleanupGeneration),
-        (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration),
-        (cleanupGeneration, cleanupGeneration));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE_GC, "CompleteVacuumComplete",
+        {"marker", "KVC249"},
+        {"completedVacuumGeneration", CompletedVacuumGeneration},
+        {"completedVacuumTrashGeneration", CompletedVacuumTrashGeneration},
+        {"vacuumGeneration", vacuumGeneration});
 }
 
 void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
@@ -249,8 +275,10 @@ void TKeyValueState::StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &kee
 }
 
 void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
-    ALOG_TRACE(NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
-            << " IsCollectEventSent# " << IsCollectEventSent << " Marker# KV64");
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible",
+        {"keyValue", TabletId},
+        {"isCollectEventSent", IsCollectEventSent},
+        {"marker", "KV64"});
 
     // there is nothing to collect yet, or the event was already sent
     Y_ABORT_UNLESS(CollectOperation && !IsCollectEventSent);
@@ -309,8 +337,11 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
 
     Y_ABORT_UNLESS(trashGoingToCollect);
 
-    ALOG_TRACE(NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
-            << "Flags Keep.Size# " << keep.size() << " DoNotKeep.Size# " << doNotKeep.size() << " Marker# KV65");
+    YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags",
+        {"keyValue", TabletId},
+        {"keepSize", keep.size()},
+        {"doNotKeepSize", doNotKeep.size()},
+        {"marker", "KV65"});
 
     StartGC(ctx, keep, doNotKeep, trashGoingToCollect);
 }

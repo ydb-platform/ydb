@@ -4,7 +4,7 @@ import os
 
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
-from yatest.common.network import PortManager
+import library.python.port_manager
 import yatest
 
 
@@ -30,7 +30,8 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
         "--log-file", yatest.common.output_path("kqprun_daemon.ydb.log"),
         "--app-config", yatest.common.source_path(parsed.config),
         "--grpc", str(grpc_port),
-        "--timeout", str(parsed.timeout_ms)
+        "--timeout", str(parsed.timeout_ms),
+        "--hold"
     ]
 
     if parsed.query:
@@ -47,7 +48,7 @@ def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]
 def start(argv: list[str]):
     logging.debug("Starting kqprun daemon")
 
-    portManager = PortManager()
+    portManager = library.python.port_manager.PortManager()
     grpc_port = portManager.get_port()
     timeout_ms, cmd = build_start_comand(argv, grpc_port)
 

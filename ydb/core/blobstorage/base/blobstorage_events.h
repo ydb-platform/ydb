@@ -4,10 +4,12 @@
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/blobstorage/base/blobstorage_host_record.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimrBlobStorage {
     class TStorageConfig;
@@ -225,7 +227,7 @@ namespace NKikimr {
     {
         bool SelfHeal = false;
         bool GroupLayoutSanitizer = false;
-
+        std::optional<NBsController::THostRecordMap> EnforceHostRecords;
         TEvControllerConfigRequest() = default;
     };
 
@@ -269,6 +271,15 @@ namespace NKikimr {
     {
     };
 
+    struct TEvBlobStorage::TEvControllerUpdateSyncerState
+        : TEventPB<
+            TEvControllerUpdateSyncerState,
+            NKikimrBlobStorage::TEvControllerUpdateSyncerState,
+            TEvBlobStorage::EvControllerUpdateSyncerState>
+    {
+        TEvControllerUpdateSyncerState() = default;
+    };
+
     struct TEvBlobStorage::TEvVStatus : public TEventPB<
         TEvBlobStorage::TEvVStatus,
         NKikimrBlobStorage::TEvVStatus,
@@ -302,12 +313,12 @@ namespace NKikimr {
             }
         }
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk) {
             Y_ABORT_UNLESS(status != NKikimrProto::OK);
             Record.SetStatus(status);
             Record.SetJoinedGroup(false);
             Record.SetReplicated(false);
-            Record.MutableVDiskID()->CopyFrom(vdisk);
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
     };
 
@@ -525,6 +536,34 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerGroupMetricsExchange, EvControllerGroupMetricsExchange>
     {};
 
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup : TEventPB<TEvControllerAllocateDDiskBlockGroup,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup, EvControllerAllocateDDiskBlockGroup>
+    {};
+
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult : TEventPB<TEvControllerAllocateDDiskBlockGroupResult,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, EvControllerAllocateDDiskBlockGroupResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoListTablets : TEventPB<TEvControllerDDiskInfoListTablets,
+            NKikimrBlobStorage::TEvControllerDDiskInfoListTablets, EvControllerDDiskInfoListTablets>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult : TEventPB<TEvControllerDDiskInfoListTabletsResult,
+            NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult, EvControllerDDiskInfoListTabletsResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoGetTablet : TEventPB<TEvControllerDDiskInfoGetTablet,
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTablet, EvControllerDDiskInfoGetTablet>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult : TEventPB<TEvControllerDDiskInfoGetTabletResult,
+            NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult, EvControllerDDiskInfoGetTabletResult>
+    {};
+
+    struct TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged : TEventPB<TEvControllerDDiskInfoTabletRevisionChanged,
+            NKikimrBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged, EvControllerDDiskInfoTabletRevisionChanged>
+    {};
+
     struct TEvBlobStorage::TEvPutVDiskToReadOnly : TEventLocal<TEvPutVDiskToReadOnly, EvPutVDiskToReadOnly> {
         const TVDiskID VDiskId;
 
@@ -581,15 +620,46 @@ namespace NKikimr {
     struct TEvNodeWardenStorageConfig
         : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
     {
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config; // effective storage config
         bool SelfManagementEnabled;
         TBridgeInfo::TPtr BridgeInfo;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> CommittedConfig; // committed storage config
 
         TEvNodeWardenStorageConfig(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
-            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> proposedConfig, bool selfManagementEnabled,
-            TBridgeInfo::TPtr bridgeInfo);
+            bool selfManagementEnabled, TBridgeInfo::TPtr bridgeInfo,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> committedConfig = nullptr);
         ~TEvNodeWardenStorageConfig();
+    };
+
+    struct TEvInterpilePut
+        : TEventPB<TEvInterpilePut, NKikimrBlobStorage::TEvInterpilePut, TEvBlobStorage::EvInterpilePut>
+    {
+        TEvInterpilePut() = default;
+    };
+
+    struct TEvInterpilePutResult
+        : TEventPB<TEvInterpilePutResult, NKikimrBlobStorage::TEvInterpilePutResult, TEvBlobStorage::EvInterpilePutResult>
+    {
+        TEvInterpilePutResult() = default;
+    };
+
+    struct TEvNodeWardenListLocalDDisks
+        : TEventLocal<TEvNodeWardenListLocalDDisks, TEvBlobStorage::EvNodeWardenListLocalDDisks>
+    {
+        TEvNodeWardenListLocalDDisks() = default;
+    };
+
+    struct TEvNodeWardenListLocalDDisksResult
+        : TEventLocal<TEvNodeWardenListLocalDDisksResult, TEvBlobStorage::EvNodeWardenListLocalDDisksResult>
+    {
+        struct TDDiskInfo {
+            TActorId DDiskId;
+            TActorId PersistentBufferId;
+        };
+
+        std::vector<TDDiskInfo> Infos;
+
+        TEvNodeWardenListLocalDDisksResult() = default;
     };
 
 } // NKikimr

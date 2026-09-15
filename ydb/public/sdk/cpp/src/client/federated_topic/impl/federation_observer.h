@@ -1,8 +1,8 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
@@ -84,6 +84,7 @@ private:
     std::shared_ptr<TFederatedDbState> FederatedDbState;
     NThreading::TPromise<void> PromiseToInitState;
     TRpcRequestSettings RpcSettings;
+    TDeadline::Duration ConnectionTimeout;
     TSpinLock Lock;
 
     NTopic::IRetryPolicy::TPtr FederationDiscoveryRetryPolicy;

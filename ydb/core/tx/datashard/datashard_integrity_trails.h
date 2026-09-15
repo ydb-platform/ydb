@@ -4,6 +4,7 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -105,7 +106,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         case NKikimr::TKeyDesc::ERowOperation::Erase:
                             rowOp = "Erase";
                             break;
-                        default:                   
+                        default:
                             rowOp = "Invalid operation";
                             break;
                     }
@@ -139,7 +140,7 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
-        ss << "BreakLocks: [";
+        ss << "BrokenLocks: [";
         for (const auto& lock : locks) {
             ss << lock << " ";
         }
@@ -149,7 +150,6 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
     };
 
     LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
-
 }
 
 template <typename TxResult>
@@ -163,7 +163,7 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         LogKeyValue("Type", "Finished", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss);
+        LogKeyValue("Status", statusString, ss, true);
 
         return ss.Str();
     };

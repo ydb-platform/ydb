@@ -1,0 +1,71 @@
+services:
+  ydb:
+    image: cr.yandex/yc/yandex-docker-local-ydb:25.2.1
+    platform: linux/amd64
+    hostname: localhost
+    ports:
+      - "127.0.0.1:2136:2136"
+      - "127.0.0.1:8765:8765"
+    environment:
+      - GRPC_TLS_PORT=2135
+      - GRPC_PORT=2136
+      - MON_PORT=8765
+      - YDB_DEFAULT_LOG_LEVEL=NOTICE
+      - YDB_USE_IN_MEMORY_PDISKS=true
+    volumes:
+      - ydb-data:/ydb_data
+    healthcheck:
+      test: /bin/sh -c "/ydb -e grpc://localhost:2136 -d /local scheme ls"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.110.0
+    ports:
+      - "127.0.0.1:4327:4317"
+      - "127.0.0.1:4328:4318"
+      - "127.0.0.1:8889:8889"
+    volumes:
+      - ./otel-collector/config.yml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - jaeger
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - jaeger
+      - prometheus
+
+volumes:
+  ydb-data:
+  grafana-data:

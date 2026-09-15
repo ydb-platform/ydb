@@ -1,4 +1,5 @@
 RECURSE(
+    async
     core
     dnsresolver
     examples
@@ -8,6 +9,8 @@ RECURSE(
     log_backend
     memory_log
     prof
+    subsystems
+    struct_log
     testlib
     util
     wilson

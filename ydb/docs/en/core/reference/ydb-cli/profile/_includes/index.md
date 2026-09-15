@@ -28,6 +28,6 @@ A profile is a named set of DB connection parameters stored in a configuration f
 
 ## Where profiles are stored {#location}
 
-Profiles are stored locally in a file named `~/ydb/config/config.yaml`.
+Profiles are stored locally in a file named `~/.ydb/config/config.yaml`.
 
 {% include [location_overlay.md](location_overlay.md) %}

@@ -37,7 +37,9 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         , JoinAlgo(joinAlgo)
         , LeftAny(leftAny)
         , RightAny(rightAny)
-    {}
+    {
+        Y_ENSURE(LeftJoinKeys.size() == RightJoinKeys.size());
+    }
 
     virtual ~TJoinOptimizerNodeInternal() = default;
     virtual TVector<TString> Labels() {

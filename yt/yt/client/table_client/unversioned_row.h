@@ -7,7 +7,6 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/serialize.h>
 
 #include <yt/yt/core/yson/public.h>
@@ -18,93 +17,55 @@
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
+#include <library/cpp/yt/memory/blob.h>
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SerializedNullRow;
+extern const std::string SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TOwningValueTag
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Unversioned value with shared ownership of string value.
 class TUnversionedOwningValue
 {
 public:
-    TUnversionedOwningValue() = default;
+    TUnversionedOwningValue();
+    TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept;
+    TUnversionedOwningValue(const TUnversionedOwningValue& other) noexcept = default;
 
-    TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept
-    {
-        std::swap(Value_, other.Value_);
-    }
+    //! Makes owning copy of #other. Copies string value.
+    TUnversionedOwningValue(const TUnversionedValue& other);
 
-    TUnversionedOwningValue(const TUnversionedOwningValue& other)
-    {
-        Assign(other.Value_);
-    }
+    //! Makes owning copy of #other. Uses #stringHolder for shared ownership of string value.
+    TUnversionedOwningValue(const TUnversionedValue& other, TSharedRangeHolderPtr stringHolder);
 
-    TUnversionedOwningValue(const TUnversionedValue& other)
-    {
-        Assign(other);
-    }
+    ~TUnversionedOwningValue() = default;
 
-    ~TUnversionedOwningValue()
-    {
-        Clear();
-    }
+    TUnversionedOwningValue& operator=(TUnversionedOwningValue&& other) noexcept;
+    TUnversionedOwningValue& operator=(const TUnversionedOwningValue& other) noexcept = default;
 
-    operator TUnversionedValue() const
-    {
-        return Value_;
-    }
+    operator TUnversionedValue() const;
+    void Clear();
 
-    TUnversionedOwningValue& operator=(TUnversionedOwningValue other) noexcept
-    {
-        std::swap(Value_, other.Value_);
-        return *this;
-    }
+    EValueType Type() const;
 
-    void Clear()
-    {
-        if (IsStringLikeType(Value_.Type)) {
-            delete[] Value_.Data.String;
-        }
-        Value_.Type = EValueType::TheBottom;
-        Value_.Length = 0;
-    }
+    //! Returns string value. Call is valid only if value is string-like type.
+    TSharedRef GetStringRef() const;
 
-    //! Provides mutable access to the string data.
-    char* GetMutableString()
-    {
-        YT_VERIFY(IsStringLikeType(Value_.Type));
-        // NB: It is correct to use `const_cast` here to modify the stored string
-        // because initially it's allocated as a non-const `char*`.
-        return const_cast<char*>(Value_.Data.String);
-    }
-
-    EValueType Type() const
-    {
-        return Value_.Type;
-    }
+    //! Returns string holder. Returned value is null if value is not of string-like type.
+    TSharedRangeHolderPtr GetStringHolder() const;
 
 private:
-    TUnversionedValue Value_{
-        .Id = 0,
-        .Type = EValueType::TheBottom,
-        .Flags = {},
-        .Length = 0,
-        .Data = {},
-    };
-
-    void Assign(const TUnversionedValue& other)
-    {
-        Value_ = other;
-        if (IsStringLikeType(Value_.Type)) {
-            auto newString = new char[Value_.Length];
-            ::memcpy(newString, Value_.Data.String, Value_.Length);
-            Value_.Data.String = newString;
-        }
-    }
+    TUnversionedValue Value_;
+    TSharedRangeHolderPtr StringHolder_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,6 +133,23 @@ inline TUnversionedValue MakeUnversionedValueHeader(EValueType type, int id = 0,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+inline TUnversionedOwningValue MakeUnversionedStringLikeOwningValue(EValueType valueType, TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedStringLikeValue(valueType, value.ToStringBuf(), id, flags), value.GetHolder());
+}
+
+inline TUnversionedOwningValue MakeUnversionedStringOwningValue(TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedStringValue(value.ToStringBuf(), id, flags), value.GetHolder());
+}
+
+inline TUnversionedOwningValue MakeUnversionedAnyOwningValue(TSharedRef value, int id = 0, EValueFlags flags = EValueFlags::None)
+{
+    return TUnversionedOwningValue(MakeUnversionedAnyValue(value.ToStringBuf(), id, flags), value.GetHolder());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TUnversionedRowHeader
 {
     ui32 Count;
@@ -184,7 +162,7 @@ static_assert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t GetDataWeight(EValueType type)
+inline i64 GetDataWeight(EValueType type)
 {
     switch (type) {
         case EValueType::Null:
@@ -210,7 +188,7 @@ inline size_t GetDataWeight(EValueType type)
     }
 }
 
-inline size_t GetDataWeight(const TUnversionedValue& value)
+inline i64 GetDataWeight(const TUnversionedValue& value)
 {
     if (IsStringLikeType(value.Type)) {
         return value.Length;
@@ -233,10 +211,10 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 
 //! Derived comparison operators.
 //! Note that these ignore flags.
-bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator==(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator<=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator>=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator >  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -257,10 +235,10 @@ int CompareRows(
 
 //! Derived comparison operators.
 //! Note that these ignore aggregate flags.
-bool operator == (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator==(TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator<=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <  (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator>=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator >  (TUnversionedRow lhs, TUnversionedRow rhs);
 
 //! Computes FarmHash forever-fixed fingerprint for a range of values.
@@ -273,9 +251,10 @@ TFingerprint GetFarmFingerprint(TUnversionedRow row);
 size_t GetUnversionedRowByteSize(ui32 valueCount);
 
 //! Returns the storage-invariant data weight of a given row.
-size_t GetDataWeight(TUnversionedRow row);
+i64 GetDataWeight(TUnversionedRow row);
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows);
+//! Returns the sum of data weights of rows.
+i64 GetDataWeight(TRange<TUnversionedRow> rows);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -339,7 +318,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && static_cast<ui32>(index) < GetCount());
         return Begin()[index];
@@ -453,18 +432,19 @@ bool ValidateNonKeyColumnsAgainstLock(
 /*! The components must pass #ValidateKeyValue check. */
 void ValidateClientKey(TLegacyKey key);
 
-//! Checks that #key is a valid client-side key. Throws on failure.
 /*! The key must obey the following properties:
  *  1. It cannot be null.
- *  2. It must contain exactly #schema.GetKeyColumnCount() components.
+ *  2. It must contain at most #schema.GetKeyColumnCount() components.
+ *     If #allowMissingKeyColumns is false, it must contain exactly that many.
  *  3. Value ids must be a permutation of {0, ..., #schema.GetKeyColumnCount() - 1}.
- *  4. Value types must either be null of match those given in schema.
+ *  4. Value types must either be null or match those given in schema.
  */
 void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable);
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns = false);
 
 //! Checks if #timestamp is sane and can be used for data.
 //! Allows timestamps in range [MinTimestamp, MaxTimestamp] plus some sentinels
@@ -533,8 +513,25 @@ const TLegacyOwningKey& ChooseMinKey(const TLegacyOwningKey& a, const TLegacyOwn
 //! Ties are broken in favour of the first argument.
 const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwningKey& b);
 
-TString SerializeToString(TUnversionedRow row);
-TString SerializeToString(TUnversionedValueRange range);
+std::string SerializeToString(TUnversionedRow row);
+std::string SerializeToString(TUnversionedValueRange range);
+
+//! Returns an upper bound on the number of bytes |SerializeRowToBuffer| writes for |range|.
+size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range);
+
+//! Serializes |range| in the same compact wire format as |SerializeToString| directly into |dst|.
+//! The buffer must hold at least |GetUnversionedRowByteSizeForWire(range)| bytes.
+//! Returns the pointer past the written bytes.
+char* SerializeRowToBuffer(char* dst, TUnversionedValueRange range);
+
+//! Reads the row header written by |SerializeRowToBuffer| from |input|, stores the value count
+//! into |valueCount|, and returns the pointer to the first value.
+const char* ReadUnversionedRowHeaderFromBuffer(const char* input, ui32* valueCount);
+
+//! Reads a single value written by |SerializeRowToBuffer| from |input| into |value|.
+//! String-like values point into the source buffer and are not copied.
+//! Returns the pointer past the consumed bytes.
+const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue* value);
 
 void ToProto(TProtobufString* protoRow, TUnversionedRow row);
 void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row);
@@ -662,7 +659,7 @@ public:
         Begin()[count] = value;
     }
 
-    TUnversionedValue& operator[] (ui32 index)
+    TUnversionedValue& operator[](ui32 index)
     {
         YT_ASSERT(index < GetHeader()->Count);
         return Begin()[index];
@@ -715,15 +712,9 @@ public:
         }
     }
 
-    TUnversionedOwningRow(const TUnversionedOwningRow& other)
-        : RowData_(other.RowData_)
-        , StringData_(other.StringData_)
-    { }
+    TUnversionedOwningRow(const TUnversionedOwningRow& other) noexcept = default;
 
-    TUnversionedOwningRow(TUnversionedOwningRow&& other)
-        : RowData_(std::move(other.RowData_))
-        , StringData_(std::move(other.StringData_))
-    { }
+    TUnversionedOwningRow(TUnversionedOwningRow&& other) noexcept = default;
 
     explicit operator bool() const
     {
@@ -762,7 +753,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && index < GetCount());
         return Begin()[index];
@@ -801,7 +792,7 @@ public:
         return *this;
     }
 
-    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other)
+    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other) noexcept
     {
         RowData_ = std::move(other.RowData_);
         StringData_ = std::move(other.StringData_);
@@ -824,7 +815,7 @@ public:
 
 private:
     friend TLegacyOwningKey GetKeySuccessorImpl(const TLegacyOwningKey& key, int prefixLength, EValueType sentinelType);
-    friend TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth);
+    friend TUnversionedOwningRow DeserializeFromString(std::string&& data, std::optional<int> nullPaddingWidth);
 
     friend class TUnversionedOwningRowBuilder;
 
@@ -924,9 +915,9 @@ void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf fo
 void FormatValue(TStringBuilderBase* builder, TMutableUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, TStringBuf format);
 
-TString ToString(TUnversionedRow row, bool valuesOnly = false);
-TString ToString(TMutableUnversionedRow row, bool valuesOnly = false);
-TString ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
+std::string ToString(TUnversionedRow row, bool valuesOnly = false);
+std::string ToString(TMutableUnversionedRow row, bool valuesOnly = false);
+std::string ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -989,6 +980,15 @@ template <>
 struct THash<NYT::NTableClient::TUnversionedRow>
 {
     inline size_t operator()(NYT::NTableClient::TUnversionedRow row) const
+    {
+        return NYT::NTableClient::TDefaultUnversionedRowHash()(row);
+    }
+};
+
+template <>
+struct THash<NYT::NTableClient::TUnversionedOwningRow>
+{
+    inline size_t operator()(NYT::NTableClient::TUnversionedOwningRow row) const
     {
         return NYT::NTableClient::TDefaultUnversionedRowHash()(row);
     }

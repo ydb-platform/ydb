@@ -7,6 +7,8 @@
 #include <library/cpp/yt/misc/cast.h>
 #include <library/cpp/yt/misc/numeric_helpers.h>
 
+#include <bit>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +46,15 @@ inline void TLegacyLockMask::Enrich(int columnCount)
 inline TLegacyLockBitmap TLegacyLockMask::GetBitmap() const
 {
     return Data_;
+}
+
+inline int TLegacyLockMask::GetLockedPrefixLength() const
+{
+    constexpr int BitsPerTypeLog2 = 1;
+    static_assert((1 << BitsPerTypeLog2) == BitsPerType);
+
+    // Ceil-divide the highest set bit count by BitsPerType via a shift; 0 for an empty mask.
+    return (std::bit_width(Data_) + BitsPerType - 1) >> BitsPerTypeLog2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,85 +166,53 @@ inline void TLockMask::Reserve(int size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return static_cast<int>(lhs) < static_cast<int>(rhs);
 }
 
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return rhs < lhs;
 }
 
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(rhs < lhs);
 }
 
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(lhs < rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t TTableSchemaHash::operator() (const TTableSchema& schema) const
+inline size_t TTableSchemaHash::operator()(const TTableSchema& schema) const
 {
     return THash<TTableSchema>()(schema);
 }
 
-inline size_t TTableSchemaHash::operator() (const TTableSchemaPtr& schema) const
+inline size_t TTableSchemaHash::operator()(const TTableSchemaPtr& schema) const
 {
     return THash<TTableSchema>()(*schema);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline bool TTableSchemaEquals::operator() (const TTableSchema& lhs, const TTableSchema& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchema& lhs, const TTableSchema& rhs) const
 {
     return lhs == rhs;
 }
 
-inline bool TTableSchemaEquals::operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const
 {
     return *lhs == *rhs;
 }
 
-inline bool TTableSchemaEquals::operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const
+inline bool TTableSchemaEquals::operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const
 {
     return *lhs == rhs;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-inline size_t TCellTaggedTableSchemaHash::operator() (const TCellTaggedTableSchema& cellTaggedSchema) const
-{
-    return MultiHash(cellTaggedSchema.TableSchema, cellTaggedSchema.CellTag);
-}
-
-inline size_t TCellTaggedTableSchemaHash::operator() (const TCellTaggedTableSchemaPtr& cellTaggedSchemaPtr) const
-{
-    YT_ASSERT(cellTaggedSchemaPtr.TableSchema);
-    return MultiHash(*cellTaggedSchemaPtr.TableSchema, cellTaggedSchemaPtr.CellTag);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchema& lhs, const TCellTaggedTableSchema& rhs) const
-{
-    return lhs.TableSchema == rhs.TableSchema && lhs.CellTag == rhs.CellTag;
-}
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchemaPtr& rhs) const
-{
-    YT_ASSERT(lhs.TableSchema && rhs.TableSchema);
-    return *lhs.TableSchema == *rhs.TableSchema && lhs.CellTag == rhs.CellTag;
-}
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchema& rhs) const
-{
-    YT_ASSERT(lhs.TableSchema);
-    return *lhs.TableSchema == rhs.TableSchema && lhs.CellTag == rhs.CellTag;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

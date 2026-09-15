@@ -1,5 +1,5 @@
 // Copyright Ruslan Arutyunyan, 2019-2021.
-// Copyright Antony Polukhin, 2021-2025.
+// Copyright Antony Polukhin, 2021-2026.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -10,27 +10,35 @@
 #ifndef BOOST_ANYS_BASIC_ANY_HPP_INCLUDED
 #define BOOST_ANYS_BASIC_ANY_HPP_INCLUDED
 
+#include <boost/any/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
+
+/// \file boost/any/basic_any.hpp
+/// \brief \copybrief boost::anys::basic_any
+
+#ifndef BOOST_ANY_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
-/// \file boost/any/basic_any.hpp
-/// \brief \copybrief boost::anys::basic_any
-
-#include <boost/any/bad_any_cast.hpp>
-#include <boost/any/fwd.hpp>
-#include <boost/assert.hpp>
-#include <boost/type_index.hpp>
-#include <boost/throw_exception.hpp>
-
 #include <memory>  // for std::addressof
 #include <type_traits>
 
+#include <boost/assert.hpp>
+#include <boost/type_index.hpp>
+#include <boost/throw_exception.hpp>
+#endif  // #ifndef BOOST_ANY_INTERFACE_UNIT
+
+#include <boost/any/bad_any_cast.hpp>
+#include <boost/any/fwd.hpp>
 
 namespace boost {
 
 namespace anys {
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
     /// \brief A class with customizable Small Object Optimization whose
     /// instances can hold instances of any type that satisfies
@@ -165,27 +173,9 @@ namespace anys {
         {};
 
         template <typename ValueType>
-        static void create(basic_any& any, const ValueType& value, std::true_type)
-        {
-            using DecayedType = typename std::decay<const ValueType>::type;
-
-            any.man = &small_manager<DecayedType>;
-            new (&any.content.small_value) ValueType(value);
-        }
-
-        template <typename ValueType>
-        static void create(basic_any& any, const ValueType& value, std::false_type)
-        {
-            using DecayedType = typename std::decay<const ValueType>::type;
-
-            any.man = &large_manager<DecayedType>;
-            any.content.large_value = new DecayedType(value);
-        }
-
-        template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::true_type)
         {
-            using DecayedType = typename std::decay<const ValueType>::type;
+            using DecayedType = typename std::decay<ValueType>::type;
             any.man = &small_manager<DecayedType>;
             new (&any.content.small_value) DecayedType(std::forward<ValueType>(value));
         }
@@ -193,15 +183,15 @@ namespace anys {
         template <typename ValueType>
         static void create(basic_any& any, ValueType&& value, std::false_type)
         {
-            using DecayedType = typename std::decay<const ValueType>::type;
+            using DecayedType = typename std::decay<ValueType>::type;
             any.man = &large_manager<DecayedType>;
             any.content.large_value = new DecayedType(std::forward<ValueType>(value));
         }
         /// @endcond
 
     public: // non-type template parameters accessors
-            static constexpr std::size_t buffer_size = OptimizeForSize;
-            static constexpr std::size_t buffer_align = OptimizeForAlignment;
+        static constexpr std::size_t buffer_size = OptimizeForSize;
+        static constexpr std::size_t buffer_align = OptimizeForAlignment;
 
     public: // structors
 
@@ -546,11 +536,19 @@ namespace anys {
     }
     /// @endcond
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace anys
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
 using boost::anys::any_cast;
 using boost::anys::unsafe_any_cast;
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace boost
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
 
 #endif // #ifndef BOOST_ANYS_BASIC_ANY_HPP_INCLUDED

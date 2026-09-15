@@ -9,7 +9,8 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+TConclusionStatus TSimpleDataSource::DoAssembleAccessor(
+    const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     auto itBlob = Blobs.find(TBlobAddress(columnId, subColumnName));
     AFL_VERIFY(itBlob != Blobs.end());
     auto it = Info.find(columnId);
@@ -17,12 +18,13 @@ void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, con
     const auto cData = it->second;
     Info.erase(it);
     if (itBlob->second.empty()) {
-        context.GetResources()->AddVerified(
+        context.MutableResources().AddVerified(
             columnId, std::make_shared<NAccessor::TTrivialArray>(NArrow::TThreadSimpleArraysCache::GetNull(cData.GetColumnType(), 0)), true);
     } else {
-        context.GetResources()->AddVerified(
+        context.MutableResources().AddVerified(
             columnId, NAccessor::NPlain::TConstructor().DeserializeFromString(itBlob->second, cData).DetachResult(), true);
     }
+    return TConclusionStatus::Success();
 }
 
 void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data) {
@@ -35,7 +37,7 @@ void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnNam
     NAccessor::TChunkConstructionData cData(data->length(), nullptr, data->type(), std::make_shared<NSerialization::TNativeSerializer>());
     AFL_VERIFY(Info.emplace(columnId, cData).second);
     Blobs.emplace(TBlobAddress(columnId, subColumnName),
-        NAccessor::NPlain::TConstructor().SerializeToString(std::make_shared<NAccessor::TTrivialArray>(data), cData));
+        NAccessor::NPlain::TConstructor().SerializeToBlobAndMeta(std::make_shared<NAccessor::TTrivialArray>(data), cData).Blob);
 }
 
 }   // namespace NKikimr::NArrow::NSSA

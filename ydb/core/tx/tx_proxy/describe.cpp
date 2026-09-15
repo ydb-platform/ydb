@@ -7,12 +7,15 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/resolver.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -35,8 +38,6 @@ class TDescribeReq : public TActor<TDescribeReq> {
     TAutoPtr<const NACLib::TUserToken> UserToken;
 
     TString TextPath;
-
-    THolder<NSysView::ISystemViewResolver> SystemViewResolver;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->NavigateReqInFly;
@@ -177,11 +178,11 @@ class TDescribeReq : public TActor<TDescribeReq> {
         auto* stats = pathDescription->MutableTableStats();
         stats->SetPartCount(0);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString() <<
-                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() <<
-                " Cookie: " << SourceCookie <<
-                " TEvDescribeSchemeResult: " << result->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Send sysview TEvDescribeSchemeResult",
+            {"selfId", ctx.SelfID},
+            {"to", Source},
+            {"cookie", SourceCookie},
+            {"ev", result->ToString()});
 
         TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -214,11 +215,11 @@ class TDescribeReq : public TActor<TDescribeReq> {
             }
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString() <<
-                " Send sysview TEvDescribeSchemeResult to# " << Source.ToString() <<
-                " Cookie: " << SourceCookie <<
-                " TEvDescribeSchemeResult: " << result->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Send sysview TEvDescribeSchemeResult",
+            {"selfId", ctx.SelfID},
+            {"to", Source},
+            {"cookie", SourceCookie},
+            {"ev", result->ToString()});
 
         TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -241,7 +242,6 @@ public:
         : TActor(&TThis::StateWaitInit)
         , Services(services)
         , TxProxyMon(txProxyMon)
-        , SystemViewResolver(NSysView::CreateSystemViewResolver())
     {
         ++*TxProxyMon->NavigateReqInFly;
     }
@@ -269,7 +269,9 @@ public:
 void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TActorContext &ctx) {
     TEvTxProxyReq::TEvNavigateScheme *msg = ev->Get();
     const auto &record = msg->Ev->Get()->Record;
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " HANDLE EvNavigateScheme " << record.GetDescribePath().GetPath());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvNavigateScheme",
+        {"selfId", ctx.SelfID},
+        {"path", record.GetDescribePath().GetPath()});
 
     WallClockStarted = ctx.Now();
 
@@ -311,8 +313,10 @@ void TDescribeReq::Handle(TEvTxProxyReq::TEvNavigateScheme::TPtr &ev, const TAct
             options->CopyFrom(record.GetDescribePath().GetOptions());
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
-            << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Send TEvDescribeScheme",
+            {"selfId", ctx.SelfID},
+            {"to", shardToRequest},
+            {"ev", req->ToString()});
 
         Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
 
@@ -350,19 +354,19 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
     const auto& entry = navigate->ResultSet.front();
 
-    LOG_LOG_S(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO),
-        NKikimrServices::TX_PROXY,
-        "Actor# " << ctx.SelfID.ToString()
-        << " HANDLE EvNavigateKeySetResult TDescribeReq marker# P5 ErrorCount# " << navigate->ErrorCount);
+    YDB_LOG_CTX(ctx, (navigate->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_INFO), "Handle EvNavigateKeySetResult TDescribeReq",
+        {"selfId", ctx.SelfID},
+        {"errorCount", navigate->ErrorCount},
+        {"marker", "P5"});
 
     if (navigate->ErrorCount > 0) {
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied: {
             const ui32 access = NACLib::EAccessRights::DescribeSchema;
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                        "Access denied for " << (UserToken ? UserToken->GetUserSID() : "empty")
-                        << " with access " << NACLib::AccessRightsToString(access)
-                        << " to path " << JoinPath(entry.Path) << " because base path");
+            YDB_LOG_ERROR_CTX(ctx, "Access denied (base path)",
+                {"userSID", (UserToken ? UserToken->GetUserSID() : "empty")},
+                {"access", NACLib::AccessRightsToString(access)},
+                {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             break;
         }
@@ -389,10 +393,10 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     if (UserToken != nullptr) {
         ui32 access = NACLib::EAccessRights::DescribeSchema;
         if (entry.SecurityObject != nullptr && !entry.SecurityObject->CheckAccess(access, *UserToken)) {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
-                        "Access denied for " << UserToken->GetUserSID()
-                        << " with access " << NACLib::AccessRightsToString(access)
-                        << " to path " << JoinPath(entry.Path));
+            YDB_LOG_ERROR_CTX(ctx, "Access denied",
+                {"userSID", UserToken->GetUserSID()},
+                {"access", NACLib::AccessRightsToString(access)},
+                {"path", JoinPath(entry.Path)});
             ReportError(NKikimrScheme::StatusAccessDenied, "Access denied", ctx);
             return Die(ctx);
         }
@@ -421,18 +425,18 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     if (UserToken != nullptr) {
         auto options = record.MutableOptions();
         if (entry.SecurityObject != nullptr) {
-            options->SetReturnBoundaries(false);
-            options->SetReturnRangeKey(false);
             ui32 access = NACLib::EAccessRights::SelectRow;
-            if (entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                options->SetReturnBoundaries(true);
-                options->SetReturnRangeKey(true);
+            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
+                options->SetReturnBoundaries(false);
+                options->SetReturnRangeKey(false);
             }
         }
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString()
-        << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvDescribeScheme",
+        {"selfId", ctx.SelfID},
+        {"to", shardToRequest},
+        {"ev", req->ToString()});
 
     Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(req.Release(), shardToRequest, true), 0, SourceCookie);
     Become(&TThis::StateWaitExec);
@@ -440,17 +444,15 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
 
 void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                "Actor# " << ctx.SelfID.ToString() <<
-                " Handle TEvDescribeSchemeResult" <<
-                " Forward to# " << Source.ToString() <<
-                " Cookie: " << ev->Cookie <<
-                " TEvDescribeSchemeResult: " << ev->Get()->ToString());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvDescribeSchemeResult",
+        {"selfId", ctx.SelfID},
+        {"to", Source},
+        {"cookie", ev->Cookie},
+        {"ev", ev->Get()->ToString()});
 
     TxProxyMon->NavigateLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() &&
-        ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
+    if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         const auto& self = pathDescription.GetSelf();
 
@@ -458,8 +460,7 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
 
         bool needSysFolder = false;
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSubDomain ||
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore ||
-            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnTable)
+            self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeColumnStore)
         {
             needSysFolder = true;
         } else if (self.GetPathId() == NSchemeShard::RootPathId) {
@@ -496,7 +497,9 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
             auto* record = ev->Get()->MutableRecord();
             auto& descr = *record->MutablePathDescription();
 
-            if (auto schema = SystemViewResolver->GetSystemViewSchema(descr.GetSysViewDescription().GetType())) {
+            if (auto schema = NSysView::GetSystemViewResolver()
+                .GetSystemViewSchema(descr.GetSysViewDescription().GetType()))
+            {
                 FillSystemViewDescr(descr, std::move(*schema));
             } else {
                 ReportError(NKikimrScheme::StatusPathDoesNotExist, "Unknown system view type", ctx);

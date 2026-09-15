@@ -14,10 +14,12 @@ private:
         AFL_VERIFY(false);
         return true;
     }
+
     virtual bool DoUseBlob(const NOlap::TUnifiedBlobId& /*blobId*/) override {
         AFL_VERIFY(false);
         return true;
     }
+
     virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& /*blobId*/) const override {
         AFL_VERIFY(false);
         return false;
@@ -25,7 +27,7 @@ private:
 
 public:
 };
-}
+}   // namespace
 
 std::shared_ptr<IBlobInUseTracker> TOperator::GetBlobsTracker() const {
     static std::shared_ptr<IBlobInUseTracker> result = std::make_shared<TBlobInUseTracker>();
@@ -36,27 +38,32 @@ namespace {
 class TBlobsDeclareRemovingAction: public IBlobsDeclareRemovingAction {
 private:
     using TBase = IBlobsDeclareRemovingAction;
+
 protected:
     virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) override {
         AFL_VERIFY(false);
     }
+
     virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& /*dbBlobs*/, const bool /*blobsWroteSuccessfully*/) override {
     }
+
     virtual void DoOnCompleteTxAfterRemoving(const bool /*blobsWroteSuccessfully*/) override {
-    
     }
 
 public:
-    TBlobsDeclareRemovingAction(const TString& storageId, const TTabletId selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
-        : TBase(storageId, selfTabletId, counters) {
+    TBlobsDeclareRemovingAction(
+        const TString& storageId, const TTabletId selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
+        : TBase(storageId, selfTabletId, counters)
+    {
     }
 };
-}
+}   // namespace
 
 std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(
     const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
-    static std::shared_ptr<IBlobsDeclareRemovingAction> result = std::make_shared<TBlobsDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters);
+    static std::shared_ptr<IBlobsDeclareRemovingAction> result =
+        std::make_shared<TBlobsDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters);
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NLocal

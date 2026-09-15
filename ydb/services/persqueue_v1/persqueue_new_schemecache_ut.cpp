@@ -5,7 +5,7 @@
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
 
 #include <ydb/core/testlib/test_pq_client.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -70,7 +70,7 @@ namespace NKikimr::NPersQueueTests {
             PrepareForGrpcNoDC(*server.AnnoyingClient);
             server.AnnoyingClient->GrantConnect("topic1@" BUILTIN_ACL_DOMAIN);
 
-            TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
+            TPQDataWriter writer("source1", server, "/Root/PQ/account1/topic1");
 
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -518,12 +518,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
@@ -551,7 +550,7 @@ namespace NKikimr::NPersQueueTests {
                 TTestServer server(false);
                 server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
                 server.StartServer();
-                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER});
 
                 const TString topicName{"account2/topic2"};
                 const TString fullTopicName{"/Root/account2/topic2"};
@@ -597,7 +596,7 @@ namespace NKikimr::NPersQueueTests {
                         .EndAddConsumer()
                     );
                     res.Wait();
-                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                    UNIT_ASSERT_C(res.GetValue().IsSuccess(), res.GetValue().GetIssues().ToString());
                 }
 
                 auto checkCounters =
@@ -731,12 +730,11 @@ namespace NKikimr::NPersQueueTests {
                                       "api.grpc.topic.stream_read.messages",
                                       "topic.read.bytes",
                                       "topic.read.messages",
-                                      "topic.compaction.lag_milliseconds_max",
-                                      "topic.compaction.unprocessed_bytes_max",
-                                      "topic.compaction.unprocessed_count_max",
+                                      "topic.partition.blobs.compaction_lag_milliseconds_max",
+                                      "topic.partition.blobs.uncompacted_bytes_max",
+                                      "topic.partition.blobs.uncompacted_count_max",
                                   },
-                                  topicName, "", "", ""
-                                  );
+                                  topicName, "", "", "");
 
                     checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
                                   {
@@ -830,7 +828,8 @@ namespace NKikimr::NPersQueueTests {
             TPersQueueV1TestServer server({.TenantModeEnabled=true});
 
             {
-                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
+                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
                 res.Wait();
                 Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());
@@ -920,7 +919,8 @@ namespace NKikimr::NPersQueueTests {
             {
                 grpc::ClientContext grpcContext;
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
-                UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::ALREADY_EXISTS);
+                UNIT_ASSERT_C(status.ok(), status.error_message());
+                UNIT_ASSERT_VALUES_EQUAL_C(addRuleResponse.operation().status(), Ydb::StatusIds::ALREADY_EXISTS, status.error_message());
             }
 
             Ydb::PersQueue::V1::RemoveReadRuleRequest removeRuleRequest;

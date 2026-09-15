@@ -25,6 +25,9 @@ RESOURCE(
 
 ALL_RESOURCE_FILES_FROM_DIRS(
     PREFIX tpch/
+    s0.1_canonical
+    s0.2_canonical
+    s0.5_canonical
     s1_canonical
     s10_canonical
     s100_canonical

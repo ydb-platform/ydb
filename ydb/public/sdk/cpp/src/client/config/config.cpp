@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 
@@ -66,7 +66,8 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
-    TAsyncFetchConfigResult FetchAllConfigs(const TFetchAllConfigsSettings& settings = {}) {
+    TAsyncFetchConfigResult FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
+            std::int32_t requestor_port, const TFetchAllConfigsSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::FetchConfigRequest>(settings);
         auto *all = request.mutable_all();
         switch (settings.Transform_) {
@@ -91,10 +92,20 @@ public:
                 break;
         }
 
+        if (!requestor_host_options.empty()) {
+            auto *requestor = request.mutable_seed_node_fetch_requestor();
+            for (const std::string& host : requestor_host_options) {
+                requestor->add_host(host);
+            }
+            requestor->set_port(requestor_port);
+        }
+
         auto promise = NThreading::NewPromise<TFetchConfigResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TConfig> configs;
+                bool transient = false;
+
                 if (Ydb::Config::FetchConfigResult result; any && any->UnpackTo(&result)) {
                     for (const auto& entry : result.config()) {
                         TIdentityTypes identity;
@@ -128,9 +139,11 @@ public:
                                 .Config = entry.config(),
                             });
                     }
+
+                    transient = result.transient();
                 }
 
-                TFetchConfigResult val(TStatus(std::move(status)), std::move(configs));
+                TFetchConfigResult val(TStatus(std::move(status)), std::move(configs), transient);
                 promise.SetValue(std::move(val));
             };
 
@@ -147,6 +160,7 @@ public:
     TAsyncStatus BootstrapCluster(const std::string& selfAssemblyUUID, const TBootstrapClusterSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::Config::BootstrapClusterRequest>(settings);
         request.set_self_assembly_uuid(selfAssemblyUUID);
+        request.set_allow_unknown_fields(settings.AllowUnknownFields_);
 
         return RunSimple<Ydb::Config::V1::ConfigService, Ydb::Config::BootstrapClusterRequest,
             Ydb::Config::BootstrapClusterResponse>(std::move(request),
@@ -197,7 +211,13 @@ TAsyncStatus TConfigClient::ReplaceConfigEnableDedicatedStorageSection(
 }
 
 TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const TFetchAllConfigsSettings& settings) {
-    return Impl_->FetchAllConfigs(settings);
+    return Impl_->FetchAllConfigs({}, 0, settings);
+}
+
+TAsyncFetchConfigResult TConfigClient::FetchAllConfigs(const std::vector<std::string>& requestor_host_options,
+        int requestor_port,
+        const TFetchAllConfigsSettings& settings) {
+    return Impl_->FetchAllConfigs(requestor_host_options, requestor_port, settings);
 }
 
 TAsyncStatus TConfigClient::BootstrapCluster(

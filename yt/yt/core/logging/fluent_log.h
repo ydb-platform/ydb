@@ -3,6 +3,8 @@
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,12 +18,12 @@ public:
     using TStatePtr = TIntrusivePtr<NYTree::TFluentYsonWriterState>;
 
     TOneShotFluentLogEvent(TStatePtr state, const NLogging::TLogger& logger, NLogging::ELogLevel level);
-    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent(TOneShotFluentLogEvent&& other) noexcept = default;
     TOneShotFluentLogEvent(const TOneShotFluentLogEvent& other) = delete;
 
     ~TOneShotFluentLogEvent();
 
-    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) = default;
+    TOneShotFluentLogEvent& operator=(TOneShotFluentLogEvent&& other) noexcept = default;
     TOneShotFluentLogEvent& operator=(const TOneShotFluentLogEvent& other) = delete;
 
 private:
@@ -57,8 +59,8 @@ private:
     const i64 MaxBatchSize_;
     const ELogLevel Level_;
 
-    TString BatchYson_;
-    TStringOutput BatchOutputStream_{BatchYson_};
+    std::string BatchYson_;
+    TStdStringOutput BatchOutputStream_{BatchYson_};
     NYson::TYsonWriter BatchYsonWriter_{
         &BatchOutputStream_,
         NYson::EYsonFormat::Binary,

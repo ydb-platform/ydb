@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include <util/string/builder.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NGeneralCache::NPublic {
 

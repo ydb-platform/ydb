@@ -26,6 +26,22 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// -> Nothing
+class TPingDistributedWriteSessionCommand
+    : public TTypedCommand<NApi::TDistributedWriteSessionPingOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPingDistributedWriteSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::INodePtr Session;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 // -> Nothing
 class TFinishDistributedWriteSessionCommand
@@ -58,6 +74,7 @@ private:
     using TBase = TWriteTableCommand;
 
     NYTree::INodePtr Cookie;
+    NYTree::INodePtr TableWriter;
     i64 MaxRowBufferSize;
 
     NApi::ITableFragmentWriterPtr CreateTableWriter(const ICommandContextPtr& context);

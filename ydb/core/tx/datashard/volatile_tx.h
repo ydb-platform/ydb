@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tablet_flat/flat_table_committed.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
@@ -52,10 +52,11 @@ namespace NKikimr::NDataShard {
         ui64 CommitOrder;
         ui64 TxId;
         EVolatileTxState State = EVolatileTxState::Waiting;
-        bool AddCommitted = false;
-        bool CommitOrdered = false;
-        bool IsArbiter = false;
-        bool IsArbiterOnHold = false;
+        ui32 AddCommitted : 1 = false;
+        ui32 CommitOrdered : 1 = false;
+        ui32 IsArbiter : 1 = false;
+        ui32 IsArbiterOnHold : 1 = false;
+        ui32 DisableExpectations : 1 = false;
         TRowVersion Version;
         absl::flat_hash_set<ui64> CommitTxIds;
         absl::flat_hash_set<ui64> Dependencies;
@@ -231,6 +232,7 @@ namespace NKikimr::NDataShard {
             std::optional<ui64> changeGroup,
             bool commitOrdered,
             bool isArbiter,
+            bool disableExpectations,
             TTransactionContext& txc);
 
         bool AttachVolatileTxCallback(

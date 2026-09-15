@@ -1,6 +1,8 @@
 UNITTEST_FOR(ydb/core/kqp)
 
-IF (WITH_VALGRIND OR SANITIZER_TYPE)
+REQUIREMENTS(cpu:2)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -16,12 +18,16 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    library/cpp/protobuf/interop
+    library/cpp/testing/common
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
-    ydb/library/yql/providers/s3/actors
-    yql/essentials/sql/pg_dummy
+    ydb/core/wrappers/ut_helpers
     ydb/library/testlib/s3_recipe_helper
+    ydb/library/yql/providers/s3/actors
     ydb/public/sdk/cpp/src/client/types/operation
+    yql/essentials/sql/pg_dummy
+    yql/essentials/udfs/common/yson2
 )
 
 YQL_LAST_ABI_VERSION()

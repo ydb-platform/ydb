@@ -37,14 +37,14 @@ items:
       href: table-ttl-reset.md
     - name: Удаление таблицы
       href: table-drop.md
+    - name: Генерация скрипта создания таблицы
+      href: tools-infer.md
   - name: Работа с данными
     items:
     - name: Получение плана исполнения запроса и AST
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link
@@ -81,6 +81,10 @@ items:
       href: parameterized-query-execution.md
     - name: Интерактивный режим выполнения запросов
       href: interactive-cli.md
+    - name: Режим AI-ассистента
+      href: interactive-cli-ai.md
+    - name: Скан запросы
+      href: scan-query.md
 # Справки по устаревшим командам:
     - name: Выполнение скрипта (с поддержкой стриминга)
       href: yql.md
@@ -94,12 +98,6 @@ items:
     - name: Выполнение запросов с параметрами
       href: parameterized-queries-cli.md
       hidden: true
-#  - name: Утилиты
-#    items:
-    # - name: Снятие бэкапа
-    #   href: commands/tools/dump.md
-    # - name: Восстановление бэкапа
-    #   href: commands/tools/restore.md
   - name: Управление фоновыми операциями
     items:
     - name: Получение списка фоновых операций
@@ -118,12 +116,14 @@ items:
       href: commands/discovery-list.md
     - name: Проверка аутентификации
       href: commands/discovery-whoami.md
+    - name: Получение токена аутентификации
+      href: auth-get-token.md
     - name: Просмотр параметров соединения
       href: commands/config-info.md
     - name: Вывод версии YDB CLI
       href: version.md
     - name: Проверка состояния базы данных
-      href: commands/monitoring-healthcheck.md 
+      href: commands/monitoring-healthcheck.md
   - name: Нагрузочное тестирование
     items:
     - name: Обзор
@@ -138,12 +138,25 @@ items:
       href: workload-topic.md
     - name: Transfer нагрузка
       href: workload-transfer.md
+    - name: TPC-C нагрузка
+      href: workload-tpcc.md
     - name: TPC-H нагрузка
       href: workload-tpch.md
     - name: TPC-DS нагрузка
       href: workload-tpcds.md
+    - name: Пользовательская нагрузка
+      href: workload-query.md
+    - name: Fulltext нагрузка
+      href: workload-fulltext.md
+    - name: Vector нагрузка
+      href: workload-vector.md
   - name: Работа с конфигурацией
     href: configs.md
     include:
       mode: link
       path: commands/configuration/toc_p.yaml
+  - name: Управление кластером в режиме bridge
+    href: commands/bridge/index.md
+    include:
+      mode: link
+      path: commands/bridge/toc_p.yaml

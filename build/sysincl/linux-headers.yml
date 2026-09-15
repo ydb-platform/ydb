@@ -77,6 +77,7 @@
   - asm/eeh_powerpc.h
   - asm/elf.h
   - asm/elf_powerpc.h
+  - asm/elf_x86.h
   - asm/epapr_hcalls.h
   - asm/epapr_hcalls_powerpc.h
   - asm/errno.h
@@ -146,8 +147,18 @@
   - asm/nvram_powerpc.h
   - asm/opal-prd.h
   - asm/opal-prd_powerpc.h
-  - asm/papr_pdsm.h
-  - asm/papr_pdsm_powerpc.h
+  - asm/papr-indices.h
+  - asm/papr-indices_powerpc.h
+  - asm/papr-miscdev.h
+  - asm/papr-miscdev_powerpc.h
+  - asm/papr-physical-attestation.h
+  - asm/papr-physical-attestation_powerpc.h
+  - asm/papr-platform-dump.h
+  - asm/papr-platform-dump_powerpc.h
+  - asm/papr-sysparm.h
+  - asm/papr-sysparm_powerpc.h
+  - asm/papr-vpd.h
+  - asm/papr-vpd_powerpc.h
   - asm/param.h
   - asm/param_arm.h
   - asm/param_arm64.h
@@ -194,6 +205,8 @@
   - asm/setup.h
   - asm/setup_arm.h
   - asm/setup_arm64.h
+  - asm/setup_data.h
+  - asm/setup_data_x86.h
   - asm/setup_powerpc.h
   - asm/setup_x86.h
   - asm/sgx.h
@@ -277,6 +290,7 @@
   - asm/unistd_32_powerpc.h
   - asm/unistd_32_x86.h
   - asm/unistd_64.h
+  - asm/unistd_64_arm64.h
   - asm/unistd_64_powerpc.h
   - asm/unistd_64_x86.h
   - asm/unistd_arm.h
@@ -293,8 +307,11 @@
   - asm/vmx_x86.h
   - asm/vsyscall.h
   - asm/vsyscall_x86.h
+  - cxl/features.h
   - drm/amdgpu_drm.h
+  - drm/amdxdna_accel.h
   - drm/armada_drm.h
+  - drm/asahi_drm.h
   - drm/drm.h
   - drm/drm_fourcc.h
   - drm/drm_mode.h
@@ -307,8 +324,11 @@
   - drm/lima_drm.h
   - drm/msm_drm.h
   - drm/nouveau_drm.h
+  - drm/nova_drm.h
   - drm/omap_drm.h
   - drm/panfrost_drm.h
+  - drm/panthor_drm.h
+  - drm/pvr_drm.h
   - drm/qaic_accel.h
   - drm/qxl_drm.h
   - drm/radeon_drm.h
@@ -318,6 +338,11 @@
   - drm/vgem_drm.h
   - drm/virtgpu_drm.h
   - drm/vmwgfx_drm.h
+  - drm/xe_drm.h
+  - fwctl/cxl.h
+  - fwctl/fwctl.h
+  - fwctl/mlx5.h
+  - fwctl/pds.h
   - linux/a.out.h
   - linux/a.out_x86.h
   - linux/acct.h
@@ -368,13 +393,15 @@
   - linux/bcm933xx_hcs.h
   - linux/bfs_fs.h
   - linux/binfmts.h
+  - linux/bits.h
+  - linux/blk-crypto.h
+  - linux/blkdev.h
   - linux/blkpg.h
   - linux/blktrace_api.h
   - linux/blkzoned.h
   - linux/bpf.h
   - linux/bpf_common.h
   - linux/bpf_perf_event.h
-  - linux/bpfilter.h
   - linux/bpqether.h
   - linux/bsg.h
   - linux/bt-bmc.h
@@ -416,6 +443,7 @@
   - linux/const.h
   - linux/coresight-stm.h
   - linux/counter.h
+  - linux/counter/microchip-tcb-capture.h
   - linux/cramfs_fs.h
   - linux/cryptouser.h
   - linux/cuda.h
@@ -434,6 +462,7 @@
   - linux/dma-buf.h
   - linux/dma-heap.h
   - linux/dns_resolver.h
+  - linux/dpll.h
   - linux/dqblk_xfs.h
   - linux/dvb/audio.h
   - linux/dvb/ca.h
@@ -454,8 +483,10 @@
   - linux/erspan.h
   - linux/ethtool.h
   - linux/ethtool_netlink.h
+  - linux/ethtool_netlink_generated.h
   - linux/eventfd.h
   - linux/eventpoll.h
+  - linux/exfat.h
   - linux/ext4.h
   - linux/f2fs.h
   - linux/fadvise.h
@@ -519,7 +550,6 @@
   - linux/if_arp.h
   - linux/if_bonding.h
   - linux/if_bridge.h
-  - linux/if_cablemodem.h
   - linux/if_eql.h
   - linux/if_ether.h
   - linux/if_fc.h
@@ -560,7 +590,6 @@
   - linux/ioam6_genl.h
   - linux/ioam6_iptunnel.h
   - linux/ioctl.h
-  - linux/iommu.h
   - linux/iommufd.h
   - linux/ioprio.h
   - linux/ip.h
@@ -606,8 +635,10 @@
   - linux/lirc.h
   - linux/llc.h
   - linux/loadpin.h
+  - linux/lockd_netlink.h
   - linux/loop.h
   - linux/lp.h
+  - linux/lsm.h
   - linux/lwtunnel.h
   - linux/magic.h
   - linux/major.h
@@ -619,6 +650,11 @@
   - linux/mdio.h
   - linux/media-bus-format.h
   - linux/media.h
+  - linux/media/amlogic/c3-isp-config.h
+  - linux/media/raspberrypi/pisp_be_config.h
+  - linux/media/raspberrypi/pisp_common.h
+  - linux/media/raspberrypi/pisp_fe_config.h
+  - linux/media/raspberrypi/pisp_fe_statistics.h
   - linux/mei.h
   - linux/mei_uuid.h
   - linux/membarrier.h
@@ -635,12 +671,14 @@
   - linux/mpls.h
   - linux/mpls_iptunnel.h
   - linux/mptcp.h
+  - linux/mptcp_pm.h
   - linux/mqueue.h
   - linux/mroute.h
   - linux/mroute6.h
   - linux/mrp_bridge.h
   - linux/msdos_fs.h
   - linux/msg.h
+  - linux/mshv.h
   - linux/mtio.h
   - linux/nbd-netlink.h
   - linux/nbd.h
@@ -649,6 +687,7 @@
   - linux/net.h
   - linux/net_dropmon.h
   - linux/net_namespace.h
+  - linux/net_shaper.h
   - linux/net_tstamp.h
   - linux/netconf.h
   - linux/netdev.h
@@ -811,12 +850,16 @@
   - linux/nfsd/debug.h
   - linux/nfsd/export.h
   - linux/nfsd/stats.h
+  - linux/nfsd_netlink.h
   - linux/nilfs2_api.h
   - linux/nilfs2_ondisk.h
   - linux/nitro_enclaves.h
   - linux/nl80211-vnd-intel.h
   - linux/nl80211.h
+  - linux/npcm-video.h
   - linux/nsfs.h
+  - linux/nsm.h
+  - linux/ntsync.h
   - linux/nubus.h
   - linux/nvme_ioctl.h
   - linux/nvram.h
@@ -825,7 +868,9 @@
   - linux/oom.h
   - linux/openat2.h
   - linux/openvswitch.h
+  - linux/ovpn.h
   - linux/packet_diag.h
+  - linux/papr_pdsm.h
   - linux/param.h
   - linux/parport.h
   - linux/patchkey.h
@@ -853,6 +898,7 @@
   - linux/ppp-ioctl.h
   - linux/ppp_defs.h
   - linux/pps.h
+  - linux/pps_gen.h
   - linux/pr.h
   - linux/prctl.h
   - linux/psample.h
@@ -872,8 +918,6 @@
   - linux/random.h
   - linux/rds.h
   - linux/reboot.h
-  - linux/reiserfs_fs.h
-  - linux/reiserfs_xattr.h
   - linux/remoteproc_cdev.h
   - linux/resource.h
   - linux/rfkill.h
@@ -953,7 +997,6 @@
   - linux/tc_act/tc_gact.h
   - linux/tc_act/tc_gate.h
   - linux/tc_act/tc_ife.h
-  - linux/tc_act/tc_ipt.h
   - linux/tc_act/tc_mirred.h
   - linux/tc_act/tc_mpls.h
   - linux/tc_act/tc_nat.h
@@ -974,6 +1017,7 @@
   - linux/tee.h
   - linux/termios.h
   - linux/thermal.h
+  - linux/thp7312.h
   - linux/time.h
   - linux/time_types.h
   - linux/timerfd.h
@@ -987,6 +1031,7 @@
   - linux/tls.h
   - linux/toshiba.h
   - linux/tps6594_pfsm.h
+  - linux/trace_mmap.h
   - linux/tty.h
   - linux/tty_flags.h
   - linux/types.h
@@ -1010,6 +1055,7 @@
   - linux/usb/ch9.h
   - linux/usb/charger.h
   - linux/usb/functionfs.h
+  - linux/usb/g_hid.h
   - linux/usb/g_printer.h
   - linux/usb/g_uvc.h
   - linux/usb/gadgetfs.h
@@ -1037,6 +1083,7 @@
   - linux/vdpa.h
   - linux/vduse.h
   - linux/version.h
+  - linux/vesa.h
   - linux/veth.h
   - linux/vfio.h
   - linux/vfio_ccw.h
@@ -1066,6 +1113,7 @@
   - linux/virtio_pmem.h
   - linux/virtio_ring.h
   - linux/virtio_rng.h
+  - linux/virtio_rtc.h
   - linux/virtio_scmi.h
   - linux/virtio_scsi.h
   - linux/virtio_snd.h
@@ -1073,6 +1121,7 @@
   - linux/virtio_vsock.h
   - linux/vm_sockets.h
   - linux/vm_sockets_diag.h
+  - linux/vmclock-abi.h
   - linux/vmcore.h
   - linux/vsockmon.h
   - linux/vt.h
@@ -1091,8 +1140,9 @@
   - linux/xilinx-v4l2-controls.h
   - linux/zorro.h
   - linux/zorro_ids.h
-  - misc/cxl.h
+  - misc/amd-apml.h
   - misc/fastrpc.h
+  - misc/mrvl_cn10k_dpi.h
   - misc/ocxl.h
   - misc/pvpanic.h
   - misc/uacce/hisi_qm.h
@@ -1132,7 +1182,7 @@
   - rdma/rvt-abi.h
   - rdma/siw-abi.h
   - rdma/vmw_pvrdma-abi.h
-  - scsi/cxlflash_ioctl.h
+  - regulator/regulator.h
   - scsi/fc/fc_els.h
   - scsi/fc/fc_fs.h
   - scsi/fc/fc_gs.h
@@ -1149,11 +1199,13 @@
   - sound/compress_offload.h
   - sound/compress_params.h
   - sound/emu10k1.h
+  - sound/fcp.h
   - sound/firewire.h
   - sound/hdsp.h
   - sound/hdspm.h
   - sound/intel/avs/tokens.h
   - sound/sb16_csp.h
+  - sound/scarlett2.h
   - sound/sfnt_info.h
   - sound/skl-tplg-interface.h
   - sound/snd_ar_tokens.h

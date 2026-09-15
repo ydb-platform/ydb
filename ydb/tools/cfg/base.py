@@ -63,13 +63,40 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None,
+                 expected_slot_size=None, max_slots=None, kind=None, pdisk_config=None, disk_scope=None):
+        # the same settings may come as top-level drive fields or inside pdisk_config;
+        # validate the effective combination so that invalid mixes do not surface only
+        # as NodeWarden warnings after the config is deployed. Zero values are treated
+        # as 'not set' to match the C++ side
+        pdisk_config_dict = pdisk_config if isinstance(pdisk_config, dict) else {}
+
+        def effective(top_level_value, key):
+            value = top_level_value if top_level_value is not None else pdisk_config_dict.get(key)
+            return value if value else None
+
+        effective_slot_count = effective(expected_slot_count, "expected_slot_count")
+        effective_slot_size = effective(expected_slot_size, "expected_slot_size")
+        effective_max_slots = effective(max_slots, "max_slots")
+        slot_size_in_units = pdisk_config_dict.get("slot_size_in_units")
+        if effective_slot_size is not None:
+            if effective_slot_count is not None:
+                raise ValueError("expected_slot_size is mutually exclusive with expected_slot_count")
+            if slot_size_in_units:
+                raise ValueError("expected_slot_size is mutually exclusive with slot_size_in_units")
+            if effective_max_slots is None:
+                raise ValueError("expected_slot_size requires max_slots")
+        elif effective_max_slots is not None:
+            raise ValueError("max_slots requires expected_slot_size")
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
         self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
+        self.expected_slot_size = expected_slot_size
+        self.max_slots = max_slots
         self.kind = kind
+        self.disk_scope = disk_scope
 
     def __eq__(self, other):
         return (
@@ -77,12 +104,25 @@ class KiKiMRDrive(object):
             and self.path == other.path
             and self.shared_with_os == other.shared_with_os
             and self.expected_slot_count == other.expected_slot_count
+            and self.expected_slot_size == other.expected_slot_size
+            and self.max_slots == other.max_slots
             and self.kind == other.kind
             and self.pdisk_config == other.pdisk_config
+            and self.disk_scope == other.disk_scope
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
+        return hash("\0".join(map(str, (
+            self.type,
+            self.path,
+            self.shared_with_os,
+            self.expected_slot_count,
+            self.expected_slot_size,
+            self.max_slots,
+            self.kind,
+            self.pdisk_config,
+            self.disk_scope,
+        ))))
 
 
 Domain = collections.namedtuple(
@@ -105,7 +145,7 @@ Domain = collections.namedtuple(
 )
 
 KiKiMRHost = collections.namedtuple(
-    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id", "port"]
+    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "module", "rack", "host_config_id", "port"]
 )
 
 DEFAULT_PLAN_RESOLUTION = 10
@@ -221,10 +261,12 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None):
+    def __init__(self, name, storage_units=None, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None, shared_database_path=None):
         self.name = name
         self.overridden_configs = overridden_configs
-        self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
+        self.storage_units = tuple()
+        if storage_units:
+            self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
         self.compute_units = tuple()
         if compute_units:
             self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
@@ -232,6 +274,7 @@ class Tenant(object):
         self.plan_resolution = plan_resolution
         self.coordinators = coordinators
         self.mediators = mediators
+        self.shared_database_path = shared_database_path
 
 
 class HostConfig(object):
@@ -271,7 +314,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False, enable_modules=False):
 
         if not validator:
             validator = validation.default_validator()
@@ -307,6 +350,7 @@ class ClusterDetailsProvider(object):
         self.dynamic_cpu_count = self.__cluster_description.get("dynamic_cpu_count", 8)
         self.force_io_pool_threads = self.__cluster_description.get("force_io_pool_threads", None)
         self.client_certificate_authorization = self.__cluster_description.get("client_certificate_authorization")
+        self.system_tablet_backup_config = self.__cluster_description.get("system_tablet_backup_config")
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
@@ -322,6 +366,7 @@ class ClusterDetailsProvider(object):
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 
+        self._enable_modules = self.__cluster_description.get("enable_modules", enable_modules)
         self._hosts = None
         self._thread_pool = ThreadPoolExecutor(max_workers=8)
 
@@ -414,6 +459,27 @@ class ClusterDetailsProvider(object):
 
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
+    def _get_module(self, host_description):
+        module = (
+            host_description.get("module") or
+            host_description.get("location", {}).get("module")
+        )
+        if module is not None:
+            return str(module)
+
+        hostname = host_description.get("name", host_description.get("host"))
+
+        # module is optional - check if it's enabled
+        if not self._enable_modules:
+            return ""
+
+        # Don't call provider if it's NopHostsInformationProvider
+        if isinstance(self._host_info_provider, walle.NopHostsInformationProvider):
+            return ""
+
+        module_from_provider = self._host_info_provider.get_module(hostname)
+        return str(module_from_provider) if module_from_provider else ""
+
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
         drives = host_description.get("drives", [])
@@ -436,6 +502,7 @@ class ClusterDetailsProvider(object):
             ic_port=host_description.get("ic_port", DEFAULT_INTERCONNECT_PORT),
             body=self._get_body(host_description),
             datacenter=self._get_datacenter(host_description),
+            module=self._get_module(host_description),
             rack=self._get_rack(host_description),
             host_config_id=host_description.get("host_config_id", None),
             port=host_description.get("port", DEFAULT_INTERCONNECT_PORT),

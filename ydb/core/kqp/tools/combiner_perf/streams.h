@@ -13,11 +13,35 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+template<typename T>
+inline TType* GetVerySimpleDataType(const TTypeEnvironment& env)
+{
+    return TDataType::Create(NUdf::TDataType<T>::Id, env);
+}
+
+template<>
+inline TType* GetVerySimpleDataType<std::string>(const TTypeEnvironment& env)
+{
+    return TDataType::Create(NUdf::TDataType<char*>::Id, env);
+}
+
+template<typename K, typename V, typename R, typename Next>
+THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
+{
+    if (implType == EHashMapImpl::Absl) {
+        return next(TAbslMapImpl<K, V>());
+    } else if (implType == EHashMapImpl::YqlRobinHood) {
+        return next(TRobinHoodMapImpl<K, V>());
+    } else {
+        return next(TUnorderedMapImpl<K, V>());
+    }
+}
+
 using T6464Samples = std::vector<std::pair<ui64, ui64>>;
-T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey);
+T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, size_t keyOffset = 0);
 
 using TString64Samples = std::vector<std::pair<std::string, ui64>>;
-TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings);
+TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings, size_t keyOffset = 0);
 
 
 struct IWideStream : public NUdf::TBoxedValue
@@ -70,7 +94,7 @@ public:
 
         // TODO: support embedded strings in values?
         NativeToUnboxed<EmbeddedKeys>(CurrSample->first, result[0]);
-        NUdf::TUnboxedValuePod val;
+        NUdf::TUnboxedValue val;
         NativeToUnboxed<false>(CurrSample->second, val);
         for (size_t i = 0; i < NumAggregates; ++i) {
             result[1 + i] = val;
@@ -386,9 +410,9 @@ public:
 
         if (count > 0) {
             const bool finish = IsAtTheEnd();
-            result[0] = Context.HolderFactory.CreateArrowBlock(builders[0]->Build(finish));
-            result[1] = Context.HolderFactory.CreateArrowBlock(builders[1]->Build(finish));
-            result[2] = Context.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(count)));
+            result[0] = Context.HolderFactory.CreateArrowBlock(builders[0]->Build(finish), Context.RuntimeSettings.DatumValidation.Get());
+            result[1] = Context.HolderFactory.CreateArrowBlock(builders[1]->Build(finish), Context.RuntimeSettings.DatumValidation.Get());
+            result[2] = Context.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(count)), Context.RuntimeSettings.DatumValidation.Get());
 
             return NUdf::EFetchStatus::Ok;
         } else {

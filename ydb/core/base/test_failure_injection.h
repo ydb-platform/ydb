@@ -15,6 +15,7 @@ enum class EInjectedFailureType : ui64 {
     IncrementalBackupPathNotResolved = 4,
     CreateChangePathStateFailed = 5,
     LateBackupCollectionNotFound = 6,
+    DisableIncrementalRestoreAutoSwitchingToReadyStateForTests = 7,
 };
 
 class TTestFailureInjector {

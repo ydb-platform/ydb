@@ -55,8 +55,8 @@ namespace detail
     template < class ParentPA, class RankPA, class Vertex>
     inline void link_sets(ParentPA p, RankPA rank, Vertex i, Vertex j)
     {
-        assert(i == get(p, i));
-        assert(j == get(p, j));
+        assert(i == static_cast< Vertex >(get(p, i)));
+        assert(j == static_cast< Vertex >(get(p, j)));
         if (i == j)
             return;
         if (get(rank, i) > get(rank, j))

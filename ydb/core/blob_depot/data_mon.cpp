@@ -8,6 +8,8 @@ namespace NKikimr::NBlobDepot {
     using TData = TBlobDepot::TData;
 
     void TData::RenderMainPage(IOutputStream& s) {
+        const auto trashLoadState = TrashLoadStateToString(TrashLoadState);
+
         HTML(s) {
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
@@ -19,6 +21,9 @@ namespace NKikimr::NBlobDepot {
                         KEYVALUE_P("Data size, number of keys", Data.size());
                         KEYVALUE_P("RefCount size, number of blobs", RefCountBlobs.size());
                         KEYVALUE_P("Total stored data size, bytes", FormatByteSize(TotalStoredDataSize));
+                        KEYVALUE_P("Trash load state", trashLoadState);
+                        KEYVALUE_P("Loaded trash, number of blobs", LoadedTrashRecords);
+                        KEYVALUE_P("Loaded trash size, bytes", FormatByteSize(TotalStoredTrashSize));
                         KEYVALUE_P("Keys made certain, number of keys", KeysMadeCertain.size());
                         KEYVALUE_P("Total number of useful S3 objects", RefCountS3.size());
                         KEYVALUE_P("Total bytes in useful S3 objects", FormatByteSize(TotalS3DataSize));

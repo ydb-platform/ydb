@@ -9,6 +9,7 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_observer.h
     configs_dispatcher_proxy.h
     configs_dispatcher_proxy.cpp
     console.cpp
@@ -34,6 +35,7 @@ SRCS(
     console__configure.cpp
     console__create_tenant.cpp
     console__drop_yaml_config.cpp
+    console__decommit_groups.cpp
     console__init_scheme.cpp
     console__load_state.cpp
     console__get_log_tail.cpp
@@ -99,6 +101,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/library/operation_id
@@ -115,5 +118,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    ut_configs_dispatcher
+    ut_console
 )

@@ -5,11 +5,13 @@
     "endpointPrefix":"lakeformation",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"AWS Lake Formation",
     "serviceId":"LakeFormation",
     "signatureVersion":"v4",
     "signingName":"lakeformation",
-    "uid":"lakeformation-2017-03-31"
+    "uid":"lakeformation-2017-03-31",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
     "AddLFTagsToResource":{
@@ -45,7 +47,7 @@
         {"shape":"EntityNotFoundException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Allows a caller to assume an IAM role decorated as the SAML user specified in the SAML assertion included in the request. This decoration allows Lake Formation to enforce access policies against the SAML users and groups. This API operation requires SAML federation setup in the caller’s account as it can only be called with valid SAML assertions. Lake Formation does not scope down the permission of the assumed role. All permissions attached to the role via the SAML federation setup will be included in the role session. </p> <p> This decorated role is expected to access data in Amazon S3 by getting temporary access from Lake Formation which is authorized via the virtual API <code>GetDataAccess</code>. Therefore, all SAML roles that can be assumed via <code>AssumeDecoratedRoleWithSAML</code> must at a minimum include <code>lakeformation:GetDataAccess</code> in their role policies. A typical IAM policy attached to such a role would look as follows: </p>"
+      "documentation":"<p>Allows a caller to assume an IAM role decorated as the SAML user specified in the SAML assertion included in the request. This decoration allows Lake Formation to enforce access policies against the SAML users and groups. This API operation requires SAML federation setup in the caller’s account as it can only be called with valid SAML assertions. Lake Formation does not scope down the permission of the assumed role. All permissions attached to the role via the SAML federation setup will be included in the role session. </p> <p> This decorated role is expected to access data in Amazon S3 by getting temporary access from Lake Formation which is authorized via the virtual API <code>GetDataAccess</code>. Therefore, all SAML roles that can be assumed via <code>AssumeDecoratedRoleWithSAML</code> must at a minimum include <code>lakeformation:GetDataAccess</code> in their role policies. A typical IAM policy attached to such a role would include the following actions: </p> <ul> <li> <p>glue:*Database*</p> </li> <li> <p>glue:*Table*</p> </li> <li> <p>glue:*Partition*</p> </li> <li> <p>glue:*UserDefinedFunction*</p> </li> <li> <p>lakeformation:GetDataAccess</p> </li> </ul>"
     },
     "BatchGrantPermissions":{
       "name":"BatchGrantPermissions",
@@ -149,6 +151,42 @@
       ],
       "documentation":"<p>Creates an LF-tag with the specified name and values.</p>"
     },
+    "CreateLFTagExpression":{
+      "name":"CreateLFTagExpression",
+      "http":{
+        "method":"POST",
+        "requestUri":"/CreateLFTagExpression"
+      },
+      "input":{"shape":"CreateLFTagExpressionRequest"},
+      "output":{"shape":"CreateLFTagExpressionResponse"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNumberLimitExceededException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"EntityNotFoundException"}
+      ],
+      "documentation":"<p>Creates a new LF-Tag expression with the provided name, description, catalog ID, and expression body. This call fails if a LF-Tag expression with the same name already exists in the caller’s account or if the underlying LF-Tags don't exist. To call this API operation, caller needs the following Lake Formation permissions:</p> <p> <code>CREATE_LF_TAG_EXPRESSION</code> on the root catalog resource.</p> <p> <code>GRANT_WITH_LF_TAG_EXPRESSION</code> on all underlying LF-Tag key:value pairs included in the expression. </p>"
+    },
+    "CreateLakeFormationIdentityCenterConfiguration":{
+      "name":"CreateLakeFormationIdentityCenterConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/CreateLakeFormationIdentityCenterConfiguration"
+      },
+      "input":{"shape":"CreateLakeFormationIdentityCenterConfigurationRequest"},
+      "output":{"shape":"CreateLakeFormationIdentityCenterConfigurationResponse"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"AlreadyExistsException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConcurrentModificationException"}
+      ],
+      "documentation":"<p>Creates an IAM Identity Center connection with Lake Formation to allow IAM Identity Center users and groups to access Data Catalog resources.</p>"
+    },
     "CreateLakeFormationOptIn":{
       "name":"CreateLakeFormationOptIn",
       "http":{
@@ -163,7 +201,8 @@
         {"shape":"OperationTimeoutException"},
         {"shape":"EntityNotFoundException"},
         {"shape":"AccessDeniedException"},
-        {"shape":"ConcurrentModificationException"}
+        {"shape":"ConcurrentModificationException"},
+        {"shape":"ResourceNumberLimitExceededException"}
       ],
       "documentation":"<p>Enforce Lake Formation permissions for the given databases, tables, and principals.</p>"
     },
@@ -199,7 +238,42 @@
         {"shape":"OperationTimeoutException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Deletes the specified LF-tag given a key name. If the input parameter tag key was not found, then the operation will throw an exception. When you delete an LF-tag, the <code>LFTagPolicy</code> attached to the LF-tag becomes invalid. If the deleted LF-tag was still assigned to any resource, the tag policy attach to the deleted LF-tag will no longer be applied to the resource.</p>"
+      "documentation":"<p> Deletes an LF-tag by its key name. The operation fails if the specified tag key doesn't exist. When you delete an LF-Tag: </p> <ul> <li> <p>The associated LF-Tag policy becomes invalid.</p> </li> <li> <p> Resources that had this tag assigned will no longer have the tag policy applied to them.</p> </li> </ul>"
+    },
+    "DeleteLFTagExpression":{
+      "name":"DeleteLFTagExpression",
+      "http":{
+        "method":"POST",
+        "requestUri":"/DeleteLFTagExpression"
+      },
+      "input":{"shape":"DeleteLFTagExpressionRequest"},
+      "output":{"shape":"DeleteLFTagExpressionResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Deletes the LF-Tag expression. The caller must be a data lake admin or have <code>DROP</code> permissions on the LF-Tag expression. Deleting a LF-Tag expression will also delete all <code>LFTagPolicy</code> permissions referencing the LF-Tag expression.</p>"
+    },
+    "DeleteLakeFormationIdentityCenterConfiguration":{
+      "name":"DeleteLakeFormationIdentityCenterConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/DeleteLakeFormationIdentityCenterConfiguration"
+      },
+      "input":{"shape":"DeleteLakeFormationIdentityCenterConfigurationRequest"},
+      "output":{"shape":"DeleteLakeFormationIdentityCenterConfigurationResponse"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConcurrentModificationException"}
+      ],
+      "documentation":"<p>Deletes an IAM Identity Center connection with Lake Formation.</p>"
     },
     "DeleteLakeFormationOptIn":{
       "name":"DeleteLakeFormationOptIn",
@@ -254,6 +328,23 @@
         {"shape":"EntityNotFoundException"}
       ],
       "documentation":"<p>Deregisters the resource as managed by the Data Catalog.</p> <p>When you deregister a path, Lake Formation removes the path from the inline policy attached to your service-linked role.</p>"
+    },
+    "DescribeLakeFormationIdentityCenterConfiguration":{
+      "name":"DescribeLakeFormationIdentityCenterConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/DescribeLakeFormationIdentityCenterConfiguration"
+      },
+      "input":{"shape":"DescribeLakeFormationIdentityCenterConfigurationRequest"},
+      "output":{"shape":"DescribeLakeFormationIdentityCenterConfigurationResponse"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves the instance ARN and application ARN for the connection.</p>"
     },
     "DescribeResource":{
       "name":"DescribeResource",
@@ -323,6 +414,21 @@
       ],
       "documentation":"<p>Returns a data cells filter.</p>"
     },
+    "GetDataLakePrincipal":{
+      "name":"GetDataLakePrincipal",
+      "http":{
+        "method":"POST",
+        "requestUri":"/GetDataLakePrincipal"
+      },
+      "input":{"shape":"GetDataLakePrincipalRequest"},
+      "output":{"shape":"GetDataLakePrincipalResponse"},
+      "errors":[
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns the identity of the invoking principal.</p>"
+    },
     "GetDataLakeSettings":{
       "name":"GetDataLakeSettings",
       "http":{
@@ -370,6 +476,23 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Returns an LF-tag definition.</p>"
+    },
+    "GetLFTagExpression":{
+      "name":"GetLFTagExpression",
+      "http":{
+        "method":"POST",
+        "requestUri":"/GetLFTagExpression"
+      },
+      "input":{"shape":"GetLFTagExpressionRequest"},
+      "output":{"shape":"GetLFTagExpressionResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns the details about the LF-Tag expression. The caller must be a data lake admin or must have <code>DESCRIBE</code> permission on the LF-Tag expression resource. </p>"
     },
     "GetQueryState":{
       "name":"GetQueryState",
@@ -479,7 +602,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"PermissionTypeMismatchException"}
       ],
-      "documentation":"<p>Allows a caller in a secure environment to assume a role with permission to access Amazon S3. In order to vend such credentials, Lake Formation assumes the role associated with a registered location, for example an Amazon S3 bucket, with a scope down policy which restricts the access to a single prefix.</p>"
+      "documentation":"<p>Allows a caller in a secure environment to assume a role with permission to access Amazon S3. In order to vend such credentials, Lake Formation assumes the role associated with a registered location, for example an Amazon S3 bucket, with a scope down policy which restricts the access to a single prefix.</p> <p>To call this API, the role that the service assumes must have <code>lakeformation:GetDataAccess</code> permission on the resource.</p>"
     },
     "GetWorkUnitResults":{
       "name":"GetWorkUnitResults",
@@ -550,6 +673,23 @@
       ],
       "documentation":"<p>Lists all the data cell filters on a table.</p>"
     },
+    "ListLFTagExpressions":{
+      "name":"ListLFTagExpressions",
+      "http":{
+        "method":"POST",
+        "requestUri":"/ListLFTagExpressions"
+      },
+      "input":{"shape":"ListLFTagExpressionsRequest"},
+      "output":{"shape":"ListLFTagExpressionsResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Returns the LF-Tag expressions in caller’s account filtered based on caller's permissions. Data Lake and read only admins implicitly can see all tag expressions in their account, else caller needs DESCRIBE permissions on tag expression.</p>"
+    },
     "ListLFTags":{
       "name":"ListLFTags",
       "http":{
@@ -596,7 +736,7 @@
         {"shape":"OperationTimeoutException"},
         {"shape":"InternalServiceException"}
       ],
-      "documentation":"<p>Returns a list of the principal permissions on the resource, filtered by the permissions of the caller. For example, if you are granted an ALTER permission, you are able to see only the principal permissions for ALTER.</p> <p>This operation returns only those permissions that have been explicitly granted.</p> <p>For information about permissions, see <a href=\"https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html\">Security and Access Control to Metadata and Data</a>.</p>"
+      "documentation":"<p>Returns a list of the principal permissions on the resource, filtered by the permissions of the caller. For example, if you are granted an ALTER permission, you are able to see only the principal permissions for ALTER.</p> <p>This operation returns only those permissions that have been explicitly granted. If both <code>Principal</code> and <code>Resource</code> parameters are provided, the response returns effective permissions rather than the explicitly granted permissions.</p> <p>For information about permissions, see <a href=\"https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html\">Security and Access Control to Metadata and Data</a>.</p>"
     },
     "ListResources":{
       "name":"ListResources",
@@ -675,7 +815,7 @@
         {"shape":"ResourceNumberLimitExceededException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Registers the resource as managed by the Data Catalog.</p> <p>To add or update data, Lake Formation needs read/write access to the chosen Amazon S3 path. Choose a role that you know has permission to do this, or choose the AWSServiceRoleForLakeFormationDataAccess service-linked role. When you register the first Amazon S3 path, the service-linked role and a new inline policy are created on your behalf. Lake Formation adds the first path to the inline policy and attaches it to the service-linked role. When you register subsequent paths, Lake Formation adds the path to the existing policy.</p> <p>The following request registers a new location and gives Lake Formation permission to use the service-linked role to access that location.</p> <p> <code>ResourceArn = arn:aws:s3:::my-bucket UseServiceLinkedRole = true</code> </p> <p>If <code>UseServiceLinkedRole</code> is not set to true, you must provide or set the <code>RoleArn</code>:</p> <p> <code>arn:aws:iam::12345:role/my-data-access-role</code> </p>"
+      "documentation":"<p>Registers the resource as managed by the Data Catalog.</p> <p>To add or update data, Lake Formation needs read/write access to the chosen data location. Choose a role that you know has permission to do this, or choose the AWSServiceRoleForLakeFormationDataAccess service-linked role. When you register the first Amazon S3 path, the service-linked role and a new inline policy are created on your behalf. Lake Formation adds the first path to the inline policy and attaches it to the service-linked role. When you register subsequent paths, Lake Formation adds the path to the existing policy.</p> <p>The following request registers a new location and gives Lake Formation permission to use the service-linked role to access that location.</p> <p> <code>ResourceArn = arn:aws:s3:::my-bucket/ UseServiceLinkedRole = true</code> </p> <p>If <code>UseServiceLinkedRole</code> is not set to true, you must provide or set the <code>RoleArn</code>:</p> <p> <code>arn:aws:iam::12345:role/my-data-access-role</code> </p>"
     },
     "RemoveLFTagsFromResource":{
       "name":"RemoveLFTagsFromResource",
@@ -815,6 +955,42 @@
       ],
       "documentation":"<p>Updates the list of possible values for the specified LF-tag key. If the LF-tag does not exist, the operation throws an EntityNotFoundException. The values in the delete key values will be deleted from list of possible values. If any value in the delete key values is attached to a resource, then API errors out with a 400 Exception - \"Update not allowed\". Untag the attribute before deleting the LF-tag key's value. </p>"
     },
+    "UpdateLFTagExpression":{
+      "name":"UpdateLFTagExpression",
+      "http":{
+        "method":"POST",
+        "requestUri":"/UpdateLFTagExpression"
+      },
+      "input":{"shape":"UpdateLFTagExpressionRequest"},
+      "output":{"shape":"UpdateLFTagExpressionResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNumberLimitExceededException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Updates the name of the LF-Tag expression to the new description and expression body provided. Updating a LF-Tag expression immediately changes the permission boundaries of all existing <code>LFTagPolicy</code> permission grants that reference the given LF-Tag expression.</p>"
+    },
+    "UpdateLakeFormationIdentityCenterConfiguration":{
+      "name":"UpdateLakeFormationIdentityCenterConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/UpdateLakeFormationIdentityCenterConfiguration"
+      },
+      "input":{"shape":"UpdateLakeFormationIdentityCenterConfigurationRequest"},
+      "output":{"shape":"UpdateLakeFormationIdentityCenterConfigurationResponse"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ConcurrentModificationException"}
+      ],
+      "documentation":"<p>Updates the IAM Identity Center connection parameters.</p>"
+    },
     "UpdateResource":{
       "name":"UpdateResource",
       "http":{
@@ -943,10 +1119,14 @@
       },
       "documentation":"<p>A new object to add to the governed table.</p>"
     },
+    "AdditionalContextMap":{
+      "type":"map",
+      "key":{"shape":"ContextKey"},
+      "value":{"shape":"ContextValue"}
+    },
     "AllRowsWildcard":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A structure that you pass to indicate you want all rows in a filter. </p>"
     },
     "AlreadyExistsException":{
@@ -959,6 +1139,14 @@
       },
       "documentation":"<p>A resource to be created or added already exists.</p>",
       "exception":true
+    },
+    "ApplicationArn":{"type":"string"},
+    "ApplicationStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
     },
     "AssumeDecoratedRoleWithSAMLRequest":{
       "type":"structure",
@@ -1088,6 +1276,7 @@
           "shape":"PermissionList",
           "documentation":"<p>The permissions to be granted.</p>"
         },
+        "Condition":{"shape":"Condition"},
         "PermissionsWithGrantOption":{
           "shape":"PermissionList",
           "documentation":"<p>Indicates if the option to pass permissions is granted.</p>"
@@ -1122,6 +1311,7 @@
         }
       }
     },
+    "Boolean":{"type":"boolean"},
     "BooleanNullable":{"type":"boolean"},
     "CancelTransactionRequest":{
       "type":"structure",
@@ -1135,8 +1325,7 @@
     },
     "CancelTransactionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CatalogIdString":{
       "type":"string",
@@ -1147,6 +1336,10 @@
     "CatalogResource":{
       "type":"structure",
       "members":{
+        "Id":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>An identifier for the catalog resource.</p>"
+        }
       },
       "documentation":"<p>A structure for the catalog object.</p>"
     },
@@ -1228,6 +1421,26 @@
       "documentation":"<p>Two processes are trying to modify a resource simultaneously.</p>",
       "exception":true
     },
+    "Condition":{
+      "type":"structure",
+      "members":{
+        "Expression":{
+          "shape":"ExpressionString",
+          "documentation":"<p>An expression written based on the Cedar Policy Language used to match the principal attributes.</p>"
+        }
+      },
+      "documentation":"<p>A Lake Formation condition, which applies to permissions and opt-ins that contain an expression.</p>"
+    },
+    "ContextKey":{
+      "type":"string",
+      "max":128,
+      "min":1
+    },
+    "ContextValue":{
+      "type":"string",
+      "max":256,
+      "min":0
+    },
     "CreateDataCellsFilterRequest":{
       "type":"structure",
       "required":["TableData"],
@@ -1240,8 +1453,36 @@
     },
     "CreateDataCellsFilterResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "CreateLFTagExpressionRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Expression"
+      ],
       "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>A name for the expression.</p>"
+        },
+        "Description":{
+          "shape":"DescriptionString",
+          "documentation":"<p>A description with information about the LF-Tag expression.</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment. </p>"
+        },
+        "Expression":{
+          "shape":"Expression",
+          "documentation":"<p>A list of LF-Tag conditions (key-value pairs).</p>"
+        }
       }
+    },
+    "CreateLFTagExpressionResponse":{
+      "type":"structure",
+      "members":{}
     },
     "CreateLFTagRequest":{
       "type":"structure",
@@ -1266,7 +1507,40 @@
     },
     "CreateLFTagResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "CreateLakeFormationIdentityCenterConfigurationRequest":{
+      "type":"structure",
       "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, view definitions, and other control information to manage your Lake Formation environment.</p>"
+        },
+        "InstanceArn":{
+          "shape":"IdentityCenterInstanceArn",
+          "documentation":"<p>The ARN of the IAM Identity Center instance for which the operation will be executed. For more information about ARNs, see Amazon Resource Names (ARNs) and Amazon Web Services Service Namespaces in the Amazon Web Services General Reference.</p>"
+        },
+        "ExternalFiltering":{
+          "shape":"ExternalFilteringConfiguration",
+          "documentation":"<p>A list of the account IDs of Amazon Web Services accounts of third-party applications that are allowed to access data managed by Lake Formation.</p>"
+        },
+        "ShareRecipients":{
+          "shape":"DataLakePrincipalList",
+          "documentation":"<p>A list of Amazon Web Services account IDs and/or Amazon Web Services organization/organizational unit ARNs that are allowed to access data managed by Lake Formation. </p> <p>If the <code>ShareRecipients</code> list includes valid values, a resource share is created with the principals you want to have access to the resources.</p> <p>If the <code>ShareRecipients</code> value is null or the list is empty, no resource share is created.</p>"
+        },
+        "ServiceIntegrations":{
+          "shape":"ServiceIntegrationList",
+          "documentation":"<p>A list of service integrations for enabling trusted identity propagation with external services such as Redshift.</p>"
+        }
+      }
+    },
+    "CreateLakeFormationIdentityCenterConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "ApplicationArn":{
+          "shape":"ApplicationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Lake Formation application integrated with IAM Identity Center.</p>"
+        }
       }
     },
     "CreateLakeFormationOptInRequest":{
@@ -1277,13 +1551,13 @@
       ],
       "members":{
         "Principal":{"shape":"DataLakePrincipal"},
-        "Resource":{"shape":"Resource"}
+        "Resource":{"shape":"Resource"},
+        "Condition":{"shape":"Condition"}
       }
     },
     "CreateLakeFormationOptInResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "CredentialTimeoutDurationSecondInteger":{
       "type":"integer",
@@ -1392,7 +1666,8 @@
         "LF_TAG",
         "LF_TAG_POLICY",
         "LF_TAG_POLICY_DATABASE",
-        "LF_TAG_POLICY_TABLE"
+        "LF_TAG_POLICY_TABLE",
+        "LF_NAMED_TAG_EXPRESSION"
       ]
     },
     "DataLakeSettings":{
@@ -1416,7 +1691,7 @@
         },
         "Parameters":{
           "shape":"ParametersMap",
-          "documentation":"<p>A key-value map that provides an additional configuration on your data lake. CrossAccountVersion is the key you can configure in the Parameters field. Accepted values for the CrossAccountVersion key are 1, 2, and 3.</p>"
+          "documentation":"<p>A key-value map that provides an additional configuration on your data lake. CROSS_ACCOUNT_VERSION is the key you can configure in the Parameters field. Accepted values for the CrossAccountVersion key are 1, 2, 3, and 4.</p>"
         },
         "TrustedResourceOwners":{
           "shape":"TrustedResourceOwners",
@@ -1502,8 +1777,25 @@
     },
     "DeleteDataCellsFilterResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "DeleteLFTagExpressionRequest":{
+      "type":"structure",
+      "required":["Name"],
       "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name for the LF-Tag expression.</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID in which the LF-Tag expression is saved. </p>"
+        }
       }
+    },
+    "DeleteLFTagExpressionResponse":{
+      "type":"structure",
+      "members":{}
     },
     "DeleteLFTagRequest":{
       "type":"structure",
@@ -1521,8 +1813,20 @@
     },
     "DeleteLFTagResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "DeleteLakeFormationIdentityCenterConfigurationRequest":{
+      "type":"structure",
       "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, view definition, and other control information to manage your Lake Formation environment.</p>"
+        }
       }
+    },
+    "DeleteLakeFormationIdentityCenterConfigurationResponse":{
+      "type":"structure",
+      "members":{}
     },
     "DeleteLakeFormationOptInRequest":{
       "type":"structure",
@@ -1532,13 +1836,13 @@
       ],
       "members":{
         "Principal":{"shape":"DataLakePrincipal"},
-        "Resource":{"shape":"Resource"}
+        "Resource":{"shape":"Resource"},
+        "Condition":{"shape":"Condition"}
       }
     },
     "DeleteLakeFormationOptInResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteObjectInput":{
       "type":"structure",
@@ -1592,8 +1896,7 @@
     },
     "DeleteObjectsOnCancelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeregisterResourceRequest":{
       "type":"structure",
@@ -1607,7 +1910,48 @@
     },
     "DeregisterResourceResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "DescribeLakeFormationIdentityCenterConfigurationRequest":{
+      "type":"structure",
       "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.</p>"
+        }
+      }
+    },
+    "DescribeLakeFormationIdentityCenterConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, and other control information to manage your Lake Formation environment.</p>"
+        },
+        "InstanceArn":{
+          "shape":"IdentityCenterInstanceArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the connection.</p>"
+        },
+        "ApplicationArn":{
+          "shape":"ApplicationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Lake Formation application integrated with IAM Identity Center.</p>"
+        },
+        "ExternalFiltering":{
+          "shape":"ExternalFilteringConfiguration",
+          "documentation":"<p>Indicates if external filtering is enabled.</p>"
+        },
+        "ShareRecipients":{
+          "shape":"DataLakePrincipalList",
+          "documentation":"<p>A list of Amazon Web Services account IDs or Amazon Web Services organization/organizational unit ARNs that are allowed to access data managed by Lake Formation. </p> <p>If the <code>ShareRecipients</code> list includes valid values, a resource share is created with the principals you want to have access to the resources as the <code>ShareRecipients</code>.</p> <p>If the <code>ShareRecipients</code> value is null or the list is empty, no resource share is created.</p>"
+        },
+        "ServiceIntegrations":{
+          "shape":"ServiceIntegrationList",
+          "documentation":"<p>A list of service integrations for enabling trusted identity propagation with external services such as Redshift.</p>"
+        },
+        "ResourceShare":{
+          "shape":"RAMResourceShareArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the RAM share.</p>"
+        }
       }
     },
     "DescribeResourceRequest":{
@@ -1669,6 +2013,13 @@
       "max":255,
       "min":1,
       "pattern":"[\\p{L}\\p{N}\\p{P}]*"
+    },
+    "EnableStatus":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
     },
     "EntityNotFoundException":{
       "type":"structure",
@@ -1734,6 +2085,10 @@
       "type":"list",
       "member":{"shape":"LFTag"}
     },
+    "ExpressionString":{
+      "type":"string",
+      "max":3000
+    },
     "ExtendTransactionRequest":{
       "type":"structure",
       "members":{
@@ -1745,8 +2100,25 @@
     },
     "ExtendTransactionResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "ExternalFilteringConfiguration":{
+      "type":"structure",
+      "required":[
+        "Status",
+        "AuthorizedTargets"
+      ],
       "members":{
-      }
+        "Status":{
+          "shape":"EnableStatus",
+          "documentation":"<p>Allows to enable or disable the third-party applications that are allowed to access data managed by Lake Formation.</p>"
+        },
+        "AuthorizedTargets":{
+          "shape":"ScopeTargets",
+          "documentation":"<p>List of third-party application <code>ARNs</code> integrated with Lake Formation.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for enabling external data filtering for third-party applications to access data managed by Lake Formation .</p>"
     },
     "FieldNameString":{
       "type":"string",
@@ -1816,6 +2188,19 @@
         }
       }
     },
+    "GetDataLakePrincipalRequest":{
+      "type":"structure",
+      "members":{}
+    },
+    "GetDataLakePrincipalResponse":{
+      "type":"structure",
+      "members":{
+        "Identity":{
+          "shape":"IdentityString",
+          "documentation":"<p>A unique identifier of the invoking principal.</p>"
+        }
+      }
+    },
     "GetDataLakeSettingsRequest":{
       "type":"structure",
       "members":{
@@ -1866,6 +2251,41 @@
         "NextToken":{
           "shape":"Token",
           "documentation":"<p>A continuation token, if this is not the first call to retrieve this list.</p>"
+        }
+      }
+    },
+    "GetLFTagExpressionRequest":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name for the LF-Tag expression</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID.</p>"
+        }
+      }
+    },
+    "GetLFTagExpressionResponse":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name for the LF-Tag expression. </p>"
+        },
+        "Description":{
+          "shape":"DescriptionString",
+          "documentation":"<p>The description with information about the LF-Tag expression.</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID in which the LF-Tag expression is saved.</p>"
+        },
+        "Expression":{
+          "shape":"Expression",
+          "documentation":"<p>The body of the LF-Tag expression. It is composed of one or more LF-Tag key-value pairs.</p>"
         }
       }
     },
@@ -2128,6 +2548,14 @@
         "SupportedPermissionTypes":{
           "shape":"PermissionTypeList",
           "documentation":"<p>A list of supported permission types for the table. Valid values are <code>COLUMN_PERMISSION</code> and <code>CELL_FILTER_PERMISSION</code>.</p>"
+        },
+        "S3Path":{
+          "shape":"PathString",
+          "documentation":"<p>The Amazon S3 path for the table.</p>"
+        },
+        "QuerySessionContext":{
+          "shape":"QuerySessionContext",
+          "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
         }
       }
     },
@@ -2149,6 +2577,10 @@
         "Expiration":{
           "shape":"ExpirationTimestamp",
           "documentation":"<p>The date and time when the temporary credentials expire.</p>"
+        },
+        "VendedS3Path":{
+          "shape":"PathStringList",
+          "documentation":"<p>The Amazon S3 path for the temporary credentials.</p>"
         }
       }
     },
@@ -2274,6 +2706,7 @@
           "shape":"PermissionList",
           "documentation":"<p>The permissions granted to the principal on the resource. Lake Formation defines privileges to grant and revoke access to metadata in the Data Catalog and data organized in underlying data storage such as Amazon S3. Lake Formation requires that each principal be authorized to perform a specific task on Lake Formation resources. </p>"
         },
+        "Condition":{"shape":"Condition"},
         "PermissionsWithGrantOption":{
           "shape":"PermissionList",
           "documentation":"<p>Indicates a list of the granted permissions that the principal may pass to other users. These permissions may only be a subset of the permissions granted in the <code>Privileges</code>.</p>"
@@ -2282,8 +2715,13 @@
     },
     "GrantPermissionsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
+    },
+    "HashString":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
     },
     "IAMRoleArn":{
       "type":"string",
@@ -2298,6 +2736,8 @@
       "max":255,
       "min":1
     },
+    "IdentityCenterInstanceArn":{"type":"string"},
+    "IdentityString":{"type":"string"},
     "Integer":{
       "type":"integer",
       "box":true
@@ -2372,6 +2812,47 @@
       "type":"list",
       "member":{"shape":"LFTagError"}
     },
+    "LFTagExpression":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name for saved the LF-Tag expression.</p>"
+        },
+        "Description":{
+          "shape":"DescriptionString",
+          "documentation":"<p>A structure that contains information about the LF-Tag expression.</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. </p>"
+        },
+        "Expression":{
+          "shape":"Expression",
+          "documentation":"<p>A logical expression composed of one or more LF-Tags.</p>"
+        }
+      },
+      "documentation":"<p>A structure consists LF-Tag expression name and catalog ID.</p>"
+    },
+    "LFTagExpressionResource":{
+      "type":"structure",
+      "required":["Name"],
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. </p>"
+        },
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name of the LF-Tag expression to grant permissions on.</p>"
+        }
+      },
+      "documentation":"<p>A structure containing a LF-Tag expression (keys and values).</p>"
+    },
+    "LFTagExpressionsList":{
+      "type":"list",
+      "member":{"shape":"LFTagExpression"}
+    },
     "LFTagKey":{
       "type":"string",
       "max":128,
@@ -2424,10 +2905,7 @@
     },
     "LFTagPolicyResource":{
       "type":"structure",
-      "required":[
-        "ResourceType",
-        "Expression"
-      ],
+      "required":["ResourceType"],
       "members":{
         "CatalogId":{
           "shape":"CatalogIdString",
@@ -2439,10 +2917,14 @@
         },
         "Expression":{
           "shape":"Expression",
-          "documentation":"<p>A list of LF-tag conditions that apply to the resource's LF-tag policy.</p>"
+          "documentation":"<p>A list of LF-tag conditions or a saved expression that apply to the resource's LF-tag policy.</p>"
+        },
+        "ExpressionName":{
+          "shape":"NameString",
+          "documentation":"<p>If provided, permissions are granted to the Data Catalog resources whose assigned LF-Tags match the expression body of the saved expression under the provided <code>ExpressionName</code>.</p>"
         }
       },
-      "documentation":"<p>A structure containing a list of LF-tag conditions that apply to a resource's LF-tag policy.</p>"
+      "documentation":"<p>A structure containing a list of LF-tag conditions or saved LF-Tag expressions that apply to a resource's LF-tag policy.</p>"
     },
     "LFTagValue":{
       "type":"string",
@@ -2461,6 +2943,10 @@
       "members":{
         "Resource":{"shape":"Resource"},
         "Principal":{"shape":"DataLakePrincipal"},
+        "Condition":{
+          "shape":"Condition",
+          "documentation":"<p>A Lake Formation condition, which applies to permissions and opt-ins that contain an expression.</p>"
+        },
         "LastModified":{
           "shape":"LastModifiedTimestamp",
           "documentation":"<p>The last modified date and time of the record.</p>"
@@ -2504,6 +2990,36 @@
         "NextToken":{
           "shape":"Token",
           "documentation":"<p>A continuation token, if not all requested data cell filters have been returned.</p>"
+        }
+      }
+    },
+    "ListLFTagExpressionsRequest":{
+      "type":"structure",
+      "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. </p>"
+        },
+        "MaxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of results to return.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if this is not the first call to retrieve this list.</p>"
+        }
+      }
+    },
+    "ListLFTagExpressionsResponse":{
+      "type":"structure",
+      "members":{
+        "LFTagExpressions":{
+          "shape":"LFTagExpressionsList",
+          "documentation":"<p>Logical expressions composed of one more LF-Tag key-value pairs.</p>"
+        },
+        "NextToken":{
+          "shape":"Token",
+          "documentation":"<p>A continuation token, if this is not the first call to retrieve this list.</p>"
         }
       }
     },
@@ -2601,7 +3117,7 @@
         },
         "IncludeRelated":{
           "shape":"TrueFalseString",
-          "documentation":"<p>Indicates that related permissions should be included in the results.</p>"
+          "documentation":"<p>Indicates that related permissions should be included in the results when listing permissions on a table resource.</p> <p>Set the field to <code>TRUE</code> to show the cell filters on a table resource. Default is <code>FALSE</code>. The Principal parameter must not be specified when requesting cell filter information.</p>"
         }
       }
     },
@@ -2739,6 +3255,10 @@
       "type":"boolean",
       "box":true
     },
+    "NullableString":{
+      "type":"string",
+      "box":true
+    },
     "NumberOfBytes":{"type":"long"},
     "NumberOfItems":{"type":"long"},
     "NumberOfMilliseconds":{"type":"long"},
@@ -2816,6 +3336,11 @@
       "type":"list",
       "member":{"shape":"PartitionObjects"}
     },
+    "PathString":{"type":"string"},
+    "PathStringList":{
+      "type":"list",
+      "member":{"shape":"PathString"}
+    },
     "Permission":{
       "type":"string",
       "enum":[
@@ -2831,7 +3356,10 @@
         "DATA_LOCATION_ACCESS",
         "CREATE_LF_TAG",
         "ASSOCIATE",
-        "GRANT_WITH_LF_TAG_EXPRESSION"
+        "GRANT_WITH_LF_TAG_EXPRESSION",
+        "CREATE_LF_TAG_EXPRESSION",
+        "CREATE_CATALOG",
+        "SUPER_USER"
       ]
     },
     "PermissionList":{
@@ -2921,6 +3449,10 @@
           "shape":"Resource",
           "documentation":"<p>The resource where permissions are to be granted or revoked.</p>"
         },
+        "Condition":{
+          "shape":"Condition",
+          "documentation":"<p>A Lake Formation condition, which applies to permissions and opt-ins that contain an expression.</p>"
+        },
         "Permissions":{
           "shape":"PermissionList",
           "documentation":"<p>The permissions to be granted or revoked on the resource.</p>"
@@ -2964,8 +3496,7 @@
     },
     "PutDataLakeSettingsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueryIdString":{"type":"string"},
     "QueryParameterMap":{
@@ -3005,6 +3536,32 @@
       "min":1,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
     },
+    "QuerySessionContext":{
+      "type":"structure",
+      "members":{
+        "QueryId":{
+          "shape":"HashString",
+          "documentation":"<p>A unique identifier generated by the query engine for the query.</p>"
+        },
+        "QueryStartTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>A timestamp provided by the query engine for when the query started.</p>"
+        },
+        "ClusterId":{
+          "shape":"NullableString",
+          "documentation":"<p>An identifier string for the consumer cluster.</p>"
+        },
+        "QueryAuthorizationId":{
+          "shape":"HashString",
+          "documentation":"<p>A cryptographically generated query identifier generated by Glue or Lake Formation.</p>"
+        },
+        "AdditionalContext":{
+          "shape":"AdditionalContextMap",
+          "documentation":"<p>An opaque string-string map passed by the query engine.</p>"
+        }
+      },
+      "documentation":"<p>A structure used as a protocol between query engines and Lake Formation or Glue. Contains both a Lake Formation generated authorization identifier and information from the request's authorization context.</p>"
+    },
     "QueryStateString":{
       "type":"string",
       "enum":[
@@ -3016,6 +3573,33 @@
       ]
     },
     "RAMResourceShareArn":{"type":"string"},
+    "RedshiftConnect":{
+      "type":"structure",
+      "required":["Authorization"],
+      "members":{
+        "Authorization":{
+          "shape":"ServiceAuthorization",
+          "documentation":"<p>The authorization status for Redshift Connect. Valid values are ENABLED or DISABLED.</p>"
+        }
+      },
+      "documentation":"<p>Configuration for enabling trusted identity propagation with Redshift Connect.</p>"
+    },
+    "RedshiftScopeUnion":{
+      "type":"structure",
+      "members":{
+        "RedshiftConnect":{
+          "shape":"RedshiftConnect",
+          "documentation":"<p>Configuration for Redshift Connect integration.</p>"
+        }
+      },
+      "documentation":"<p>A union structure representing different Redshift integration scopes.</p>",
+      "union":true
+    },
+    "RedshiftServiceIntegrations":{
+      "type":"list",
+      "member":{"shape":"RedshiftScopeUnion"},
+      "documentation":"<p>A list of Redshift service integration configurations.</p>"
+    },
     "RegisterResourceRequest":{
       "type":"structure",
       "required":["ResourceArn"],
@@ -3039,13 +3623,16 @@
         "HybridAccessEnabled":{
           "shape":"NullableBoolean",
           "documentation":"<p> Specifies whether the data access of tables pointing to the location can be managed by both Lake Formation permissions as well as Amazon S3 bucket policies. </p>"
+        },
+        "WithPrivilegedAccess":{
+          "shape":"Boolean",
+          "documentation":"<p>Grants the calling principal the permissions to perform all supported Lake Formation operations on the registered data location. </p>"
         }
       }
     },
     "RegisterResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RemoveLFTagsFromResourceRequest":{
       "type":"structure",
@@ -3106,11 +3693,15 @@
         },
         "LFTag":{
           "shape":"LFTagKeyResource",
-          "documentation":"<p>The LF-tag key and values attached to a resource.</p>"
+          "documentation":"<p>The LF-Tag key and values attached to a resource.</p>"
         },
         "LFTagPolicy":{
           "shape":"LFTagPolicyResource",
-          "documentation":"<p>A list of LF-tag conditions that define a resource's LF-tag policy.</p>"
+          "documentation":"<p>A list of LF-tag conditions or saved LF-Tag expressions that define a resource's LF-tag policy.</p>"
+        },
+        "LFTagExpression":{
+          "shape":"LFTagExpressionResource",
+          "documentation":"<p>LF-Tag expression resource. A logical expression composed of one or more LF-Tag key:value pairs.</p>"
         }
       },
       "documentation":"<p>A structure for the resource.</p>"
@@ -3138,6 +3729,10 @@
         "HybridAccessEnabled":{
           "shape":"NullableBoolean",
           "documentation":"<p> Indicates whether the data access of tables pointing to the location can be managed by both Lake Formation permissions as well as Amazon S3 bucket policies. </p>"
+        },
+        "WithPrivilegedAccess":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>Grants the calling principal the permissions to perform all supported Lake Formation operations on the registered data location. </p>"
         }
       },
       "documentation":"<p>A structure containing information about an Lake Formation resource.</p>"
@@ -3216,6 +3811,7 @@
           "shape":"PermissionList",
           "documentation":"<p>The permissions revoked to the principal on the resource. For information about permissions, see <a href=\"https://docs.aws.amazon.com/lake-formation/latest/dg/security-data-access.html\">Security and Access Control to Metadata and Data</a>.</p>"
         },
+        "Condition":{"shape":"Condition"},
         "PermissionsWithGrantOption":{
           "shape":"PermissionList",
           "documentation":"<p>Indicates a list of permissions for which to revoke the grant option allowing the principal to pass permissions to other principals.</p>"
@@ -3224,8 +3820,7 @@
     },
     "RevokePermissionsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "RowFilter":{
       "type":"structure",
@@ -3245,6 +3840,11 @@
       "type":"string",
       "max":100000,
       "min":4
+    },
+    "ScopeTarget":{"type":"string"},
+    "ScopeTargets":{
+      "type":"list",
+      "member":{"shape":"ScopeTarget"}
     },
     "SearchDatabasesByLFTagsRequest":{
       "type":"structure",
@@ -3314,7 +3914,7 @@
       "members":{
         "NextToken":{
           "shape":"Token",
-          "documentation":"<p>A continuation token, present if the current list segment is not the last.</p>"
+          "documentation":"<p>A continuation token, present if the current list segment is not the last. On the first run, if you include a not null (a value) token you can get empty pages.</p>"
         },
         "TableList":{
           "shape":"TableLFTagsList",
@@ -3323,6 +3923,30 @@
       }
     },
     "SecretAccessKeyString":{"type":"string"},
+    "ServiceAuthorization":{
+      "type":"string",
+      "documentation":"<p>Authorization status for service integrations. Specify a value of <code>ENABLED</code> or <code>DISABLED</code>.</p>",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
+    },
+    "ServiceIntegrationList":{
+      "type":"list",
+      "member":{"shape":"ServiceIntegrationUnion"},
+      "documentation":"<p>A list of service integrations for trusted identity propagation.</p>"
+    },
+    "ServiceIntegrationUnion":{
+      "type":"structure",
+      "members":{
+        "Redshift":{
+          "shape":"RedshiftServiceIntegrations",
+          "documentation":"<p>Redshift service integration configuration.</p>"
+        }
+      },
+      "documentation":"<p>A union structure representing different service integration types.</p>",
+      "union":true
+    },
     "SessionTokenString":{"type":"string"},
     "StartQueryPlanningRequest":{
       "type":"structure",
@@ -3494,8 +4118,7 @@
     },
     "TableWildcard":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A wildcard object representing every table under a database.</p>"
     },
     "TableWithColumnsResource":{
@@ -3714,8 +4337,36 @@
     },
     "UpdateDataCellsFilterResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "UpdateLFTagExpressionRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "Expression"
+      ],
       "members":{
+        "Name":{
+          "shape":"NameString",
+          "documentation":"<p>The name for the LF-Tag expression.</p>"
+        },
+        "Description":{
+          "shape":"DescriptionString",
+          "documentation":"<p>The description with information about the saved LF-Tag expression.</p>"
+        },
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. </p>"
+        },
+        "Expression":{
+          "shape":"Expression",
+          "documentation":"<p>The LF-Tag expression body composed of one more LF-Tag key-value pairs.</p>"
+        }
       }
+    },
+    "UpdateLFTagExpressionResponse":{
+      "type":"structure",
+      "members":{}
     },
     "UpdateLFTagRequest":{
       "type":"structure",
@@ -3741,8 +4392,36 @@
     },
     "UpdateLFTagResponse":{
       "type":"structure",
+      "members":{}
+    },
+    "UpdateLakeFormationIdentityCenterConfigurationRequest":{
+      "type":"structure",
       "members":{
+        "CatalogId":{
+          "shape":"CatalogIdString",
+          "documentation":"<p>The identifier for the Data Catalog. By default, the account ID. The Data Catalog is the persistent metadata store. It contains database definitions, table definitions, view definitions, and other control information to manage your Lake Formation environment.</p>"
+        },
+        "ShareRecipients":{
+          "shape":"DataLakePrincipalList",
+          "documentation":"<p>A list of Amazon Web Services account IDs or Amazon Web Services organization/organizational unit ARNs that are allowed to access to access data managed by Lake Formation. </p> <p>If the <code>ShareRecipients</code> list includes valid values, then the resource share is updated with the principals you want to have access to the resources.</p> <p>If the <code>ShareRecipients</code> value is null, both the list of share recipients and the resource share remain unchanged.</p> <p>If the <code>ShareRecipients</code> value is an empty list, then the existing share recipients list will be cleared, and the resource share will be deleted.</p>"
+        },
+        "ServiceIntegrations":{
+          "shape":"ServiceIntegrationList",
+          "documentation":"<p>A list of service integrations for enabling trusted identity propagation with external services such as Redshift.</p>"
+        },
+        "ApplicationStatus":{
+          "shape":"ApplicationStatus",
+          "documentation":"<p>Allows to enable or disable the IAM Identity Center connection.</p>"
+        },
+        "ExternalFiltering":{
+          "shape":"ExternalFilteringConfiguration",
+          "documentation":"<p>A list of the account IDs of Amazon Web Services accounts of third-party applications that are allowed to access data managed by Lake Formation.</p>"
+        }
       }
+    },
+    "UpdateLakeFormationIdentityCenterConfigurationResponse":{
+      "type":"structure",
+      "members":{}
     },
     "UpdateResourceRequest":{
       "type":"structure",
@@ -3771,8 +4450,7 @@
     },
     "UpdateResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateTableObjectsRequest":{
       "type":"structure",
@@ -3806,8 +4484,7 @@
     },
     "UpdateTableObjectsResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateTableStorageOptimizerRequest":{
       "type":"structure",
@@ -3831,7 +4508,7 @@
         },
         "StorageOptimizerConfig":{
           "shape":"StorageOptimizerConfigMap",
-          "documentation":"<p>Name of the table for which to enable the storage optimizer.</p>"
+          "documentation":"<p>Name of the configuration for the storage optimizer.</p>"
         }
       }
     },

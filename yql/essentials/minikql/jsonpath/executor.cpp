@@ -1,7 +1,7 @@
 #include "executor.h"
 #include <yql/essentials/minikql/jsonpath/parser/parse_double.h>
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/dom/node.h>
 
 #include <util/generic/scope.h>
@@ -32,7 +32,7 @@ TIssue MakeError(const TJsonPathItem& item, TIssueCode code, const TStringBuf me
     return MakeError(item.Pos, code, message);
 }
 
-}
+} // namespace
 
 TResult::TResult(TJsonNodes&& nodes)
     : Result_(std::move(nodes))
@@ -66,11 +66,11 @@ bool TResult::IsError() const {
 }
 
 TExecutor::TExecutor(
-    const TJsonPathPtr path,
+    TJsonPathPtr path,
     const TJsonNodes& input,
     const TVariablesMap& variables,
     const IValueBuilder* valueBuilder)
-    : Reader_(path)
+    : Reader_(std::move(path))
     , Input_(input)
     , Variables_(variables)
     , ValueBuilder_(valueBuilder)
@@ -207,7 +207,7 @@ TResult TExecutor::NumberLiteral(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::MemberAccess(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -235,7 +235,7 @@ TResult TExecutor::MemberAccess(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::WildcardMemberAccess(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -311,7 +311,7 @@ TMaybe<TIssue> TExecutor::EnsureArraySubscripts(const TJsonPathItem& item, TVect
 }
 
 TResult TExecutor::ArrayAccess(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -375,7 +375,7 @@ TResult TExecutor::ArrayAccess(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::WildcardArrayAccess(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -396,7 +396,7 @@ TResult TExecutor::WildcardArrayAccess(const TJsonPathItem& item) {
 
 TResult TExecutor::UnaryArithmeticOp(const TJsonPathItem& item) {
     const auto& operandItem = Reader_.ReadInput(item);
-    const auto operandsResult = Execute(operandItem);
+    auto operandsResult = Execute(operandItem);
     if (operandsResult.IsError()) {
         return operandsResult;
     }
@@ -408,8 +408,7 @@ TResult TExecutor::UnaryArithmeticOp(const TJsonPathItem& item) {
         if (!operand.IsNumber()) {
             return MakeError(
                 operandItem, TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE,
-                TStringBuilder() << "Unsupported type for unary operations"
-            );
+                TStringBuilder() << "Unsupported type for unary operations");
         }
 
         if (item.Type == EJsonPathItemType::UnaryPlus) {
@@ -433,8 +432,7 @@ TMaybe<TIssue> TExecutor::EnsureBinaryArithmeticOpArgument(TPosition pos, const 
     if (!value.IsNumber()) {
         return MakeError(
             pos, TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE,
-            TStringBuilder() << "Unsupported type for binary operations"
-        );
+            TStringBuilder() << "Unsupported type for binary operations");
     }
 
     result = value.GetNumber();
@@ -443,7 +441,7 @@ TMaybe<TIssue> TExecutor::EnsureBinaryArithmeticOpArgument(TPosition pos, const 
 
 TResult TExecutor::BinaryArithmeticOp(const TJsonPathItem& item) {
     const auto& leftItem = Reader_.ReadLeftOperand(item);
-    const auto leftResult = Execute(leftItem);
+    auto leftResult = Execute(leftItem);
     if (leftResult.IsError()) {
         return leftResult;
     }
@@ -455,7 +453,7 @@ TResult TExecutor::BinaryArithmeticOp(const TJsonPathItem& item) {
     }
 
     const auto& rightItem = Reader_.ReadRightOperand(item);
-    const auto rightResult = Execute(rightItem);
+    auto rightResult = Execute(rightItem);
     if (rightResult.IsError()) {
         return rightResult;
     }
@@ -519,7 +517,7 @@ TMaybe<TIssue> TExecutor::EnsureLogicalOpArgument(TPosition pos, const TJsonNode
 
 TResult TExecutor::BinaryLogicalOp(const TJsonPathItem& item) {
     const auto& leftItem = Reader_.ReadLeftOperand(item);
-    const auto leftResult = Execute(leftItem);
+    auto leftResult = Execute(leftItem);
     if (leftResult.IsError()) {
         return leftResult;
     }
@@ -531,7 +529,7 @@ TResult TExecutor::BinaryLogicalOp(const TJsonPathItem& item) {
     }
 
     const auto& rightItem = Reader_.ReadRightOperand(item);
-    const auto rightResult = Execute(rightItem);
+    auto rightResult = Execute(rightItem);
     if (rightResult.IsError()) {
         return rightResult;
     }
@@ -601,7 +599,7 @@ TResult TExecutor::UnaryLogicalOp(const TJsonPathItem& item) {
         | null  | null  |
     */
     const auto& operandItem = Reader_.ReadInput(item);
-    const auto operandResult = Execute(operandItem);
+    auto operandResult = Execute(operandItem);
     if (operandResult.IsError()) {
         return operandResult;
     }
@@ -756,7 +754,7 @@ TResult TExecutor::FilterObject(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::FilterPredicate(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -897,7 +895,7 @@ TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
         return input;
     }
     TJsonNodes result;
-    TPair row[2];
+    std::array<TPair, 2> row;
     TPair& nameEntry = row[0];
     TPair& valueEntry = row[1];
     for (const auto& node : OptionalUnwrapArrays(input.GetNodes())) {
@@ -915,7 +913,7 @@ TResult TExecutor::KeyValueMethod(const TJsonPathItem& item) {
             valueEntry.first = MakeString("value", ValueBuilder_);
             valueEntry.second = value.ConvertToUnboxedValue(ValueBuilder_);
 
-            result.push_back(TValue(MakeDict(row, 2)));
+            result.push_back(TValue(MakeDict(row.data(), 2)));
         }
     }
     return std::move(result);
@@ -937,7 +935,7 @@ TResult TExecutor::StartsWithPredicate(const TJsonPathItem& item) {
         return MakeError(item, TIssuesIds::JSONPATH_INVALID_STARTS_WITH_ARGUMENT, "Type of input argument for starts with predicate must be string");
     }
 
-    const auto prefix = Execute(Reader_.ReadPrefix(item));
+    auto prefix = Execute(Reader_.ReadPrefix(item));
     if (prefix.IsError()) {
         return prefix;
     }
@@ -963,7 +961,7 @@ TResult TExecutor::StartsWithPredicate(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::IsUnknownPredicate(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -995,7 +993,7 @@ TResult TExecutor::ExistsPredicate(const TJsonPathItem& item) {
 }
 
 TResult TExecutor::LikeRegexPredicate(const TJsonPathItem& item) {
-    const auto input = Execute(Reader_.ReadInput(item));
+    auto input = Execute(Reader_.ReadInput(item));
     if (input.IsError()) {
         return input;
     }
@@ -1060,5 +1058,4 @@ TJsonNodes TExecutor::OptionalArrayWrapNodes(const TJsonNodes& input) {
     return result;
 }
 
-}
-
+} // namespace NYql::NJsonPath

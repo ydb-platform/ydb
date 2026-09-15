@@ -413,6 +413,84 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "ResourceCatalogs"
+    },
+    "ListClusterNodes": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "ClusterNodeSummaries"
+    },
+    "ListClusters": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "ClusterSummaries"
+    },
+    "ListInferenceComponents": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "InferenceComponents"
+    },
+    "ListMlflowTrackingServers": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "TrackingServerSummaries"
+    },
+    "ListOptimizationJobs": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "OptimizationJobSummaries"
+    },
+    "ListClusterSchedulerConfigs": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "ClusterSchedulerConfigSummaries"
+    },
+    "ListComputeQuotas": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "ComputeQuotaSummaries"
+    },
+    "ListPartnerApps": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Summaries"
+    },
+    "ListTrainingPlans": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "TrainingPlanSummaries"
+    },
+    "CreateHubContentPresignedUrls": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "AuthorizedUrlConfigs"
+    },
+    "ListPipelineVersions": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "PipelineVersionSummaries"
+    },
+    "ListClusterEvents": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "Events"
+    },
+    "ListUltraServersByReservedCapacity": {
+      "input_token": "NextToken",
+      "output_token": "NextToken",
+      "limit_key": "MaxResults",
+      "result_key": "UltraServers"
     }
   }
 }

@@ -1,0 +1,17 @@
+/* hybridfile can not YQL-17743 */
+USE plato;
+
+$in = (
+    select
+        *
+    from Input
+    where subkey > '1'
+    order by
+        key desc
+    limit 15000
+);
+
+select
+    *
+from $in
+where value like "a%";

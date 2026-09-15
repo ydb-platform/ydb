@@ -1,6 +1,8 @@
-import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrCms;
 option java_package = "ru.yandex.kikimr.proto";
@@ -20,6 +22,10 @@ message TStatus {
         NO_SUCH_HOST = 10;
         NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
+        // Temporary disallow: the action would be allowed, but the node currently
+        // hosts a running system tablet. Such actions can still be granted to fill
+        // a batch when no tablet-free nodes are left.
+        DISALLOW_TEMP_SYS_TABLET = 13;
     }
 
     optional ECode   Code = 1;
@@ -109,6 +115,8 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DRAIN_NODE = 11;
+    CORDON_NODE = 12;
   }
 
   message TIssue {
@@ -134,6 +142,7 @@ message TAction {
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
   optional TIssue Issue = 7;
+  optional string MaintenanceTaskContext = 8;
 }
 
 enum ETenantPolicy {
@@ -156,14 +165,13 @@ enum EAvailabilityMode {
     // of parity parts in that group.
     // Compute nodes are handled as in default mode.
     MODE_KEEP_AVAILABLE = 1;
-    // In this mode CMS allows at most 1 locked disk in a group
-    // ignoring its parity parts count. Allows to restart nodes
-    // even if multiple disks of some group are down. Using
-    // this mode might cause data unavailability.
-    // For compute nodes CMS follows tenant and cluster policies
-    // but allows to restart at least one node for tenant or
-    // cluster.
+    // This mode ignores all cluster availability checks.
+    // Using this mode might cause data unavailability.
     MODE_FORCE_RESTART = 2;
+    // Behaves like MODE_MAX_AVAILABILITY but automatically
+    // falls back to MODE_KEEP_AVAILABLE when it is not possible
+    // to restart nodes using MODE_MAX_AVAILABILITY.
+    MODE_SMART_AVAILABILITY = 3;
 }
 
 message TPermissionRequest {
@@ -182,6 +190,9 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  // Maximum number of permissions that may be issued by a single check of this request.
+  // Unset means "no cap", 0 means "cap is zero".
+  optional uint32 MaxPermissionCount = 13 [default = 0];
 }
 
 enum EExtensionType {
@@ -213,6 +224,7 @@ message TManageRequestRequest {
     LIST = 1;
     GET = 2;
     REJECT = 3;
+    APPROVE = 4;
   }
 
   optional string   User = 1;
@@ -234,6 +246,7 @@ message TManageRequestResponse {
 
   optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
+  repeated TPermission       ManuallyApprovedPermissions = 3;
 }
 
 message TCheckRequest {
@@ -426,6 +439,19 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 1 [default = false];
+            optional uint32 NodeGoodStateLimit = 2 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
+            optional uint32 NodeBadStateLimit = 4 [default = 10];
+            optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            optional uint32 RelaxTime = 6 [default = 600000000];
+            optional bool PileupReplicas = 7 [default = false];
+            optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
+            optional uint32 OverrideRingsCount = 9 [default = 0];
+            optional uint32 ReplicasSpecificVolume = 10 [default = 200]; // 1 additional replica in ring per ReplicasSpecificVolume nodes in cluster
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -435,6 +461,7 @@ message TCmsConfig {
             UNKNOWN = 0;
             DISABLED = 1;
             FAULTY = 2;
+            MAINTENANCE = 3;
         }
 
         optional bool Enable = 1 [default = true];
@@ -453,6 +480,7 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        optional uint32 PileRatio = 18 [default = 50];
         // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
         // This limit helps prevent cascading overreaction when many disks go offline on a single host
         // (due to disk shelf disconnection).
@@ -465,8 +493,11 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
+        optional uint64 InitialDeploymentGracePeriod = 20 [default = 600000000];
     }
 
     message TLogConfig {
@@ -493,6 +524,7 @@ message TCmsConfig {
     optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
+    optional bool DisableMaintenance = 9;
 }
 
 message TPDiskID {
@@ -510,7 +542,7 @@ message TItems {
 message TSetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TSetMarkerResponse {
@@ -520,7 +552,7 @@ message TSetMarkerResponse {
 message TResetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TResetMarkerResponse {
@@ -578,6 +610,8 @@ message TLogRecordData {
         optional TAvailabilityStats NodeAvailabilityStats = 7;
         optional string Host = 8;
         optional string Reason = 9;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E CurrentMaintenanceStatus = 10;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E RequiredMaintenanceStatus = 11;
     }
 
     message TMarkersModification {
@@ -589,7 +623,7 @@ message TLogRecordData {
         }
         repeated EMarker OldMarkers = 5;
         repeated EMarker NewMarkers = 6;
-        optional string UserToken = 7;
+        optional string UserToken = 7 [(Ydb.sensitive) = true];
     }
 
     optional uint32 RecordType = 1;
@@ -656,6 +690,7 @@ message TPDiskInfo {
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
+        RATIO_BY_PILE = 7;
     }
 
     optional uint32 State = 1; // EPDiskState
@@ -671,6 +706,9 @@ message TPDiskInfo {
     optional string LastStatusChange = 11;
     optional EIgnoreReason IgnoreReason = 12;
     optional bool StatusChangeFailed = 13;
+    optional uint32 MaintenanceStatus = 14;
+    optional uint32 DesiredMaintenanceStatus = 15;
+    optional uint32 PrevDesiredMaintenanceStatus = 16;
 }
 
 message TPDisk {
@@ -700,9 +738,96 @@ message TConfigUpdaterState {
 }
 
 message TGetSentinelStateResponse {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+    }
+
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
+    repeated TNodeState NodesState = 6;
+}
+
+// NBS 2.0 (Direct Block Group) UI pagination support. All filtering, sorting
+// and paging is performed on the CMS side so that the UI never has to fetch
+// the complete tablet/disk list (which can be huge in a large cluster).
+
+enum EDDiskTabletSortBy {
+    DDISK_TABLET_SORT_BY_TABLET_ID = 0;
+    DDISK_TABLET_SORT_BY_LAST_CHANGED_AT = 1;
+    DDISK_TABLET_SORT_BY_GROUPS_COUNT = 2;
+}
+
+message TDDiskTabletListRequest {
+    // 0-based offset of the first item to return.
+    optional uint32 Offset = 1 [default = 0];
+    // Maximum number of items to return.
+    optional uint32 Limit = 2 [default = 50];
+    // Case-insensitive substring filter applied to the tablet id (as a decimal string).
+    optional string FilterTabletId = 3;
+    optional EDDiskTabletSortBy SortBy = 4 [default = DDISK_TABLET_SORT_BY_TABLET_ID];
+    optional bool SortDescending = 5 [default = false];
+    // If set, only tablets that have at least one unavailable DDisk or
+    // Persistent Buffer are returned (evaluated on the CMS side using the
+    // latest known PDisk availability, before paging).
+    optional bool OnlyProblems = 6 [default = false];
+}
+
+message TDDiskTabletListResponse {
+    message TTabletRevision {
+        optional uint64 TabletId = 1;
+        optional uint64 Revision = 2;
+        optional uint32 GroupsCount = 3;
+        optional uint64 LastChangedAt = 4;
+        optional uint32 UnavailableDDiskCount = 5;
+        optional uint32 UnavailablePersistentBufferCount = 6;
+    }
+
+    reserved 2;
+    optional TStatus Status = 1;
+    repeated TTabletRevision Tablets = 3;
+    // Total number of items matching the filter (before paging), used by the UI
+    // to compute the number of pages.
+    optional uint32 TotalCount = 4;
+}
+
+enum EDDiskDiskSortBy {
+    DDISK_DISK_SORT_BY_DISK_ID = 0;
+    DDISK_DISK_SORT_BY_TABLETS_COUNT = 1;
+}
+
+message TDDiskDiskListRequest {
+    optional uint32 Offset = 1 [default = 0];
+    optional uint32 Limit = 2 [default = 50];
+    // Case-insensitive substring filter applied to "NodeId:PDiskId:DDiskSlotId".
+    optional string FilterDiskId = 3;
+    // Case-insensitive substring filter applied to associated tablet ids.
+    optional string FilterTabletId = 4;
+    optional EDDiskDiskSortBy SortBy = 5 [default = DDISK_DISK_SORT_BY_DISK_ID];
+    optional bool SortDescending = 6 [default = false];
+    // If set, only disks currently considered unavailable are returned
+    // (evaluated on the CMS side, before paging).
+    optional bool OnlyProblems = 7 [default = false];
+}
+
+message TDDiskDiskListResponse {
+    message TDiskUsage {
+        optional NKikimrBlobStorage.NDDisk.TDDiskId DiskId = 1;
+        repeated uint64 DDiskTabletIds = 2; // tablets using this disk in the DDisk role
+        repeated uint64 PersistentBufferTabletIds = 3; // tablets using this disk in the PersistentBuffer role
+        optional bool Available = 4;
+        // Full underlying PDisk state as reported by Whiteboard (e.g. "Normal",
+        // "Missing", "Timeout", "NodeDisconnected", one of the Initial*/*Error
+        // states, or "Unknown" if it was never reported to CMS). This is a more
+        // detailed status than Available, which is only a coarse up/down flag.
+        optional string State = 5;
+    }
+
+    reserved 2;
+    optional TStatus Status = 1;
+    repeated TDiskUsage Disks = 3;
+    optional uint32 TotalCount = 4;
 }

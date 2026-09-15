@@ -128,7 +128,7 @@ public:
         return Schema_;
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }
@@ -157,7 +157,7 @@ void PipeReaderToWriter(
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options)
 {
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     TRowBatchReadOptions readOptions{
         .MaxRowsPerRead = options.BufferRowCount,
@@ -218,31 +218,48 @@ void PipeReaderToWriter(
 void PipeReaderToWriterByBatches(
     const IRowBatchReaderPtr& reader,
     const ISchemalessFormatWriterPtr& writer,
-    TRowBatchReadOptions options,
-    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater,
-    TDuration pipeDelay)
+    const TPipeReaderToWriterByBatchesOptions& options)
 {
-    try {
-        TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto readOptions = options.StartingOptions;
 
-        for (bool isFirstBatch = true; auto batch = reader->Read(options); isFirstBatch = false) {
+    auto wrapReaderError = [&] (TError error) -> TError {
+        if (options.ReaderErrorWrapper) {
+            return options.ReaderErrorWrapper(std::move(error));
+        }
+        return error;
+    };
+
+    try {
+        auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
+
+        auto readBatch = [&] {
+            try {
+                return reader->Read(readOptions);
+            } catch (const std::exception& ex) {
+                THROW_ERROR wrapReaderError(TError(ex));
+            }
+        };
+
+        for (bool isFirstBatch = true; auto batch = readBatch(); isFirstBatch = false) {
             yielder.TryYield();
 
             if (batch->IsEmpty()) {
-                WaitFor(reader->GetReadyEvent())
-                    .ThrowOnError();
+                auto error = WaitFor(reader->GetReadyEvent());
+                if (!error.IsOK()) {
+                    THROW_ERROR wrapReaderError(std::move(error));
+                }
                 continue;
             }
 
             auto rowsRead = batch->GetRowCount();
 
-            if (pipeDelay != TDuration::Zero()) {
-                TDelayedExecutor::WaitForDuration(pipeDelay);
+            if (options.PipeDelay != TDuration::Zero()) {
+                TDelayedExecutor::WaitForDuration(options.PipeDelay);
             }
 
             TWallTimer timer(/*start*/ false);
 
-            if (optionsUpdater) {
+            if (options.OptionsUpdater) {
                 timer.Start();
             }
 
@@ -251,30 +268,33 @@ void PipeReaderToWriterByBatches(
                     .ThrowOnError();
             }
 
-            if (optionsUpdater && !isFirstBatch) {
-                options.MaxRowsPerRead = rowsRead;
-                optionsUpdater(&options, timer.GetElapsedTime());
+            if (options.OptionsUpdater && !isFirstBatch) {
+                readOptions.MaxRowsPerRead = rowsRead;
+                options.OptionsUpdater(&readOptions, timer.GetElapsedTime());
             }
         }
 
         WaitFor(writer->Close())
             .ThrowOnError();
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Failed to transfer batches from reader to writer");
+        YT_TLOG_ERROR("Failed to transfer batches from reader to writer")
+            .With(ex);
 
         throw;
     }
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     TBlob buffer(GetRefCountedTypeCookie<TWriteBufferTag>(), bufferBlockSize, /*initializeStorage*/ false);
 
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     while (true) {
         yielder.TryYield();
@@ -284,17 +304,23 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(bufferBlockSize, {.InitializeStorage = false});
 
@@ -306,16 +332,22 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     IOutputStream* output)
 {
+    i64 totalBytes = 0;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -324,10 +356,14 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += data.Size();
+
         output->Write(data.Begin(), data.Size());
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

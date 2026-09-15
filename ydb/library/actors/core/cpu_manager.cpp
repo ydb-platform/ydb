@@ -27,14 +27,14 @@ namespace NActors {
 
     void TCpuManager::SetupShared() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared");
-        bool hasSharedThread = false;
+        bool needsSharedPool = false;
         for (TBasicExecutorPoolConfig& cfg : Config.Basic) {
-            if (cfg.HasSharedThread) {
-                hasSharedThread = true;
+            if (cfg.HasSharedThread || cfg.AllThreadsAreShared) {
+                needsSharedPool = true;
                 break;
             }
         }
-        if (!hasSharedThread) {
+        if (!needsSharedPool) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::SetupShared: no shared threads, skipping");
             return;
         }
@@ -50,19 +50,18 @@ namespace NActors {
             return Config.Basic[a].PoolId < Config.Basic[b].PoolId;
         });
 
-        i16 sht = 1;
+
         for (ui32 i = 0; i < Config.Basic.size(); ++i) {
-            i16 sharedThreadCount = Config.Basic[poolIds[i]].HasSharedThread ? sht : 0;
-            if (sharedThreadCount) {
-                sht = 1;
-            }
+            auto &cfg = Config.Basic[poolIds[i]];
+            i16 sharedThreadCount = cfg.AllThreadsAreShared ? cfg.DefaultThreadCount : cfg.MaxThreadCount ? 1 : 0;
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,
                 .ForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount,
                 .InPriorityOrder = true,
                 .PoolName = Config.Basic[poolIds[i]].PoolName,
-                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0,
+                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0 || !Config.Basic[poolIds[i]].MaxThreadCount && !Config.Basic[poolIds[i]].Threads,
+                .AdjacentPools = Config.Basic[poolIds[i]].AdjacentPools,
             });
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {
@@ -107,8 +106,16 @@ namespace NActors {
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
             Executors[excIdx].Reset(CreateExecutorPool(excIdx));
             bool ignoreThreads = dynamic_cast<TIOExecutorPool*>(Executors[excIdx].Get());
+            ui8 harmonizerNeedyCpuWindowSeconds = 1;
+            for (const auto& cfg : Config.Basic) {
+                if (cfg.PoolId == excIdx) {
+                    harmonizerNeedyCpuWindowSeconds = cfg.HarmonizerNeedyCpuWindowSeconds;
+                    break;
+                }
+            }
             TSelfPingInfo *pingInfo = (excIdx < Config.PingInfoByPool.size()) ? &Config.PingInfoByPool[excIdx] : nullptr;
-            Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, ignoreThreads);
+            ignoreThreads &= (Shared != nullptr);
+            Harmonizer->AddPool(Executors[excIdx].Get(), pingInfo, ignoreThreads, harmonizerNeedyCpuWindowSeconds);
         }
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::Setup: created");
     }
@@ -230,6 +237,20 @@ namespace NActors {
             }
         }
         return pools;
+    }
+
+    std::optional<TCpuMask> TCpuManager::GetExecutorPoolAffinity(ui32 poolId) const {
+        if (poolId >= ExecutorPoolCount) {
+            return std::nullopt;
+        }
+
+        // The same mask the pool's own worker threads pin themselves to.
+        const TAffinity* affinity = Executors[poolId]->Affinity();
+        if (!affinity || affinity->Empty()) {
+            return std::nullopt;
+        }
+
+        return static_cast<TCpuMask>(*affinity);
     }
 
     void TCpuManager::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {

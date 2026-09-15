@@ -8,10 +8,10 @@ namespace NYdb::inline Dev::NFederatedTopic {
 std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
     if (dataReceivedEvent.HasCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(), msg.GetOffset() + 1};
+        return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
     }
     const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
+    return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
 }
 
 
@@ -129,10 +129,10 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
 void TDeferredCommit::TImpl::Commit() {
     for (auto&& [partitionStream, offsetRanges] : Offsets) {
         for (auto&& [startOffset, endOffset] : offsetRanges) {
-            static_cast<NTopic::TPartitionStreamImpl<false>*>(partitionStream.Get()->PartitionSession.Get())->Commit(startOffset, endOffset);
+            static_cast<NTopic::TPartitionSessionControl*>(partitionStream.Get()->PartitionSession.Get())->Commit(startOffset, endOffset);
         }
     }
     Offsets.clear();
 }
 
-}
+} // namespace NYdb::NFederatedTopic

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "localrecovery_defs.h"
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_data.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
@@ -51,6 +52,9 @@ namespace NKikimr {
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn;
+        NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
+        std::unique_ptr<TChunkKeeperData> ChunkKeeperData;
+        bool HasMetadata = false;
 
         TEvLocalRecoveryDone(NKikimrProto::EReplyStatus status,
                              TIntrusivePtr<TLocalRecoveryInfo> recovInfo,
@@ -65,7 +69,10 @@ namespace NKikimr {
                              const TIntrusivePtr<TLsnMngr> &lsnMngr,
                              TVDiskIncarnationGuid vdiskIncarnationGuid,
                              NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
-                             ui64 scrubEntrypointLsn);
+                             ui64 scrubEntrypointLsn,
+                             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
+                             std::unique_ptr<TChunkKeeperData>&& chunkKeeperData,
+                             bool hasMetadata);
         ~TEvLocalRecoveryDone();
     };
 

@@ -49,7 +49,8 @@ bool TStoragesManager::DoLoadIdempotency(NTable::TDatabase& database) {
 
 TStoragesManager::TStoragesManager(NColumnShard::TColumnShard& shard)
     : Shard(shard)
-    , SharedBlobsManager(std::make_shared<NDataSharing::TSharedBlobsManager>((TTabletId)Shard.TabletID())) {
+    , SharedBlobsManager(std::make_shared<NDataSharing::TSharedBlobsManager>((TTabletId)Shard.TabletID()))
+{
 }
 
 }   // namespace NKikimr::NOlap

@@ -1,0 +1,6 @@
+--- contrib/python/prettytable/py3/tests/test_style.py	(index)
++++ contrib/python/prettytable/py3/tests/test_style.py	(working tree)
+@@ -18 +18,2 @@ from prettytable.prettytable import _str_block_width
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
++import yatest.common as yc
++DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "data")

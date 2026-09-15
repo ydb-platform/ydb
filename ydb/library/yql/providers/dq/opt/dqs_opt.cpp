@@ -56,7 +56,7 @@ namespace NYql::NDqs {
                 [&typesCtx](const TExprNode::TPtr& inputExpr, TExprContext& ctx, IOptimizationContext&) {
                     TExprBase node{inputExpr};
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx, typesCtx);
                     PERFORM_RULE(DqPeepholeRewriteMapJoinWithGraceCore, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteMapJoinWithMapCore, node, ctx);
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);

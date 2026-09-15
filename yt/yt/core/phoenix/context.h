@@ -61,13 +61,10 @@ private:
     friend struct NDetail::TSerializer;
 
     THashMap<TObjectId, void*> IdToPtr_;
-    std::vector<std::function<void()>> Deletors_;
+    std::vector<std::function<void()>> Deleters_;
 
     void RegisterObject(TObjectId id, void* basePtr);
     void* GetObject(TObjectId id) const;
-
-    template <class T>
-    void RegisterConstructedObject(T* ptr);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,7 +83,3 @@ using TPersistenceContext = TCustomPersistenceContext<TSaveContext, TLoadContext
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NPhoenix
-
-#define CONTEXT_INL_H_
-#include "context-inl.h"
-#undef CONTEXT_INL_H_

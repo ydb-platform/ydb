@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SKELETON
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -27,6 +29,7 @@ namespace NKikimr {
         ui64 BlackZonePeriods = 0;
         ui64 TotalChunks = 0;
         ui64 FreeChunks = 0;
+        ui64 SpaceObservationGeneration = 0;
 
         friend class TActorBootstrapped<TDskSpaceTrackerActor>;
 
@@ -58,10 +61,13 @@ namespace NKikimr {
                     break;
             }
 
-            LOG_LOG_S(ctx, priority, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "TDskSpaceTrackerActor: " << zone << " ZONE" << " Marker# BSVSOOST01");
+            YDB_LOG_CTX(ctx, priority, "ZONE",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"TDskSpaceTrackerActor", zone},
+                {"marker", "BSVSOOST01"});
             // send message to PDisk
             Become(&TThis::AskFunc);
+            SpaceObservationGeneration = VCtx->OutOfSpaceState.StartSpacePoll();
             ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound));
         }
@@ -76,9 +82,10 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_SKELETON, VCtx->VDiskLogPrefix
-                    << "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; msg# " << msg->ToString()
-                    << " Marker# BSVSOOST02");
+            YDB_LOG_DEBUG_CTX(ctx, "TDskSpaceTrackerActor:handle TEvCheckSpaceResult;",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"msg", msg->ToString()},
+                {"marker", "BSVSOOST02"});
 
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 
@@ -88,18 +95,35 @@ namespace NKikimr {
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
-            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags);
-            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags);
-            VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->Occupancy));
+            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags, SpaceObservationGeneration);
+            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags, SpaceObservationGeneration);
+            VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->NormalizedOccupancy));
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
+            VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);
+            VCtx->OutOfSpaceState.UpdateSpaceHeadroom(msg->Headroom, SpaceObservationGeneration);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
+            MonGroup.NormalizedOccupancyPerMille() = static_cast<ui32>(msg->NormalizedOccupancy * 1000);
+            MonGroup.VDiskSlotUsagePerMille() = static_cast<ui32>(msg->VDiskSlotUsage * 10);  // percent -> permille
+            MonGroup.VDiskRawUsagePerMille() = static_cast<ui32>(msg->VDiskRawUsage * 10);  // percent -> permille
+
+            auto spaceColor = StatusFlagToSpaceColor(msg->StatusFlags);
+            MonGroup.CapacityAlertGreen() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::GREEN) ? 1 : 0;
+            MonGroup.CapacityAlertCyan() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::CYAN) ? 1 : 0;
+            MonGroup.CapacityAlertLightYellow() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW) ? 1 : 0;
+            MonGroup.CapacityAlertYellow() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) ? 1 : 0;
+            MonGroup.CapacityAlertLightOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE) ? 1 : 0;
+            MonGroup.CapacityAlertPreOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE) ? 1 : 0;
+            MonGroup.CapacityAlertOrange() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::ORANGE) ? 1 : 0;
+            MonGroup.CapacityAlertRed() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::RED) ? 1 : 0;
+            MonGroup.CapacityAlertBlack() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) ? 1 : 0;
+
             if (msg->NumSlots > 0) {
                 ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;
                 if (VCtx->CostTracker) {
-                    VCtx->CostTracker->SetTimeAvailable(timeAvailable);
+                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumSlots, msg->ExpectedSlotCount);
                 }
             }
 

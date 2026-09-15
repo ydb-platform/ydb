@@ -17,7 +17,6 @@
 //
 
 #include <limits.h>
-#include <stdint.h>
 #include <string.h>
 
 #include <algorithm>
@@ -28,6 +27,7 @@
 #include <vector>
 
 #include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpc/impl/compression_types.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
@@ -71,9 +71,12 @@ ServerBuilder::ServerBuilder()
     plugins_.emplace_back(value());
   }
 
-  // all compression algorithms enabled by default.
+  // all compression algorithms enabled by default, except zstd,
+  // which must be enabled explicitly.
   enabled_compression_algorithms_bitset_ =
       (1u << GRPC_COMPRESS_ALGORITHMS_COUNT) - 1;
+
+  grpc_core::ClearBit(&enabled_compression_algorithms_bitset_, GRPC_COMPRESS_ZSTD);
   memset(&maybe_default_compression_level_, 0,
          sizeof(maybe_default_compression_level_));
   memset(&maybe_default_compression_algorithm_, 0,

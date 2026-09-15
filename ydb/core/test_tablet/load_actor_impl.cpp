@@ -1,5 +1,7 @@
 #include "load_actor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     TLoadActor::TLoadActor(ui64 tabletId, ui32 generation, TActorId tablet,
@@ -26,14 +28,26 @@ namespace NKikimr::NTestShard {
         }
 
         auto *appData = AppData();
-        appData->Icb->RegisterSharedControl(DisableWrites, "TestShardControls.DisableWrites");
+        TControlBoard::RegisterSharedControl(DisableWrites, appData->Icb->TestShardControls.DisableWrites);
     }
 
     void TLoadActor::ClearKeys() {
         for (auto& [key, info] : Keys) {
-            Y_ABORT_UNLESS(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
-                    ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
-                    : info.ConfirmedKeyIndex == Max<size_t>());
+            auto makeError = [&] {
+                TStringBuilder sb;
+                sb << "Key# " << key << " ConfirmedKeyIndex# " << info.ConfirmedKeyIndex
+                    << " ConfirmedState# " << info.ConfirmedState << " PendingState# " << info.PendingState;
+                if (info.ConfirmedKeyIndex != Max<size_t>()) {
+                    sb << " KeyByIndex# " << ConfirmedKeys[info.ConfirmedKeyIndex];
+                }
+                return TString(sb);
+            };
+            // every pending transition from CONFIRMED state immediately sets ConfirmedKeyIndex -> Max<size_t>()
+            const bool shouldBeConfirmed = info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                && info.PendingState == ::NTestShard::TStateServer::CONFIRMED;
+            Y_VERIFY_S(shouldBeConfirmed
+                ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
+                : info.ConfirmedKeyIndex == Max<size_t>(), makeError());
             info.ConfirmedKeyIndex = Max<size_t>();
         }
         Keys.clear();
@@ -41,11 +55,14 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Bootstrap() {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
+        YDB_LOG_DEBUG("TLoadActor::Bootstrap",
+            {"marker", "TS31"},
+            {"tabletId", TabletId});
         if (Settings.HasStorageServerHost()) {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
                 Settings.GetStorageServerPort()));
             Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+            IssuedConnect = true;
         } else {
             RunValidation(true);
         }
@@ -53,7 +70,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::PassAway() {
-        if (Settings.HasStorageServerHost()) {
+        if (IssuedConnect) {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
         }
         if (ValidationActorId) {
@@ -63,7 +80,9 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::HandleWakeup() {
-        STLOG(PRI_NOTICE, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
+        YDB_LOG_ERROR("Voluntary restart",
+            {"marker", "TS00"},
+            {"tabletId", TabletId});
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
     }
 
@@ -71,7 +90,7 @@ namespace NKikimr::NTestShard {
         if (ValidationActorId) { // do nothing while validation is in progress
             return;
         }
-        if (StallCounter > 500) {
+        if (Settings.HasStallCounter() && StallCounter > Settings.GetStallCounter()) {
             if (WritesInFlight.empty() && PatchesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() &&
                     TransitionInFlight.empty()) {
                 StallCounter = 0;
@@ -92,17 +111,19 @@ namespace NKikimr::NTestShard {
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites) {
+            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites && BytesOfData <= Settings.GetMaxDataBytes()) {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
-                        IssuePatch();
+                        if (!IssuePatch()) {
+                            IssueWrite();
+                        }
                     } else {
                         IssueWrite();
                     }
                     if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() || !Settings.GetResetWritePeriodOnFull()) {
                         NextWriteTimestamp += GenerateRandomInterval(Settings.GetWritePeriods());
-                        canWriteMore = NextWriteTimestamp <= now;
+                        canWriteMore = NextWriteTimestamp <= now && BytesOfData <= Settings.GetMaxDataBytes();
                     } else {
                         NextWriteTimestamp = TMonotonic::Max();
                     }
@@ -151,6 +172,9 @@ namespace NKikimr::NTestShard {
         if (ev->Get()->Connected) {
             RunValidation(true);
         } else {
+            YDB_LOG_ERROR("State server not connected",
+                {"marker", "TS33"},
+                {"tabletId", TabletId});
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
             PassAway();
         }
@@ -192,35 +216,51 @@ namespace NKikimr::NTestShard {
         Y_ABORT_UNLESS(!ValidationActorId); // no requests during validation
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            STLOG(PRI_ERROR, TEST_SHARD, TS26, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
-                (Status, record.GetStatus()), (ErrorReason, record.GetErrorReason()));
+            YDB_LOG_ERROR("TEvKeyValue::TEvRequest failed",
+                {"marker", "TS26"},
+                {"tabletId", TabletId},
+                {"status", record.GetStatus()},
+                {"errorReason", record.GetErrorReason()});
             if (const auto it = WritesInFlight.find(record.GetCookie()); it != WritesInFlight.end()) {
+                WriteCounters.RecordFail(it->second.KeysInQuery.size());
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS27, "write failed", (TabletId, TabletId), (Key, key));
+                    YDB_LOG_WARN("Write failed",
+                        {"marker", "TS27"},
+                        {"tabletId", TabletId},
+                        {"key", key});
                     RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
                 }
                 WritesInFlight.erase(it);
             }
             if (auto nh = PatchesInFlight.extract(record.GetCookie())) {
+                PatchCounters.RecordFail();
                 const TString& key = nh.mapped();
                 const auto it = Keys.find(key);
                 Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                STLOG(PRI_WARN, TEST_SHARD, TS27, "patch failed", (TabletId, TabletId), (Key, key));
+                YDB_LOG_WARN("Patch failed",
+                    {"marker", "TS34"},
+                    {"tabletId", TabletId},
+                    {"key", key});
                 RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
             }
             if (const auto it = DeletesInFlight.find(record.GetCookie()); it != DeletesInFlight.end()) {
+                DeleteCounters.RecordFail(it->second.KeysInQuery.size());
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS28, "delete failed", (TabletId, TabletId), (Key, key));
+                    YDB_LOG_WARN("Delete failed",
+                        {"marker", "TS28"},
+                        {"tabletId", TabletId},
+                        {"key", key});
                     RegisterTransition(*it, ::NTestShard::TStateServer::DELETE_PENDING, ::NTestShard::TStateServer::CONFIRMED);
                     BytesOfData += it->second.Len;
                 }
                 DeletesInFlight.erase(it);
             }
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
+                ReadCounters.RecordFail();
                 const auto& [key, timestamp, payloadInResponse, items] = it->second;
                 const auto jt = KeysBeingRead.find(key);
                 Y_ABORT_UNLESS(jt != KeysBeingRead.end() && jt->second);
@@ -240,7 +280,10 @@ namespace NKikimr::NTestShard {
                 }
                 return SingleLineProto(copy);
             };
-            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
+            YDB_LOG_INFO("TEvKeyValue::TEvResponse",
+                {"marker", "TS04"},
+                {"tabletId", TabletId},
+                {"msg", makeResponse()});
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessPatchResult(record.GetCookie(), record.GetPatchResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());

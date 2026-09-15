@@ -6,7 +6,7 @@
 #include <aws/common/common.h>
 #include <aws/common/error.h>
 
-#define AWS_DEFINE_ERROR_INFO_CAL(CODE, STR) [(CODE)-0x1C00] = AWS_DEFINE_ERROR_INFO(CODE, STR, "aws-c-cal")
+#define AWS_DEFINE_ERROR_INFO_CAL(CODE, STR) [(CODE) - 0x1C00] = AWS_DEFINE_ERROR_INFO(CODE, STR, "aws-c-cal")
 
 static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO_CAL(AWS_ERROR_CAL_SIGNATURE_VALIDATION_FAILED, "Verify on a cryptographic signature failed."),

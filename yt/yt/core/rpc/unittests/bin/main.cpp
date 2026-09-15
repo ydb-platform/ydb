@@ -10,6 +10,7 @@
 
 using namespace NYT;
 using namespace NYT::NBus;
+using namespace NYT::NBus::NTcp;
 using namespace NYT::NRpc;
 using namespace NYT::NRpc::NBus;
 using namespace NYT::NConcurrency;
@@ -22,7 +23,7 @@ int main(int argc, char* argv[])
 {
     try {
         if (argc != 2) {
-            THROW_ERROR_EXCEPTION("Config argument is missing. Pass empty string to get config schema.");
+            THROW_ERROR_EXCEPTION("Config argument is missing. Pass empty string to get config schema");
         }
 
         TYsonStringBuf configText(argv[1]);
@@ -41,13 +42,20 @@ int main(int argc, char* argv[])
         busConfig->SetUnrecognizedStrategy(EUnrecognizedStrategy::ThrowRecursive);
         Deserialize(*busConfig, ConvertToNode(configText));
 
-        YT_LOG_INFO("Config: %v", ConvertToYsonString(busConfig, EYsonFormat::Text));
+        YT_TLOG_INFO("Loaded config")
+            .With("Config", ConvertToYsonString(busConfig, EYsonFormat::Text));
 
         auto busServer = CreateBusServer(busConfig);
         auto server = CreateBusServer(busServer);
 
         auto workerPool = CreateThreadPool(4, "Worker");
-        auto service = CreateTestService(workerPool->GetInvoker(), false, /*createChannel*/ {}, GetNullMemoryUsageTracker());
+        auto service = CreateTestService(
+            workerPool->GetInvoker(),
+            false,
+            /*createChannel*/ {},
+            GetNullMemoryUsageTracker(),
+            /*useAuthenticator*/ false);
+
         server->RegisterService(service);
         server->Start();
 

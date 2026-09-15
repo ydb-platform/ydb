@@ -12,8 +12,8 @@ struct TControls {
         if (auto *appData = NKikimr::AppData()) {
             if (appData->Icb) {
                 MergeReads = std::make_shared<NKikimr::TControlWrapper>(0, 0, 1);
-                appData->Icb->RegisterSharedControl(*MergeReads,
-                    "TableServiceControls.EnableMergeDatashardReads");
+                NKikimr::TControlBoard::RegisterSharedControl(*MergeReads,
+                    appData->Icb->TableServiceControls.EnableMergeDatashardReads);
             }
         }
 
@@ -26,6 +26,10 @@ namespace NKikimr::NKqp {
 
 std::shared_ptr<TControlWrapper> MergeDatashardReadsControl() {
     return Singleton<TControls>()->MergeReads;
+}
+
+bool IsEnabledReadsMerge() {
+    return *MergeDatashardReadsControl() == 1;
 }
 
 } // namespace NKikimr::NKqp

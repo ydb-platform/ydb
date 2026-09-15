@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include "config.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateNodeDrives
@@ -30,8 +32,10 @@ class TBlobStorageController::TTxUpdateNodeDrives
             out << "]";
             return out.Str();
         };
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN05, "Add devicesData from NodeWarden",
-                (NodeId, nodeId), (Devices, createLog()));
+        YDB_LOG_DEBUG("Add devicesData from NodeWarden",
+            {"marker", "BSCTXRN05"},
+            {"nodeId", nodeId},
+            {"devices", createLog()});
 
         std::unordered_map<TString, TString> diskSerialNumberByPath;
         for (const auto& disk : Record.GetDrivesData()) {
@@ -73,8 +77,12 @@ class TBlobStorageController::TTxUpdateNodeDrives
                         break;
                     }
 
-                    STLOG(NLog::PRI_ERROR, BS_CONTROLLER, BSCTXRN06, log.Str(), (PDiskId, pdiskId), (Path, pdiskInfo.Path),
-                        (OldSerial, pdiskInfo.ExpectedSerial), (NewSerial, serial));
+                    YDB_LOG_ERROR(log.Str(),
+                        {"marker", "BSCTXRN06"},
+                        {"PDiskId", pdiskId},
+                        {"path", pdiskInfo.Path},
+                        {"oldSerial", pdiskInfo.ExpectedSerial},
+                        {"newSerial", serial});
                 }
             }
 
@@ -101,14 +109,18 @@ class TBlobStorageController::TTxUpdateNodeDrives
             if (auto info = state.DrivesSerials.FindForUpdate(serial)) {
                 if (info->LifeStage == NKikimrBlobStorage::TDriveLifeStage::ADDED_BY_DSTOOL) {
                     if (info->NodeId.GetRef() != nodeId) {
-                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN03,
-                            "Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
-                            (NewNodeId, nodeId), (OldNodeId, info->NodeId.GetRef()), (Serial, serial));
+                        YDB_LOG_ERROR("Received drive from NewNodeId, but drive is reported as placed in OldNodeId",
+                            {"marker", "BSCTXRN03"},
+                            {"newNodeId", nodeId},
+                            {"oldNodeId", info->NodeId.GetRef()},
+                            {"serial", serial});
                     }
                     if (info->Path.GetRef() != data.GetPath()) {
-                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN04,
-                            "Received drive by NewPath, but drive is reported as placed by OldPath",
-                            (NewPath, data.GetPath()), (OldPath, info->Path.GetRef()), (Serial, serial));
+                        YDB_LOG_ERROR("Received drive by NewPath, but drive is reported as placed by OldPath",
+                            {"marker", "BSCTXRN04"},
+                            {"newPath", data.GetPath()},
+                            {"oldPath", info->Path.GetRef()},
+                            {"serial", serial});
                     }
                 } else {
                     info->NodeId = nodeId;
@@ -171,14 +183,17 @@ public:
             updateIsSuccessful = false;
             auto& nodeInfo = Self->GetNode(nodeId);
             Self->EraseKnownDrivesOnDisconnected(&nodeInfo);
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN00,
-                    "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
+            YDB_LOG_ERROR("Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode",
+                {"marker", "BSCTXRN00"},
+                {"errorReason", e.what()});
         }
 
-        TString error;
-        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
-            State->Rollback();
-            State.reset();
+        bool validated = true;
+        if (updateIsSuccessful) {
+            validated = !Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags(), txc);
+        }
+        if (!updateIsSuccessful || !validated) {
+            Self->RollbackConfigUpdate(State);
         }
 
         return true;
@@ -213,7 +228,9 @@ public:
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_REGISTER_NODE_USEC);
 
         const auto& record = Request->Get()->Record;
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXRN01, "Handle TEvControllerRegisterNode", (Request, record));
+        YDB_LOG_DEBUG("Handle TEvControllerRegisterNode",
+            {"marker", "BSCTXRN01"},
+            {"request", record});
 
         if (!Self->ValidateIncomingNodeWardenEvent(*Request)) {
             return true;
@@ -221,7 +238,10 @@ public:
 
         const TNodeId nodeId = record.GetNodeID();
         if (nodeId != Request->Sender.NodeId()) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN07, "NodeId field mismatch", (Request, record), (Sender, Request->Sender));
+            YDB_LOG_ERROR("NodeId field mismatch",
+                {"marker", "BSCTXRN07"},
+                {"request", record},
+                {"sender", Request->Sender});
             return true;
         }
 
@@ -236,67 +256,52 @@ public:
         }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
-        // create map of group ids to their generations as reported by the node warden
-        TMap<ui32, ui32> startedGroups;
-        if (record.GroupsSize() == record.GroupGenerationsSize()) {
-            for (size_t i = 0; i < record.GroupsSize(); ++i) {
-                startedGroups.emplace(record.GetGroups(i), record.GetGroupGenerations(i));
-            }
-        } else {
-            for (ui32 groupId : record.GetGroups()) {
-                startedGroups.emplace(groupId, 0);
-            }
-        }
-
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
-        TSet<ui32> groupIDsToRead;
+        TSet<TGroupId> groupIDsToRead;
+        TSet<TGroupId> groupsToDiscard;
+        // Effective subscription set for this RegisterNode:
+        // 1) groups inferred from local VSlots on this node,
+        // 2) groups explicitly listed by NodeWarden in RegisterNode.Record.Groups.
+        TSet<TGroupId> groupsToSubscribe;
+
         const TPDiskId minPDiskId(TPDiskId::MinForNode(nodeId));
         const TVSlotId vslotId = TVSlotId::MinForPDisk(minPDiskId);
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId.GetRawId());
+                groupIDsToRead.insert(it->second->GroupId);
+                // Local dynamic VSlots imply local interest in group updates even without active proxy.
+                if (NKikimr::IsDynamicGroup(it->second->GroupId)) {
+                    groupsToSubscribe.insert(it->second->GroupId);
+                }
             }
         }
 
-        TSet<ui32> groupsToDiscard;
-
-        auto processGroup = [&](const auto& p, TGroupInfo *group) {
-            auto&& [groupId, generation] = p;
-            if (!group) {
+        const auto& groups = record.GetGroups();
+        const bool hasGenerations = groups.size() == record.GetGroupGenerations().size();
+        for (int i = 0; i < groups.size(); ++i) {
+            const TGroupId groupId = TGroupId::FromValue(groups[i]);
+            if (const TGroupInfo *group = Self->FindGroup(groupId); !group) { // group has vanished
                 groupsToDiscard.insert(groupsToDiscard.end(), groupId);
-            } else if (group->Generation > generation) {
+            } else if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
                 groupIDsToRead.insert(groupId);
             }
-        };
-
-        if (startedGroups.size() <= Self->GroupMap.size() / 10) {
-            for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
-            }
-        } else {
-            auto started = startedGroups.begin();
-            auto groupIt = Self->GroupMap.begin();
-
-            while (started != startedGroups.end()) {
-                TGroupInfo *group = nullptr;
-
-                // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
-                    if (groupIt->first.GetRawId() == started->first) {
-                        group = groupIt->second.Get();
-                    }
-                }
-
-                processGroup(*started++, group);
-            }
         }
+        for (ui32 groupIdProto : groups) {
+            // Keep backward-compatible behavior: every group requested explicitly by NodeWarden
+            // must remain in GroupsRequested.
+            groupsToSubscribe.insert(TGroupId::FromValue(groupIdProto));
+        }
+
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
+        Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
+        Y_ABORT_UNLESS(groupsToDiscard.empty());
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
             auto& pdisk = it->second;
@@ -328,9 +333,9 @@ public:
         node.DeclarativePDiskManagement = record.GetDeclarativePDiskManagement();
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
-        for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
-            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
+        for (const TGroupId groupId : groupsToSubscribe) {
+            node.GroupsRequested.insert(groupId);
+            Self->GroupToNode.emplace(groupId, nodeId);
         }
 
         for (const auto& status : record.GetShredStatus()) {
@@ -343,8 +348,10 @@ public:
 
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::kShredAborted:
                 case NKikimrBlobStorage::TEvControllerRegisterNode::TShredStatus::SHREDSTATE_NOT_SET:
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXRN08, "shred aborted due to error", (PDiskId, pdiskId),
-                        (ErrorReason, status.GetShredAborted()));
+                    YDB_LOG_ERROR("Shred aborted due to error",
+                        {"marker", "BSCTXRN08"},
+                        {"PDiskId", pdiskId},
+                        {"errorReason", status.GetShredAborted()});
                     Self->ShredState.OnRegisterNode(pdiskId, std::nullopt, false, txc);
                     break;
 
@@ -362,13 +369,15 @@ public:
             if (record.GetMainConfigVersion() < configVersion) {
                 yamlConfig->SetCompressedMainConfig(CompressSingleConfig(*Self->YamlConfig));
             } else if (configVersion < record.GetMainConfigVersion()) {
-                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "main config version on node is greater than one known to BSC",
-                    (NodeId, record.GetNodeID()),
-                    (NodeVersion, record.GetMainConfigVersion()),
-                    (StoredVersion, configVersion));
+                YDB_LOG_ALERT("Main config version on node is greater than one known to BSC",
+                    {"marker", "BSCTXRN09"},
+                    {"nodeId", record.GetNodeID()},
+                    {"nodeVersion", record.GetMainConfigVersion()},
+                    {"storedVersion", configVersion});
             } else if (record.GetMainConfigHash() != Self->YamlConfigHash) {
-                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node main config hash mismatch",
-                    (NodeId, record.GetNodeID()));
+                YDB_LOG_ALERT("Node main config hash mismatch",
+                    {"marker", "BSCTXRN11"},
+                    {"nodeId", record.GetNodeID()});
             }
         } else if (record.HasMainConfigVersion()) {
             // TODO(alexvru): report?
@@ -383,13 +392,15 @@ public:
             if (!record.HasStorageConfigVersion() || record.GetStorageConfigVersion() < configVersion) {
                 yamlConfig->SetCompressedStorageConfig(CompressStorageYamlConfig(*Self->StorageYamlConfig));
             } else if (configVersion < record.GetStorageConfigVersion()) {
-                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN09, "storage config version on node is greater than one known to BSC",
-                    (NodeId, record.GetNodeID()),
-                    (NodeVersion, record.GetMainConfigVersion()),
-                    (StoredVersion, configVersion));
+                YDB_LOG_ALERT("Storage config version on node is greater than one known to BSC",
+                    {"marker", "BSCTXRN10"},
+                    {"nodeId", record.GetNodeID()},
+                    {"nodeVersion", record.GetMainConfigVersion()},
+                    {"storedVersion", configVersion});
             } else if (record.GetStorageConfigHash() != Self->StorageYamlConfigHash) {
-                STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXRN11, "node storage config hash mismatch",
-                    (NodeId, record.GetNodeID()));
+                YDB_LOG_ALERT("Node storage config hash mismatch",
+                    {"marker", "BSCTXRN12"},
+                    {"nodeId", record.GetNodeID()});
             }
         }
 
@@ -398,8 +409,16 @@ public:
 
     void Complete(const TActorContext&) override {
         if (Response) {
-            Self->SendInReply(*Request, std::move(Response));
-            Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            if (const auto it = Self->PipeServerToNode.find(Request->Recipient); it != Self->PipeServerToNode.end()) {
+                const TNodeId nodeId = Request->Sender.NodeId();
+                Y_ABORT_UNLESS(it->second == nodeId);
+                auto *node = Self->FindNode(nodeId);
+                Y_ABORT_UNLESS(node);
+                Y_ABORT_UNLESS(!node->Registered);
+                node->Registered = true;
+                Self->SendInReply(*Request, std::move(Response));
+                Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            }
         }
         Self->ShredState.OnNodeReportTxComplete();
     }
@@ -428,10 +447,10 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
+void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = TGroupId::FromValue(*it);
+        const TGroupId groupId = *it;
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
@@ -449,7 +468,7 @@ void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
 
-                SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
+                SerializeGroupInfo(groupProto, *group, info, scopeId);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
@@ -481,8 +500,10 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         pDisk->SetPDiskCategory(pdisk.Kind.GetRaw());
         pDisk->SetPDiskGuid(pdisk.Guid);
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
-            STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
-                (PDiskId, pdiskId.PDiskId));
+            YDB_LOG_CRIT("PDiskConfig invalid",
+                {"marker", "BSCTXRN02"},
+                {"nodeId", pdiskId.NodeId},
+                {"PDiskId", pdiskId.PDiskId});
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
@@ -581,6 +602,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         EraseKnownDrivesOnDisconnected(&node);
     }
     node.ConnectedServerId = serverId;
+    node.Registered = false;
     node.InterconnectSessionId = interconnectSessionId;
 
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
@@ -589,6 +611,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
     }
 
     node.LastConnectTimestamp = TInstant::Now();
+    node.DisconnectedTimestampMono = TMonotonic::Max();
 
     ShredState.OnWardenConnected(nodeId);
 }
@@ -600,6 +623,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
+    node.Registered = false;
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {
@@ -617,7 +641,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
     std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
-        if (const TGroupInfo *group = it->second->Group) {
+        if (it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
@@ -625,6 +649,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             timingQ.emplace_back(*it->second);
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),
+                .OnlyPhantomsRemain = it->second->IsReplicatingWithPhantomsOnly(),
                 .IsReady = it->second->IsReady,
                 .VDiskStatus = it->second->GetStatus(),
             });
@@ -636,8 +661,10 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         auto& slot = it->second;
         slot.ReadySince = TMonotonic::Max();
         slot.VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        slot.OnlyPhantomsRemain = false;
         updates.push_back({
             .VDiskId = slot.VDiskId,
+            .OnlyPhantomsRemain = slot.IsReplicatingWithPhantomsOnly(),
             .ReadySince = slot.ReadySince,
             .VDiskStatus = slot.VDiskStatus,
         });
@@ -655,6 +682,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
         GroupToNode.erase(std::make_tuple(groupId, nodeId));
     }
     node.LastDisconnectTimestamp = now;
+    node.DisconnectedTimestampMono = mono;
     Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 
@@ -664,14 +692,17 @@ void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo)
 
 void TBlobStorageController::SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie) {
     Y_ABORT_UNLESS(nodeId);
-    if (auto *node = FindNode(nodeId); node && node->ConnectedServerId) {
+    if (TNodeInfo* node = FindNode(nodeId); node && node->ConnectedServerId) {
         auto h = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, cookie);
         if (node->InterconnectSessionId) {
             h->Rewrite(TEvInterconnect::EvForward, node->InterconnectSessionId);
         }
         TActivationContext::Send(h.release());
     } else {
-        STLOG(PRI_WARN, BS_CONTROLLER, BSC17, "SendToWarden dropped event", (NodeId, nodeId), (Type, ev->Type()));
+        YDB_LOG_WARN("SendToWarden dropped event",
+            {"marker", "BSC17"},
+            {"nodeId", nodeId},
+            {"type", ev->Type()});
     }
 }
 
@@ -684,4 +715,3 @@ void TBlobStorageController::SendInReply(const IEventHandle& query, std::unique_
 }
 
 } // NKikimr::NBsController
-

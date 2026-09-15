@@ -138,6 +138,7 @@ TNode SerializeParamsForListJobs(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options);
 
 TNode SerializeParamsForSelectRows(
@@ -202,6 +203,18 @@ TNode SerializeParamsForAlterTable(
     const TYPath& path,
     const TAlterTableOptions& options);
 
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options);
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options);
+
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
@@ -211,6 +224,9 @@ TNode SerializeParamsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,
     const TGetTablePartitionsOptions& options);
+
+TNode SerializeParamsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options);
 
 TNode SerializeParamsForReadFile(
     const TTransactionId& transactionId,
@@ -253,7 +269,8 @@ TNode SerializeParamsForAbortTransaction(
     const TTransactionId& transactionId);
 
 TNode SerializeParamsForCommitTransaction(
-    const TTransactionId& transactionId);
+    const TTransactionId& transactionId,
+    const TCommitTransactionOptions& options);
 
 TNode SerializeParamsForStartTransaction(
     const TTransactionId& parentTransactionId,

@@ -1,0 +1,35 @@
+PRAGMA DqEngine = 'disable';
+pragma yt.JoinEnableStarJoin="true";
+use plato;
+
+-- Forced sorting
+
+SELECT
+    c.key,
+    c.subkey,
+    c.value,
+    s1.key,
+    s1.subkey,
+    s1.value,
+    s2.key,
+    s2.subkey,
+    s2.value
+FROM Input1 AS c
+LEFT JOIN /*+star() */ ANY Input2 AS s1 ON c.key = s1.key AND c.subkey = s1.subkey
+LEFT JOIN ANY Input3 AS s2 ON c.key = s2.key AND c.subkey = s2.subkey;
+
+-- No star join
+
+SELECT
+    c.key,
+    c.subkey,
+    c.value,
+    s1.key,
+    s1.subkey,
+    s1.value,
+    s2.key,
+    s2.subkey,
+    s2.value
+FROM Input1 AS c
+LEFT JOIN ANY Input2 AS s1 ON c.key = s1.key AND c.subkey = s1.subkey
+LEFT JOIN ANY Input3 AS s2 ON c.key = s2.key AND c.subkey = s2.subkey;

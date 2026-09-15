@@ -7,21 +7,21 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_unboxed_value_stream.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 namespace {
 
-class TTryWeakMemberFromDictWrapper : public TMutableComputationNode<TTryWeakMemberFromDictWrapper> {
-    typedef TMutableComputationNode<TTryWeakMemberFromDictWrapper> TBaseComputation;
+class TTryWeakMemberFromDictWrapper: public TMutableComputationNode<TTryWeakMemberFromDictWrapper> {
+    using TBaseComputation = TMutableComputationNode<TTryWeakMemberFromDictWrapper>;
+
 public:
     TTryWeakMemberFromDictWrapper(TComputationMutables& mutables, IComputationNode* otherDict, IComputationNode* restDict, NUdf::TDataTypeId schemeType,
-            NUdf::TUnboxedValue&& memberName, NUdf::TUnboxedValue&& otherIsStrMemberName)
+                                  NUdf::TUnboxedValue&& memberName, NUdf::TUnboxedValue&& otherIsStrMemberName)
         : TBaseComputation(mutables)
-        , OtherDict(otherDict)
-        , RestDict(restDict)
-        , SchemeType(NUdf::GetDataSlot(schemeType))
-        , MemberName(std::move(memberName))
-        , OtherIsStringMemberName(std::move(otherIsStrMemberName))
+        , OtherDict_(otherDict)
+        , RestDict_(restDict)
+        , SchemeType_(NUdf::GetDataSlot(schemeType))
+        , MemberName_(std::move(memberName))
+        , OtherIsStringMemberName_(std::move(otherIsStrMemberName))
     {
     }
 
@@ -31,17 +31,17 @@ public:
     }
 
     NUdf::TUnboxedValue DoCalculateImpl(TComputationContext& ctx) const {
-        if (const auto& restDict = RestDict->GetValue(ctx)) {
-            if (const auto& tryMember = restDict.Lookup(MemberName)) {
-                return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
+        if (const auto& restDict = RestDict_->GetValue(ctx)) {
+            if (const auto& tryMember = restDict.Lookup(MemberName_)) {
+                return SimpleValueFromYson(SchemeType_, tryMember.AsStringRef());
             }
         }
 
-        if (const auto& otherDict = OtherDict->GetValue(ctx)) {
-            if (auto tryMember = otherDict.Lookup(MemberName)) {
-                const bool isString = otherDict.Contains(OtherIsStringMemberName);
+        if (const auto& otherDict = OtherDict_->GetValue(ctx)) {
+            if (auto tryMember = otherDict.Lookup(MemberName_)) {
+                const bool isString = otherDict.Contains(OtherIsStringMemberName_);
                 if (isString) {
-                    if (SchemeType == NUdf::EDataSlot::Yson) {
+                    if (SchemeType_ == NUdf::EDataSlot::Yson) {
                         const auto& ref = tryMember.AsStringRef();
                         const auto size = ref.Size();
                         MKQL_ENSURE(size <= std::numeric_limits<i32>::max(), "TryWeakMemberFromDict: Unable to fit string to i32");
@@ -50,13 +50,13 @@ public:
                         NYson::WriteVarInt32(&stringStream, size);
                         stringStream.DoWrite(ref.Data(), size);
                         return stringStream.Value();
-                    } else if (SchemeType == NUdf::EDataSlot::String) {
+                    } else if (SchemeType_ == NUdf::EDataSlot::String) {
                         return tryMember;
                     } else {
                         return {};
                     }
                 } else {
-                    return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
+                    return SimpleValueFromYson(SchemeType_, tryMember.AsStringRef());
                 }
             }
         }
@@ -66,18 +66,18 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(OtherDict);
-        DependsOn(RestDict);
+        DependsOn(OtherDict_);
+        DependsOn(RestDict_);
     }
 
-    IComputationNode* const OtherDict;
-    IComputationNode* const RestDict;
-    const NUdf::EDataSlot SchemeType;
-    const NUdf::TUnboxedValue MemberName;
-    const NUdf::TUnboxedValue OtherIsStringMemberName;
+    IComputationNode* const OtherDict_;
+    IComputationNode* const RestDict_;
+    const NUdf::EDataSlot SchemeType_;
+    const NUdf::TUnboxedValue MemberName_;
+    const NUdf::TUnboxedValue OtherIsStringMemberName_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapTryWeakMemberFromDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
@@ -107,8 +107,7 @@ IComputationNode* WrapTryWeakMemberFromDict(TCallable& callable, const TComputat
     auto memberNameStr = MakeString(memberName);
     auto otherIsStringMemberNameStr = MakeString("_yql_" + memberName);
     return new TTryWeakMemberFromDictWrapper(ctx.Mutables, otherDict, restDict, static_cast<NUdf::TDataTypeId>(schemeType),
-            std::move(memberNameStr), std::move(otherIsStringMemberNameStr));
+                                             std::move(memberNameStr), std::move(otherIsStringMemberNameStr));
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

@@ -9,6 +9,7 @@ Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct
 Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>
 Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?
 Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32
+Re2::IsValidRegexp(pattern:String?, options:Struct<...>?) -> Bool
 Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>
 ```
 
@@ -85,6 +86,10 @@ Works as follows:
 ## Re2::Count {#count}
 
 Returns the number of non-overlapping substrings of the input string that have matched the regular expression.
+
+## Re2::IsValidRegexp {#isvalidregexp}
+
+Checks if the passed string is a valid regular expression pattern according to Re2 syntax. The optional `options` parameter allows you to validate the pattern using the same parsing settings that would be used by other Re2 functions, ensuring consistency in validation.
 
 ## Re2::Options {#options}
 

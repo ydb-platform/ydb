@@ -448,6 +448,8 @@ bool TYtTableMetaInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         else
             VALIDATE_FIELD(IsDynamic)
         else
+            VALIDATE_FIELD(HasRLS)
+        else
             VALIDATE_FIELD(SqlView)
         else
             VALIDATE_FIELD(SqlViewSyntaxVersion)
@@ -491,6 +493,8 @@ void TYtTableMetaInfo::Parse(TExprBase node) {
             HANDLE_FIELD(InferredScheme)
         else
             HANDLE_FIELD(IsDynamic)
+        else
+            HANDLE_FIELD(HasRLS)
         else {
             YQL_ENSURE(false, "Unexpected option " << setting.Name().Value());
         }
@@ -518,6 +522,7 @@ TExprBase TYtTableMetaInfo::ToExprNode(TExprContext& ctx, const TPositionHandle&
         ADD_BOOL_FIELD(YqlCompatibleScheme)
         ADD_BOOL_FIELD(InferredScheme)
         ADD_BOOL_FIELD(IsDynamic)
+        ADD_BOOL_FIELD(HasRLS)
         ;
 
 #undef ADD_BOOL_FIELD
@@ -625,14 +630,17 @@ NYT::TNode TYtTableBaseInfo::GetCodecSpecNode(const NCommon::TStructMemberMapper
         if (Meta->IsDynamic) {
             res[YqlDynamicAttribute] = true;
         }
+        if (Meta->HasRLS) {
+            res[YqlRLSAttribute] = true;
+        }
     }
     return res;
 }
 
-NYT::TNode TYtTableBaseInfo::GetAttrSpecNode(ui64 nativeTypeCompatibility, bool rowSpecCompactForm) const {
+NYT::TNode TYtTableBaseInfo::GetAttrSpecNode(bool rowSpecCompactForm) const {
     NYT::TNode res = NYT::TNode::CreateMap();
     if (RowSpec) {
-        RowSpec->FillAttrNode(res[YqlRowSpecAttribute], nativeTypeCompatibility, rowSpecCompactForm);
+        RowSpec->FillAttrNode(res[YqlRowSpecAttribute], rowSpecCompactForm);
     }
     return res;
 }
@@ -690,18 +698,22 @@ TYqlRowSpecInfo::TPtr TYtTableBaseInfo::GetRowSpec(TExprBase node) {
 }
 
 TYtTableStatInfo::TPtr TYtTableBaseInfo::GetStat(NNodes::TExprBase node) {
-    TExprNode::TPtr statNode;
+    TMaybeNode<TExprBase> stat;
     if (node.Maybe<TYtOutTable>()) {
-        statNode = node.Cast<TYtOutTable>().Stat().Ptr();
+        stat = node.Cast<TYtOutTable>().Stat();
     } else if (node.Maybe<TYtTable>()) {
-        statNode = node.Cast<TYtTable>().Stat().Ptr();
+        stat = node.Cast<TYtTable>().Stat();
     } else if (node.Maybe<TYtOutput>()) {
         auto tableWithCluster = GetOutTableWithCluster(node);
-        statNode = tableWithCluster.first.Cast<TYtOutTable>().Stat().Ptr();
+        stat = tableWithCluster.first.Cast<TYtOutTable>().Stat();
     } else {
         ythrow yexception() << "Not a table node " << (node.Raw() ? TString{node.Ref().Content()}.Quote() : TStringBuf("\"null\""));
     }
-    return MakeIntrusive<TYtTableStatInfo>(statNode);
+
+    if (stat.Maybe<TCoVoid>()) {
+        return {};
+    }
+    return MakeIntrusive<TYtTableStatInfo>(stat.Cast());
 }
 
 TStringBuf TYtTableBaseInfo::GetTableName(NNodes::TExprBase node) {
@@ -905,10 +917,21 @@ bool TYtTableInfo::HasSubstAnonymousLabel(NNodes::TExprBase node) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder) {
+TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeTypeCompatibility, const TMaybe<TColumnOrder>& columnOrder) {
     RowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-    RowSpec->SetType(type, nativeYtTypeFlags);
+    RowSpec->SetType(type, nativeTypeCompatibility);
     RowSpec->SetColumnOrder(columnOrder);
+
+    Meta = MakeIntrusive<TYtTableMetaInfo>();
+    Meta->CanWrite = true;
+    Meta->DoesExist = true;
+    Meta->YqlCompatibleScheme = true;
+
+    IsTemp = true;
+}
+
+TYtOutTableInfo::TYtOutTableInfo(const TYqlRowSpecInfo::TPtr& rowSpec) {
+    RowSpec = rowSpec;
 
     Meta = MakeIntrusive<TYtTableMetaInfo>();
     Meta->CanWrite = true;
@@ -978,7 +1001,7 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups, ctx)) {
+    if (!ValidateSettings(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::UniqueBy | EYtSettingType::OpHash | EYtSettingType::ColumnGroups | EYtSettingType::View, ctx)) {
         return false;
     }
 
@@ -2760,6 +2783,100 @@ void TYtColumnsInfo::Parse(NNodes::TExprBase node) {
     }
 }
 
+void TYtColumnsInfo::Apply(const TYtColumnsInfo& other) {
+    TMaybe<THashMap<TString, TString>> myBackRenames;
+    if (Renames) {
+        myBackRenames.ConstructInPlace();
+        for (const auto& [from, to] : *Renames) {
+            YQL_ENSURE(myBackRenames->emplace(to, from).second);
+        }
+    }
+
+    TMaybe<THashMap<TString, TString>> myColumnTypes;
+    TMaybe<TVector<TColumn>> myColumns;
+    if (Columns) {
+        myColumns.ConstructInPlace();
+        myColumnTypes.ConstructInPlace();
+        for (auto col : *Columns) {
+            if (myBackRenames) {
+                if (auto it = myBackRenames->find(col.Name); it != myBackRenames->end()) {
+                    col.Name = it->second;
+                }
+            }
+            YQL_ENSURE(myColumnTypes->emplace(col.Name, col.Type).second);
+            myColumns->push_back(col);
+        }
+    }
+
+    TMaybe<TVector<TColumn>> otherColumns = other.Columns;
+    if (other.Renames && otherColumns) {
+        THashMap<TString, TString> otherBackRenames;
+        for (const auto& [from, to] : *other.Renames) {
+            YQL_ENSURE(otherBackRenames.emplace(to, from).second);
+        }
+
+        for (auto& col : *otherColumns) {
+            if (auto it = otherBackRenames.find(col.Name); it != otherBackRenames.end()) {
+                col.Name = it->second;
+            }
+        }
+    }
+
+    if (otherColumns && myBackRenames) {
+        for (auto& col : *otherColumns) {
+            if (auto it = myBackRenames->find(col.Name); it != myBackRenames->end()) {
+                col.Name = it->second;
+            }
+        }
+    }
+
+    Columns = otherColumns ? otherColumns : myColumns;
+    Others = false;
+    TMaybe<TSet<TString>> resultColumnSet;
+    if (Columns) {
+        resultColumnSet.ConstructInPlace();
+        for (auto& col : *Columns) {
+            if (myColumnTypes) {
+                if (auto it = myColumnTypes->find(col.Name); it != myColumnTypes->end()) {
+                    col.Type = it->second;
+                }
+            }
+            YQL_ENSURE(resultColumnSet->insert(col.Name).second);
+            UpdateOthers(col.Name);
+        }
+    }
+
+    TMaybe<THashMap<TString, TString>> resultRenames;
+    if (Renames && !other.Renames) {
+        resultRenames = Renames;
+    } else if (!Renames && other.Renames) {
+        resultRenames = other.Renames;
+    } else if (Renames && other.Renames) {
+        resultRenames.ConstructInPlace();
+        for (auto& [from, to] : *Renames) {
+            TString tgt = to;
+            if (auto it = other.Renames->find(to); it != other.Renames->end()) {
+                tgt = it->second;
+            }
+            YQL_ENSURE(resultRenames->emplace(from, tgt).second);
+        }
+    }
+
+    Renames.Clear();
+    if (resultRenames) {
+        if (resultColumnSet) {
+            for (auto it = resultRenames->begin(); it != resultRenames->end();) {
+                if (!resultColumnSet->contains(it->first)) {
+                    resultRenames->erase(it++);
+                } else {
+                    ++it;
+                }
+            }
+        }
+        SetRenames(*resultRenames);
+    }
+}
+
 NNodes::TExprBase TYtColumnsInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos, const THashSet<TString>* filter) const {
     if (!Columns && !Renames) {
         return Build<TCoVoid>(ctx, pos).Done();
@@ -2838,7 +2955,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (!EnsureMinMaxArgsCount(node, 4, 5, ctx)) {
+    if (!EnsureMinMaxArgsCount(node, 5, 6, ctx)) {
         return false;
     }
 
@@ -2871,11 +2988,45 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
+    if (!node.Child(TYtPath::idx_QLFilter)->IsCallable(TYtQLFilter::CallableName())
+        && !node.Child(TYtPath::idx_QLFilter)->IsCallable(TCoVoid::CallableName())) {
+
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_QLFilter)->Pos()), TStringBuilder()
+            << "Expected " << TYtQLFilter::CallableName()
+            << " or Void"));
+        return false;
+    }
+
     if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !EnsureAtom(*node.Child(TYtPath::idx_AdditionalAttributes), ctx)) {
         return false;
     }
 
     return true;
+}
+
+bool TYtPathInfo::RewriteWithQLFilter(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (!input->IsCallable(TYtPath::CallableName())) {
+        return false;
+    }
+
+    static_assert(TYtPath::idx_QLFilter == 4);
+    static_assert(TYtPath::idx_AdditionalAttributes == 5);
+
+    if (input->ChildrenSize() == TYtPath::idx_QLFilter) {
+        TExprNode::TListType newChildren = input->ChildrenList();
+        newChildren.push_back(ctx.NewCallable(input->Pos(), "Void", {}));
+        output = ctx.ChangeChildren(*input, std::move(newChildren));
+        return true;
+    }
+
+    if (input->ChildrenSize() == TYtPath::idx_AdditionalAttributes && input->Child(TYtPath::idx_QLFilter)->Type() == TExprNode::Atom) {
+        TExprNode::TListType newChildren = input->ChildrenList();
+        newChildren.insert(newChildren.begin() + TYtPath::idx_QLFilter, ctx.NewCallable(input->Pos(), "Void", {}));
+        output = ctx.ChangeChildren(*input, std::move(newChildren));
+        return true;
+    }
+
+    return false;
 }
 
 void TYtPathInfo::Parse(TExprBase node) {
@@ -2895,6 +3046,11 @@ void TYtPathInfo::Parse(TExprBase node) {
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
     }
+
+    if (path.QLFilter().Maybe<TYtQLFilter>()) {
+        QLFilter = path.QLFilter().Ptr();
+    }
+
     if (path.AdditionalAttributes().Maybe<TCoAtom>()) {
         AdditionalAttributes = path.AdditionalAttributes().Cast().Value();
     }
@@ -2917,6 +3073,11 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
         pathBuilder.Stat(Stat->ToExprNode(ctx, pos));
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
+    }
+    if (QLFilter) {
+        pathBuilder.QLFilter(QLFilter);
+    } else {
+        pathBuilder.QLFilter<TCoVoid>().Build();
     }
     if (AdditionalAttributes) {
         pathBuilder.AdditionalAttributes<TCoAtom>()

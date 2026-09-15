@@ -31,11 +31,24 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
             info.IPv6Addrs.emplace_back(addr);
         }
         info.SslTargetNameOverride = endpointInfo.ssl_target_name_override();
+        info.BridgePileName = endpointInfo.bridge_pile_name();
+    }
+
+    const auto& pileStates = proto.pile_states();
+    PileStates_.reserve(pileStates.size());
+    for (const auto& pileState : pileStates) {
+        TPileState& info = PileStates_.emplace_back();
+        info.State = static_cast<TPileState::EState>(pileState.state());
+        info.PileName = pileState.pile_name();
     }
 }
 
 const std::vector<TEndpointInfo>& TListEndpointsResult::GetEndpointsInfo() const {
     return Info_;
+}
+
+const std::vector<TPileState>& TListEndpointsResult::GetPileStates() const {
+    return PileStates_;
 }
 
 TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto)
@@ -47,6 +60,12 @@ TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResul
     for (const auto& group : groups) {
         Groups_.emplace_back(group);
     }
+    IsAdministrationAllowed_ = proto.is_administration_allowed();
+    IsMonitoringAllowed_ = proto.is_monitoring_allowed();
+    IsViewerAllowed_ = proto.is_viewer_allowed();
+    IsDatabaseAllowed_ = proto.is_database_allowed();
+    IsRegisterNodeAllowed_ = proto.is_register_node_allowed();
+    IsBootstrapAllowed_ = proto.is_bootstrap_allowed();
 }
 
 const std::string& TWhoAmIResult::GetUserName() const {
@@ -57,17 +76,42 @@ const std::vector<std::string>& TWhoAmIResult::GetGroups() const {
     return Groups_;
 }
 
+bool TWhoAmIResult::IsAdministrationAllowed() const {
+    return IsAdministrationAllowed_;
+}
+
+bool TWhoAmIResult::IsMonitoringAllowed() const {
+    return IsMonitoringAllowed_;
+}
+
+bool TWhoAmIResult::IsViewerAllowed() const {
+    return IsViewerAllowed_;
+}
+
+bool TWhoAmIResult::IsDatabaseAllowed() const {
+    return IsDatabaseAllowed_;
+}
+
+bool TWhoAmIResult::IsRegisterNodeAllowed() const {
+    return IsRegisterNodeAllowed_;
+}
+
+bool TWhoAmIResult::IsBootstrapAllowed() const {
+    return IsBootstrapAllowed_;
+}
+
 TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)
     : DataCenterNum(location.has_data_center_num() ? std::make_optional(location.data_center_num()) : std::nullopt)
     , RoomNum(location.has_room_num() ? std::make_optional(location.room_num()) : std::nullopt)
     , RackNum(location.has_rack_num() ? std::make_optional(location.rack_num()) : std::nullopt)
     , BodyNum(location.has_body_num() ? std::make_optional(location.body_num()) : std::nullopt)
     , Body(location.has_body() ? std::make_optional(location.body()) : std::nullopt)
+    , BridgePileName(location.has_bridge_pile_name() ? std::make_optional(location.bridge_pile_name()) : std::nullopt)
     , DataCenter(location.has_data_center() ? std::make_optional(location.data_center()) : std::nullopt)
     , Module(location.has_module() ? std::make_optional(location.module()) : std::nullopt)
     , Rack(location.has_rack() ? std::make_optional(location.rack()) : std::nullopt)
     , Unit(location.has_unit() ? std::make_optional(location.unit()) : std::nullopt)
-    {}
+{}
 
 TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     : NodeId(info.node_id())
@@ -77,7 +121,6 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    , BridgePileId(info.has_bridge_pile_id() ? std::make_optional(info.bridge_pile_id()) : std::nullopt)
 {}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
@@ -209,13 +252,13 @@ public:
         if (!settings.Path_.empty()) {
             request.set_path(TStringType{settings.Path_});
         }
-        if (!settings.BridgePileName_.empty()) {
-            request.set_bridge_pile_name(TStringType{settings.BridgePileName_});
-        }
 
         auto requestLocation = request.mutable_location();
         const auto& location = settings.Location_;
 
+        if (location.BridgePileName) {
+            requestLocation->set_bridge_pile_name(TStringType{location.BridgePileName.value()});
+        }
         if (location.DataCenter) {
             requestLocation->set_data_center(TStringType{location.DataCenter.value()});
         }

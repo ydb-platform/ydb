@@ -95,6 +95,12 @@ namespace NActors {
             TString TenantName;
             TString MessagePrefix;
             ui32 NodeId;
+            // Add levelStr field in JSON for Y.Deploy log format
+            bool AddLevelInJson = false;
+
+            // Enable to pass structured log fields as json attributes and meta flags
+            // If false, then json text message contain key-value pairs from structured message
+            bool EnableStructuredLogInJson = false;
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc
@@ -166,6 +172,7 @@ namespace NActors {
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
+            void SetEnableStructuredLogInJson(bool value);
 
         private:
             int SetLevelImpl(

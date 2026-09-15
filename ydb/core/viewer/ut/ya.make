@@ -6,11 +6,19 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(
     viewer_ut.cpp
+    viewer_subscriptions_ut.cpp
     topic_data_ut.cpp
     ut/ut_utils.cpp
 )
@@ -18,8 +26,14 @@ SRCS(
 PEERDIR(
     library/cpp/http/misc
     library/cpp/http/simple
+    ydb/core/mon
+    ydb/core/mon/ut_utils
+    ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/core/tx/schemeshard/ut_helpers
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 END()

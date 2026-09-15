@@ -1,5 +1,7 @@
 #include "util.h"
 
+#include <google/protobuf/text_format.h>
+
 #include <util/generic/map.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
@@ -26,6 +28,16 @@ void SetLog(const std::shared_ptr<::TLog>& log) {
 
 const std::shared_ptr<::TLog>& GetLog() {
     return Singleton<TLog>()->Log;
+}
+
+TString ProtoToString(const google::protobuf::Message& message) {
+    google::protobuf::TextFormat::Printer printer;
+    printer.SetHideUnknownFields(true);
+
+    TString result;
+    Y_ENSURE(printer.PrintToString(message, &result));
+
+    return result;
 }
 
 } // NBackup

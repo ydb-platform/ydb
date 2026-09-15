@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
-#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/write_session.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
@@ -20,6 +19,38 @@
 #include <future>
 
 namespace NYdb::NFederatedTopic::NTests {
+
+void WriteMessages(std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> setup, const TString& path, const TString& messageBase, size_t count) {
+    NPersQueue::TWriteSessionSettings writeSettings;
+    writeSettings.Path(path).MessageGroupId("src_id");
+    writeSettings.Codec(NPersQueue::ECodec::RAW);
+    IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
+    writeSettings.CompressionExecutor(executor);
+
+    auto& pqClient = setup->GetPersQueueClient();
+    auto writeSession = pqClient.CreateSimpleBlockingWriteSession(writeSettings);
+
+    for (size_t i = 0; i < count; ++i) {
+        UNIT_ASSERT(writeSession->Write(messageBase + ToString(i)));
+    }
+    writeSession->Close();
+}
+
+void WriteMessages(std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> setup, const TString& messageBase, size_t count) {
+    NPersQueue::TWriteSessionSettings writeSettings;
+    writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+    writeSettings.Codec(NPersQueue::ECodec::RAW);
+    IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
+    writeSettings.CompressionExecutor(executor);
+
+    auto& pqClient = setup->GetPersQueueClient();
+    auto writeSession = pqClient.CreateSimpleBlockingWriteSession(writeSettings);
+
+    for (size_t i = 0; i < count; ++i) {
+        UNIT_ASSERT(writeSession->Write(messageBase + ToString(i)));
+    }
+    writeSession->Close();
+}
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
 
@@ -275,7 +306,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -402,6 +433,52 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         startPartitionSessionEvent->Confirm();
 
         ReadSession->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(SimpleDataHandlersAndGetEvent) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+
+        const TString topic1 = setup->GetTestTopic();
+        const TString topic2 = setup->GetTestTopic() + "-second";
+        setup->CreateTopic(topic2, setup->GetLocalCluster());
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << setup->GetGrpcPort())
+            .SetDatabase("/Root");
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NFederatedTopic::TFederatedTopicClient client(driver);
+
+        TString messageBase = "hello-";
+        WriteMessages(setup, topic1, messageBase, 5);
+        WriteMessages(setup, topic2, messageBase + "t2-", 3);
+
+        TVector<TString> receivedMessages;
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings settings;
+        settings
+            .ConsumerName("test-consumer")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic1))
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic2));
+
+        settings.EventHandlers_.SimpleDataHandlers(
+            [&receivedMessages](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+                for (const auto& message: event.GetMessages()) {
+                    receivedMessages.push_back(TString(message.GetData()));
+                }
+            },
+            true  // commit on receive
+        );
+
+        auto session = client.CreateReadSession(settings);
+        std::jthread thread([&] {
+            Sleep(TDuration::Seconds(3));
+            UNIT_ASSERT(session->Close(TDuration::MilliSeconds(10)));
+        });
+
+        auto event = session->GetEvent(/* block = */true);
+        UNIT_ASSERT(event.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages.size(), 8);
     }
 
     Y_UNIT_TEST(FallbackToSingleDbAfterBadRequest) {
@@ -534,7 +611,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -640,7 +717,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();
@@ -660,7 +737,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc2").MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();
@@ -680,7 +757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc3").MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();
@@ -740,6 +817,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Y_ASSERT(readyToAcceptEvent);
         WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello"));
 
+        auto firstFlush = WriteSession->Flush();
+        auto secondFlush = WriteSession->Flush();
+        auto reentrantFlushPromise = NThreading::NewPromise<bool>();
+        auto reentrantFlush = reentrantFlushPromise.GetFuture();
+        firstFlush.Subscribe([WriteSession, reentrantFlushPromise](const NThreading::TFuture<bool>& result) mutable {
+            reentrantFlushPromise.TrySetValue(result.GetValue() && WriteSession->Flush().GetValueSync());
+        });
+
         WriteSession->WaitEvent().Wait(TDuration::Seconds(1));
         event = WriteSession->GetEvent(false);
         Y_ASSERT(event);
@@ -765,6 +850,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto* acksEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event);
         Y_ASSERT(acksEvent);
+
+        UNIT_ASSERT_C(firstFlush.Wait(TDuration::Seconds(30)), "first flush timed out");
+        UNIT_ASSERT_C(secondFlush.Wait(TDuration::Seconds(30)), "second flush timed out");
+        UNIT_ASSERT_C(reentrantFlush.Wait(TDuration::Seconds(30)), "reentrant flush timed out");
+        UNIT_ASSERT(firstFlush.GetValue());
+        UNIT_ASSERT(secondFlush.GetValue());
+        UNIT_ASSERT(reentrantFlush.GetValue());
 
         WriteSession->Close(TDuration::MilliSeconds(10));
     }
@@ -850,7 +942,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
-
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
@@ -904,6 +995,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
+        auto flush = WriteSession->Flush();
 
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeUnavailableResult());
@@ -911,7 +1003,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // At this point the observer that federated write session works with should become stale, and the session closes.
         // No messages we have written and no federation discovery requests should be sent.
 
-        Sleep(TDuration::Seconds(3));
+        UNIT_ASSERT_C(flush.Wait(TDuration::Seconds(30)), "flush timed out");
+        UNIT_ASSERT(!flush.GetValue());
         UNIT_ASSERT(!fdsMock.GetNextPendingRequest().has_value());
         WriteSession->Close();
         UNIT_ASSERT_VALUES_EQUAL(acks, 0);

@@ -6,17 +6,23 @@ from devtools.yamaker.modules import GLOBAL, Linkable, Switch
 from devtools.yamaker.project import NixProject
 
 
+def _get_major_version(version: str) -> str:
+    return version.split('.')[0]
+
+
 def post_build(self):
     # copying icudt.dat file from original repository
-    icu_dat_path = f"{self.srcdir}/data/in/icudt76l.dat"
-    rodata_path = f"{self.dstdir}/icudt76_dat.rodata"
+    major_version = _get_major_version(self.version)
+    icu_dat_path = f"{self.srcdir}/data/in/icudt{major_version}l.dat"
+    rodata_path = f"{self.dstdir}/icudt{major_version}_dat.rodata"
     shutil.copy(icu_dat_path, rodata_path)
 
 
 def post_install(self):
     result_target = self.yamakes["."]
 
-    result_target.SRCS.add("icudt76_dat.rodata")
+    major_version = _get_major_version(self.version)
+    result_target.SRCS.add(f"icudt{major_version}_dat.rodata")
 
     result_target.CFLAGS = [
         "-DU_COMMON_IMPLEMENTATION",
@@ -84,7 +90,7 @@ icu = NixProject(
         "g:cpp-contrib",
     ],
     arcdir="contrib/libs/icu",
-    nixattr="icu74",
+    nixattr="icu",
     put_with={
         "icuio": [
             "icuuc",

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "expected_error_guard.h"
 #include "retry_lib.h"
 #include "wait_proxy.h"
 
@@ -32,11 +33,21 @@ TResult RequestWithRetry(
                 return func(mutationId);
             }
         } catch (const TErrorResponse& e) {
-            YT_LOG_ERROR("Retry failed %v - %v",
-                e.GetError().GetMessage(),
-                retryPolicy->GetAttemptDescription());
+            // NB(achains): Do not log expected error in stderr.
+            if (TExpectedErrorGuard::IsErrorExpected(e)) {
+                YT_LOG_INFO("Received expected error, retry failed %v - %v",
+                    e.GetError().GetMessage(),
+                    retryPolicy->GetAttemptDescription());
+            } else {
+                YT_LOG_ERROR("Retry failed %v - %v",
+                    e.GetError().GetMessage(),
+                    retryPolicy->GetAttemptDescription());
+            }
 
-            useSameMutationId = e.IsTransportError();
+            // NB(achains): Timed out request may have been applied by the server, so the mutation id must be reused.
+            //              HTTP backend wraps timeout errors as transport error.
+            //              RPC backend instead reports NYT::EErrorCode::Timeout.
+            useSameMutationId = e.IsTransportError() || e.IsRequestTimedOut();
 
             if (!IsRetriable(e)) {
                 throw;

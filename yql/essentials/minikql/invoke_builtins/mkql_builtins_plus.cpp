@@ -1,12 +1,11 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TPlus : public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TPlus: public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOutput>> {
     static TOutput Do(TInput val)
     {
         return +val;
@@ -32,7 +31,7 @@ struct TDecimalPlus {
     }
 #endif
 };
-}
+} // namespace
 
 void RegisterPlus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TPlus, TUnaryArgsOpt>(registry, "Plus");
@@ -41,5 +40,4 @@ void RegisterPlus(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPlus, TUnaryArgsOpt>(registry, "Plus");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

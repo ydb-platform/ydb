@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/yson/public.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,12 +21,12 @@ public:
     constexpr explicit TSize(TUnderlying value);
 
     TSize(const TSize&) = default;
-    TSize(TSize&&) = default;
+    TSize(TSize&&) noexcept = default;
 
     static TSize FromString(TStringBuf serializedValue);
 
     TSize& operator=(const TSize&) = default;
-    TSize& operator=(TSize&&) = default;
+    TSize& operator=(TSize&&) noexcept = default;
 
     constexpr operator const TUnderlying&() const;
     constexpr operator TUnderlying&();
@@ -38,6 +40,12 @@ public:
 private:
     TUnderlying Underlying_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TSize& value, NYson::IYsonConsumer* consumer);
+void Deserialize(TSize& value, INodePtr node);
+void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 

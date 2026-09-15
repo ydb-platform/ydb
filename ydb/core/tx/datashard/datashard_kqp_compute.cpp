@@ -2,11 +2,14 @@
 #include "range_ops.h"
 #include "datashard_user_db.h"
 
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <yql/essentials/minikql/mkql_node.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -15,25 +18,22 @@ using namespace NTable;
 using namespace NUdf;
 
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, TIntrusivePtr<NACLib::TUserContext>);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
-        Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
-        Map["KqpDeleteRows"] = &WrapKqpDeleteRows;
-        Map["KqpEffects"] = &WrapKqpEffects;
     }
 
     THashMap<TString, TCallableDatashardBuilderFunc> Map;
 };
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx) {
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, TIntrusivePtr<NACLib::TUserContext> userCtx) {
     MKQL_ENSURE_S(computeCtx);
     MKQL_ENSURE_S(computeCtx->Database);
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
 
-    return [computeFactory, computeCtx]
+    return [computeFactory, computeCtx, userCtx]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (auto compute = computeFactory(callable, ctx)) {
                 return compute;
@@ -42,7 +42,7 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
             const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
             auto it = datashardMap.find(callable.GetType()->GetName());
             if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
+                return it->second(callable, ctx, *computeCtx, userCtx);
             }
 
             return nullptr;
@@ -134,14 +134,14 @@ void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     UserDb.SetLockNodeId(lockNodeId);
 }
 
-void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
-    UserDb.SetReadVersion(readVersion);
+void TKqpDatashardComputeContext::SetMvccVersion(TRowVersion mvccVersion) {
+    UserDb.SetMvccVersion(mvccVersion);
 }
 
-TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
-    Y_ENSURE(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
+TRowVersion TKqpDatashardComputeContext::GetMvccVersion() const {
+    Y_ENSURE(!UserDb.GetMvccVersion().IsMin(), "Cannot perform reads without ReadVersion set");
 
-    return UserDb.GetReadVersion();
+    return UserDb.GetMvccVersion();
 }
 
 TEngineHostCounters& TKqpDatashardComputeContext::GetDatashardCounters() {
@@ -240,15 +240,16 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetReadVersion());
+                                         GetMvccVersion()).Ready;
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
-            << ", columns: [" << JoinSeq(", ", columnTags) << "]"
-            << ", range: " << DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)
-            << ", itemsLimit: " << key.RangeLimits.ItemsLimit
-            << ", bytesLimit: " << key.RangeLimits.BytesLimit
-            << ", reverse: " << key.Reverse
-            << ", result: " << ready);
+        YDB_LOG_TRACE("Run precharge on table",
+            {"table", tableInfo->Name},
+            {"columns", JoinSeq(", ", columnTags)},
+            {"range", DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)},
+            {"itemsLimit", key.RangeLimits.ItemsLimit},
+            {"bytesLimit", key.RangeLimits.BytesLimit},
+            {"reverse", key.Reverse},
+            {"result", ready});
 
         ret &= ready;
     }
@@ -265,3 +266,7 @@ const absl::flat_hash_set<ui64>& TKqpDatashardComputeContext::GetVolatileReadDep
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

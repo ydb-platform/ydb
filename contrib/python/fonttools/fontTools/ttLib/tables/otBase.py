@@ -15,10 +15,7 @@ have_uharfbuzz = False
 try:
     import uharfbuzz as hb
 
-    # repack method added in uharfbuzz >= 0.23; if uharfbuzz *can* be
-    # imported but repack method is missing, behave as if uharfbuzz
-    # is not available (fallback to the slower Python implementation)
-    have_uharfbuzz = callable(getattr(hb, "repack", None))
+    have_uharfbuzz = True
 except ImportError:
     pass
 
@@ -344,6 +341,15 @@ class OTTableReader(object):
         self.pos = newpos
         return value
 
+    def readInt24(self):
+        pos = self.pos
+        newpos = pos + 3
+        b = self.data[pos:newpos]
+        pad = b"\xff" if b[0] & 0x80 else b"\0"
+        (value,) = struct.unpack(">l", pad + b)
+        self.pos = newpos
+        return value
+
     def readUInt24Array(self, count):
         return [self.readUInt24() for _ in range(count)]
 
@@ -500,8 +506,7 @@ class OTTableWriter(object):
             internedTables = {}
 
         items = self.items
-        for i in range(len(items)):
-            item = items[i]
+        for i, item in enumerate(items):
             if hasattr(item, "getCountData"):
                 items[i] = item.getCountData()
             elif hasattr(item, "subWriter"):
@@ -669,10 +674,7 @@ class OTTableWriter(object):
             tableData = table.getDataForHarfbuzz()
             data.append(tableData)
 
-        if hasattr(hb, "repack_with_tag"):
-            return hb.repack_with_tag(str(tableTag), data, obj_list)
-        else:
-            return hb.repack(data, obj_list)
+        return hb.serialize_with_tag(str(tableTag), data, obj_list)
 
     def getAllData(self, remove_duplicate=True):
         """Assemble all data, including all subtables."""
@@ -1130,8 +1132,7 @@ class BaseTable(object):
         for conv in self.getConverters():
             if conv.repeat:
                 value = getattr(self, conv.name, [])
-                for i in range(len(value)):
-                    item = value[i]
+                for i, item in enumerate(value):
                     conv.xmlWrite(xmlWriter, font, item, conv.name, [("index", i)])
             else:
                 if conv.aux and not eval(conv.aux, None, vars(self)):

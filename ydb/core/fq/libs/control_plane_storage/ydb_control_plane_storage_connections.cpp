@@ -10,6 +10,8 @@
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 namespace {
@@ -114,17 +116,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     const auto& content = connection.content();
     const TString& connectionId = connection.meta().id();
 
-    CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
-        << "CreateConnectionRequest: "
-        << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+    YDB_LOG_TRACE("Dump logPrefix, createConnectionRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+        {"createConnectionRequest", NKikimr::MaskTicket(token)},
+        {"request", SecureDebugString(request)});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
-            << "CreateConnectionRequest, validation failed: "
-            << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
-            << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("CreateConnectionRequest, validation",
+            {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", SecureDebugString(request)},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, false);
@@ -246,17 +248,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         permissions.SetAll();
     }
     const int64_t limit = request.limit();
-    CPS_LOG_T(MakeLogPrefix(scope, user)
-        << "ListConnectionsRequest: "
-        << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+    YDB_LOG_TRACE("Dump logPrefix, listConnectionsRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user)},
+        {"listConnectionsRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_D(MakeLogPrefix(scope, user)
-            << "ListConnectionsRequest, validation failed: "
-            << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
-            << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("ListConnectionsRequest, validation",
+            {"logPrefix", MakeLogPrefix(scope, user)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListConnectionsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, false);
@@ -319,7 +321,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit, extractSensitiveFields, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListConnectionsResult result;
@@ -328,7 +330,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             auto& connection = *result.add_connection();
             if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
             }
             PrepareSensitiveFields(connection, extractSensitiveFields);
         }
@@ -383,17 +385,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     }
     const int byteSize = request.ByteSize();
 
-    CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
-        << "DescribeConnectionRequest: "
-        << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+    YDB_LOG_TRACE("Dump logPrefix, describeConnectionRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+        {"describeConnectionRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
-            << "DescribeConnectionRequest, validation failed: "
-            << NKikimr::MaskTicket(token)<< " "
-            << request.DebugString()
-            << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("DescribeConnectionRequest, validation",
+            {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeConnectionRequest, scope, connectionId, user, delta, byteSize, false);
@@ -412,25 +414,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, extractSensitiveFields, resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::DescribeConnectionResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         if (!result.mutable_connection()->ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
         }
 
         bool hasViewAccess = HasViewAccess(permissions, result.connection().content().acl().visibility(), result.connection().meta().created_by(), user);
         if (!hasViewAccess) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         PrepareSensitiveFields(*result.mutable_connection(), extractSensitiveFields);
@@ -476,18 +478,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
     const int byteSize = request.ByteSize();
-    CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
-        << "ModifyConnectionRequest: "
-        << NKikimr::MaskTicket(token)
-        << " " << SecureDebugString(request));
+    YDB_LOG_TRACE("Dump logPrefix, modifyConnectionRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+        {"modifyConnectionRequest", NKikimr::MaskTicket(token)},
+        {"request", SecureDebugString(request)});
 
     NYql::TIssues issues = ValidateConnection(ev, false);
     if (issues) {
-        CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
-            << "ModifyConnectionRequest, validation failed: "
-            << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
-            << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("ModifyConnectionRequest, validation",
+            {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", SecureDebugString(request)},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ModifyConnectionRequest, scope, connectionId, user, delta, byteSize, false);
@@ -503,20 +505,20 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         FederatedQuery::Connection connection;
         if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
         }
 
         auto& meta = *connection.mutable_meta();
@@ -529,11 +531,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         bool validateType = content.setting().connection_case() == request.content().setting().connection_case();
 
         if (!validateType) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
         }
 
         if (content.acl().visibility() == FederatedQuery::Acl::SCOPE && request.content().acl().visibility() == FederatedQuery::Acl::PRIVATE) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
         // FIXME: this code needs better generalization
@@ -559,7 +561,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         response->second.After.ConstructInPlace().CopyFrom(connection);
         response->second.CloudId = connectionInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyConnection(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("connection_id", connectionId);
         writeQueryBuilder.AddInt64("visibility", connection.content().acl().visibility());
@@ -567,7 +569,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", connectionInternal.SerializeAsString());
         writeQueryBuilder.AddString("connection", connection.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME "` = $connection\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
@@ -673,18 +675,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     const TString idempotencyKey = request.idempotency_key();
     const int byteSize = request.ByteSize();
     const int previousRevision = request.previous_revision();
-    CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
-        << "DeleteConnectionRequest: "
-        << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+    YDB_LOG_TRACE("Dump logPrefix, deleteConnectionRequest, request",
+        {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+        {"deleteConnectionRequest", NKikimr::MaskTicket(token)},
+        {"request", request.DebugString()});
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
-            << "DeleteConnectionRequest, validation failed: "
-            << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
-            << " error: " << issues.ToString());
+        YDB_LOG_DEBUG("DeleteConnectionRequest, validation",
+            {"logPrefix", MakeLogPrefix(scope, user, connectionId)},
+            {"failed", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()},
+            {"error", issues});
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DeleteConnectionRequest, scope, connectionId, user, delta, byteSize, false);

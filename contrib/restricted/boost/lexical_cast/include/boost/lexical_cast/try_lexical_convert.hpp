@@ -1,6 +1,6 @@
 // Copyright Kevlin Henney, 2000-2005.
 // Copyright Alexander Nasonov, 2006-2010.
-// Copyright Antony Polukhin, 2011-2025.
+// Copyright Antony Polukhin, 2011-2026.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -18,13 +18,18 @@
 #ifndef BOOST_LEXICAL_CAST_TRY_LEXICAL_CONVERT_HPP
 #define BOOST_LEXICAL_CAST_TRY_LEXICAL_CONVERT_HPP
 
+#include <boost/lexical_cast/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
+
+#ifndef BOOST_LEXICAL_CAST_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #   pragma once
 #endif
 
-#include <boost/type_traits/conditional.hpp>
-#include <boost/type_traits/is_arithmetic.hpp>
+#include <type_traits>
+#endif
 
 #include <boost/lexical_cast/detail/buffer_view.hpp>
 #include <boost/lexical_cast/detail/is_character.hpp>
@@ -35,22 +40,24 @@ namespace boost {
     namespace detail
     {
         template<typename Target, typename Source>
-        using is_arithmetic_and_not_xchars = boost::integral_constant<
+        using is_arithmetic_and_not_xchars = std::integral_constant<
             bool,
             !(boost::detail::is_character<Target>::value) &&
                 !(boost::detail::is_character<Source>::value) &&
-                boost::is_arithmetic<Source>::value &&
-                boost::is_arithmetic<Target>::value
+                std::is_arithmetic<Source>::value &&
+                std::is_arithmetic<Target>::value
         >;
     }
 
     namespace conversion { namespace detail {
 
+BOOST_LEXICAL_CAST_BEGIN_MODULE_EXPORT
+
         template <typename Target, typename Source>
         inline bool try_lexical_convert(const Source& arg, Target& result)
         {
             static_assert(
-                !boost::is_volatile<Source>::value,
+                !std::is_volatile<Source>::value,
                 "Boost.LexicalCast does not support volatile input");
 
             typedef typename boost::detail::array_to_pointer_decay<Source>::type src;
@@ -58,7 +65,7 @@ namespace boost {
             typedef boost::detail::is_arithmetic_and_not_xchars<Target, src >
                 shall_we_copy_with_dynamic_check_t;
 
-            typedef typename boost::conditional<
+            typedef typename std::conditional<
                  shall_we_copy_with_dynamic_check_t::value,
                  boost::detail::dynamic_num_converter_impl<Target, src >,
                  boost::detail::lexical_converter_impl<Target, src >
@@ -79,15 +86,20 @@ namespace boost {
                 result
             );
         }
+BOOST_LEXICAL_CAST_END_MODULE_EXPORT
 
     }} // namespace conversion::detail
 
     namespace conversion {
+BOOST_LEXICAL_CAST_BEGIN_MODULE_EXPORT
         // ADL barrier
         using ::boost::conversion::detail::try_lexical_convert;
+BOOST_LEXICAL_CAST_END_MODULE_EXPORT
     }
 
 } // namespace boost
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_LEXICAL_CAST_INTERFACE_UNIT)
 
 #endif // BOOST_LEXICAL_CAST_TRY_LEXICAL_CONVERT_HPP
 

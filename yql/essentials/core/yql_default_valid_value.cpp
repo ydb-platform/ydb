@@ -8,8 +8,9 @@ namespace {
 
 class TIsValidValueSupportedVisitor: public TTypeAnnotationVisitor {
 public:
-    TIsValidValueSupportedVisitor(const TTypeAnnotationNode* type)
-        : Type_(type) {
+    explicit TIsValidValueSupportedVisitor(const TTypeAnnotationNode* type)
+        : Type_(type)
+    {
     }
 
     bool IsSupported() {
@@ -23,6 +24,16 @@ private:
         Result_ = false; // YQL_ENSURE(false, "UnitExprType is not supported.");
     }
 
+    void Visit(const TUniversalExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "UniversalExprType is not supported.");
+    }
+
+    void Visit(const TUniversalStructExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "UniversalStructExprType is not supported.");
+    }
+
     void Visit(const TMultiExprType& type) override {
         Y_UNUSED(type);
         Result_ = false; // YQL_ENSURE(false, "MultiExprType is not supported.");
@@ -30,8 +41,8 @@ private:
 
     void Visit(const TTupleExprType& type) override {
         const auto& items = type.GetItems();
-        for (size_t i = 0; i < items.size(); ++i) {
-            if (!TIsValidValueSupportedVisitor(items[i]).IsSupported()) {
+        for (const auto* item : items) {
+            if (!TIsValidValueSupportedVisitor(item).IsSupported()) {
                 Result_ = false;
                 return;
             }
@@ -41,8 +52,8 @@ private:
 
     void Visit(const TStructExprType& type) override {
         const auto& items = type.GetItems();
-        for (size_t i = 0; i < items.size(); ++i) {
-            if (!TIsValidValueSupportedVisitor(items[i]->GetItemType()).IsSupported()) {
+        for (const auto* item : items) {
+            if (!TIsValidValueSupportedVisitor(item->GetItemType()).IsSupported()) {
                 Result_ = false;
                 return;
             }
@@ -159,7 +170,16 @@ private:
         Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
     }
 
-private:
+    void Visit(const TLinearExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "BlockExprType is not supported.");
+    }
+
+    void Visit(const TDynamicLinearExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "ScalarExprType is not supported.");
+    }
+
     const TTypeAnnotationNode* Type_;
     bool Result_ = false;
 };
@@ -169,7 +189,8 @@ public:
     TValidValueNodeVisitor(const TTypeAnnotationNode* type, TExprContext& ctx, TPositionHandle pos)
         : Type_(type)
         , Ctx_(ctx)
-        , Pos_(pos) {
+        , Pos_(pos)
+    {
     }
 
     TExprNode::TPtr CreateDefaultValue() {
@@ -181,6 +202,16 @@ private:
     void Visit(const TUnitExprType& type) override {
         Y_UNUSED(type);
         YQL_ENSURE(false, "UnitExprType is not supported.");
+    }
+
+    void Visit(const TUniversalExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "UniversalExprType is not supported.");
+    }
+
+    void Visit(const TUniversalStructExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "UniversalStructExprType is not supported.");
     }
 
     void Visit(const TMultiExprType& type) override {
@@ -453,7 +484,16 @@ private:
         YQL_ENSURE(false, "ScalarExprType is not supported.");
     }
 
-private:
+    void Visit(const TLinearExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "LinearExprType is not supported.");
+    }
+
+    void Visit(const TDynamicLinearExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "DynamicLinearExprType is not supported.");
+    }
+
     const TTypeAnnotationNode* Type_;
     TExprContext& Ctx_;
     TExprNode::TPtr Result_ = nullptr;

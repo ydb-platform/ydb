@@ -19,8 +19,7 @@ namespace numpy
   {
 
     template <class pS>
-    types::ndarray<long, pS> negative_binomial(long n, double p,
-                                               pS const &shape)
+    types::ndarray<long, pS> negative_binomial(long n, double p, pS const &shape)
     {
       types::ndarray<long, pS> result{shape, types::none_type()};
       std::negative_binomial_distribution<long> distribution{n, p};
@@ -30,8 +29,7 @@ namespace numpy
     }
 
     inline auto negative_binomial(long n, double p, long size)
-        -> decltype(negative_binomial(n, p,
-                                      types::array_tuple<long, 1>{{size}}))
+        -> decltype(negative_binomial(n, p, types::array_tuple<long, 1>{{size}}))
     {
       return negative_binomial(n, p, types::array_tuple<long, 1>{{size}});
     }

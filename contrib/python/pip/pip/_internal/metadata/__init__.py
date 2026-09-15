@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import contextlib
 import functools
 import os
 import sys
-from typing import List, Literal, Optional, Protocol, Type, cast
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from pip._internal.utils.deprecation import deprecated
 from pip._internal.utils.misc import strtobool
 
 from .base import BaseDistribution, BaseEnvironment, FilesystemWheel, MemoryWheel, Wheel
+
+if TYPE_CHECKING:
+    from pip._vendor.packaging.utils import NormalizedName
 
 __all__ = [
     "BaseDistribution",
@@ -81,12 +86,12 @@ def _emit_pkg_resources_deprecation_if_needed() -> None:
 
 
 class Backend(Protocol):
-    NAME: 'Literal["importlib", "pkg_resources"]'
-    Distribution: Type[BaseDistribution]
-    Environment: Type[BaseEnvironment]
+    NAME: Literal["importlib", "pkg_resources"]
+    Distribution: type[BaseDistribution]
+    Environment: type[BaseEnvironment]
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def select_backend() -> Backend:
     if _should_use_importlib_metadata():
         from . import importlib
@@ -110,7 +115,7 @@ def get_default_environment() -> BaseEnvironment:
     return select_backend().Environment.default()
 
 
-def get_environment(paths: Optional[List[str]]) -> BaseEnvironment:
+def get_environment(paths: list[str] | None) -> BaseEnvironment:
     """Get a representation of the environment specified by ``paths``.
 
     This returns an Environment instance from the chosen backend based on the
@@ -129,7 +134,9 @@ def get_directory_distribution(directory: str) -> BaseDistribution:
     return select_backend().Distribution.from_directory(directory)
 
 
-def get_wheel_distribution(wheel: Wheel, canonical_name: str) -> BaseDistribution:
+def get_wheel_distribution(
+    wheel: Wheel, canonical_name: NormalizedName
+) -> BaseDistribution:
     """Get the representation of the specified wheel's distribution metadata.
 
     This returns a Distribution instance from the chosen backend based on

@@ -381,9 +381,9 @@ int main(int argc, char *argv[])
 	bdev_size_lbas = bdev_size / lba_size;
 	close(fd);
 
-	buffer = aligned_alloc(lba_size, lba_size);
+	buffer = t_aligned_alloc(lba_size, lba_size);
 	if (!buffer) {
-		fprintf(stderr, "aligned_alloc failed\n");
+		fprintf(stderr, "t_aligned_alloc failed\n");
 		return T_EXIT_FAIL;
 	}
 	for (i = 0; i < lba_size; i++)

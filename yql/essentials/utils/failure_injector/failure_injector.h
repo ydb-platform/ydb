@@ -33,4 +33,4 @@ private:
     TMutex Lock_;
 };
 
-} // NYql
+} // namespace NYql

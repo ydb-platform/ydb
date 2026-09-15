@@ -8,11 +8,11 @@
 
 #include <yt/yt/core/json/json_writer.h>
 
-#include <yt/yt/core/misc/string_builder.h>
-
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt_proto/yt/formats/extension.pb.h>
+
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/text_format.h>
@@ -51,8 +51,8 @@ const std::string& TEnumerationDescription::GetValueName(i32 value) const
         return *valueName;
     }
     THROW_ERROR_EXCEPTION("Invalid value for enum")
-        << TErrorAttribute("enum_name", GetEnumerationName())
-        << TErrorAttribute("value", value);
+        .With("enum_name", GetEnumerationName())
+        .With("value", value);
 }
 
 const std::string* TEnumerationDescription::TryGetValueName(i32 value) const
@@ -70,8 +70,8 @@ i32 TEnumerationDescription::GetValue(TStringBuf valueName) const
         return *value;
     }
     THROW_ERROR_EXCEPTION("Invalid value for enum")
-        << TErrorAttribute("enum_name", GetEnumerationName())
-        << TErrorAttribute("value", valueName);
+        .With("enum_name", GetEnumerationName())
+        .With("value", valueName);
 }
 
 std::optional<i32> TEnumerationDescription::TryGetValue(TStringBuf valueName) const
@@ -125,8 +125,8 @@ public:
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
-                << TErrorAttribute("line_number", line)
-                << TErrorAttribute("column_number", column));
+                .With("line_number", line)
+                .With("column_number", column));
         }
     }
 
@@ -153,8 +153,8 @@ public:
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
-                << TErrorAttribute("file_name", fileName)
-                << TErrorAttribute("element_name", elementName));
+                .With("file_name", fileName)
+                .With("element_name", elementName));
         }
     }
 
@@ -162,7 +162,7 @@ public:
     {
         if (!Errors_.empty()) {
             THROW_ERROR_EXCEPTION("Error while building protobuf descriptors")
-                << Errors_;
+                .With(Errors_);
         }
     }
 
@@ -342,11 +342,17 @@ void ValidateSimpleType(
             case ESimpleLogicalValueType::Int16:
             case ESimpleLogicalValueType::Int32:
             case ESimpleLogicalValueType::Int64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
                 return EKind::SignedInteger;
             case ESimpleLogicalValueType::Uint8:
             case ESimpleLogicalValueType::Uint16:
             case ESimpleLogicalValueType::Uint32:
             case ESimpleLogicalValueType::Uint64:
+            case ESimpleLogicalValueType::Timestamp:
+            case ESimpleLogicalValueType::Date:
+            case ESimpleLogicalValueType::Datetime:
                 return EKind::UnsignedInteger;
             default:
                 return EKind::Other;
@@ -478,8 +484,8 @@ static bool CanBePacked(EProtobufType type)
     THROW_ERROR_EXCEPTION("Table schema and protobuf format config mismatch at %v: %v",
         descriptor.GetDescription(),
         message)
-        << TErrorAttribute("type_in_schema", ToString(*descriptor.GetType()))
-        << TErrorAttribute("protobuf_type", protoTypeConfig);
+        .With("type_in_schema", ToString(*descriptor.GetType()))
+        .With("protobuf_type", protoTypeConfig);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -591,7 +597,7 @@ private:
 class TProtobufTypeConfigBuilder
 {
 public:
-    TProtobufTypeConfigBuilder(bool enumsAsStrings)
+    explicit TProtobufTypeConfigBuilder(bool enumsAsStrings)
         : EnumsAsStrings_(enumsAsStrings)
         , Enumerations_(GetEphemeralNodeFactory()->CreateMap())
     { }
@@ -824,15 +830,15 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptorsLegacy(
     for (size_t i = 0; i < config->FileIndices.size(); ++i) {
         if (config->FileIndices[i] >= std::ssize(fileDescriptors)) {
             THROW_ERROR_EXCEPTION("File index is out of bound")
-                << TErrorAttribute("file_index", config->FileIndices[i])
-                << TErrorAttribute("file_count", fileDescriptors.size());
+                .With("file_index", config->FileIndices[i])
+                .With("file_count", fileDescriptors.size());
         }
         auto* fileDescriptor = fileDescriptors[config->FileIndices[i]];
 
         if (config->MessageIndices[i] >= fileDescriptor->message_type_count()) {
             THROW_ERROR_EXCEPTION("Message index is out of bound")
-                << TErrorAttribute("message_index", config->MessageIndices[i])
-                << TErrorAttribute("message_count", fileDescriptor->message_type_count());
+                .With("message_index", config->MessageIndices[i])
+                .With("message_count", fileDescriptor->message_type_count());
         }
         messageDescriptors.push_back(fileDescriptor->message_type(config->MessageIndices[i]));
     }
@@ -860,7 +866,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptors(
     parser.RecordErrorsTo(&errorCollector);
     if (!parser.ParseFromString(*config->FileDescriptorSetText, &fileDescriptorSet)) {
         THROW_ERROR_EXCEPTION(R"(Error parsing "file_descriptor_set_text" in protobuf config)")
-            << errorCollector.GetErrors();
+            .With(errorCollector.GetErrors());
     }
 
     DescriptorPool descriptorPool;
@@ -881,7 +887,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptors(
     InitFromProtobufSchema(configWithTypes, schemas);
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -898,7 +904,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     }
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -919,7 +925,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
 
     parent->AddChild(
             std::nullopt,
-            std::move(child), //KMP
+            std::move(child), // KMP
             fieldIndex);
 
     for (auto& fieldConfig : columnConfig->Type->Fields) {
@@ -927,7 +933,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     }
 }
 
-template<typename TType>
+template <typename TType>
 void TProtobufFormatDescriptionBase<TType>::InitColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -939,7 +945,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
 {
     if (columnConfig->Type->ProtoType == EProtobufType::EmbeddedMessage) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
             columnConfig->Name,
             EProtobufType::EmbeddedMessage);
         }
@@ -952,7 +958,7 @@ void TProtobufFormatDescriptionBase<TType>::InitColumn(
     TLogicalTypePtr logicalType = columnSchema ? columnSchema->LogicalType() : nullptr;
     if (columnConfig->ProtoType == EProtobufType::OtherColumns) {
         if (columnConfig->Repeated) {
-            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv can not be repeated",
+            THROW_ERROR_EXCEPTION("Protobuf field %Qv of type %Qlv cannot be repeated",
                 columnConfig->Name,
                 EProtobufType::OtherColumns);
         }
@@ -1004,15 +1010,13 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
     if (config->Enumerations) {
         const auto& enumerationConfigMap = config->Enumerations;
         for (const auto& [name_, field] : enumerationConfigMap->GetChildren()) {
-            // TODO(babenko): migrate to std::string
-            auto name = std::string(name_);
+            const auto& name = name_;
             if (field->GetType() != ENodeType::Map) {
                 THROW_ERROR_EXCEPTION(R"(Invalid enumeration specification type: expected "map", found %Qlv)",
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            // TODO(babenko): migrate to std::string
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(std::string(TimestampColumnName), enumerationConfig));
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TimestampColumnName, enumerationConfig));
         }
     }
 
@@ -1192,7 +1196,12 @@ typename TProtobufTypeBuilder<TType>::TTypePtr TProtobufTypeBuilder<TType>::Find
             VisitStruct(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Dict:
-            YT_VERIFY(repeated);
+            if (!repeated) {
+                ThrowSchemaMismatch(
+                    "non-repeated protobuf field cannot match \"dict\" type in schema",
+                    descriptor,
+                    typeConfig);
+            }
             VisitDict(type, typeConfig, descriptor);
             return type;
         case ELogicalMetatype::Simple:
@@ -1258,7 +1267,7 @@ void TProtobufTypeBuilder<TType>:: VisitStruct(
             ? descriptor.VariantStructField(fieldIndex)
             : descriptor.StructField(fieldIndex);
         if (isOneof && childDescriptor.GetType()->IsNullable()) {
-            THROW_ERROR_EXCEPTION("Optional variant field %Qv can not match oneof field in protobuf format",
+            THROW_ERROR_EXCEPTION("Optional variant field %Qv cannot match oneof field in protobuf format",
                 childDescriptor.GetDescription());
         }
         type->AddChild(
@@ -1398,7 +1407,7 @@ void TProtobufWriterFormatDescription::AddTable(TProtobufWriterTypePtr tableType
         if (!inserted) {
             THROW_ERROR_EXCEPTION("Multiple fields with same column name %Qv are forbidden in protobuf format",
                 column->Name)
-                << TErrorAttribute("table_index", std::ssize(Tables_) - 1);
+                .With("table_index", std::ssize(Tables_) - 1);
         }
         if (column->Type->ProtoType == EProtobufType::OtherColumns) {
             table.OtherColumnsField = column.get();
@@ -1410,7 +1419,7 @@ void TProtobufWriterFormatDescription::AddTable(TProtobufWriterTypePtr tableType
 const TProtobufWriterFormatDescription::TTableDescription&
 TProtobufWriterFormatDescription::GetTableDescription(int tableIndex) const
 {
-    if (Y_UNLIKELY(tableIndex >= std::ssize(Tables_))) {
+    if (tableIndex >= std::ssize(Tables_)) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Table with index %v is missing in format description",
             tableIndex);
     }
@@ -1555,13 +1564,13 @@ std::optional<int> TProtobufParserType::FieldNumberToChildIndex(int fieldNumber,
     int index;
     if (fieldNumber < std::ssize(store->FieldNumberToChildIndexVector)) {
         index = store->FieldNumberToChildIndexVector[fieldNumber];
-        if (Y_UNLIKELY(index == InvalidChildIndex)) {
+        if (index == InvalidChildIndex) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }
     } else {
         auto it = store->FieldNumberToChildIndexMap.find(fieldNumber);
-        if (Y_UNLIKELY(it == store->FieldNumberToChildIndexMap.end())) {
+        if (it == store->FieldNumberToChildIndexMap.end()) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Unexpected field number %v",
                 fieldNumber);
         }

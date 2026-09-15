@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bloom_filter_defaults.h"
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
 #include "util_basics.h"
@@ -45,12 +46,14 @@ public:
 
     struct TFamily /* group of columns configuration */ {
         using ECodec = NPage::ECodec;
+        using ECacheMode = NPage::ECacheMode;
 
         ui32 Room = DefaultRoom;
         ECache Cache = ECache::None;    /* How to cache data pages      */
         ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
+        ECacheMode CacheMode = ECacheMode::Regular;
     };
 
     using TColumn = NTable::TColumn;
@@ -81,13 +84,22 @@ public:
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
-        bool ByKeyFilter = false;
+        struct TByKeyFilterPrefix {
+            ui32 PrefixLength = 0;
+            double FalsePositiveProbability = DefaultBloomFilterFpp;
+
+            bool operator==(const TByKeyFilterPrefix&) const = default;
+            auto operator<=>(const TByKeyFilterPrefix&) const = default;
+        };
+        TVector<TByKeyFilterPrefix> ByKeyFilterPrefixes;
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
+        ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
 
         // When true this table has an in-memory caching enabled that has not been processed yet
-        mutable bool PendingCacheEnable = false;
+        mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
+        mutable bool PendingCacheModeChange = false; // has unprocessed NPage::ECacheMode change
     };
 
     struct TRedo {
@@ -208,6 +220,7 @@ class TAlter {
 public:
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
+    using ECacheMode = NPage::ECacheMode;
 
     TAlter(IAlterSink* sink = nullptr)
         : Sink(sink)
@@ -223,13 +236,17 @@ public:
     TAlter& Merge(const TSchemeChanges &delta);
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
-    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
+    TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
+    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
+            const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null = { }, bool setNotNullInProgress = false);
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
-    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
+    TAlter& SetFamilyCompression(ui32 table, ui32 family, ECodec codec);
+    TAlter& SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode);
+    TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
@@ -241,8 +258,10 @@ public:
     TAlter& SetExecutorResourceProfile(const TString &name);
     TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
+    TAlter& SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
     TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();

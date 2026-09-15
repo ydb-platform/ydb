@@ -9,7 +9,7 @@ def post_install(self):
 boost_pool = NixSourceProject(
     nixattr="boost_pool",
     arcdir=boost.make_arcdir("pool"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

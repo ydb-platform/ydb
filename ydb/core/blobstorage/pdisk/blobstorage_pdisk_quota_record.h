@@ -78,8 +78,8 @@ public:
             str << " VDiskId# " << *VDiskId;
         }
         str << "\n";
-        str << " HardLimit# " << HardLimit;
-        str << " Free# " << Free;
+        str << " HardLimit# " << AtomicGet(HardLimit);
+        str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
         str << " Weight# " << GetWeight();
         double occupancy;
@@ -111,6 +111,11 @@ public:
 
     bool ForceAllocate(i64 count) {
         return AtomicSub(Free, count) > AtomicGet(Black);
+    }
+
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
     }
 
     // Called only from the main thread
@@ -150,8 +155,13 @@ public:
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count, double *occupancy) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         const i64 newFree = AtomicGet(Free) - count;
+        const i64 hardLimit = AtomicGet(HardLimit);
 
-        *occupancy = HardLimit ? (double)(HardLimit - newFree) / HardLimit : 1.0;
+        if (hardLimit) {
+            *occupancy = (double)(std::max(static_cast<i64>(0), hardLimit - newFree)) / hardLimit;
+        } else {
+            *occupancy = 1.0;
+        }
 
         if (newFree > AtomicGet(Cyan)) {
             return TColor::GREEN;
@@ -174,7 +184,33 @@ public:
         }
     }
 
-    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    // Largest allocation that still leaves this record strictly better than `color`.
+    // Mirrors EstimateSpaceColor, which reports a color better than X exactly while
+    // the free space left after the allocation is above the X boundary.
+    i64 GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        i64 boundary = 0;
+        switch (color) {
+        case TColor::PRE_ORANGE:
+            boundary = AtomicGet(PreOrange);
+            break;
+        case TColor::ORANGE:
+            boundary = AtomicGet(Orange);
+            break;
+        case TColor::RED:
+            boundary = AtomicGet(Red);
+            break;
+        case TColor::BLACK:
+            boundary = AtomicGet(Black);
+            break;
+        default:
+            Y_ABORT("no headroom is reported for color# %d", int(color));
+        }
+        return Max<i64>(0, AtomicGet(Free) - boundary - 1);
+    }
+
+    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         switch (color) {

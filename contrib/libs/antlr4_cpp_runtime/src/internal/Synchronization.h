@@ -32,9 +32,9 @@
 #include <utility>
 
 #if ANTLR4CPP_USING_ABSEIL
-#error #include "absl/base/call_once.h"
-#error #include "absl/base/thread_annotations.h"
-#error #include "absl/synchronization/mutex.h"
+#include "absl/base/call_once.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/synchronization/mutex.h"
 #define ANTLR4CPP_NO_THREAD_SAFTEY_ANALYSIS ABSL_NO_THREAD_SAFETY_ANALYSIS
 #else
 #define ANTLR4CPP_NO_THREAD_SAFTEY_ANALYSIS

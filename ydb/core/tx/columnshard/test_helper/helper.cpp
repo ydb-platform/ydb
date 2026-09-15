@@ -1,7 +1,6 @@
 #include "helper.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/wrappers/fake_storage_config.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -20,6 +20,7 @@
 namespace {
 static std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> DummyCollector = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
 }
+
 namespace NKikimr::NArrow::NTest {
 
 NKikimrSchemeOp::TOlapColumnDescription TTestColumn::CreateColumn(const ui32 id) const {

@@ -377,8 +377,8 @@ void TYsonSyntaxChecker::IncrementNestingLevel()
 {
     ++NestingLevel_;
     if (NestingLevel_ >= NestingLevelLimit_) {
-        THROW_ERROR_EXCEPTION("Depth limit exceeded while parsing YSON")
-            << TErrorAttribute("limit", NestingLevelLimit_);
+        THROW_ERROR_EXCEPTION(EErrorCode::DepthLimitExceeded, "Depth limit exceeded while parsing YSON")
+            .With("limit", NestingLevelLimit_);
     }
 }
 

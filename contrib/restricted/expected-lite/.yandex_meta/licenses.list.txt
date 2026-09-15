@@ -1,5 +1,5 @@
 ====================BSL-1.0====================
-*expected lite* is distributed under the [Boost Software License](https://github.com/martinmoene/XXXX-lite/blob/master/LICENSE.txt).
+*expected lite* is distributed under the [Boost Software License](LICENSE.txt).
 
 
 ====================BSL-1.0====================
@@ -33,7 +33,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
-// Copyright (C) 2016-2020 Martin Moene.
+// Copyright (C) 2016-2025 Martin Moene.
 
 
 ====================File: LICENSE.txt====================

@@ -1,8 +1,8 @@
-UNITTEST()
+GTEST()
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -11,7 +11,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/library/operation_id
 )
 

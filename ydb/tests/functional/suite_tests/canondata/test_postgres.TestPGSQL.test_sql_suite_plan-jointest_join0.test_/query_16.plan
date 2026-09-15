@@ -47,7 +47,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-Filter-FullJoin (JoinDict)",
+                                        "Node Type": "Aggregate-Filter-FullJoin (Dict)",
                                         "Operators": [
                                             {
                                                 "Inputs": [],
@@ -72,13 +72,13 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "FullJoin (JoinDict)"
+                                                "Name": "FullJoin (Dict)"
                                             }
                                         ],
                                         "PlanNodeId": 11,
                                         "Plans": [
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "unique2"
                                                 ],
@@ -107,9 +107,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
                                                                                             "unique2 (-\u221e, +\u221e)"
                                                                                         ],
@@ -132,7 +129,7 @@
                                                 ]
                                             },
                                             {
-                                                "HashFunc": "HashV1",
+                                                "HashFunc": "HashV2",
                                                 "KeyColumns": [
                                                     "unique2"
                                                 ],
@@ -161,9 +158,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
                                                                                             "unique2 (-\u221e, +\u221e)"
                                                                                         ],

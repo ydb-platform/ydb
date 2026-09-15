@@ -1,9 +1,10 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
@@ -17,7 +18,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NPersQueue;
-using IExecutor = NYdb::NPersQueue::IExecutor;
+using IExecutor = NYdb::IExecutor;
 using namespace ::testing; // Google mock.
 
 #define UNIT_ASSERT_EVENT_TYPE(event, type)                 \
@@ -550,6 +551,10 @@ public:
         Executor->Start();
     }
 
+    void Stop() override {
+        Executor->Stop();
+    }
+
     size_t GetTasksAdded() {
         with_lock (Lock) {
             return TasksAdded;
@@ -562,19 +567,6 @@ private:
     size_t TasksAdded = 0;
     ::IExecutor::TPtr Executor;
     std::vector<TFunction> Functions;
-};
-
-class TSynchronousExecutor : public ::IExecutor {
-    bool IsAsync() const override {
-        return false;
-    }
-
-    void Post(TFunction&& f) override {
-        f();
-    }
-
-    void DoStart() override {
-    }
 };
 
 extern TLogFormatter NYdb::GetPrefixLogFormatter(const std::string& prefix); // Defined in ydb.cpp.
@@ -608,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }
@@ -934,7 +926,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
             });
         EXPECT_CALL(*setup.MockProcessor, OnInitRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
+            .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
                 UNIT_ASSERT_STRINGS_EQUAL(req.consumer(), "TestConsumer");
                 UNIT_ASSERT_VALUES_EQUAL(req.max_lag_duration_ms(), 32000);
                 UNIT_ASSERT_VALUES_EQUAL(req.start_from_written_at_ms(), 42000);
@@ -944,7 +936,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids_size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids(0), 100);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids(1), 101);
-            }));
+            });
         setup.GetSession()->Start();
         setup.MockProcessorFactory->Wait();
 
@@ -1108,14 +1100,14 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT(stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnStartReadRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
+                .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.read_offset(), 13);
                     UNIT_ASSERT_VALUES_EQUAL(req.commit_offset(), 31);
-                }));
+                });
 
             event.Confirm(13, 31);
         }
@@ -1148,12 +1140,12 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_EQUAL(destroyEvent.GetPartitionStream(), stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnReleasedRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
+                .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
-                }));
+                });
 
             destroyEvent.Confirm();
         }
@@ -1184,7 +1176,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(ProperlyOrdersDecompressedData) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(new TReorderingExecutor());
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>());
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         for (ui64 i = 1; i <= 2; ++i) {
@@ -1209,7 +1201,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(BrokenCompressedData) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(new TReorderingExecutor(1));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(1));
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
@@ -1286,7 +1278,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     }
 
     Y_UNIT_TEST(DecompressWithSynchronousExecutor) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "msg", new TSynchronousExecutor());
+        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "msg", CreateSyncExecutor());
     }
 
     TString GenerateMessageData(size_t size) {
@@ -1313,7 +1305,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         if (memoryLimit) {
             setup.Settings.MaxMemoryUsageBytes(memoryLimit);
         }
-        auto executor = MakeIntrusive<TReorderingExecutor>(reorderedCycleSize);
+        auto executor = std::make_shared<TReorderingExecutor>(reorderedCycleSize);
         setup.Settings.DecompressionExecutor(executor);
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
@@ -1327,7 +1319,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         THashSet<ui64> committedCookies;
         THashSet<ui64> committedOffsets;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 for (const auto& commit : req.cookies()) {
                     committedCookies.insert(commit.partition_cookie());
                 }
@@ -1337,7 +1329,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                         committedOffsets.insert(i);
                     }
                 }
-            }));
+            });
 
         for (ui64 i = 1; i <= serverBatchesCount; ++i) {
             TMockReadSessionProcessor::TServerReadInfo resp;
@@ -1520,12 +1512,12 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         EXPECT_CALL(*setup.MockProcessor, OnStatusRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
+            .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
                 UNIT_ASSERT_VALUES_EQUAL(req.topic().path(), "TestTopic");
                 UNIT_ASSERT_VALUES_EQUAL(req.cluster(), "TestCluster");
                 UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
-            }));
+            });
         // Another assign id.
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .PartitionStreamStatus(11, 34, TInstant::Seconds(4), "TestTopic", "TestCluster", 1 /*partition*/, 13/*assign id to ignore*/));
@@ -1548,7 +1540,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(HoleBetweenOffsets) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(MakeIntrusive<TReorderingExecutor>(2ull));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(2ull));
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
@@ -1566,7 +1558,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         bool has1 = false;
         bool has2 = false;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 Cerr << "Got commit req " << req << "\n";
                 for (const auto& commit : req.cookies()) {
                     if (commit.partition_cookie() == 1) {
@@ -1583,7 +1575,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                     else if (range.start_offset() == 0 && range.end_offset() == 3) has2 = true;
                     else UNIT_ASSERT(false);
                 }
-            }));
+            });
 
         for (int i = 0; i < 2; ) {
             std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
@@ -1656,7 +1648,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(DataReceivedCallback) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(MakeIntrusive<TReorderingExecutor>(2ull));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(2ull));
         auto calledPromise = NThreading::NewPromise<void>();
         int time = 0;
         setup.Settings.EventHandlers_.DataReceivedHandler([&](TReadSessionEvent::TDataReceivedEvent& event) {
@@ -1870,7 +1862,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
+            UNIT_ASSERT(event);\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent()));\
         }
 
 #define UNIT_ASSERT_DATA_EVENT(count) \
@@ -1882,8 +1875,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
+            UNIT_ASSERT(event);\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent())); \
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event->GetEvent()).GetMessagesCount(), count); \
         }
 
         NTopic::TAReadSessionSettings<true> settings;
@@ -1913,14 +1907,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                    0);
 
         std::atomic<bool> ready = true;
+        std::atomic<bool> abandoned = false;
 
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
 
         TDeferredActions actions;
 

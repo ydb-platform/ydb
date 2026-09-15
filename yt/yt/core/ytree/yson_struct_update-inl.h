@@ -11,7 +11,8 @@ namespace NYT::NYTree {
 namespace NDetail {
 
 template <CYsonStructDerived TStruct>
-const IYsonStructMeta* GetYsonStructMeta() {
+const IYsonStructMeta* GetYsonStructMeta()
+{
     return New<TStruct>()->GetMeta();
 }
 
@@ -254,19 +255,19 @@ TMapFieldConfigurator<TMap>::TMapFieldConfigurator()
     OnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/)
         -> TConfigurator<TStruct> {
         THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
-            << TErrorAttribute("created_key", key);
+            .With("created_key", key);
     });
     OnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
         THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
-            << TErrorAttribute("removed_key", key);
+            .With("removed_key", key);
     });
     ValidateOnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/) {
         THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
-            << TErrorAttribute("created_key", key);
+            .With("created_key", key);
     });
     ValidateOnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
         THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
-            << TErrorAttribute("removed_key", key);
+            .With("removed_key", key);
     });
 
     TFieldConfigurator<TMap>::Updater(
@@ -380,7 +381,7 @@ NDetail::TFieldConfigurator<TValue>& TConfigurator<TStruct>::Field(const std::st
 
 template <CYsonStructDerived TStruct>
 template <class TValue>
-NDetail::TMapFieldConfigurator<TValue>& TConfigurator<TStruct>::MapField(const TString& name, TYsonStructField<TStruct, TValue> field)
+NDetail::TMapFieldConfigurator<TValue>& TConfigurator<TStruct>::MapField(const std::string& name, TYsonStructField<TStruct, TValue> field)
 {
     IYsonStructParameterPtr parameter;
 

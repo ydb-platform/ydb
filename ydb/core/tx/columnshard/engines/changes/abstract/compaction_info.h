@@ -18,6 +18,7 @@ class TPlanCompactionInfo {
 private:
     TInternalPathId PathId;
     TMonotonic StartTime = TMonotonic::Now();
+    YDB_ACCESSOR_DEF(TDuration, Duration)
     TPositiveControlInteger Count;
     YDB_READONLY_DEF(TString, TaskId);
 
@@ -35,7 +36,8 @@ public:
 
     explicit TPlanCompactionInfo(const TInternalPathId pathId, const TString& taskId)
         : PathId(pathId)
-        , TaskId(taskId) {
+        , TaskId(taskId)
+    {
     }
 
     TInternalPathId GetPathId() const {

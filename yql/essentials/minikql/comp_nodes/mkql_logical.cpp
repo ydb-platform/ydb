@@ -1,17 +1,17 @@
 #include "mkql_logical.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include "mkql_check_args.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TAndWrapper : public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+class TAndWrapper: public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
+    using TBaseComputation = TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>>;
+
 public:
     TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -43,7 +43,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -82,8 +82,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TOrWrapper : public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+class TOrWrapper: public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
+    using TBaseComputation = TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>>;
+
 public:
     TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -115,7 +116,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -154,8 +155,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TXorWrapper : public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
-    typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+class TXorWrapper: public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
+    using TBaseComputation = TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>>;
+
 public:
     TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -179,7 +181,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
@@ -244,12 +246,14 @@ public:
 };
 
 template <bool IsOptional>
-class TNotWrapper : public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
-    typedef TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> TBaseComputation;
+class TNotWrapper: public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
+    using TBaseComputation = TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>>;
+
 public:
-    TNotWrapper(IComputationNode* arg)
+    explicit TNotWrapper(IComputationNode* arg)
         : TBaseComputation(arg)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
@@ -261,7 +265,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto xorr = BinaryOperator::CreateXor(arg, ConstantInt::get(arg->getType(), 1), "xor", block);
         const auto result = IsOptional ? SelectInst::Create(IsExists(arg, block, context), xorr, arg, "sel", block) : static_cast<Value*>(xorr);
@@ -277,7 +281,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     const auto rightType = callable.GetInput(1).GetStaticType();
-    CheckBinaryFunctionArgs(leftType, rightType, true, true);
+    CheckBinaryFunctionArgs(leftType, rightType, /*allowOptionalInput=*/true, /*requiresBooleanArgs=*/true);
 
     const bool isLeftOptional = leftType->IsOptional();
     const bool isRightOptional = rightType->IsOptional();
@@ -289,8 +293,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
         } else {
             return new TWrapper<true, false>(ctx.Mutables, left, right);
         }
-    }
-    else {
+    } else {
         if (isRightOptional) {
             return new TWrapper<false, true>(ctx.Mutables, left, right);
         } else {
@@ -299,7 +302,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
     }
 }
 
-}
+} // namespace
 
 IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TAndWrapper>(callable, ctx);
@@ -325,12 +328,9 @@ IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryCont
 
     if (isOptional) {
         return new TNotWrapper<true>(node);
-    }
-    else {
+    } else {
         return new TNotWrapper<false>(node);
     }
 }
 
-
-}
-}
+} // namespace NKikimr::NMiniKQL

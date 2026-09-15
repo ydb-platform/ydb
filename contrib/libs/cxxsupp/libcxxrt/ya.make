@@ -35,12 +35,34 @@ ENDIF()
 
 SRCS(
     auxhelper.cc
-    dynamic_cast.cc
-    exception.cc
     guard.cc
     memory.cc
     stdexcept.cc
     typeinfo.cc
 )
+
+IF (NO_CXX_EXCEPTIONS)
+    SRCS(
+        noexception.cc
+    )
+ELSE()
+    SRCS(
+        exception.cc
+    )
+ENDIF()
+
+IF (NO_CXX_RTTI)
+    BUILD_ONLY_IF(NO_CXX_EXCEPTIONS)
+ELSE()
+    SRCS(
+        dynamic_cast.cc
+    )
+ENDIF()
+
+IF (NO_CXX_EXCEPTIONS)
+    CFLAGS(
+        -D_CXXRT_NO_EXCEPTIONS
+    )
+ENDIF()
 
 END()

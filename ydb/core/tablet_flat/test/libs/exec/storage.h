@@ -10,14 +10,14 @@
 namespace NKikimr {
 namespace NFake {
 
-    class TStorage : public ::NActors::IActorCallback {
+    class TStorageMock : public ::NActors::IActorCallback {
     public:
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using NStore = TEvBlobStorage;
 
-        TStorage(ui32 group)
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TStorage::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+        TStorageMock(ui32 group)
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TStorageMock::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
             , Group(group)
             , Model(new NFake::TProxyDS)
         {

@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 SRCS(
     coordinator_ut.cpp
     leader_election_ut.cpp
+    local_leader_election_ut.cpp
     row_dispatcher_ut.cpp
     topic_session_ut.cpp
 )
@@ -15,9 +16,11 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher
     ydb/core/testlib
     ydb/core/testlib/actors
-    ydb/tests/fq/pq_async_io
-    yql/essentials/sql/pg_dummy
+    ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/pq/gateway/dummy
+    ydb/tests/fq/pq_async_io
+    yql/essentials/minikql/invoke_builtins
+    yql/essentials/sql/pg_dummy
 )
 
 SIZE(MEDIUM)

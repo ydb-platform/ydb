@@ -113,9 +113,11 @@ enum SysCacheIdentifier
 	TYPENAMENSP,
 	TYPEOID,
 	USERMAPPINGOID,
-	USERMAPPINGUSERSERVER
+	USERMAPPINGUSERSERVER,
+	/* intentionally out of alphabetical order, to avoid an ABI break: */
+	EXTENSIONOID
 
-#define SysCacheSize (USERMAPPINGUSERSERVER + 1)
+#define SysCacheSize (EXTENSIONOID + 1)
 };
 
 extern void InitCatalogCache(void);
@@ -139,9 +141,14 @@ extern HeapTuple SearchSysCache4(int cacheId,
 
 extern void ReleaseSysCache(HeapTuple tuple);
 
+extern HeapTuple SearchSysCacheLocked1(int cacheId,
+									   Datum key1);
+
 /* convenience routines */
 extern HeapTuple SearchSysCacheCopy(int cacheId,
 									Datum key1, Datum key2, Datum key3, Datum key4);
+extern HeapTuple SearchSysCacheLockedCopy1(int cacheId,
+										   Datum key1);
 extern bool SearchSysCacheExists(int cacheId,
 								 Datum key1, Datum key2, Datum key3, Datum key4);
 extern Oid	GetSysCacheOid(int cacheId, AttrNumber oidcol,

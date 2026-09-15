@@ -4,6 +4,9 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 
 namespace NKikimr::NKqp {
@@ -15,21 +18,18 @@ enum {
 
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-TString MakeOperationId() {
-    TULIDGenerator ulidGen;
-    return ulidGen.Next(TActivationContext::Now()).ToBinary();
-}
-
-TAnalyzeActor::TAnalyzeActor(TString tablePath, TVector<TString> columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
-    : TablePath(tablePath)
-    , Columns(columns) 
+TAnalyzeActor::TAnalyzeActor(const TString& database, const TString& tablePath,
+    const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise)
+    : Database(database)
+    , TablePath(tablePath)
+    , Columns(columns)
     , Promise(promise)
-    , OperationId(MakeOperationId())
+    , OperationId(UlidGen.Next(TActivationContext::Now()).ToBinary())
 {}
 
 void TAnalyzeActor::Bootstrap() {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     auto navigate = std::make_unique<TNavigate>();
+    navigate->DatabaseName = Database;
     auto& entry = navigate->ResultSet.emplace_back();
     entry.Path = SplitPath(TablePath);
     entry.Operation = TNavigate::EOp::OpTable;
@@ -46,21 +46,36 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
 
     const auto& record = ev->Get()->Record;
     const TString operationId = record.GetOperationId();
-    const auto status = record.GetStatus(); 
-
-    if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, 
-            "TAnalyzeActor, TEvAnalyzeResponse has status=" << status);
-    }
-
-    if (operationId != OperationId) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY, 
-            "TAnalyzeActor, TEvAnalyzeResponse has operationId=" << operationId 
-            << " , but expected " << OperationId);
-    }
+    const auto status = record.GetStatus();
 
     NYql::IKikimrGateway::TGenericResult result;
-    result.SetSuccess();
+    if (operationId != OperationId) {
+        YDB_LOG_CRIT("TAnalyzeActor received unexpected operation id in TEvAnalyzeResponse",
+            {"operationId", operationId},
+            {"expectedOperationId", OperationId});
+        result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
+        result.AddIssue(NYql::TIssue("ANALYZE failed: OperationId mismatch"));
+    } else if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetIssues(), issues);
+        YDB_LOG_WARN("TAnalyzeActor, TEvAnalyzeResponse has",
+            {"status", status},
+            {"operationId", OperationId.Quote()},
+            {"database", Database},
+            {"tablePath", TablePath},
+            {"pathId", PathId},
+            {"statisticsAggregatorId", StatisticsAggregatorId.value_or(0)},
+            {"issues", issues.ToOneLineString()});
+        result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
+        NYql::TIssue error("Executing ANALYZE");
+        for (const auto& issue : issues) {
+            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
+        result.AddIssue(error);
+    } else {
+        result.SetSuccess();
+    }
+
     Promise.SetValue(std::move(result));
     this->Die(ctx);
 }
@@ -87,7 +102,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         Promise.SetValue(
             NYql::NCommon::ResultFromIssues<NYql::IKikimrGateway::TGenericResult>(
                 error,
-                TStringBuilder() << "Can't get statistics aggregator ID. " << entry.Status, 
+                TStringBuilder() << "Can't get statistics aggregator ID. " << entry.Status,
                 {}
             )
         );
@@ -109,14 +124,14 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         }
         return;
     }
-    
+
     PathId = entry.TableId.PathId;
 
     auto& domainInfo = entry.DomainInfo;
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = Database;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;
@@ -132,8 +147,8 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             SendStatisticsAggregatorAnalyze(entry, ctx);
             return;
         }
-            
-        navigateDomainKey(domainInfo->DomainKey);  
+
+        navigateDomainKey(domainInfo->DomainKey);
     } else {
         navigateDomainKey(domainInfo->ResourcesDomainKey);
     }
@@ -158,7 +173,7 @@ void TAnalyzeActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TAc
         Promise.SetValue(
                 NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
                     YqlIssue(
-                        {}, NYql::TIssuesIds::UNEXPECTED, 
+                        {}, NYql::TIssuesIds::UNEXPECTED,
                         TStringBuilder() << "Can't establish connection with the Statistics Aggregator!"
                     )
                 )
@@ -177,22 +192,24 @@ void TAnalyzeActor::Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const T
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
         IEventHandle::FlagTrackDelivery
     );
 }
 
-void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
+void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& entry, const TActorContext& ctx) {
     Y_ABORT_UNLESS(entry.DomainInfo->Params.HasStatisticsAggregator());
 
     StatisticsAggregatorId = entry.DomainInfo->Params.GetStatisticsAggregator();
 
     auto& record = Request.Record;
     record.SetOperationId(OperationId);
+    record.SetDatabase(Database);
     auto table = record.AddTables();
 
     PathId.ToProto(table->MutablePathId());
+    table->SetPath(TablePath);
 
     THashMap<TString, ui32> tagByColumnName;
     for (const auto& [_, tableInfo]: entry.Columns) {
@@ -204,7 +221,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
             Promise.SetValue(
                 NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
                     YqlIssue(
-                        {}, NYql::TIssuesIds::UNEXPECTED, 
+                        {}, NYql::TIssuesIds::UNEXPECTED,
                         TStringBuilder() << "No such column: " << columnName << " in the " << TablePath
                     )
                 )
@@ -219,28 +236,46 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeC
     auto analyzeRequest = std::make_unique<NStat::TEvStatistics::TEvAnalyze>();
     analyzeRequest->Record = Request.Record;
     Send(
-        MakePipePerNodeCacheID(false),
+        MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), entry.DomainInfo->Params.GetStatisticsAggregator(), true),
         IEventHandle::FlagTrackDelivery
     );
 }
 
+void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_NOTICE("Got TEvAbortExecution",
+        {"issues", ev->Get()->GetIssues().ToOneLineString()});
+
+    // ANALYZE is a long-running operation: tying its lifetime to the calling query
+    // would mean a session timeout silently cancels work the user may want to keep.
+    // Match BUILD_INDEX / EXPORT / IMPORT / COMPACTION: the calling actor dies, but
+    // the SA traversal continues. The user can poll via `ydb operation get analyze`
+    // and explicitly cancel via `ydb operation cancel analyze`; orphans are bounded
+    // by the SA-side deadline in tx_analyze_deadline.cpp.
+    Promise.SetValue(
+        NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(ev->Get()->GetIssues()));
+    this->Die(ctx);
+}
+
 void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
-    ALOG_CRIT(
-        NKikimrServices::KQP_GATEWAY, 
-        "TAnalyzeActor, unexpected event, request type: " << typeRewrite;
-    );
-        
+    YDB_LOG_CRIT("TAnalyzeActor, unexpected event, request",
+        {"type", typeRewrite});
+
     Promise.SetValue(
         NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(
             YqlIssue(
-                {}, NYql::TIssuesIds::UNEXPECTED, 
+                {}, NYql::TIssuesIds::UNEXPECTED,
                 TStringBuilder() << "Unexpected event: " << typeRewrite
             )
         )
     );
 
     this->PassAway();
+}
+
+void TAnalyzeActor::PassAway() {
+    Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
+    TActorBootstrapped::PassAway();
 }
 
 }// end of NKikimr::NKqp

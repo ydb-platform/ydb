@@ -10,12 +10,45 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TDeletePrivateShards: public TDeleteParts {
+class TDeleteSubdomainSystemShards: public TSubOperationState {
+protected:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TDeleteSubdomainSystemShards" << " opId# " << OperationId << " ";
+    }
+
 public:
-    explicit TDeletePrivateShards(const TOperationId& id)
-        : TDeleteParts(id, TTxState::Done)
+    explicit TDeleteSubdomainSystemShards(const TOperationId& id)
+        : OperationId(id)
     {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << DebugHint() << "ProgressState");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
+
+        auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
+        Y_ABORT_UNLESS(subdomain);
+
+        // Initiate asynchronous deletion of system shards
+        if (subdomain->GetSharedHive()) {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        } else {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteSystemShard(shard.Idx);
+            }
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
     }
 };
 
@@ -119,7 +152,7 @@ public:
             return true;
         }
 
-        TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, context.Ctx, TSchemeShard::EHiveSelection::IGNORE_TENANT);
+        TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, TSchemeShard::EHiveSelection::IGNORE_TENANT);
 
         auto event = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
         context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, TPipeMessageId(0, 0), event.Release());
@@ -237,7 +270,7 @@ class TDropExtSubdomain: public TSubOperation {
         case TTxState::DeleteExternalShards:
             return MakeHolder<TDeleteExternalShards>(OperationId);
         case TTxState::DeletePrivateShards:
-            return MakeHolder<TDeletePrivateShards>(OperationId);
+            return MakeHolder<TDeleteSubdomainSystemShards>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -309,28 +342,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         auto relatedTx = context.SS->GetRelatedTransactions({path.Base()->PathId}, context.Ctx);
-
-        for (auto otherTxId: relatedTx) {
-            if (otherTxId == OperationId.GetTxId()) {
-                continue;
-            }
-
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TDropExtSubdomain Propose dependence has found"
-                             << ", dependent transaction: " << OperationId.GetTxId()
-                             << ", parent transaction: " << otherTxId
-                             << ", at schemeshard: " << ssId);
-
-            context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
-
-            Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
-            auto otherOperation = context.SS->Operations.at(otherTxId);
-            for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
-                if (auto part = otherOperation->Parts.at(partId)) {
-                    part->AbortUnsafe(OperationId.GetTxId(), context);
-                }
-            }
-        }
+        NForceDrop::AbortRelatedOperations(OperationId, relatedTx, context, "TDropExtSubdomain Propose dependence has found");
 
         context.SS->MarkAsDropping(path.Base(), OperationId.GetTxId(), context.Ctx);
 

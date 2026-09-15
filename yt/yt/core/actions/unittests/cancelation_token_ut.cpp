@@ -9,12 +9,12 @@ namespace {
 
 struct TSimpleToken
 {
-    friend bool TagInvoke(TTagInvokeTag<IsCancelationRequested>, const TSimpleToken& token) noexcept
+    friend bool TagInvoke(NMpl::TTagInvokeTag<IsCancelationRequested>, const TSimpleToken& token) noexcept
     {
         return !token.Error.IsOK();
     }
 
-    friend const TError& TagInvoke(TTagInvokeTag<GetCancelationError>, const TSimpleToken& token)
+    friend const TError& TagInvoke(NMpl::TTagInvokeTag<GetCancelationError>, const TSimpleToken& token)
     {
         return token.Error;
     }
@@ -37,9 +37,9 @@ struct TSimpleToken
     }
 
     TSimpleToken& operator=(const TSimpleToken&) = default;
-    TSimpleToken& operator=(TSimpleToken&&) = default;
+    TSimpleToken& operator=(TSimpleToken&&) noexcept = default;
 
-    TSimpleToken(TSimpleToken&& other)
+    TSimpleToken(TSimpleToken&& other) noexcept
         : Error(std::move(other.Error))
     {
         ++MoveCount;

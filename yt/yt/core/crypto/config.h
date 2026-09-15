@@ -8,17 +8,18 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Either an inlined value, environment variable, or a file reference.
+//! Environment variable and/or a file reference or inlined value.
+//! Environment variable have priority if specified and defined.
 struct TPemBlobConfig
     : public NYTree::TYsonStruct
 {
-    std::optional<TString> EnvironmentVariable;
-    std::optional<TString> FileName;
-    std::optional<TString> Value;
+    std::optional<std::string> EnvironmentVariable;
+    std::optional<std::string> FileName;
+    std::optional<std::string> Value;
 
-    TString LoadBlob() const;
+    std::string LoadBlob(TCertificatePathResolver pathResolver = nullptr) const;
 
-    static TPemBlobConfigPtr CreateFileReference(const TString& fileName);
+    static TPemBlobConfigPtr CreateFileReference(const std::string& fileName);
 
     REGISTER_YSON_STRUCT(TPemBlobConfig);
 
@@ -55,6 +56,9 @@ struct TSslContextConfig
 
     //! Commands for SSL context configuration handled by SSL_CONF_cmd.
     std::vector<TSslContextCommandPtr> SslConfigurationCommands;
+
+    //! Trust everybody, never verify certificate, issue warning - for testing purpose.
+    bool InsecureSkipVerify;
 
     REGISTER_YSON_STRUCT(TSslContextConfig);
 

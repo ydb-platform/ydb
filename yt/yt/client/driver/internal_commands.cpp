@@ -238,4 +238,76 @@ void TForsakeChaosCoordinator::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TForsakeChaosShortcut::Register(TRegistrar registrar)
+{
+    registrar.Parameter("coordinator_cell_id", &TThis::CoordinatorCellId_);
+        registrar.Parameter("chaos_object_id", &TThis::ChaosObjectId_);
+}
+
+void TForsakeChaosShortcut::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->ForsakeChaosShortcut(CoordinatorCellId_, ChaosObjectId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRemoveChaosCellMailbox::Register(TRegistrar registrar)
+{
+    registrar.Parameter("chaos_cell_id", &TThis::ChaosCellId_);
+    registrar.Parameter("destination_cell_id", &TThis::DestinationCellId_);
+}
+
+void TRemoveChaosCellMailbox::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetInternalClientOrThrow()->RemoveChaosCellMailbox(ChaosCellId_, DestinationCellId_))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetOrderedTabletSafeTrimRowCount::Register(TRegistrar registrar)
+{
+    registrar.Parameter("requests", &TThis::Requests_);
+}
+
+void TGetOrderedTabletSafeTrimRowCount::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    std::vector<TGetOrderedTabletSafeTrimRowCountRequest> requests;
+    requests.reserve(Requests_.size());
+    for (const auto& request : Requests_) {
+        requests.push_back(*request);
+    }
+
+    auto responses = WaitFor(internalClient->GetOrderedTabletSafeTrimRowCount(requests, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .Value(responses));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetConnectionOrchidValue::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<TYPath>("path", [] (TGetConnectionOrchidValue* command) -> auto& {
+        return command->Options.Path;
+    })
+        .Optional(/*init*/ false);
+}
+
+void TGetConnectionOrchidValue::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    auto response = WaitFor(internalClient->GetConnectionOrchidValue(Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(response);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

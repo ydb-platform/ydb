@@ -212,7 +212,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -389,19 +389,31 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
-                if (parentPath->IsTable()) {
-                    checks.NotBackupTable();
+                if (parentPath.Parent()->IsTableIndex()) {
+                    // Only __ydb_id sequence can be created in the prefixed index
+                    if (name != NTableIndex::NKMeans::IdColumnSequence &&
+                        name != NTableIndex::NFulltext::GenSequence) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
+                    }
+                    checks.IsInsideTableIndexPath()
+                        .IsUnderCreating()
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (parentPath->IsTable()) {
+                    checks
+                        .IsCommonSensePath()
+                        .NotBackupTable();
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
-                } else {
+                } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                          .IsLikeDirectory();
                 }
             }
 
@@ -551,10 +563,9 @@ public:
         }
         context.SS->PersistPath(db, dstPath->PathId);
 
-        context.SS->Sequences[pathId] = sequenceInfo;
+        context.SS->Sequences.Set(pathId, sequenceInfo);
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
         context.SS->PersistSequenceAlter(db, pathId, *alterData);
-        context.SS->IncrementPathDbRefCount(pathId);
 
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistUpdateNextPathId(db);

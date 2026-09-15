@@ -16,7 +16,7 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx, const TString& optLLVM,
-    const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TJobMkqlWriterImpl* writer)
+    const TMkqlIOSpecs* specs, NYT::IReaderImplBase* reader, TMkqlWriterImpl* writer)
 {
     TMaybe<ui32> exprContextObject;
     return [&codecCtx, optLLVM, specs, reader, writer, exprContextObject](NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
@@ -26,7 +26,8 @@ TComputationNodeFactory GetJobFactory(NYql::NCommon::TCodecContext& codecCtx, co
                 return WrapYtTableContent(codecCtx, ctx.Mutables, callable, optLLVM, {} /*empty pathPrefix inside job*/);
             }
             if (name == "BlockTableContent") {
-                return WrapYtBlockTableContent(codecCtx, ctx.Mutables, callable, {} /*empty pathPrefix inside job*/);
+                EDatumValidationMode datumValidationMode = specs ? specs->DatumValidationMode_ : DefaultDatumValidationMode;
+                return WrapYtBlockTableContent(codecCtx, ctx.Mutables, callable, {} /*empty pathPrefix inside job*/, datumValidationMode);
             }
             if (name == "Input") {
                 YQL_ENSURE(reader);

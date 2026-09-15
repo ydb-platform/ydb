@@ -152,13 +152,11 @@ TBinaryJsonReader::TBinaryJsonReader(TStringBuf buffer)
     Y_ENSURE(
         Header_.Version == CURRENT_VERSION,
         TStringBuilder() << "Version in BinaryJson `" << static_cast<ui64>(Header_.Version) << "` "
-        << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`"
-    );
+                         << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`");
 
     Y_ENSURE(
         Header_.StringOffset < Buffer_.size(),
-        "StringOffset must be inside buffer"
-    );
+        "StringOffset must be inside buffer");
 
     // Tree starts right after Header
     TreeStart_ = sizeof(Header_);
@@ -187,7 +185,7 @@ TKeyEntry TBinaryJsonReader::ReadKeyEntry(ui32 offset) const {
     return ReadPOD<TKeyEntry>(offset);
 }
 
-const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
+TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
     Y_DEBUG_ABORT_UNLESS(StringSEntryStart_ <= offset && offset < StringSEntryStart_ + StringCount_ * sizeof(TSEntry), "Offset is not inside string index");
     ui32 startOffset = 0;
     if (offset == StringSEntryStart_) {
@@ -219,7 +217,7 @@ TUnboxedValue ReadElementToJsonDom(const TEntryCursor& cursor, const NUdf::IValu
         case EEntryType::Null:
             return MakeEntity();
         case EEntryType::String:
-            return MakeString(cursor.GetString(), valueBuilder);
+            return SetUtf8Mark(MakeString(cursor.GetString(), valueBuilder));
         case EEntryType::Number:
             return MakeDouble(cursor.GetNumber());
         case EEntryType::Container:
@@ -324,7 +322,7 @@ void ReadContainerToJson(const TContainerCursor& cursor, TJsonWriter& writer) {
     }
 }
 
-}
+} // namespace
 
 TString SerializeToJson(const TBinaryJson& binaryJson) {
     return SerializeToJson(TStringBuf(binaryJson.Data(), binaryJson.Size()));
@@ -351,7 +349,7 @@ TString SerializeToJson(TStringBuf binaryJson) {
 namespace {
 
 struct TPODReader {
-    TPODReader(TStringBuf buffer)
+    explicit TPODReader(TStringBuf buffer)
         : TPODReader(buffer, 0, buffer.size())
     {
     }
@@ -387,7 +385,7 @@ struct TPODReader {
 };
 
 struct TBinaryJsonValidator {
-    TBinaryJsonValidator(TStringBuf buffer)
+    explicit TBinaryJsonValidator(TStringBuf buffer)
         : Buffer_(buffer)
     {
     }
@@ -575,7 +573,7 @@ private:
     TStringBuf Buffer_;
 };
 
-}
+} // namespace
 
 TMaybe<TStringBuf> IsValidBinaryJsonWithError(TStringBuf buffer) {
     return TBinaryJsonValidator(buffer).ValidateWithError();
@@ -585,4 +583,4 @@ bool IsValidBinaryJson(TStringBuf buffer) {
     return !IsValidBinaryJsonWithError(buffer).Defined();
 }
 
-}
+} // namespace NKikimr::NBinaryJson

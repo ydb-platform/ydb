@@ -12,8 +12,7 @@ namespace builtins
   namespace str
   {
 
-    bool startswith(types::str const &s, types::str const &prefix,
-                    long start = 0, long end = -1);
+    bool startswith(types::str const &s, types::str const &prefix, long start = 0, long end = -1);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, startswith);
   } // namespace str

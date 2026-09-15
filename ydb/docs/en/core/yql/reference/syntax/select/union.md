@@ -1,11 +1,5 @@
 # Combining subquery results (UNION)
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [olap_warning_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ## UNION {#union}
 
 Union of the results of the underlying queries, with duplicates removed.

@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import typing as t
+import warnings
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from http import HTTPStatus
 
-from .._internal import _to_str
 from ..datastructures import Headers
 from ..datastructures import HeaderSet
 from ..http import dump_cookie
@@ -28,14 +30,13 @@ from werkzeug.http import parse_csp_header
 from werkzeug.http import parse_date
 from werkzeug.http import parse_options_header
 from werkzeug.http import parse_set_header
-from werkzeug.http import parse_www_authenticate_header
 from werkzeug.http import quote_etag
 from werkzeug.http import unquote_etag
 from werkzeug.utils import header_property
 
 
-def _set_property(name: str, doc: t.Optional[str] = None) -> property:
-    def fget(self: "Response") -> HeaderSet:
+def _set_property(name: str, doc: str | None = None) -> property:
+    def fget(self: Response) -> HeaderSet:
         def on_update(header_set: HeaderSet) -> None:
             if not header_set and name in self.headers:
                 del self.headers[name]
@@ -45,10 +46,8 @@ def _set_property(name: str, doc: t.Optional[str] = None) -> property:
         return parse_set_header(self.headers.get(name), on_update)
 
     def fset(
-        self: "Response",
-        value: t.Optional[
-            t.Union[str, t.Dict[str, t.Union[str, int]], t.Iterable[str]]
-        ],
+        self: Response,
+        value: None | (str | dict[str, str | int] | t.Iterable[str]),
     ) -> None:
         if not value:
             del self.headers[name]
@@ -85,14 +84,38 @@ class Response:
     .. versionadded:: 2.0
     """
 
-    #: the charset of the response.
-    charset = "utf-8"
+    _charset: str
+
+    @property
+    def charset(self) -> str:
+        """The charset used to encode body and cookie data. Defaults to UTF-8.
+
+        .. deprecated:: 2.3
+            Will be removed in Werkzeug 3.0. Response data must always be UTF-8.
+        """
+        warnings.warn(
+            "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+            " 2.4. Text in body and cookie data will always use UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._charset
+
+    @charset.setter
+    def charset(self, value: str) -> None:
+        warnings.warn(
+            "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+            " 2.4. Text in body and cookie data will always use UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._charset = value
 
     #: the default status if none is provided.
     default_status = 200
 
     #: the default mimetype if none is provided.
-    default_mimetype: t.Optional[str] = "text/plain"
+    default_mimetype: str | None = "text/plain"
 
     #: Warn if a cookie header exceeds this size. The default, 4093, should be
     #: safely `supported by most browsers <cookie_>`_. A cookie larger than
@@ -109,16 +132,24 @@ class Response:
 
     def __init__(
         self,
-        status: t.Optional[t.Union[int, str, HTTPStatus]] = None,
-        headers: t.Optional[
-            t.Union[
-                t.Mapping[str, t.Union[str, int, t.Iterable[t.Union[str, int]]]],
-                t.Iterable[t.Tuple[str, t.Union[str, int]]],
-            ]
-        ] = None,
-        mimetype: t.Optional[str] = None,
-        content_type: t.Optional[str] = None,
+        status: int | str | HTTPStatus | None = None,
+        headers: t.Mapping[str, str | t.Iterable[str]]
+        | t.Iterable[tuple[str, str]]
+        | None = None,
+        mimetype: str | None = None,
+        content_type: str | None = None,
     ) -> None:
+        if not isinstance(type(self).charset, property):
+            warnings.warn(
+                "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+                " 2.4. Text in body and cookie data will always use UTF-8.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._charset = self.charset
+        else:
+            self._charset = "utf-8"
+
         if isinstance(headers, Headers):
             self.headers = headers
         elif not headers:
@@ -130,7 +161,7 @@ class Response:
             if mimetype is None and "content-type" not in self.headers:
                 mimetype = self.default_mimetype
             if mimetype is not None:
-                mimetype = get_content_type(mimetype, self.charset)
+                mimetype = get_content_type(mimetype, self._charset)
             content_type = mimetype
         if content_type is not None:
             self.headers["Content-Type"] = content_type
@@ -156,30 +187,29 @@ class Response:
         return self._status
 
     @status.setter
-    def status(self, value: t.Union[str, int, HTTPStatus]) -> None:
-        if not isinstance(value, (str, bytes, int, HTTPStatus)):
-            raise TypeError("Invalid status argument")
-
+    def status(self, value: str | int | HTTPStatus) -> None:
         self._status, self._status_code = self._clean_status(value)
 
-    def _clean_status(self, value: t.Union[str, int, HTTPStatus]) -> t.Tuple[str, int]:
-        if isinstance(value, HTTPStatus):
-            value = int(value)
-        status = _to_str(value, self.charset)
-        split_status = status.split(None, 1)
+    def _clean_status(self, value: str | int | HTTPStatus) -> tuple[str, int]:
+        if isinstance(value, (int, HTTPStatus)):
+            status_code = int(value)
+        else:
+            value = value.strip()
 
-        if len(split_status) == 0:
-            raise ValueError("Empty status argument")
+            if not value:
+                raise ValueError("Empty status argument")
 
-        try:
-            status_code = int(split_status[0])
-        except ValueError:
-            # only message
-            return f"0 {status}", 0
+            code_str, sep, _ = value.partition(" ")
 
-        if len(split_status) > 1:
-            # code and message
-            return status, status_code
+            try:
+                status_code = int(code_str)
+            except ValueError:
+                # only message
+                return f"0 {value}", 0
+
+            if sep:
+                # code and message
+                return value, status_code
 
         # only code, look up message
         try:
@@ -193,13 +223,13 @@ class Response:
         self,
         key: str,
         value: str = "",
-        max_age: t.Optional[t.Union[timedelta, int]] = None,
-        expires: t.Optional[t.Union[str, datetime, int, float]] = None,
-        path: t.Optional[str] = "/",
-        domain: t.Optional[str] = None,
+        max_age: timedelta | int | None = None,
+        expires: str | datetime | int | float | None = None,
+        path: str | None = "/",
+        domain: str | None = None,
         secure: bool = False,
         httponly: bool = False,
-        samesite: t.Optional[str] = None,
+        samesite: str | None = None,
     ) -> None:
         """Sets a cookie.
 
@@ -215,7 +245,7 @@ class Response:
         :param path: limits the cookie to a given path, per default it will
                      span the whole domain.
         :param domain: if you want to set a cross-domain cookie.  For example,
-                       ``domain=".example.com"`` will set a cookie that is
+                       ``domain="example.com"`` will set a cookie that is
                        readable by the domain ``www.example.com``,
                        ``foo.example.com`` etc.  Otherwise, a cookie will only
                        be readable by the domain that set it.
@@ -225,6 +255,7 @@ class Response:
         :param samesite: Limit the scope of the cookie to only be
             attached to requests that are "same-site".
         """
+        charset = self._charset if self._charset != "utf-8" else None
         self.headers.add(
             "Set-Cookie",
             dump_cookie(
@@ -236,7 +267,7 @@ class Response:
                 domain=domain,
                 secure=secure,
                 httponly=httponly,
-                charset=self.charset,
+                charset=charset,
                 max_size=self.max_cookie_size,
                 samesite=samesite,
             ),
@@ -245,11 +276,11 @@ class Response:
     def delete_cookie(
         self,
         key: str,
-        path: str = "/",
-        domain: t.Optional[str] = None,
+        path: str | None = "/",
+        domain: str | None = None,
         secure: bool = False,
         httponly: bool = False,
-        samesite: t.Optional[str] = None,
+        samesite: str | None = None,
     ) -> None:
         """Delete a cookie.  Fails silently if key doesn't exist.
 
@@ -290,7 +321,7 @@ class Response:
     # Common Descriptors
 
     @property
-    def mimetype(self) -> t.Optional[str]:
+    def mimetype(self) -> str | None:
         """The mimetype (content type without charset etc.)"""
         ct = self.headers.get("content-type")
 
@@ -301,10 +332,10 @@ class Response:
 
     @mimetype.setter
     def mimetype(self, value: str) -> None:
-        self.headers["Content-Type"] = get_content_type(value, self.charset)
+        self.headers["Content-Type"] = get_content_type(value, self._charset)
 
     @property
-    def mimetype_params(self) -> t.Dict[str, str]:
+    def mimetype_params(self) -> dict[str, str]:
         """The mimetype parameters as dict. For example if the
         content type is ``text/html; charset=utf-8`` the params would be
         ``{'charset': 'utf-8'}``.
@@ -421,7 +452,7 @@ class Response:
     )
 
     @property
-    def retry_after(self) -> t.Optional[datetime]:
+    def retry_after(self) -> datetime | None:
         """The Retry-After response-header field can be used with a
         503 (Service Unavailable) response to indicate how long the
         service is expected to be unavailable to the requesting client.
@@ -443,7 +474,7 @@ class Response:
         return datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
     @retry_after.setter
-    def retry_after(self, value: t.Optional[t.Union[datetime, int, str]]) -> None:
+    def retry_after(self, value: datetime | int | str | None) -> None:
         if value is None:
             if "retry-after" in self.headers:
                 del self.headers["retry-after"]
@@ -501,7 +532,7 @@ class Response:
         """Set the etag, and override the old one if there was one."""
         self.headers["ETag"] = quote_etag(etag, weak)
 
-    def get_etag(self) -> t.Union[t.Tuple[str, bool], t.Tuple[None, None]]:
+    def get_etag(self) -> tuple[str, bool] | tuple[None, None]:
         """Return a tuple in the form ``(etag, is_weak)``.  If there is no
         ETag the return value is ``(None, None)``.
         """
@@ -542,7 +573,7 @@ class Response:
         return rv
 
     @content_range.setter
-    def content_range(self, value: t.Optional[t.Union[ContentRange, str]]) -> None:
+    def content_range(self, value: ContentRange | str | None) -> None:
         if not value:
             del self.headers["content-range"]
         elif isinstance(value, str):
@@ -554,16 +585,70 @@ class Response:
 
     @property
     def www_authenticate(self) -> WWWAuthenticate:
-        """The ``WWW-Authenticate`` header in a parsed form."""
+        """The ``WWW-Authenticate`` header parsed into a :class:`.WWWAuthenticate`
+        object. Modifying the object will modify the header value.
 
-        def on_update(www_auth: WWWAuthenticate) -> None:
-            if not www_auth and "www-authenticate" in self.headers:
-                del self.headers["www-authenticate"]
-            elif www_auth:
-                self.headers["WWW-Authenticate"] = www_auth.to_header()
+        This header is not set by default. To set this header, assign an instance of
+        :class:`.WWWAuthenticate` to this attribute.
 
-        header = self.headers.get("www-authenticate")
-        return parse_www_authenticate_header(header, on_update)
+        .. code-block:: python
+
+            response.www_authenticate = WWWAuthenticate(
+                "basic", {"realm": "Authentication Required"}
+            )
+
+        Multiple values for this header can be sent to give the client multiple options.
+        Assign a list to set multiple headers. However, modifying the items in the list
+        will not automatically update the header values, and accessing this attribute
+        will only ever return the first value.
+
+        To unset this header, assign ``None`` or use ``del``.
+
+        .. versionchanged:: 2.3
+            This attribute can be assigned to to set the header. A list can be assigned
+            to set multiple header values. Use ``del`` to unset the header.
+
+        .. versionchanged:: 2.3
+            :class:`WWWAuthenticate` is no longer a ``dict``. The ``token`` attribute
+            was added for auth challenges that use a token instead of parameters.
+        """
+        value = WWWAuthenticate.from_header(self.headers.get("WWW-Authenticate"))
+
+        if value is None:
+            value = WWWAuthenticate("basic")
+
+        def on_update(value: WWWAuthenticate) -> None:
+            self.www_authenticate = value
+
+        value._on_update = on_update
+        return value
+
+    @www_authenticate.setter
+    def www_authenticate(
+        self, value: WWWAuthenticate | list[WWWAuthenticate] | None
+    ) -> None:
+        if not value:  # None or empty list
+            del self.www_authenticate
+        elif isinstance(value, list):
+            # Clear any existing header by setting the first item.
+            self.headers.set("WWW-Authenticate", value[0].to_header())
+
+            for item in value[1:]:
+                # Add additional header lines for additional items.
+                self.headers.add("WWW-Authenticate", item.to_header())
+        else:
+            self.headers.set("WWW-Authenticate", value.to_header())
+
+            def on_update(value: WWWAuthenticate) -> None:
+                self.www_authenticate = value
+
+            # When setting a single value, allow updating it directly.
+            value._on_update = on_update
+
+    @www_authenticate.deleter
+    def www_authenticate(self) -> None:
+        if "WWW-Authenticate" in self.headers:
+            del self.headers["WWW-Authenticate"]
 
     # CSP
 
@@ -590,7 +675,7 @@ class Response:
 
     @content_security_policy.setter
     def content_security_policy(
-        self, value: t.Optional[t.Union[ContentSecurityPolicy, str]]
+        self, value: ContentSecurityPolicy | str | None
     ) -> None:
         if not value:
             del self.headers["content-security-policy"]
@@ -625,7 +710,7 @@ class Response:
 
     @content_security_policy_report_only.setter
     def content_security_policy_report_only(
-        self, value: t.Optional[t.Union[ContentSecurityPolicy, str]]
+        self, value: ContentSecurityPolicy | str | None
     ) -> None:
         if not value:
             del self.headers["content-security-policy-report-only"]
@@ -645,7 +730,7 @@ class Response:
         return "Access-Control-Allow-Credentials" in self.headers
 
     @access_control_allow_credentials.setter
-    def access_control_allow_credentials(self, value: t.Optional[bool]) -> None:
+    def access_control_allow_credentials(self, value: bool | None) -> None:
         if value is True:
             self.headers["Access-Control-Allow-Credentials"] = "true"
         else:

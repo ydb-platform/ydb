@@ -3,15 +3,15 @@
 using namespace NYql::NUdf;
 
 namespace NCompress {
-    SIMPLE_MODULE(TCompressModule, EXPORTED_COMPRESS_BASE_UDF);
-}
+SIMPLE_MODULE(TCompressModule, EXPORTED_COMPRESS_BASE_UDF);
+} // namespace NCompress
 
 namespace NDecompress {
-    SIMPLE_MODULE(TDecompressModule, EXPORTED_DECOMPRESS_BASE_UDF);
-}
+SIMPLE_MODULE(TDecompressModule, EXPORTED_DECOMPRESS_BASE_UDF);
+} // namespace NDecompress
 
 namespace NTryDecompress {
-    SIMPLE_MODULE(TTryDecompressModule, EXPORTED_TRY_DECOMPRESS_BASE_UDF);
-}
+SIMPLE_MODULE(TTryDecompressModule, EXPORTED_TRY_DECOMPRESS_BASE_UDF);
+} // namespace NTryDecompress
 
 REGISTER_MODULES(NCompress::TCompressModule, NDecompress::TDecompressModule, NTryDecompress::TTryDecompressModule);

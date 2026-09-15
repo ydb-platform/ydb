@@ -12,9 +12,12 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <util/random/fast.h>
+
 namespace NKikimr::NDataShard::NKMeans {
 
 using NKikimr::NKMeans::IClusters;
+using namespace NTableIndex::NKMeans;
 
 TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to);
 
@@ -25,13 +28,16 @@ void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, con
 void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
     TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel);
 
+void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
+    TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isForeign, double distance, bool isPostingLevel);
+
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-    ui32& dataPos, NTable::TTag& embeddingTag);
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
+    NTable::TPos& dataPos, NTable::TPos* isForeignPos = nullptr);
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {});
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns = {}, bool withForeignFlag = false);
 
 class TSampler {
     struct TProbability {
@@ -44,6 +50,7 @@ class TSampler {
     ui32 K = 0;
     TReallyFastRng32 Rng;
     ui64 MaxProbability = 0;
+    ui64 TotalSeen = 0;
 
     // We are using binary heap, because we don't want to do batch processing here,
     // serialization is more expensive than compare
@@ -60,6 +67,7 @@ public:
     {}
 
     void Add(const auto& getValue) {
+        ++TotalSeen;
         const auto probability = GetProbability();
         if (probability > MaxProbability) {
             return;
@@ -84,6 +92,7 @@ public:
 
     std::pair<TVector<TProbability>, TVector<TString>> Finish() {
         MaxProbability = Max<ui64>();
+        TotalSeen = 0;
         return {
             std::exchange(MaxRows, {}),
             std::exchange(DataRows, {})
@@ -94,8 +103,12 @@ public:
         return MaxProbability;
     }
 
+    ui64 GetTotalSeen() const {
+        return TotalSeen;
+    }
+
     TString Debug() const {
-        return TStringBuilder() << "Sample: " << DataRows.size();
+        return TStringBuilder() << "Sample: " << DataRows.size() << " TotalSeen: " << TotalSeen;
     }
 
 private:

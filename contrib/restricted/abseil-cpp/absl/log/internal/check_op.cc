@@ -14,6 +14,7 @@
 
 #include "absl/log/internal/check_op.h"
 
+#include <cstdint>
 #include <cstring>
 #include <ostream>
 #include <string>
@@ -99,6 +100,10 @@ void MakeCheckOpValueString(std::ostream& os, const void* p) {
   } else {
     os << p;
   }
+}
+
+std::ostream& operator<<(std::ostream& os, UnprintableWrapper) {
+  return os << "UNPRINTABLE";
 }
 
 // Helper functions for string comparisons.

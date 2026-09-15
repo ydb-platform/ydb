@@ -35,20 +35,28 @@ bool aws_allocator_is_valid(const struct aws_allocator *alloc) {
 }
 
 static void *s_aligned_malloc(struct aws_allocator *allocator, size_t size) {
-    (void)allocator;
-    /* larger allocations should be aligned so that AVX and friends can avoid
-     * the extra preamble during unaligned versions of memcpy/memset on big buffers
-     * This will also accelerate hardware CRC and SHA on ARM chips
-     *
-     * 64 byte alignment for > page allocations on 64 bit systems
-     * 32 byte alignment for > page allocations on 32 bit systems
-     * 16 byte alignment for <= page allocations on 64 bit systems
-     * 8 byte alignment for <= page allocations on 32 bit systems
-     *
-     * We use PAGE_SIZE as the boundary because we are not aware of any allocations of
-     * this size or greater that are not data buffers
-     */
-    const size_t alignment = sizeof(void *) * (size > (size_t)PAGE_SIZE ? 8 : 2);
+    size_t alignment = 0;
+    if (allocator->impl != NULL) {
+        alignment = (size_t)allocator->impl;
+    } else {
+        /**
+         * For implicit alignment.
+         * larger allocations should be aligned so that AVX and friends can avoid
+         * the extra preamble during unaligned versions of memcpy/memset on big buffers
+         * This will also accelerate hardware CRC and SHA on ARM chips
+         *
+         * 64 byte alignment for > page allocations on 64 bit systems
+         * 32 byte alignment for > page allocations on 32 bit systems
+         * 16 byte alignment for <= page allocations on 64 bit systems
+         * 8 byte alignment for <= page allocations on 32 bit systems
+         *
+         * We use PAGE_SIZE as the boundary because we are not aware of any allocations of
+         * this size or greater that are not data buffers.
+         *
+         * Unless there is a customized alignment size.
+         */
+        alignment = sizeof(void *) * (size > (size_t)PAGE_SIZE ? 8 : 2);
+    }
 #if !defined(_WIN32)
     void *result = NULL;
     int err = posix_memalign(&result, alignment, size);
@@ -146,7 +154,7 @@ static void *s_non_aligned_calloc(struct aws_allocator *allocator, size_t num, s
     return mem;
 }
 
-static struct aws_allocator default_allocator = {
+static struct aws_allocator s_default_allocator = {
     .mem_acquire = s_non_aligned_malloc,
     .mem_release = s_non_aligned_free,
     .mem_realloc = s_non_aligned_realloc,
@@ -154,10 +162,10 @@ static struct aws_allocator default_allocator = {
 };
 
 struct aws_allocator *aws_default_allocator(void) {
-    return &default_allocator;
+    return &s_default_allocator;
 }
 
-static struct aws_allocator aligned_allocator = {
+static struct aws_allocator s_implicit_aligned_allocator = {
     .mem_acquire = s_aligned_malloc,
     .mem_release = s_aligned_free,
     .mem_realloc = s_aligned_realloc,
@@ -165,7 +173,29 @@ static struct aws_allocator aligned_allocator = {
 };
 
 struct aws_allocator *aws_aligned_allocator(void) {
-    return &aligned_allocator;
+    return &s_implicit_aligned_allocator;
+}
+
+struct aws_allocator *aws_explicit_aligned_allocator_new(size_t customized_alignment) {
+    if (customized_alignment == 0 || (customized_alignment & (customized_alignment - 1)) != 0 ||
+        customized_alignment % sizeof(void *) != 0) {
+        /**
+         * the alignment must be a power of two and a multiple of sizeof(void *) and non-zero.
+         */
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        return NULL;
+    }
+    struct aws_allocator *aligned_alloc = aws_mem_calloc(aws_default_allocator(), 1, sizeof(struct aws_allocator));
+    *aligned_alloc = s_implicit_aligned_allocator;
+    aligned_alloc->impl = (void *)customized_alignment;
+    return aligned_alloc;
+}
+
+void aws_explicit_aligned_allocator_destroy(struct aws_allocator *aligned_alloc) {
+    if (!aligned_alloc) {
+        return;
+    }
+    aws_mem_release(aws_default_allocator(), aligned_alloc);
 }
 
 void *aws_mem_acquire(struct aws_allocator *allocator, size_t size) {

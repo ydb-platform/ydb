@@ -302,16 +302,22 @@ inline path initial_path(system::error_code& ec)
     return detail::initial_path(&ec);
 }
 
+#if BOOST_FILESYSTEM_VERSION < 4 && !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
+
 template< class Path >
+BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use the non-templated `initial_path` overload")
 path initial_path()
 {
     return initial_path();
 }
 template< class Path >
+BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use the non-templated `initial_path` overload")
 path initial_path(system::error_code& ec)
 {
     return detail::initial_path(&ec);
 }
+
+#endif // BOOST_FILESYSTEM_VERSION < 4 && !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
 
 inline path current_path()
 {
@@ -603,7 +609,7 @@ inline path temp_directory_path(system::error_code& ec)
 }
 
 inline path unique_path(path const& p =
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     L"%%%%-%%%%-%%%%-%%%%"
 #else
     "%%%%-%%%%-%%%%-%%%%"
@@ -617,7 +623,7 @@ inline path unique_path(system::error_code& ec)
 {
     return detail::unique_path
     (
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
         L"%%%%-%%%%-%%%%-%%%%",
 #else
         "%%%%-%%%%-%%%%-%%%%",

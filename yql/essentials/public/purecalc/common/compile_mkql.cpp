@@ -21,7 +21,7 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeSelfCallableCompiler() {
         auto type = ctx.BuildType(node, *node.GetTypeAnn());
         NKikimr::NMiniKQL::TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), type);
         call.Add(ctx.ProgramBuilder.NewDataLiteral<ui32>(inputIndex));
-        return NKikimr::NMiniKQL::TRuntimeNode(call.Build(), false);
+        return NKikimr::NMiniKQL::TRuntimeNode(call.Build(), /*isImmediate=*/false);
     };
 }
 
@@ -58,7 +58,7 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeFileContentCallableCompiler(const 
         } else {
             // TODO support EUserDataType::URL
             MKQL_ENSURE(false, "user data blocks of type URL are not supported by FileContent: " << name);
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
         }
     };
 }
@@ -90,10 +90,10 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeFolderPathCallableCompiler(const T
     };
 }
 
-}
+} // namespace
 
 NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TExprContext& exprCtx,
-    const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData, NCommon::TMemoizedTypesMap* typeMemoization)
+                                            const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData, NCommon::TMemoizedTypesMap* typeMemoization)
 {
     NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -106,11 +106,11 @@ NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TEx
     // Prepare build context
 
     NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, funcRegistry);
-    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx, /*lambdaId*/0, /*args*/{}, typeMemoization);
+    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx, /*lambdaId*/ 0, /*args*/ {}, typeMemoization);
 
     // Build the root MKQL node
 
     return NCommon::MkqlBuildExpr(*exprRoot, buildCtx);
 }
 
-} // NYql::NPureCalc
+} // namespace NYql::NPureCalc

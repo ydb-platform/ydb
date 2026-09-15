@@ -1,15 +1,16 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -47,7 +48,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -107,7 +108,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -144,7 +145,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace_back(i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
@@ -160,35 +161,30 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
 
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
-
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
+
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
         return nullptr;
     }
 
-    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
-    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-        auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
-        tabletConfig.SetYcCloudId(cloudId);
+    const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+        tabletConfig.SetYcCloudId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-        auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
-        tabletConfig.SetYcFolderId(folderId);
+    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+        tabletConfig.SetYcFolderId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-        auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
-        tabletConfig.SetYdbDatabaseId(databaseId);
+    if (auto it = attrs.find("database_id"); it != attrs.end()) {
+        tabletConfig.SetYdbDatabaseId(it->second);
     }
+    if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
+        tabletConfig.SetMonitoringProjectId(it->second);
+    }
+
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 
@@ -239,9 +235,12 @@ void ApplySharding(TTxId txId,
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
-        partition->AlterVersion = 1;
+        // Must match pqGroup->AlterVersion: init counts partitions with
+        // partition->AlterVersion <= alterData->AlterVersion when rebuilding PQPartitionsInside.
+        partition->AlterVersion = pqGroup->AlterVersion;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+        partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
 
         pqGroup->AddPartition(idx, partition.Release());
     }
@@ -365,11 +364,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -410,11 +409,11 @@ public:
                 .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -425,8 +424,7 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
 
@@ -456,8 +454,7 @@ public:
                 dstPath.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PersQueue with the storage pool");
                 return result;
             }
 
@@ -468,6 +465,29 @@ public:
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
+        // the LocalPathId; for federation topics the Id should already be set from
+        // the _id attribute via ProcessTopicAttributes.
+        // Re-serialization follows the same pattern as schemeshard__operation_alter_pq.cpp:347
+        // and schemeshard__operation_common_pq.cpp:830.
+        if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+            bool configChanged = false;
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
+                config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetOwnerId(ui64(ssId));
+                configChanged = true;
+            }
+            if (config.HasId() && !config.GetId().HasTxStep()) {
+                // Sentinel: the id is filled at create, so writers must not use the
+                // name-keyed fallback (a brand-new topic has no legacy rows).
+                config.MutableId()->SetTxStep(0);
+                configChanged = true;
+            }
+            if (configChanged) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->TabletConfig);
+            }
+        }
 
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 
@@ -487,9 +507,8 @@ public:
         TTopicInfo::TPtr emptyGroup = new TTopicInfo;
         emptyGroup->Shards.swap(pqGroup->Shards);
 
-        context.SS->Topics[pathId] = emptyGroup;
-        context.SS->Topics[pathId]->AlterData = pqGroup;
-        context.SS->IncrementPathDbRefCount(pathId);
+        emptyGroup->AlterData = pqGroup;
+        context.SS->Topics.Set(pathId, emptyGroup);
 
         context.DbChanges.PersistPersQueueGroup(pathId, emptyGroup);
         context.DbChanges.PersistAddPersQueueGroupAlter(pathId, pqGroup);
@@ -526,8 +545,8 @@ public:
             }
         }
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
-
         context.DbChanges.PersistTxState(OperationId);
 
         if (!acl.empty()) {
@@ -548,6 +567,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
+        dstPath.DomainInfo()->IncPQGroupsInside();
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
         StreamReservedThroughputChange = reserve.Throughput;

@@ -1,13 +1,6 @@
 #pragma once
 #include <util/generic/algorithm.h>
 
-template<>
-struct std::hash<NKikimr::TSubDomainKey> {
-    std::size_t operator ()(const NKikimr::TSubDomainKey& s) const {
-        return s.Hash();
-    }
-};
-
 template <>
 struct std::equal_to<NKikimrBlobStorage::TVDiskID> {
     static decltype(auto) make_tuple(const NKikimrBlobStorage::TVDiskID& id) {

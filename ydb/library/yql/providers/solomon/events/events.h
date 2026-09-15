@@ -1,15 +1,24 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NYql::NDq {
+
+enum EEventSpaceSolomonProvider {
+    ES_SOLOMON_PROVIDER = 4264 // must be in sync with ydb/core/base/events.h
+};
 
 struct TEvSolomonProvider {
 
     enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
+        EvBegin = EventSpaceBegin(EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER),
 
         // lister events
         EvUpdateConsumersCount = EvBegin,
@@ -17,14 +26,16 @@ struct TEvSolomonProvider {
         EvGetNextBatch,
         EvMetricsBatch,
         EvMetricsReadError,
+        EvConsumerFinished,
 
         // read actor events
         EvPointsCountBatch,
         EvNewDataBatch,
+        EvRetryDataRequest,
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER)");
+    static_assert(EvEnd < EventSpaceEnd(EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER), "expect EvEnd < EventSpaceEnd(ES_SOLOMON_PROVIDER)");
 
     struct TEvUpdateConsumersCount :
         public NActors::TEventPB<TEvUpdateConsumersCount, NSo::MetricQueue::TEvUpdateConsumersCount, EvUpdateConsumersCount> {
@@ -51,11 +62,12 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, ui64 downloadedBytes, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
             Record.SetNoMoreMetrics(noMoreMetrics);
+            Record.SetDownloadedBytes(downloadedBytes);
             *Record.MutableTransportMeta() = transportMeta;
         }
     };
@@ -70,6 +82,15 @@ struct TEvSolomonProvider {
         }
     };
 
+    struct TEvConsumerFinished :
+        public NActors::TEventPB<TEvConsumerFinished, NSo::MetricQueue::TEvConsumerFinished, EvConsumerFinished> {
+
+        TEvConsumerFinished() = default;
+        explicit TEvConsumerFinished(const NDqProto::TMessageTransportMeta& transportMeta) {
+            *Record.MutableTransportMeta() = transportMeta;
+        }
+    };
+
     struct TEvPointsCountBatch : public NActors::TEventLocal<TEvPointsCountBatch, EvPointsCountBatch> {
         NSo::TMetric Metric;
         NSo::TGetPointsCountResponse Response;
@@ -80,14 +101,18 @@ struct TEvSolomonProvider {
     };
     
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
-        NSo::TMetric Metric;
-        TInstant From, To;
         NSo::TGetDataResponse Response;
-        TEvNewDataBatch(NSo::TMetric metric, TInstant from, TInstant to, const NSo::TGetDataResponse& response)
-            : Metric(metric)
-            , From(from)
-            , To(to)
-            , Response(response)
+        NSo::TMetricTimeRange Request;
+        TEvNewDataBatch(NSo::TGetDataResponse&& response, NSo::TMetricTimeRange&& request)
+            : Response(std::move(response))
+            , Request(std::move(request))
+        {}
+    };
+
+    struct TEvRetryDataRequest: public NActors::TEventLocal<TEvRetryDataRequest, EvRetryDataRequest> {
+        NSo::TMetricTimeRange Request;
+        explicit TEvRetryDataRequest(NSo::TMetricTimeRange&& request)
+            : Request(std::move(request))
         {}
     };
 };

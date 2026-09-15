@@ -27,8 +27,17 @@ namespace NFwd {
     }
 
     using IPageCollection = NPageCollection::IPageCollection;
-    using TFetch = NPageCollection::TFetch;
     using TGroupId = NPage::TGroupId;
+
+    struct TFetch : TMoveOnly {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TPageId> Pages;
+        ui64 Cookie;
+
+        explicit operator bool() const {
+            return bool(Pages);
+        }
+    };
 
     class TPartGroupLoadingQueue : public IPageLoadingQueue, public TIntrusiveListItem<TPartGroupLoadingQueue> {
     public:
@@ -58,10 +67,11 @@ namespace NFwd {
         }
 
     private:
-        ui64 AddToQueue(TPageId pageId, EPage type, const TIntrusiveConstPtr<IPageCollection>& pageCollection, TAutoPtr<TFetch>& fetch) {
+        ui64 AddToQueue(TPageId pageId, EPage type, const TIntrusiveConstPtr<IPageCollection>& pageCollection, TFetch& fetch) {
             if (!fetch) {
-                fetch.Reset(new TFetch(Cookie, pageCollection, { }));
-                fetch->Pages.reserve(16);
+                fetch.PageCollection = pageCollection;
+                fetch.Pages.reserve(16);
+                fetch.Cookie = Cookie;
             }
 
             const auto meta = pageCollection->Page(pageId);
@@ -70,7 +80,7 @@ namespace NFwd {
                 Y_TABLET_ERROR("Got an invalid page");
             }
 
-            fetch->Pages.emplace_back(pageId);
+            fetch.Pages.push_back(pageId);
 
             return meta.Size;
         }
@@ -82,8 +92,8 @@ namespace NFwd {
         const TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         const THolder<IPageLoadingLogic> PageLoadingLogic;
         bool Grow = false;  /* Should call Forward(...) for preloading */
-        TAutoPtr<TFetch> GroupFetch;
-        TAutoPtr<TFetch> IndexFetch;
+        TFetch GroupFetch;
+        TFetch IndexFetch;
     };
 
     struct TEnv : public IPages {
@@ -150,7 +160,7 @@ namespace NFwd {
             return Get(GetQueue(part, room), ref, EPage::Opaque);
         }
 
-        void DoSave(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
+        void Save(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TVector<NSharedCache::TEvResult::TLoaded> pages)
         {
             const ui32 epoch = ui32(cookie) - Salt;
             if (epoch < Epoch) {
@@ -212,7 +222,7 @@ namespace NFwd {
             return std::accumulate(GroupQueues.begin(), GroupQueues.end(), Total, aggr);
         }
 
-        TAutoPtr<TFetch> GrabFetches()
+        TFetch GetFetch()
         {
             while (FetchingQueues) {
                 auto queue = FetchingQueues.Front();
@@ -222,20 +232,18 @@ namespace NFwd {
                 }
 
                 if (auto request = std::move(queue->IndexFetch)) {
-                    Y_ENSURE(request->Pages, "Shouldn't send empty requests");
-                    Pending += request->Pages.size();
+                    Pending += request.Pages.size();
                     return request;
                 }
                 if (auto request = std::move(queue->GroupFetch)) {
-                    Y_ENSURE(request->Pages, "Shouldn't send empty requests");
-                    Pending += request->Pages.size();
+                    Pending += request.Pages.size();
                     return request;
                 }
 
                 FetchingQueues.PopFront();
             }
 
-            return nullptr;
+            return {};
         }
 
         TAutoPtr<TSeen> GrabTraces()

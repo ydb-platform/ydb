@@ -20,7 +20,6 @@ struct TEvents {
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),
         EvKillSource,
-        EvUpdateMaxCacheSize,
         EvEnd
     };
 
@@ -29,6 +28,7 @@ struct TEvents {
     class TEvAskData: public NActors::TEventLocal<TEvAskData, EvAskData> {
     private:
         YDB_READONLY(EConsumer, Consumer, EConsumer::Undefined);
+        YDB_READONLY(TMonotonic, StartRequestInstant, TMonotonic::Now());
 
         bool AddressesExtracted = false;
         THashSet<TAddress> Addresses;
@@ -41,6 +41,8 @@ struct TEvents {
             : Consumer(consumer)
             , Addresses(std::move(addresses))
             , Callback(std::move(callback)) {
+            AFL_VERIFY(Addresses.size());
+            AFL_VERIFY(Callback);
         }
 
         THashSet<TAddress> ExtractAddresses() {
@@ -66,16 +68,6 @@ struct TEvents {
 
         TSourceId GetSourceId() const {
             return SourceId;
-        }
-    };
-
-    class TEvUpdateMaxCacheSize: public NActors::TEventLocal<TEvUpdateMaxCacheSize, EvUpdateMaxCacheSize> {
-    private:
-        YDB_READONLY_CONST(ui64, MaxCacheSize);
-
-    public:
-        TEvUpdateMaxCacheSize(const ui64 maxCacheSize)
-            : MaxCacheSize(maxCacheSize) {
         }
     };
 };

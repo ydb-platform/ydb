@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
-
 #include <ydb/library/grpc/server/grpc_server.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 
 namespace NKikimr::NGRpcService {
@@ -22,11 +22,11 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
 private:
-    NActors::TActorSystem* ActorSystem = nullptr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    NActors::TActorId GRpcRequestProxyId;
+    NActors::TActorSystem* ActorSystem_ = nullptr;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    NActors::TActorId GRpcRequestProxyId_;
 
-    grpc::ServerCompletionQueue* CQ = nullptr;
+    grpc::ServerCompletionQueue* CQ_ = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService

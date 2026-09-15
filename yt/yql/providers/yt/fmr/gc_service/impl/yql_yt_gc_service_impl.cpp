@@ -18,7 +18,7 @@ public:
         GroupDeletionRequestMaxBatchSize_(settings.GroupDeletionRequestMaxBatchSize),
         MaxInflightGroupDeletionRequests_(settings.MaxInflightGroupDeletionRequests)
     {
-        ThreadPool_ = CreateThreadPool(settings.WorkersNum);
+        ThreadPool_ = CreateThreadPool(settings.WorkersNum, settings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
         ProcessGroupDeletionRequests();
     }
 
@@ -48,11 +48,16 @@ public:
                     GroupsToDeleteBatches_.back().emplace_back(group);
                     ++cnt;
                 }
+                CondVar_.Signal();
             }
             promise.SetValue();
         };
         ThreadPool_->SafeAddFunc(registerDeletionFunc);
         return future;
+    }
+
+    NThreading::TFuture<void> ClearAll() override {
+        return TableDataService_ ? TableDataService_->Clear() : NThreading::MakeFuture();
     }
 
 private:
@@ -61,6 +66,9 @@ private:
             while (!StopGcService_) {
                 std::vector<TString> groupsToDelete;
                 with_lock(Mutex_) {
+                    CondVar_.WaitT(Mutex_, TimeToSleepBetweenGroupDeletionRequests_, [&] {
+                        return !GroupsToDeleteBatches_.empty() || StopGcService_;
+                    });
                     if (!GroupsToDeleteBatches_.empty()) {
                         groupsToDelete = GroupsToDeleteBatches_.front();
                         GroupsToDeleteBatches_.pop();
@@ -69,11 +77,15 @@ private:
                     }
                 }
                 if (groupsToDelete.empty()) {
-                    Sleep(TimeToSleepBetweenGroupDeletionRequests_);
+                    with_lock(Mutex_) {
+                        CondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenGroupDeletionRequests_);
+                    }
                     continue;
                 }
                 TableDataService_->RegisterDeletion(groupsToDelete).GetValueSync();
-                Sleep(TimeToSleepBetweenGroupDeletionRequests_);
+                with_lock(Mutex_) {
+                    CondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenGroupDeletionRequests_);
+                }
             }
         };
         ThreadPool_->SafeAddFunc(runExistingGroupDeleteRequestsFunc);

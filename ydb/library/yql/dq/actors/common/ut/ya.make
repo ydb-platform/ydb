@@ -6,8 +6,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib/actors
-    ydb/core/testlib
+    ydb/library/actors/testlib
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/common
     yql/essentials/sql/pg_dummy
 )
 

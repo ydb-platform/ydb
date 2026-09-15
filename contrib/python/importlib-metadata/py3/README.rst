@@ -7,14 +7,14 @@
    :target: https://github.com/python/importlib_metadata/actions?query=workflow%3A%22tests%22
    :alt: tests
 
-.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
     :target: https://github.com/astral-sh/ruff
     :alt: Ruff
 
 .. image:: https://readthedocs.org/projects/importlib-metadata/badge/?version=latest
    :target: https://importlib-metadata.readthedocs.io/en/latest/?badge=latest
 
-.. image:: https://img.shields.io/badge/skeleton-2025-informational
+.. image:: https://img.shields.io/badge/skeleton-2026-informational
    :target: https://blog.jaraco.com/skeleton
 
 .. image:: https://tidelift.com/badges/package/pypi/importlib-metadata

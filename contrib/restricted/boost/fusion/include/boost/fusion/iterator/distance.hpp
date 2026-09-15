@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_DISTANCE_09172005_0721)
+#ifndef FUSION_DISTANCE_09172005_0721
 #define FUSION_DISTANCE_09172005_0721
 
 #include <boost/fusion/support/config.hpp>

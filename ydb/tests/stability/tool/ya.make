@@ -22,6 +22,10 @@ BUNDLE(
     ydb/tests/stress/node_broker NAME node_broker_workload
     ydb/tests/stress/transfer NAME transfer_workload
     ydb/tests/stress/s3_backups NAME s3_backups_workload
+    ydb/tests/stress/ctas NAME ctas_workload
+    ydb/tests/stress/topic_kafka NAME topic_kafka_workload
+    ydb/tests/stress/kafka NAME kafka_workload
+    ydb/tests/stress/topic NAME topic_workload
     ydb/tools/cfg/bin NAME cfg
     ydb/tests/tools/nemesis/driver NAME nemesis
     ydb/apps/ydb NAME ydb_cli
@@ -36,6 +40,10 @@ RESOURCE(
     node_broker_workload node_broker_workload
     transfer_workload transfer_workload
     s3_backups_workload s3_backups_workload
+    ctas_workload ctas_workload
+    topic_kafka_workload topic_kafka_workload
+    kafka_workload kafka_workload
+    topic_workload topic_workload
     cfg cfg
     nemesis nemesis
     ydb/tests/stability/resources/tbl_profile.txt tbl_profile.txt

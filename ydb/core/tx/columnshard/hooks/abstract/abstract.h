@@ -2,8 +2,8 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -16,6 +16,7 @@
 #include <util/generic/refcount.h>
 #include <util/generic/singleton.h>
 
+#include <atomic>
 #include <memory>
 
 namespace NKikimr::NColumnShard {
@@ -29,13 +30,16 @@ class IBlobsGCAction;
 class TPortionInfo;
 class TDataAccessorsResult;
 class IBlobsStorageOperator;
+
 namespace NIndexes {
 class TIndexMetaContainer;
 }
+
 namespace NDataLocks {
 class ILock;
 }
 }   // namespace NKikimr::NOlap
+
 namespace arrow {
 class RecordBatch;
 }
@@ -68,7 +72,8 @@ public:
         Compaction,
         TTL,
         Cleanup,
-        GC
+        GC,
+        CleanupSchemas
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
@@ -76,80 +81,106 @@ protected:
     virtual std::optional<TDuration> DoGetStalenessLivetimePing() const {
         return {};
     }
+
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
+
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
+
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
         return true;
     }
+
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return true;
     }
+
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, NOlap::TColumnEngineChanges& /*change*/) {
         return true;
     }
+
     virtual void DoOnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& /*shard*/) {
     }
+
     virtual void DoOnAfterGCAction(const NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& /*action*/) {
     }
+
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
+
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
+
     virtual void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*result*/) {
     }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetLimitForPortionsMetadataAsk(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetOverridenGCPeriod(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetCompactionActualizationLag(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetActualizationTasksLag(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetMaxReadStaleness(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetStatsReportInterval(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetGuaranteeIndexationStartBytesLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration defaultValue) const {
         return defaultValue;
     }
+
     virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
         return defaultValue;
     }
+
     virtual const NOlap::NSplitter::TSplitSettings& DoGetBlobSplitSettings(const NOlap::NSplitter::TSplitSettings& defaultValue) const {
         return defaultValue;
     }
@@ -165,11 +196,16 @@ public:
         return DefaultConfig;
     }
 
+    virtual void OnCleanupSchemasFinished() {
+    }
+
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
         const NOlap::NSplitter::TSplitSettings& defaultValue = Default<NOlap::NSplitter::TSplitSettings>()) {
         return DoGetBlobSplitSettings(defaultValue);
     }
+
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 currentSubsetsCount);
+
     virtual void OnRequestTracingChanges(
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
@@ -181,6 +217,7 @@ public:
     ui64 GetMemoryLimitScanPortion() const {
         return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
     }
+
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
 
     TDuration GetStalenessLivetimePing(const TDuration defValue) const {
@@ -236,34 +273,48 @@ public:
         const ui64 defaultValue = 100 * (1 << 20);
         return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
     }
+
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }
+
     ui64 GetSmallPortionSizeDetector() const {
         const ui64 defaultValue = GetConfig().GetSmallPortionDetectSizeLimit();
         return DoGetSmallPortionSizeDetector(defaultValue);
     }
+
     virtual void OnExportFinished() {
     }
+
+    virtual void OnImportFinished() {
+    }
+
     virtual void OnActualizationRefreshScheme() {
     }
+
     virtual void OnActualizationRefreshTiering() {
     }
+
     virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
     }
 
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);
     }
+
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
+
     virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
     }
+
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
     }
+
     virtual void OnTieringMetadataActualized() {
     }
+
     virtual void OnMaxValueUsage() {
     }
 
@@ -291,38 +342,48 @@ public:
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
+
     bool OnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& shard) {
         return DoOnWriteIndexComplete(changes, shard);
     }
+
     void OnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& shard) {
         return DoOnAfterSharingSessionsManagerStart(shard);
     }
+
     bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
         return DoOnWriteIndexStart(tabletId, change);
     }
+
     virtual void OnHeaderSelectProcessed(const std::optional<bool> /*result*/) {
     }
 
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
+
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);
     }
+
     TDuration GetMaxReadStalenessInMem() const {
         return 0.9 * GetMaxReadStaleness();
     }
+
     TDuration GetUsedSnapshotLivetime() const {
         const TDuration defaultValue = 0.6 * GetMaxReadStaleness();
         return DoGetUsedSnapshotLivetime(defaultValue);
     }
+
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const {
         return EOptimizerCompactionWeightControl::Force;
     }
+
     TDuration GetGuaranteeIndexationInterval() const;
     TDuration GetPeriodicWakeupActivationPeriod() const;
     TDuration GetStatsReportInterval() const;
     ui64 GetGuaranteeIndexationStartBytesLimit() const;
+
     TDuration GetOptimizerFreshnessCheckDuration() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetOptimizerFreshnessCheckDurationMs());
         return DoGetOptimizerFreshnessCheckDuration(defaultValue);
@@ -363,16 +424,56 @@ public:
 
     virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
+
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
+};
 
+class IKqpController {
+public:
+    using TPtr = std::shared_ptr<IKqpController>;
+
+    virtual ~IKqpController() = default;
+
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) {
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) {
+    }
+};
+
+class TTestKqpController: public IKqpController {
+private:
+    YDB_READONLY_DEF(TAtomicCounter, InitScanCounter);
+    YDB_READONLY_DEF(TAtomicCounter, ResolvingCounter);
+
+public:
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) override {
+        InitScanCounter.Inc();
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) override {
+        ResolvingCounter.Inc();
+    }
 };
 
 class TControllers {
 private:
-    ICSController::TPtr CSController = std::make_shared<ICSController>();
+    std::atomic<ICSController::TPtr*> CSControllerPtr{ new ICSController::TPtr(std::make_shared<ICSController>()) };
+    IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
+
+    void ReplaceCSController(const ICSController::TPtr& newController) {
+        auto* newPtr = new ICSController::TPtr(newController);
+        auto* oldPtr = CSControllerPtr.exchange(newPtr);
+        delete oldPtr;
+    }
 
 public:
+    ~TControllers() {
+        auto* ptr = CSControllerPtr.load();
+        delete ptr;
+    }
+
     template <class TController>
     class TGuard: TMoveOnly {
     private:
@@ -380,14 +481,17 @@ public:
 
     public:
         TGuard(std::shared_ptr<TController> controller)
-            : Controller(controller) {
+            : Controller(controller)
+        {
             Y_ABORT_UNLESS(Controller);
         }
 
         TGuard(TGuard&& other)
-            : TGuard(other.Controller) {
+            : TGuard(other.Controller)
+        {
             other.Controller = nullptr;
         }
+
         TGuard& operator=(TGuard&& other) {
             std::swap(Controller, other.Controller);
         }
@@ -398,7 +502,8 @@ public:
 
         ~TGuard() {
             if (Controller) {
-                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+                auto* controllers = Singleton<TControllers>();
+                controllers->ReplaceCSController(std::make_shared<ICSController>());
             }
         }
     };
@@ -406,17 +511,36 @@ public:
     template <class T, class... Types>
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
-        Singleton<TControllers>()->CSController = result;
+        auto* controllers = Singleton<TControllers>();
+        controllers->ReplaceCSController(result);
         return result;
     }
 
     static ICSController::TPtr GetColumnShardController() {
-        return Singleton<TControllers>()->CSController;
+        auto* controllers = Singleton<TControllers>();
+        return *controllers->CSControllerPtr.load();
     }
 
     template <class T>
     static T* GetControllerAs() {
-        auto controller = Singleton<TControllers>()->CSController;
+        auto controller = GetColumnShardController();
+        return dynamic_cast<T*>(controller.get());
+    }
+
+    template <class T, class... Types>
+    static TGuard<T> RegisterKqpControllerGuard(Types... args) {
+        auto result = std::make_shared<T>(args...);
+        Singleton<TControllers>()->KqpController = result;
+        return result;
+    }
+
+    static IKqpController::TPtr GetKqpController() {
+        return Singleton<TControllers>()->KqpController;
+    }
+
+    template <class T>
+    static T* GetKqpControllerAs() {
+        auto controller = Singleton<TControllers>()->KqpController;
         return dynamic_cast<T*>(controller.get());
     }
 };

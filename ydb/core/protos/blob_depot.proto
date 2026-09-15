@@ -1,5 +1,6 @@
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrBlobDepot;
@@ -114,12 +115,16 @@ message TEvBlock {
     optional fixed64 TabletId = 1;
     optional uint32 BlockedGeneration = 2;
     optional uint64 IssuerGuid = 3;
+    optional uint32 Version = 4;
+    optional uint32 WriteSourceOp = 5;
 }
 
 message TEvBlockResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
     optional uint32 TimeToLiveMs = 3;
+    optional bool IsTabletStorageInfoVersionObsolete = 4 [default = false];
+    optional uint32 ActualGeneration = 5;
 }
 
 message TEvPushNotify {
@@ -163,6 +168,7 @@ message TEvCollectGarbage {
     optional bool Hard = 7;
     optional uint32 CollectGeneration = 8;
     optional uint64 CollectStep = 9;
+    optional bool IgnoreBlock = 10;
 }
 
 message TEvCollectGarbageResult {
@@ -184,6 +190,8 @@ message TEvCommitBlobSeq {
         optional bool CommitNotify = 5;
         optional TS3Locator S3Locator = 6; // if blob has been written to S3
         repeated TExtraBlockCheck ExtraBlockChecks = 7;
+        optional bool IssueKeepFlag = 8;
+        optional bool IgnoreBlock = 9;
     }
 
     repeated TItem Items = 1;
@@ -201,6 +209,7 @@ message TEvCommitBlobSeqResult {
 message TEvDiscardSpoiledBlobSeq {
     repeated TBlobSeqId Items = 1;
     repeated TS3Locator S3Locators = 2;
+    optional bool S3SlowDown = 3; // set when at least one S3Locator is being discarded due to S3 SlowDown response
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -229,6 +238,11 @@ message TEvResolve {
     }
 
     repeated TItem Items = 1;
+
+    // Admission hint of the request this resolve serves: in decommission mode a MustRestoreFirst
+    // item makes BlobDepot copy the blob into its own storage, and that write must be admitted the
+    // same way the requesting tablet's own writes are, or the tablet cannot boot.
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 2;
 }
 
 message TEvResolveResult {
@@ -250,6 +264,7 @@ message TEvResolveResult {
 message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
+    optional uint32 NodeId = 3;
 }
 
 message TEvPrepareWriteS3 {

@@ -1,11 +1,13 @@
 
 INCLUDE(header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/computation/")
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/computation)
 
 SET(ORIG_SOURCES
     mkql_computation_node_codegen.cpp
-    mkql_simple_codegen.cpp
     mkql_computation_node_graph.cpp
     mkql_computation_node_graph_saveload.cpp
     mkql_computation_node_holders_codegen.cpp

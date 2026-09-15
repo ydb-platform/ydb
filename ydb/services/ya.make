@@ -8,8 +8,8 @@ RECURSE(
     datastreams
     deprecated/persqueue_v0
     discovery
+    distributed_storage
     dynamic_config
-    ext_index
     fq
     kesus
     keyvalue
@@ -17,13 +17,23 @@ RECURSE(
     local_discovery
     maintenance
     metadata
+    udf_store
     monitoring
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter
     replication
+    scheme_secret
+    sqs_topic
     tablet
+    test_shard
     view
     ydb
     ymq
 )
+
+IF (OS_LINUX)
+    RECURSE(
+        nbs
+    )
+ENDIF()

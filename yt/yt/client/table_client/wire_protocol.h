@@ -170,7 +170,7 @@ public:
         const NTableClient::TNameTableToSchemaIdMapping* idMapping = nullptr) = 0;
 
     virtual void WriteSerializedRowset(
-        size_t rowCount,
+        int rowCount,
         const std::vector<TSharedRef>& serializedRowset) = 0;
 
     virtual void WriteUnversionedRowset(
@@ -310,7 +310,7 @@ struct IWireProtocolRowsetReader
 DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetReader)
 
 IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
-    const std::vector<TSharedRef>& compressedBlocks,
+    std::vector<TSharedRef> compressedBlocks,
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,

@@ -4,10 +4,14 @@
 #include "helpers/writer.h"
 #include "helpers/get_value.h"
 
+#include <library/cpp/lwtrace/all.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NKqp {
 
@@ -52,7 +56,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             for (const auto& [tabletId, pathIdTranslator]  : tablets) {
                 const auto& pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
                 for (const auto& pathId : pathIds) {
-                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false);
                     UNIT_ASSERT(internalPathId.has_value());
                     UNIT_ASSERT(result.contains(pathId) && result[pathId].contains(tabletId));
                     UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
@@ -79,7 +83,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
 
             for (const auto& [tabletId, pathIdTranslator]  : tablets) {
-                if (const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId)) {
+                if (const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false)) {
                     UNIT_ASSERT(result[pathId].contains(tabletId));
                     UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
                 }
@@ -114,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
 
         for (const auto& [tabletId, pathIdTranslator]  : tablets) {
-            const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+            const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId, false);
             UNIT_ASSERT(internalPathId.has_value());
             UNIT_ASSERT(result[pathId].contains(tabletId));
             UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
@@ -152,9 +156,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), tablePathId);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), tablePathId);
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
-        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
+        for (size_t i = 0; i < 3; ++i) {
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[i].at("Kind"))), GetUtf8(rows[i].at("Kind")));
+        }
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("TabletId")), 72075186224037889ull);
         UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("TabletId")), 72075186224037890ull);
@@ -182,8 +186,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
-        csController->WaitCompactions(TDuration::Seconds(5));
 
+        csController->WaitCompactions(TDuration::Seconds(5));
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
@@ -228,6 +232,39 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
+        {
+            auto selectQuery = TString(R"(
+                SELECT Sum(Rows) as Rows
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_portion_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("Rows")), 10 * 1000);
+        }
+    }
+
+    Y_UNIT_TEST(StatsSysViewChunksLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable");
+        for (ui64 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT *
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            LIMIT 1
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
@@ -332,11 +369,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 count3;
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore");
@@ -408,11 +445,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         ui64 count1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -452,11 +488,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         ui64 bytes1;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(Max<ui32>());
-        NKikimrConfig::TAppConfig appConfig;
-        auto* CSConfig = appConfig.MutableColumnShardConfig();
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* CSConfig = settings.AppConfig.MutableColumnShardConfig();
         CSConfig->SetDefaultCompression(NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
         CSConfig->SetAlterObjectEnabled(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTypedLocalHelper helper("Utf8", kikimr);
@@ -492,7 +527,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 4);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }
@@ -525,7 +561,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    AFL_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5)("json", i);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    AFL_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
-//                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("json", i);
+//                    YDB_LOG_INFO("",
+//                          {"json", i});
 //                }
             }
         }
@@ -559,9 +596,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), tablePathId);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "SPLIT_COMPACTED");
         }
         {
             auto selectQuery = TString(R"(
@@ -587,8 +624,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), 20000);
+            UNIT_ASSERT_LE(rows.size(), 2);
+            int totalRows = 0;
+            for (const auto& row : rows) {
+                totalRows += GetUint64(row.at("Rows"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 20000);
         }
     }
 
@@ -624,6 +665,17 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                ORDER BY PathId
+                LIMIT 10
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        }
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT *
+                FROM `/Root/olapStore/.sys/store_primary_index_stats`
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -643,11 +695,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[0].at("Kind"))), GetUtf8(rows[0].at("Kind")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[2].at("Kind"))), GetUtf8(rows[2].at("Kind")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[1].at("Kind"))), GetUtf8(rows[1].at("Kind")));
         }
 
         {
@@ -662,11 +714,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             ui32 numExpected = 3 * 3;
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
+            UNIT_ASSERT_GE(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[0].at("Kind"))), GetUtf8(rows[0].at("Kind")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[numExpected - 1].at("Kind"))), GetUtf8(rows[numExpected - 1].at("Kind")));
         }
 
         {
@@ -685,11 +737,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
             ui32 numExpected = 2 * 3;
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
+            UNIT_ASSERT_GE(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[0].at("Kind"))), GetUtf8(rows[0].at("Kind")));
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_C(IsIn({"SPLIT_COMPACTED", "INSERTED"}, GetUtf8(rows[numExpected - 1].at("Kind"))), GetUtf8(rows[numExpected - 1].at("Kind")));
         }
     }
 
@@ -936,6 +988,44 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PathId")), tablePaths[i]);
             }
         }
+    }
+
+    Y_UNIT_TEST(FetchAddedColumnWithProgramTracing) {
+        class TDummyProbeExecutor: public NLWTrace::IExecutor {
+        protected:
+            bool DoExecute(NLWTrace::TOrbit& /*orbit*/, const NLWTrace::TParams& /*params*/) override {
+                return true;
+            }
+        };
+
+        auto& probe = NOlap::NReader::NLWTrace_YDB_CS_DATA_SOURCE::lwtrace_ProgramFetchOriginalData;
+        TDummyProbeExecutor executor;
+        UNIT_ASSERT(probe.Probe.Attach(&executor));
+        Y_DEFER {
+            probe.Probe.Detach(&executor);
+        };
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            auto alterResult = session.ExecuteSchemeQuery(
+                "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        auto rows = ExecuteScanQuery(tableClient, R"(
+            SELECT timestamp, uid, new_column_ui64
+            FROM `/Root/olapStore/olapTable`
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 100);
     }
 }
 

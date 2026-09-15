@@ -1,6 +1,7 @@
 #include "background_controller.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+
 #include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr::NColumnShard {
@@ -15,4 +16,4 @@ void TBackgroundControllerCounters::OnCompactionFinish(TInternalPathId pathId) {
     }
 }
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

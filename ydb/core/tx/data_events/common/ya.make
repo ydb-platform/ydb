@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/core/protos
     ydb/library/conclusion
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     ydb/public/api/protos
 )
 

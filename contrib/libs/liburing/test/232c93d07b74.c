@@ -101,14 +101,8 @@ static void *rcv(void *arg)
 	int s1 = accept(s0, NULL, NULL);
 	assert(s1 != -1);
 
-	if (p->non_blocking) {
-		int flags = fcntl(s1, F_GETFL, 0);
-		assert(flags != -1);
-
-		flags |= O_NONBLOCK;
-		res = fcntl(s1, F_SETFL, flags);
-		assert(res != -1);
-	}
+	if (p->non_blocking)
+		t_set_nonblock(s1);
 
 	struct io_uring m_io_uring;
 	void *ret = NULL;
@@ -209,14 +203,8 @@ static void *snd(void *arg)
 		assert(ret != -1);
 	}
 
-	if (p->non_blocking) {
-		int flags = fcntl(s0, F_GETFL, 0);
-		assert(flags != -1);
-
-		flags |= O_NONBLOCK;
-		ret = fcntl(s0, F_SETFL, flags);
-		assert(ret != -1);
-	}
+	if (p->non_blocking)
+		t_set_nonblock(s0);
 
 	struct io_uring m_io_uring;
 

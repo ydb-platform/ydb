@@ -3,9 +3,12 @@
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/config.h>
@@ -13,9 +16,10 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 namespace NKikimr::NOlap::NReader {
 
-class TPartialReadResult;
 class TPartialSourceAddress;
 
 class TComputeShardingPolicy {
@@ -29,13 +33,16 @@ public:
     }
 
     TComputeShardingPolicy() = default;
+
     bool DeserializeFromProto(const NKikimrTxDataShard::TComputeShardingPolicy& policy) {
         ShardsCount = policy.GetShardsCount();
         for (auto&& i : policy.GetColumnNames()) {
             ColumnNames.emplace_back(i);
         }
         if (ShardsCount >= 1 && ColumnNames.empty()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"shardsCount", ShardsCount},
+                {"columnNames", JoinSeq(",", ColumnNames)});
             return false;
         }
         return true;
@@ -50,18 +57,19 @@ class TReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
+    YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     const NColumnShard::TConcreteScanCounters Counters;
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
     const ui64 ScanId;
     const TActorId ScanActorId;
     const TActorId ResourceSubscribeActorId;
-    const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
     const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
+    std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
 
 public:
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
@@ -69,8 +77,8 @@ public:
         return Resolver.get();
     }
 
-    ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetInternalProcessId();
+    bool SendTaskToExecute(const std::shared_ptr<NConveyorComposite::ITask>& task) const {
+        return ConveyorProcessGuard.SendTaskToExecute(task);
     }
 
     template <class T>
@@ -119,10 +127,6 @@ public:
         return ResourceSubscribeActorId;
     }
 
-    const TActorId& GetReadCoordinatorActorId() const {
-        return ReadCoordinatorActorId;
-    }
-
     const TActorId& GetScanActorId() const {
         return ScanActorId;
     }
@@ -147,11 +151,16 @@ public:
         return ResourcesTaskContext;
     }
 
+    const std::shared_ptr<NLWTrace::TOrbit>& GetScanOrbit() const {
+        return ScanOrbit;
+    }
+
     TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
-        const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
+        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
+        const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit);
 };
 
 class IDataReader {
@@ -162,7 +171,7 @@ protected:
     virtual TString DoDebugString(const bool verbose) const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
+    virtual std::vector<std::unique_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) = 0;
     virtual TConclusion<bool> DoReadNextInterval() = 0;
 
 public:
@@ -174,6 +183,7 @@ public:
         Started = true;
         return DoStart();
     }
+
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
 
     const TReadContext& GetContext() const {
@@ -189,7 +199,9 @@ public:
     }
 
     void Abort(const TString& reason) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_aborted")("reason", reason);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_aborted"},
+            {"reason", reason});
         return DoAbort();
     }
 
@@ -207,7 +219,7 @@ public:
         return *result;
     }
 
-    std::vector<std::shared_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
+    std::vector<std::unique_ptr<TPartialReadResult>> ExtractReadyResults(const int64_t maxRowsInBatch) {
         return DoExtractReadyResults(maxRowsInBatch);
     }
 
@@ -220,6 +232,7 @@ public:
         sb << DoDebugString(verbose);
         return sb;
     }
+
     [[nodiscard]] TConclusion<bool> ReadNextInterval() {
         return DoReadNextInterval();
     }

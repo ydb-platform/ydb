@@ -40,7 +40,7 @@ class UnknownAPIVersionError(
 ):
     def __init__(self, service_name, bad_api_version, available_api_versions):
         msg = (
-            f"The '{service_name}' resource does not an API version of: {bad_api_version}\n"
+            f"The '{service_name}' resource does not support an API version of: {bad_api_version}\n"
             f"Valid API versions are: {available_api_versions}"
         )
         # Not using super because we don't want the DataNotFoundError
@@ -123,4 +123,8 @@ class PythonDeprecationWarning(Warning):
     in an future release. See warning for specifics.
     """
 
+    pass
+
+
+class InvalidCrtTransferConfigError(Boto3Error):
     pass

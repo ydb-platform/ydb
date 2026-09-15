@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_MOVE_01192013_2225)
+#ifndef FUSION_MOVE_01192013_2225
 #define FUSION_MOVE_01192013_2225
 
 #include <boost/fusion/support/config.hpp>

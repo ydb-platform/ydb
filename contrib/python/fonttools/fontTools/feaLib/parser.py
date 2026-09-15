@@ -887,6 +887,11 @@ class Parser(object):
 
         is_deletion = False
         if len(new) == 1 and isinstance(new[0], ast.NullGlyph):
+            if reverse:
+                raise FeatureLibError(
+                    "Reverse chaining substitutions do not support glyph deletion",
+                    location,
+                )
             new = []  # Deletion
             is_deletion = True
 
@@ -1948,6 +1953,7 @@ class Parser(object):
         return self.ast.FontRevisionStatement(version, location=location)
 
     def parse_conditionset_(self):
+        location = self.cur_token_location_
         name = self.expect_name_()
 
         conditions = {}
@@ -1982,7 +1988,7 @@ class Parser(object):
         finalname = self.expect_name_()
         if finalname != name:
             raise FeatureLibError('Expected "%s"' % name, self.cur_token_location_)
-        return self.ast.ConditionsetStatement(name, conditions)
+        return self.ast.ConditionsetStatement(name, conditions, location=location)
 
     def parse_block_(
         self, block, vertical, stylisticset=None, size_feature=False, cv_feature=None
@@ -2198,7 +2204,7 @@ class Parser(object):
                 raise FeatureLibError(
                     "Expected an equals sign", self.cur_token_location_
                 )
-            value = self.expect_number_()
+            value = self.expect_integer_or_float_()
             location[axis] = value
             if self.next_token_type_ is Lexer.NAME and self.next_token_[0] == ":":
                 # Lexer has just read the value as a glyph name. We'll correct it later
@@ -2229,6 +2235,16 @@ class Parser(object):
         raise FeatureLibError(
             "Expected a floating-point number", self.cur_token_location_
         )
+
+    def expect_integer_or_float_(self):
+        if self.next_token_type_ == Lexer.FLOAT:
+            return self.expect_float_()
+        elif self.next_token_type_ is Lexer.NUMBER:
+            return self.expect_number_()
+        else:
+            raise FeatureLibError(
+                "Expected an integer or floating-point number", self.cur_token_location_
+            )
 
     def expect_decipoint_(self):
         if self.next_token_type_ == Lexer.FLOAT:

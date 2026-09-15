@@ -67,13 +67,11 @@ TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, con
     , ReqId(reqId)
     , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(),
                 true, 0, "", 0))
-    , Cypher(pDisk->Cfg->EnableSectorEncryption)
     , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
     , Data(SizeToRead)
 {
     Y_VERIFY_S(actorSystem == PCtx->ActorSystem, PCtx->PDiskLogPrefix);
     Y_VERIFY_S(replyTo == PCtx->PDiskActor, PCtx->PDiskLogPrefix);
-    Cypher.SetKey(PDisk->Format.SysLogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
     TDiskFormat &format = PDisk->Format;
@@ -100,20 +98,15 @@ void TSysLogReader::Start() {
     TVector<TBuffer *> bufferParts;
     completionParts.reserve(partsToRead);
     bufferParts.reserve(partsToRead);
-    auto *cumulativeCompletion = new TCumulativeCompletionHolder();
-    for (ui32 idx = 0; idx < partsToRead; ++idx) {
-        const ui32 offset = idx * bufferSize;
-        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        bufferParts.push_back(PDisk->BufferPool->Pop());
-        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data,
-                bufferParts[idx], sizeToReadPart, offset));
-    }
+    auto *cumulativeCompletion = new TCumulativeCompletionHolder(partsToRead);
     cumulativeCompletion->SetCompletionAction(finalCompletion);
     for (ui32 idx = 0; idx < partsToRead; ++idx) {
         const ui32 offset = idx * bufferSize;
         const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart, BeginSectorIdx * format.SectorSize + offset,
-                completionParts[idx], ReqId, {});
+        bufferParts.push_back(PDisk->BufferPool->Pop());
+        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data, bufferParts[idx], sizeToReadPart, offset));
+        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart,
+            BeginSectorIdx * format.SectorSize + offset, completionParts[idx], ReqId, {});
     }
 }
 
@@ -159,7 +152,7 @@ void TSysLogReader::RestoreSectorSets() {
         const ui64 magic = format.MagicSysLogChunk;
         const bool isErasureEncode = format.IsErasureEncodeSysLog();
         TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format,
-            PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+            PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get(), {});
         restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, 0);
 
         if (!restorator.GoodSectorFlags) {
@@ -177,9 +170,10 @@ void TSysLogReader::RestoreSectorSets() {
         sectorSetInfo.GoodSectorFlags = restorator.GoodSectorFlags;
         sectorSetInfo.IsIdeal = (restorator.LastBadIdx == (ui32)-1);
 
-        // Decrypt data
-        Cypher.StartMessage(sectorFooter->Nonce);
-        Cypher.InplaceEncrypt(rawSector, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
+        TPDiskStreamCypher cypher(sectorFooter->IsEncrypted());
+        cypher.SetKey(PDisk->Format.SysLogKey);
+        cypher.StartMessage(sectorFooter->Nonce);
+        cypher.InplaceEncrypt(rawSector, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
         PDisk->CheckLogCanary(rawSector, 0, sectorIdx + sectorsToSkip);
 
         TLogPageHeader *pageHeader = (TLogPageHeader*)rawSector;
@@ -324,8 +318,11 @@ void TSysLogReader::FindTheBestRecord() {
             BestRecordLastOffset = idx + LoopOffset;
         }
     }
-    P_LOG(PRI_INFO, BPD01, "SysLogReader found the best record", (BestRecordFirstOffset, BestRecordFirstOffset),
-            (BestRecordLastOffset, BestRecordLastOffset), (BestNonce, BestNonce));
+    YDB_LOG_P_LOG(PRI_INFO, "SysLogReader found the best record",
+        {"marker", "BPD01"},
+        {"bestRecordFirstOffset", BestRecordFirstOffset},
+        {"bestRecordLastOffset", BestRecordLastOffset},
+        {"bestNonce", BestNonce});
     VerboseCheck(BestNonce > 0, "No best record found! Marker# BPS06");
     // Can become replied at this point
 }
@@ -392,7 +389,8 @@ void TSysLogReader::PrepareResult() {
 
 void TSysLogReader::Reply() {
     if (!IsReplied) {
-        P_LOG(PRI_DEBUG, BPD01, Result->ToString());
+        YDB_LOG_P_LOG(PRI_DEBUG, Result->ToString(),
+            {"marker", "BPD01"});
         PCtx->ActorSystem->Send(PCtx->PDiskActor, Result.Release());
         IsReplied = true;
     }
@@ -407,7 +405,9 @@ bool TSysLogReader::VerboseCheck(bool condition, const char *desctiption) {
             str << desctiption << " ";
             DumpDebugInfo(str, true);
             Result->ErrorReason = str.Str();
-            P_LOG(PRI_ERROR, BPD01, "SysLogRead check failed", (Result, Result->ToString()));
+            YDB_LOG_P_LOG(PRI_ERROR, "SysLogRead check failed",
+                {"marker", "BPD01"},
+                {"result", Result->ToString()});
             Reply();
         }
     }

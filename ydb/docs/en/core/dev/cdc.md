@@ -8,7 +8,7 @@ CDC is represented as a data schema object: a changefeed that can be added to a 
 
 ## Reading data from a topic {#read}
 
-Before reading data, add a [consumer](../concepts/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
+Before reading data, add a [consumer](../concepts/datamodel/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
 
 ```bash
 {{ ydb-cli }} topic consumer add \

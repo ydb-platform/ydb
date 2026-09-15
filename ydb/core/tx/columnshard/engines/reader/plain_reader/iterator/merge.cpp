@@ -2,10 +2,13 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -40,12 +43,14 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
-        auto accessors = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
-        auto conclusion = Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors, std::make_shared<NArrow::NSSA::TFakeDataSource>());
+        auto accessors = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
+        auto conclusion =
+            Context->GetReadMetadata()->GetProgram().ApplyProgram(std::move(accessors), std::make_shared<NArrow::NSSA::TFakeDataSource>());
         if (conclusion.IsFail()) {
             return conclusion;
         }
-        if (accessors->GetRecordsCountOptional().value_or(0) == 0) {
+        accessors = conclusion.DetachResult();
+        if (!accessors->HasSomeUsefulInfo()) {
             ResultBatch = nullptr;
         } else {
             ResultBatch = accessors->ToTable(std::nullopt, Context->GetCommonContext()->GetResolver(), false);
@@ -53,14 +58,18 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     }
     if (ResultBatch && ResultBatch->num_rows()) {
         const auto& shardingPolicy = Context->GetCommonContext()->GetComputeShardingPolicy();
-        if (NArrow::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
+        if (NArrow::NHash::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
             ShardedBatch = NArrow::TShardingSplitIndex::Apply(shardingPolicy.GetShardsCount(), ResultBatch, "__compute_sharding_hash");
         } else {
             ShardedBatch = NArrow::TShardedRecordBatch(ResultBatch);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "update_memory_merger")("before_data", dataSizeBefore)(
-            "before_memory", memorySizeBefore)("after_memory", NArrow::GetTableMemorySize(ResultBatch))(
-            "after_data", NArrow::GetTableDataSize(ResultBatch))("guard", AllocationGuard->GetMemory());
+        YDB_LOG_DEBUG("",
+            {"event", "update_memory_merger"},
+            {"beforeData", dataSizeBefore},
+            {"beforeMemory", memorySizeBefore},
+            {"afterMemory", NArrow::GetTableMemorySize(ResultBatch)},
+            {"afterData", NArrow::GetTableDataSize(ResultBatch)},
+            {"guard", AllocationGuard->GetMemory()});
         //        AllocationGuard->Update(NArrow::GetTableMemorySize(ResultBatch));
         AFL_VERIFY(!!LastPK == !!ShardedBatch->GetRecordsCount())("lpk", !!LastPK)("sb", ShardedBatch->GetRecordsCount());
     } else {
@@ -71,11 +80,13 @@ TConclusionStatus TBaseMergeTask::PrepareResultBatch() {
     return TConclusionStatus::Success();
 }
 
-bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) const {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoApply")("interval_idx", MergingContext->GetIntervalIdx());
+bool TBaseMergeTask::DoApply(IDataReader& indexedDataRead) {
+    YDB_LOG_DEBUG("",
+        {"event", "DoApply"},
+        {"intervalIdx", MergingContext->GetIntervalIdx()});
     auto& reader = static_cast<TPlainReadData&>(indexedDataRead);
     auto copy = AllocationGuard;
-    reader.MutableScanner().OnIntervalResult(std::move(copy), ShardedBatch, LastPK, std::move(Merger), IntervalIdx, reader);
+    reader.MutableScanner().OnIntervalResult(std::move(copy), std::move(ShardedBatch), LastPK, std::move(Merger), IntervalIdx, reader);
     return true;
 }
 
@@ -86,15 +97,14 @@ bool TBaseMergeTask::DoOnAllocated(
         return false;
     }
     AllocationGuard = std::move(guard);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
-        static_pointer_cast<TBaseMergeTask>(allocation), Context->GetCommonContext()->GetConveyorProcessId());
+    Context->GetCommonContext()->SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation));
     return true;
 }
 
-TConclusionStatus TStartMergeTask::DoExecuteImpl() {
+TConclusion<bool> TStartMergeTask::DoExecuteImpl() {
     if (OnlyEmptySources) {
         ResultBatch = nullptr;
-        return TConclusionStatus::Success();
+        return true;
     }
     bool sourcesInMemory = true;
     for (auto&& i : Sources) {
@@ -122,7 +132,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         }
         Sources.clear();
         AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
-        return TConclusionStatus::Success();
+        return true;
     }
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::COMMON", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(!Merger);
@@ -141,7 +151,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         AFL_VERIFY(Merger->GetSourcesCount() <= Sources.size());
         if (Merger->GetSourcesCount() == 0 || isEmpty) {
             ResultBatch = nullptr;
-            return TConclusionStatus::Success();
+            return true;
         }
     }
     Merger->PutControlPoint(MergingContext->GetFinish(), false);
@@ -149,7 +159,9 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExecute")("interval_idx", MergingContext->GetIntervalIdx());
+    YDB_LOG_DEBUG("",
+        {"event", "DoExecute"},
+        {"intervalIdx", MergingContext->GetIntervalIdx()});
     std::optional<NArrow::NMerger::TCursor> lastResultPosition;
     if (Merger->GetSourcesCount() == 1 && sourcesInMemory) {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::ONE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
@@ -172,13 +184,18 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         LastPK = lastResultPosition->ExtractSortingPosition(MergingContext->GetFinish().GetSortFields());
     }
     AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
-    return PrepareResultBatch();
+    auto statusConclusion = PrepareResultBatch();
+    if (statusConclusion.IsFail()) {
+        return statusConclusion;
+    }
+    return true;
 }
 
 TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
     THashMap<ui32, std::shared_ptr<IDataSource>>&& sources)
     : TBase(mergingContext, readContext)
-    , Sources(std::move(sources)) {
+    , Sources(std::move(sources))
+{
     for (auto&& s : Sources) {
         AFL_VERIFY(s.second->IsDataReady());
     }
@@ -189,14 +206,18 @@ TStartMergeTask::TStartMergeTask(const std::shared_ptr<TMergingContext>& merging
     }
 }
 
-TConclusionStatus TContinueMergeTask::DoExecuteImpl() {
+TConclusion<bool> TContinueMergeTask::DoExecuteImpl() {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::CONTINUE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     std::optional<NArrow::NMerger::TCursor> lastResultPosition = DrainMergerLinearScan(Context->ReadSequentiallyBufferSize);
     if (lastResultPosition) {
         LastPK = lastResultPosition->ExtractSortingPosition(MergingContext->GetFinish().GetSortFields());
     }
     AFL_VERIFY(!!LastPK == (!!ResultBatch && ResultBatch->num_rows()));
-    return PrepareResultBatch();
+    auto statusConclusion = PrepareResultBatch();
+    if (statusConclusion.IsFail()) {
+        return statusConclusion;
+    }
+    return true;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

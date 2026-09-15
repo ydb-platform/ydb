@@ -1,14 +1,19 @@
 #include "sessions.h"
+
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_start_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_to_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
-    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("sessions", "start")("tablet_id", shard.TabletID());
+    YDB_LOG_CREATE_CONTEXT(
+        {"sessions", "start"},
+        {"tabletId", shard.TabletID()});
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
             i.second->PrepareToStart(shard);
@@ -93,7 +98,6 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
                 return false;
             }
         }
-
     }
 
     {
@@ -123,19 +127,22 @@ bool TSessionsManager::Load(NTable::TDatabase& database, const TColumnEngineForL
     return true;
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ProposeDestSession(
+    NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
     AFL_VERIFY(session);
     return std::make_unique<TTxProposeFromInitiator>(self, session, DestSessions, "tx_propose_from_initiator");
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::ConfirmDestSession(
+    NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session) {
     AFL_VERIFY(session);
     return std::make_unique<TTxConfirmFromInitiator>(self, session, "tx_confirm_from_initiator");
 }
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::InitializeSourceSession(
+    NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session) {
     AFL_VERIFY(session);
     return std::make_unique<TTxStartToSource>(self, session, SourceSessions, "tx_start_to_source");
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

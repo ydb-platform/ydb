@@ -4,6 +4,8 @@
 #include "util.h"
 #include "constants.h"
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 #include <array>
 
 //-----------------------------------------------------------------------------
@@ -77,29 +79,53 @@ TTerminal::TTerminal(size_t terminalID,
                      bool noDelays,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
+                     NQuery::TTxSettings txMode,
+                     bool mixedTxMode,
+                     double txModeWeightSerializable,
+                     double txModeWeightSnapshot,
+                     double txModeWeightReadCommitted,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
-    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
+    , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log, txMode)
     , NoDelays(noDelays)
+    , MixedTxMode(mixedTxMode)
+    , TxModeWeightSerializable(txModeWeightSerializable)
+    , TxModeWeightSnapshot(txModeWeightSnapshot)
+    , TxModeWeightReadCommitted(txModeWeightReadCommitted)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
-    , Task(Run())
 {
+}
+
+NQuery::TTxSettings TTerminal::ChooseTxMode() const {
+    double totalWeight = TxModeWeightSerializable + TxModeWeightSnapshot + TxModeWeightReadCommitted;
+    double randomValue = ::RandomNumber<double>() * totalWeight; // randomValue in [0; totalWeight)
+    double cumulative = TxModeWeightSerializable;
+    if (randomValue <= cumulative) {
+        return NQuery::TTxSettings::SerializableRW();
+    }
+    cumulative += TxModeWeightSnapshot;
+    if (randomValue <= cumulative) {
+        return NQuery::TTxSettings::SnapshotRW();
+    }
+    return NQuery::TTxSettings::ReadCommittedRW();
 }
 
 void TTerminal::Start() {
     if (!Started) {
-        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
+        TaskFuture = Run();
         Started = true;
     }
 }
 
-TTerminalTask TTerminal::Run() {
+NThreading::TFuture<void> TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
+
+    co_await TTaskReady(TaskQueue, Context.TerminalID);
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
@@ -113,6 +139,10 @@ TTerminalTask TTerminal::Run() {
 
         size_t txIndex = ChooseRandomTransactionIndex();
         auto& transaction = Transactions[txIndex];
+
+        if (MixedTxMode) {
+            Context.TxMode = ChooseTxMode();
+        }
 
         try {
             if (!NoDelays) {
@@ -188,11 +218,18 @@ TTerminalTask TTerminal::Run() {
                 ss << ", backtrace: " << ex.BackTrace()->PrintToString();
             }
             LOG_E(ss.Str());
-            RequestStop();
+            RequestStopWithError();
+            co_return;
+        } catch (const std::exception& ex) {
+            TStringStream ss;
+            ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
+                << ex.what();
+            LOG_E(ss.Str());
+            RequestStopWithError();
             co_return;
         }
 
-        // only here if exception cought
+        // only here if exception caught
 
         TaskQueue.DecInflight();
     }
@@ -203,11 +240,11 @@ TTerminalTask TTerminal::Run() {
 }
 
 bool TTerminal::IsDone() const {
-    if (!Task.Handle) {
+    if (!Started) {
         return true;
     }
 
-    return Task.Handle.done();
+    return TaskFuture.HasValue() || TaskFuture.HasException();
 }
 
 } // namespace NYdb::NTPCC

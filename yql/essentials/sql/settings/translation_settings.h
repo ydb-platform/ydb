@@ -1,7 +1,9 @@
 #pragma once
 
+#include <yql/essentials/sql/settings/flags/flags.h>
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -9,132 +11,160 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
-namespace google::protobuf {
-    class Arena;
-}
+namespace google::protobuf { // NOLINT(readability-identifier-naming)
+class Arena;
+} // namespace google::protobuf
 
 namespace NYql {
-    class TIssues;
-    class IAutoParamBuilderFactory;
-}
+class TIssues;
+class IAutoParamBuilderFactory;
+} // namespace NYql
 
 namespace NSQLTranslation {
-    constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
 
-    enum class ESqlMode {
-        QUERY = 0,
-        LIMITED_VIEW = 1,
-        LIBRARY = 2,
-        SUBQUERY = 3,
-        DISCOVERY = 4,
-    };
+constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
+constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
 
-    enum class EBindingsMode {
-        // raise error
-        DISABLED,
-        // classic support for bindings
-        ENABLED,
-        // bindings.my_binding -> current_cluster.my_binding + raise warning
-        DROP_WITH_WARNING,
-        // bindings.my_binding -> current_cluster.my_binding
-        DROP
-    };
+enum class ESqlMode {
+    QUERY = 0,
+    LIMITED_VIEW = 1,
+    LIBRARY = 2,
+    SUBQUERY = 3,
+    DISCOVERY = 4,
+};
 
-    inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
-        return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY;
-    }
+enum class EBindingsMode {
+    // raise error
+    DISABLED,
+    // classic support for bindings
+    ENABLED,
+    // bindings.my_binding -> current_cluster.my_binding + raise warning
+    DROP_WITH_WARNING,
+    // bindings.my_binding -> current_cluster.my_binding
+    DROP
+};
 
-    using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
+enum class EYqlSelect {
+    Disable,
+    Auto,
+    Force,
+};
 
-    // persisted
-    enum class EV0Behavior : ui32 {
-        Silent = 0,
-        Report,
-        Disable
-    };
+inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
+    return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY;
+}
 
-    class ISqlFeaturePolicy : public TThrRefBase {
-    public:
-        virtual ~ISqlFeaturePolicy() = default;
-        virtual bool Allow() const = 0;
+using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
 
-        using TPtr = TIntrusivePtr<ISqlFeaturePolicy>;
+// persisted
+enum class EV0Behavior: ui32 {
+    Silent = 0,
+    Report,
+    Disable
+};
 
-        static TPtr MakeAlwaysDisallow();
+class ISqlFeaturePolicy: public TThrRefBase {
+public:
+    ~ISqlFeaturePolicy() override = default;
+    virtual bool Allow() const = 0;
 
-        static TPtr MakeAlwaysAllow();
+    using TPtr = TIntrusivePtr<ISqlFeaturePolicy>;
 
-        static TPtr Make(bool allow);
-    };
+    static TPtr MakeAlwaysDisallow();
 
-    struct TTableBindingSettings {
-        TString ClusterType;
-        THashMap<TString, TString> Settings;
-    };
+    static TPtr MakeAlwaysAllow();
 
-    struct TTranslationSettings
-    {
-        TTranslationSettings();
-        google::protobuf::Arena* Arena = nullptr;
+    static TPtr Make(bool allow);
+};
 
-        NYql::TLangVersion LangVer = NYql::MinLangVersion;
-        NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
-        THashMap<TString, TString> ClusterMapping;
-        TString PathPrefix;
-        // keys (cluster name) should be normalized
-        THashMap<TString, TString> ClusterPathPrefixes;
-        THashMap<TString, TString> ModuleMapping;
-        THashSet<TString> Libraries;
-        THashSet<TString> Flags;
+struct TTableBindingSettings {
+    TString ClusterType;
+    THashMap<TString, TString> Settings;
+};
 
-        EBindingsMode BindingsMode;
-        THashMap<TString, TTableBindingSettings> Bindings;
-        bool SaveWorldDependencies = false;
+struct TTranslationSettings {
+    TTranslationSettings();
+    google::protobuf::Arena* Arena = nullptr;
 
-        // each (name, type) entry in this map is equivalent to
-        // DECLARE $name AS type;
-        // NOTE: DECLARE statement in SQL text overrides entry in DeclaredNamedExprs
-        TMap<TString, TString> DeclaredNamedExprs;
+    NYql::TLangVersion LangVer = NYql::MinLangVersion;
+    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::None;
+    THashMap<TString, TString> ClusterMapping;
+    TString PathPrefix;
+    // keys (cluster name) should be normalized
+    THashMap<TString, TString> ClusterPathPrefixes;
+    THashMap<TString, TString> ModuleMapping;
+    THashSet<TString> Libraries;
+    THashSet<TString> Flags;
+    EYqlSelect YqlSelect = EYqlSelect::Disable;
 
-        ESqlMode Mode;
-        TString DefaultCluster;
-        TIncrementMonCounterFunction IncrementCounter;
-        size_t MaxErrors;
-        bool EndOfQueryCommit;
-        TString File;
-        bool EnableGenericUdfs;
-        ui16 SyntaxVersion;
-        bool AnsiLexer;
-        bool Antlr4Parser;
-        bool PgParser;
-        bool InferSyntaxVersion;
-        EV0Behavior V0Behavior;
-        bool V0ForceDisable;
-        bool PGDisable;
-        bool WarnOnV0;
-        bool TestAntlr4;
-        ISqlFeaturePolicy::TPtr V0WarnAsError;
-        ISqlFeaturePolicy::TPtr DqDefaultAuto;
-        ISqlFeaturePolicy::TPtr BlockDefaultAuto;
-        bool AssumeYdbOnClusterWithSlash;
-        TString DynamicClusterProvider;
-        TString FileAliasPrefix;
+    EBindingsMode BindingsMode;
+    THashMap<TString, TTableBindingSettings> Bindings;
+    bool SaveWorldDependencies = false;
 
-        TVector<ui32> PgParameterTypeOids;
-        bool AutoParametrizeEnabled = false;
-        bool AutoParametrizeValuesStmt = false;
+    // each (name, type) entry in this map is equivalent to
+    // DECLARE $name AS type;
+    // NOTE: DECLARE statement in SQL text overrides entry in DeclaredNamedExprs
+    TMap<TString, TString> DeclaredNamedExprs;
 
-        TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
-        bool UnicodeLiterals = false;
+    ESqlMode Mode;
+    TString DefaultCluster;
+    TIncrementMonCounterFunction IncrementCounter;
+    size_t MaxErrors;
+    bool EndOfQueryCommit;
+    TString File;
+    bool EnableGenericUdfs;
+    ui16 SyntaxVersion;
+    bool AnsiLexer;
+    bool Antlr4Parser; // TODO(YQL-19017): remove.
+    bool PgParser;
+    bool InferSyntaxVersion;
+    EV0Behavior V0Behavior;
+    bool V0ForceDisable;
+    bool PGDisable;
+    bool WarnOnV0;
+    bool TestAntlr4; // TODO(YQL-19017): remove.
+    TMaybe<size_t> MaxParseTreeDepth;
+    ISqlFeaturePolicy::TPtr V0WarnAsError;
+    ISqlFeaturePolicy::TPtr DqDefaultAuto;
+    ISqlFeaturePolicy::TPtr BlockDefaultAuto;
+    bool AssumeYdbOnClusterWithSlash;
+    TString DynamicClusterProvider;
+    TString FileAliasPrefix;
+    const NYql::IUdfMeta* UdfMeta = nullptr;
 
-        TMaybe<TString> ApplicationName;
-        bool PgSortNulls = false;
-        NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
-        bool EmitReadsForExists = false;
-        bool AlwaysAllowExports = false;
-        bool IsReplay = false;
-    };
+    TVector<ui32> PgParameterTypeOids;
+    bool AutoParametrizeEnabled = false;
+    bool AutoParametrizeValuesStmt = false;
 
-    bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);
+    TGUCSettings::TPtr GUCSettings = std::make_shared<TGUCSettings>();
+    bool UnicodeLiterals = false;
 
-}  // namespace NSQLTranslation
+    TMaybe<TString> ApplicationName;
+    bool PgSortNulls = false;
+    NYql::IAutoParamBuilderFactory* AutoParamBuilderFactory = nullptr;
+    bool EmitReadsForExists = true;
+    bool AlwaysAllowExports = false;
+    bool IsReplay = false;
+    bool AllowTablesFunction = false;
+
+    bool ValidateViewStatement = true;
+
+    TVector<TString> ExtraSystemColumnPrefixes;
+};
+
+struct TParsedSettings {
+    bool HasSyntaxV0 = false;
+    bool HasSyntaxV1 = false;
+    bool HasAnsiLexer = false;
+    bool HasPgParser = false;
+
+    bool ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const;
+};
+
+bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings& parsed, NYql::TIssues& issues);
+
+bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues);
+
+void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettings& settings);
+
+} // namespace NSQLTranslation

@@ -187,7 +187,7 @@ public:
         if (FD_ == -1) {
             THROW_ERROR_EXCEPTION("Failed to open %Qlv perf event descriptor",
                 type)
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
@@ -204,7 +204,7 @@ public:
         if (HandleEintr(read, FD_, &result, sizeof(result)) != sizeof(result)) {
             THROW_ERROR_EXCEPTION("Failed to read perf event counter %Qlv",
                 Type_)
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
         return result;
     }

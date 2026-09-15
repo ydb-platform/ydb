@@ -4,4 +4,6 @@ RECURSE(
     python3_10
     python3_11
     python3_12
+    python3_13
+    python3_14
 )

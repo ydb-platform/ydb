@@ -3,13 +3,23 @@
 Implements the Distutils 'bdist' command (create a built [binary]
 distribution)."""
 
+from __future__ import annotations
+
 import os
 import warnings
-from typing import ClassVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, ClassVar
 
 from ..core import Command
 from ..errors import DistutilsOptionError, DistutilsPlatformError
 from ..util import get_platform
+
+if TYPE_CHECKING:
+    from typing_extensions import deprecated
+else:
+
+    def deprecated(message):
+        return lambda fn: fn
 
 
 def show_formats():
@@ -26,9 +36,10 @@ def show_formats():
 
 class ListCompat(dict[str, tuple[str, str]]):
     # adapter to allow for Setuptools compatibility in format_commands
-    def append(self, item):
+    @deprecated("format_commands is now a dict. append is deprecated.")
+    def append(self, item: object) -> None:
         warnings.warn(
-            """format_commands is now a dict. append is deprecated.""",
+            "format_commands is now a dict. append is deprecated.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -64,9 +75,9 @@ class bdist(Command):
         ),
     ]
 
-    boolean_options = ['skip-build']
+    boolean_options: ClassVar[list[str]] = ['skip-build']
 
-    help_options = [
+    help_options: ClassVar[list[tuple[str, str | None, str, Callable[[], object]]]] = [
         ('help-formats', None, "lists available distribution formats", show_formats),
     ]
 
@@ -75,7 +86,7 @@ class bdist(Command):
 
     # This won't do in reality: will need to distinguish RPM-ish Linux,
     # Debian-ish Linux, Solaris, FreeBSD, ..., Windows, Mac OS.
-    default_format = {'posix': 'gztar', 'nt': 'zip'}
+    default_format: ClassVar[dict[str, str]] = {'posix': 'gztar', 'nt': 'zip'}
 
     # Define commands in preferred order for the --help-formats option
     format_commands = ListCompat({
@@ -100,7 +111,7 @@ class bdist(Command):
         self.group = None
         self.owner = None
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         # have to finalize 'plat_name' before 'bdist_base'
         if self.plat_name is None:
             if self.skip_build:
@@ -128,7 +139,7 @@ class bdist(Command):
         if self.dist_dir is None:
             self.dist_dir = "dist"
 
-    def run(self):
+    def run(self) -> None:
         # Figure out which sub-commands we need to run.
         commands = []
         for format in self.formats:

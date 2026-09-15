@@ -15,7 +15,7 @@ namespace NKikimr {
 
 IActor* CreateTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie);
 IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGen, bool leader);
-IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, NWilson::TTraceId traceId = {});
+IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, TMessageRelevanceWatcher relevance, bool isZeroEntry, NWilson::TTraceId traceId = {});
 IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry);
 IActor* CreateTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo> &tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max());
 
@@ -41,11 +41,17 @@ struct TEvTabletBase {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletId;
         const TString ErrorReason;
+        const bool IsTabletStorageInfoVersionObsolete;
+        const ui32 ActualGeneration;
 
-        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
+        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
+                const TString &reason = TString(), bool isTabletStorageInfoVersionObsolete = false,
+                ui32 actualGeneration = 0)
             : Status(status)
             , TabletId(tabletId)
             , ErrorReason(reason)
+            , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
+            , ActualGeneration(actualGeneration)
         {}
     };
 

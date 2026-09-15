@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKafka {
 
@@ -9,9 +10,9 @@ TKqpTxHelper::TKqpTxHelper(TString database)
     : DataBase(database)
 {}
 
-void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx) {
+void TKqpTxHelper::SendCreateSessionRequest(const TActorContext& ctx, ui64 cookie) {
     auto ev = MakeCreateSessionRequest();
-    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0);
+    ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, cookie);
 }
 
 void TKqpTxHelper::BeginTransaction(ui64 cookie, const TActorContext& ctx) {
@@ -33,7 +34,7 @@ bool TKqpTxHelper::HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse:
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
+    AFL_ENSURE(!KqpSessionId.empty())("reason", "KqpSessionId is empty")("database", DataBase);
 
     return true;
 }

@@ -33,6 +33,7 @@ SRCS(
     dsproxy_nodemonactor.cpp
     dsproxy_nodemonactor.h
     dsproxy_patch.cpp
+    dsproxy_patch.h
     dsproxy_put.cpp
     dsproxy_put_impl.cpp
     dsproxy_put_impl.h
@@ -71,13 +72,14 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/ingress
     ydb/core/control/lib
+    ydb/core/retro_tracing_impl/spans
     ydb/core/util
+    ydb/library/actors/retro_tracing/collector
 )
 
 END()
 
 RECURSE(
-    bridge
     mock
 )
 

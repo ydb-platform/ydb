@@ -1,0 +1,70 @@
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-argsort.h	(2b123705947de6ee6e379cd491387cf13170ba06)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-argsort.h	(e6f7d08f9defe623efe6804b14076b2193638b2f)
+@@ -1,3 +1,5 @@
++/* integer log2 вместо inline-шаблона std::log2 —
++   comdat-копия из AVX-512 TU (vcvtusi2sd) прилетала в AVX2-путь -> SIGILL на Zen3 */
+ /*******************************************************************
+  * Copyright (C) 2022 Intel Corporation
+  * SPDX-License-Identifier: BSD-3-Clause
+@@ -568,7 +570,7 @@ X86_SIMD_SORT_INLINE void avx512_argsort(T *arr,
+         }
+         UNUSED(hasnan);
+         argsort_64bit_<vectype, argtype>(
+-                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+ 
+         if (descending) { std::reverse(arg, arg + arrsize); }
+     }
+@@ -602,7 +604,7 @@ X86_SIMD_SORT_INLINE void avx2_argsort(T *arr,
+         }
+         UNUSED(hasnan);
+         argsort_64bit_<vectype, argtype>(
+-                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, arg, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+ 
+         if (descending) { std::reverse(arg, arg + arrsize); }
+     }
+@@ -635,7 +637,7 @@ X86_SIMD_SORT_INLINE void avx512_argselect(T *arr,
+         }
+         UNUSED(hasnan);
+         argselect_64bit_<vectype, argtype>(
+-                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+     }
+ }
+ 
+@@ -665,7 +667,7 @@ X86_SIMD_SORT_INLINE void avx2_argselect(T *arr,
+         }
+         UNUSED(hasnan);
+         argselect_64bit_<vectype, argtype>(
+-                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, arg, k, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+     }
+ }
+ #endif // XSS_COMMON_ARGSORT
+--- contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-qsort.h	(2b123705947de6ee6e379cd491387cf13170ba06)
++++ contrib/python/numpy/py3/numpy/_core/src/npysort/x86-simd-sort/src/xss-common-qsort.h	(e6f7d08f9defe623efe6804b14076b2193638b2f)
+@@ -1,3 +1,5 @@
++/* integer log2 вместо inline-шаблона std::log2 —
++   comdat-копия из AVX-512 TU (vcvtusi2sd) прилетала в AVX2-путь -> SIGILL на Zen3 */
+ /*******************************************************************
+  * Copyright (C) 2022 Intel Corporation
+  * Copyright (C) 2021 Serge Sans Paille
+@@ -627,7 +629,7 @@ X86_SIMD_SORT_INLINE void xss_qsort(T *arr, arrsize_t arrsize, bool hasnan)
+ 
+         UNUSED(hasnan);
+         qsort_<vtype, comparator, T>(
+-                arr, 0, arrsize - 1, 2 * (arrsize_t)log2(arrsize));
++                arr, 0, arrsize - 1, 2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+ 
+         replace_inf_with_nan(arr, arrsize, nan_count, descending);
+     }
+@@ -663,7 +665,7 @@ xss_qselect(T *arr, arrsize_t k, arrsize_t arrsize, bool hasnan)
+                                        k,
+                                        index_first_elem,
+                                        index_last_elem,
+-                                       2 * (arrsize_t)log2(arrsize));
++                                       2 * (arrsize_t)(63 - __builtin_clzll((unsigned long long)arrsize)));
+     }
+ }
+ 

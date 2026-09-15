@@ -10,16 +10,18 @@ namespace NYql {
 
 struct TExprContext;
 class TExprNode;
-typedef TIntrusivePtr<TExprNode> TExprNodePtr;
-typedef std::vector<TExprNodePtr> TExprNodeList;
+using TExprNodePtr = TIntrusivePtr<TExprNode>;
+using TExprNodeList = std::vector<TExprNodePtr>;
+using TExprNodeSpan = std::span<const TExprNodePtr>;
 
 class TExprNodeReplaceBuilder;
 
 class TExprNodeBuilder {
-friend class TExprNodeReplaceBuilder;
+    friend class TExprNodeReplaceBuilder;
+
 public:
-    typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
-public:
+    using ExtArgsFuncType = std::function<TExprNodePtr(const TStringBuf&)>;
+
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
     TExprNodePtr Build();
@@ -43,6 +45,7 @@ public:
     TExprNodeBuilder& Add(ui32 index, TExprNodePtr&& child);
     TExprNodeBuilder& Add(ui32 index, const TExprNodePtr& child);
     TExprNodeBuilder& Add(TExprNodeList&& children);
+
     // only for lambda bodies
     TExprNodeBuilder& Set(TExprNodePtr&& body);
     TExprNodeBuilder& Set(const TExprNodePtr& body);
@@ -90,11 +93,10 @@ public:
     }
 
 private:
-    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container);
+    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, TExprNodePtr container);
     TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer);
     TExprNodePtr FindArgument(const TStringBuf& name);
 
-private:
     TExprContext& Ctx_;
     TExprNodeBuilder* Parent_;
     TExprNodeReplaceBuilder* ParentReplacer_;
@@ -105,18 +107,21 @@ private:
 };
 
 namespace NNodes {
-    template<typename TParent, typename TNode>
-    class TNodeBuilder;
-}
+template <typename TParent, typename TNode>
+class TNodeBuilder;
+} // namespace NNodes
 
 class TExprNodeReplaceBuilder {
-friend class TExprNodeBuilder;
+    friend class TExprNodeBuilder;
+
 private:
     struct TBuildAdapter {
-        typedef TExprNodeReplaceBuilder& ResultType;
+        using ResultType = TExprNodeReplaceBuilder&;
 
-        TBuildAdapter(TExprNodeReplaceBuilder& builder)
-            : Builder(builder) {}
+        explicit TBuildAdapter(TExprNodeReplaceBuilder& builder)
+            : Builder(builder)
+        {
+        }
 
         ResultType Value() {
             return Builder;
@@ -136,21 +141,20 @@ public:
     TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode);
     TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName);
+    TExprNodeReplaceBuilder& WithArguments(TExprNodeSpan nodes);
     TExprNodeBuilder With(ui32 argIndex);
     TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
 
-    template<typename TNode>
+    template <typename TNode>
     NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) {
         TBuildAdapter adapter(*this);
 
-        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(Owner_->Ctx_, Owner_->Pos_,
+        NNodes::TNodeBuilder<TBuildAdapter, TNode> builder(
+            Owner_->Ctx_, Owner_->Pos_,
             [adapter, argIndex](const TNode& node) mutable -> TBuildAdapter& {
                 adapter.Builder = adapter.Builder.With(argIndex, node.Get());
-                return adapter;
-            },
-            [adapter] (const TStringBuf& argName) {
-                return adapter.Builder.Owner_->FindArgument(argName);
-            });
+                return adapter; },
+            [adapter](const TStringBuf& argName) { return adapter.Builder.Owner_->FindArgument(argName); });
 
         return builder;
     }
@@ -172,4 +176,3 @@ private:
 };
 
 } // namespace NYql
-

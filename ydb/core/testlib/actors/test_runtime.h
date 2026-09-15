@@ -4,6 +4,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/memory_controller/memory_controller.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 
@@ -53,6 +54,7 @@ namespace NActors {
             TAutoPtr<NActors::IDestructable> Opaque;
             TKeyConfigGenerator KeyConfigGenerator;
             std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+            std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> Dcb;
         };
 
         struct TActorSystemSetupConfig {
@@ -67,10 +69,11 @@ namespace NActors {
             ui32 IOPoolId = 2;
             ui32 BatchPoolId = 3;
             TMap<TString, ui32> ServicePools = {};
+            TVector<ui32> BlobStorageExecutorPoolIds = {};
         };
 
         TTestActorRuntime(THeSingleSystemEnv d);
-        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
@@ -81,10 +84,9 @@ namespace NActors {
         virtual void Initialize(TEgg);
         void SetupStatsCollectors();
         void SetupActorSystemConfig(const TActorSystemSetupConfig& config, const TActorSystemPools& pools);
+        const TVector<ui32>& GetBlobStorageExecutorPoolIds() const;
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
-
-        void SimulateSleep(TDuration duration);
 
         template<class TResult>
         inline TResult WaitFuture(NThreading::TFuture<TResult> f, TDuration simTimeout = TDuration::Max()) {
@@ -105,24 +107,6 @@ namespace NActors {
                 return f.ExtractValue();
             } else {
                 return f.GetValue();
-            }
-        }
-
-        template<class TCondition>
-        inline void WaitFor(const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
-            if (!condition()) {
-                TDispatchOptions options;
-                options.CustomFinalCondition = [&]() {
-                    return condition();
-                };
-                // Quirk: non-empty FinalEvents enables full simulation
-                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
-
-                Cerr << "... waiting for " << description << Endl;
-                this->DispatchEvents(options, simTimeout);
-
-                Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
-                Cerr << "... waiting for " << description << " (done)" << Endl;
             }
         }
 
@@ -166,7 +150,6 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
-        TActorId SleepEdgeActor;
         TVector<std::function<void(ui32, NKikimr::TAppData&)>> AppDataInit_;
         bool NeedStatsCollectors = false;
         std::optional<TActorSystemSetupConfig> ActorSystemSetupConfig;

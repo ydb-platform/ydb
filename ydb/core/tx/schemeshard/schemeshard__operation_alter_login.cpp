@@ -39,9 +39,8 @@ public:
 
                     NLogin::TLoginProvider::TCreateUserRequest request;
                     request.User = createUser.GetUser();
-                    request.Password = createUser.GetPassword();
+                    request.HashedPassword = createUser.GetHashedPassword();
                     request.CanLogin = createUser.GetCanLogin();
-                    request.IsHashedPassword = createUser.GetIsHashedPassword();
 
                     auto response = context.SS->LoginProvider.CreateUser(request);
 
@@ -50,9 +49,10 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::CreatedAt,
-                                                                           Schema::LoginSids::IsEnabled>(sid.Type, sid.PasswordHash, ToMicroSeconds(sid.CreatedAt), sid.IsEnabled);
+                                                                           Schema::LoginSids::IsEnabled>(
+                                                                            sid.Type, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt), sid.IsEnabled);
 
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
@@ -75,10 +75,8 @@ public:
                     NLogin::TLoginProvider::TModifyUserRequest request;
 
                     request.User = modifyUser.GetUser();
-
-                    if (modifyUser.HasPassword()) {
-                        request.Password = modifyUser.GetPassword();
-                        request.IsHashedPassword = modifyUser.GetIsHashedPassword();
+                    if (modifyUser.HasHashedPassword()) {
+                        request.HashedPassword = modifyUser.GetHashedPassword();
                     }
 
                     if (modifyUser.HasCanLogin()) {
@@ -91,9 +89,11 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                           Schema::LoginSids::SidHash,
+                                                                           Schema::LoginSids::SidHash,  // explicitly erase deprecated field
+                                                                           Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::IsEnabled,
-                                                                           Schema::LoginSids::FailedAttemptCount>(sid.Type, sid.PasswordHash, sid.IsEnabled, sid.FailedLoginAttemptCount);
+                                                                           Schema::LoginSids::FailedAttemptCount>(
+                                                                            sid.Type, "", sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

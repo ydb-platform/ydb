@@ -3,7 +3,10 @@
 Utility functions for creating archive files (tarballs, zip files,
 that sort of thing)."""
 
+from __future__ import annotations
+
 import os
+from typing import Literal, overload
 
 try:
     import zipfile
@@ -54,14 +57,13 @@ def _get_uid(name):
 
 
 def make_tarball(
-    base_name,
-    base_dir,
-    compress="gzip",
-    verbose=False,
-    dry_run=False,
-    owner=None,
-    group=None,
-):
+    base_name: str,
+    base_dir: str | os.PathLike[str],
+    compress: Literal["gzip", "bzip2", "xz"] | None = "gzip",
+    verbose: bool = False,
+    owner: str | None = None,
+    group: str | None = None,
+) -> str:
     """Create a (possibly compressed) tar file from all the files under
     'base_dir'.
 
@@ -93,7 +95,7 @@ def make_tarball(
     archive_name = base_name + '.tar'
     archive_name += compress_ext.get(compress, '')
 
-    mkpath(os.path.dirname(archive_name), dry_run=dry_run)
+    mkpath(os.path.dirname(archive_name))
 
     # creating the tarball
     import tarfile  # late import so Python build itself doesn't break
@@ -112,17 +114,20 @@ def make_tarball(
             tarinfo.uname = owner
         return tarinfo
 
-    if not dry_run:
-        tar = tarfile.open(archive_name, f'w|{tar_compression[compress]}')
-        try:
-            tar.add(base_dir, filter=_set_uid_gid)
-        finally:
-            tar.close()
+    tar = tarfile.open(archive_name, f'w|{tar_compression[compress]}')
+    try:
+        tar.add(base_dir, filter=_set_uid_gid)
+    finally:
+        tar.close()
 
     return archive_name
 
 
-def make_zipfile(base_name, base_dir, verbose=False, dry_run=False):  # noqa: C901
+def make_zipfile(
+    base_name: str,
+    base_dir: str | os.PathLike[str],
+    verbose: bool = False,
+) -> str:
     """Create a zip file from all the files under 'base_dir'.
 
     The output zip file will be named 'base_name' + ".zip".  Uses either the
@@ -132,7 +137,7 @@ def make_zipfile(base_name, base_dir, verbose=False, dry_run=False):  # noqa: C9
     file.
     """
     zip_filename = base_name + ".zip"
-    mkpath(os.path.dirname(zip_filename), dry_run=dry_run)
+    mkpath(os.path.dirname(zip_filename))
 
     # If zipfile module is not available, try spawning an external
     # 'zip' command.
@@ -143,7 +148,7 @@ def make_zipfile(base_name, base_dir, verbose=False, dry_run=False):  # noqa: C9
             zipoptions = "-rq"
 
         try:
-            spawn(["zip", zipoptions, zip_filename, base_dir], dry_run=dry_run)
+            spawn(["zip", zipoptions, zip_filename, base_dir])
         except DistutilsExecError:
             # XXX really should distinguish between "couldn't find
             # external 'zip' command" and "zip failed".
@@ -156,29 +161,26 @@ def make_zipfile(base_name, base_dir, verbose=False, dry_run=False):  # noqa: C9
     else:
         log.info("creating '%s' and adding '%s' to it", zip_filename, base_dir)
 
-        if not dry_run:
-            try:
-                zip = zipfile.ZipFile(
-                    zip_filename, "w", compression=zipfile.ZIP_DEFLATED
-                )
-            except RuntimeError:
-                zip = zipfile.ZipFile(zip_filename, "w", compression=zipfile.ZIP_STORED)
+        try:
+            zip = zipfile.ZipFile(zip_filename, "w", compression=zipfile.ZIP_DEFLATED)
+        except RuntimeError:
+            zip = zipfile.ZipFile(zip_filename, "w", compression=zipfile.ZIP_STORED)
 
-            with zip:
-                if base_dir != os.curdir:
-                    path = os.path.normpath(os.path.join(base_dir, ''))
+        with zip:
+            if base_dir != os.curdir:
+                path = os.path.normpath(os.path.join(base_dir, ''))
+                zip.write(path, path)
+                log.info("adding '%s'", path)
+            for dirpath, dirnames, filenames in os.walk(base_dir):
+                for name in dirnames:
+                    path = os.path.normpath(os.path.join(dirpath, name, ''))
                     zip.write(path, path)
                     log.info("adding '%s'", path)
-                for dirpath, dirnames, filenames in os.walk(base_dir):
-                    for name in dirnames:
-                        path = os.path.normpath(os.path.join(dirpath, name, ''))
+                for name in filenames:
+                    path = os.path.normpath(os.path.join(dirpath, name))
+                    if os.path.isfile(path):
                         zip.write(path, path)
                         log.info("adding '%s'", path)
-                    for name in filenames:
-                        path = os.path.normpath(os.path.join(dirpath, name))
-                        if os.path.isfile(path):
-                            zip.write(path, path)
-                            log.info("adding '%s'", path)
 
     return zip_filename
 
@@ -204,16 +206,35 @@ def check_archive_formats(formats):
     return None
 
 
+@overload
 def make_archive(
-    base_name,
-    format,
-    root_dir=None,
-    base_dir=None,
-    verbose=False,
-    dry_run=False,
-    owner=None,
-    group=None,
-):
+    base_name: str,
+    format: str,
+    root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes] | None = None,
+    base_dir: str | None = None,
+    verbose: bool = False,
+    owner: str | None = None,
+    group: str | None = None,
+) -> str: ...
+@overload
+def make_archive(
+    base_name: str | os.PathLike[str],
+    format: str,
+    root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes],
+    base_dir: str | None = None,
+    verbose: bool = False,
+    owner: str | None = None,
+    group: str | None = None,
+) -> str: ...
+def make_archive(
+    base_name: str | os.PathLike[str],
+    format: str,
+    root_dir: str | os.PathLike[str] | bytes | os.PathLike[bytes] | None = None,
+    base_dir: str | None = None,
+    verbose: bool = False,
+    owner: str | None = None,
+    group: str | None = None,
+) -> str:
     """Create an archive file (eg. zip or tar).
 
     'base_name' is the name of the file to create, minus any format-specific
@@ -234,13 +255,12 @@ def make_archive(
     if root_dir is not None:
         log.debug("changing into '%s'", root_dir)
         base_name = os.path.abspath(base_name)
-        if not dry_run:
-            os.chdir(root_dir)
+        os.chdir(root_dir)
 
     if base_dir is None:
         base_dir = os.curdir
 
-    kwargs = {'dry_run': dry_run}
+    kwargs: dict[str, bool | None] = {}
 
     try:
         format_info = ARCHIVE_FORMATS[format]

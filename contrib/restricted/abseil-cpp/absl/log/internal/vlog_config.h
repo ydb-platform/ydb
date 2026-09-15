@@ -48,7 +48,6 @@ class VLogSite;
 
 int RegisterAndInitialize(VLogSite* absl_nonnull v);
 void UpdateVLogSites();
-constexpr int kUseFlag = (std::numeric_limits<int16_t>::min)();
 
 // Represents a unique callsite for a `VLOG()` or `VLOG_IS_ON()` call.
 //
@@ -121,7 +120,7 @@ class VLogSite final {
   std::atomic<int> v_;
   std::atomic<VLogSite*> next_;
 };
-static_assert(std::is_trivially_destructible<VLogSite>::value,
+static_assert(std::is_trivially_destructible_v<VLogSite>,
               "VLogSite must be trivially destructible");
 
 // Returns the current verbose log level of `file`.

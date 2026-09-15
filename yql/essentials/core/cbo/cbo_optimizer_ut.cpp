@@ -8,14 +8,13 @@ using namespace NYql;
 Y_UNIT_TEST_SUITE(CboOptimizer) {
 
 Y_UNIT_TEST(InputToString) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
-    IOptimizer::TInput input = {{rel1, rel2, rel3}, {}, {}, {}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
+    IOptimizer::TRel rel3 = {.Rows = 10000, .TotalCost = 9009, .TargetVars = {{'c'}}};
+    IOptimizer::TInput input = {.Rels = {rel1, rel2, rel3}, .EqClasses = {}, .Left = {}, .Right = {}};
 
-    input.EqClasses.emplace_back(IOptimizer::TEq {
-        {{1, 1}, {2, 1}, {3, 1}}
-    });
+    input.EqClasses.emplace_back(IOptimizer::TEq{
+        {{1, 1}, {2, 1}, {3, 1}}});
 
     auto str = input.ToString();
 
@@ -40,17 +39,15 @@ TotalCost: 0.00
 }
 
 Y_UNIT_TEST(InputNormalize) {
-    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
-    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
-    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
-    IOptimizer::TInput input = {{rel1, rel2, rel3}, {}, {}, {}};
+    IOptimizer::TRel rel1 = {.Rows = 100000, .TotalCost = 1000000, .TargetVars = {{'a'}}};
+    IOptimizer::TRel rel2 = {.Rows = 1000000, .TotalCost = 9000009, .TargetVars = {{'b'}}};
+    IOptimizer::TRel rel3 = {.Rows = 10000, .TotalCost = 9009, .TargetVars = {{'c'}}};
+    IOptimizer::TInput input = {.Rels = {rel1, rel2, rel3}, .EqClasses = {}, .Left = {}, .Right = {}};
 
-    input.EqClasses.emplace_back(IOptimizer::TEq {
-        {{1, 1}, {2, 1}}
-    });
-    input.EqClasses.emplace_back(IOptimizer::TEq {
-        {{2, 1}, {3, 1}}
-    });
+    input.EqClasses.emplace_back(IOptimizer::TEq{
+        {{1, 1}, {2, 1}}});
+    input.EqClasses.emplace_back(IOptimizer::TEq{
+        {{2, 1}, {3, 1}}});
 
     TString expected = R"__(Rels: [{rows: 100000,cost: 1000000,vars: [a]},
 {rows: 1000000,cost: 9000009,vars: [b]},
@@ -68,14 +65,12 @@ EqClasses: [[a,b,c]]
 )__";
     UNIT_ASSERT_STRINGS_EQUAL(expected, input.ToString());
 
-    IOptimizer::TRel rel4 = {10001, 9009, {{'d'}}};
-    IOptimizer::TInput input2 = {{rel1, rel2, rel3, rel4}, {}, {}, {}};
-    input2.EqClasses.emplace_back(IOptimizer::TEq {
-        {{1, 1}, {2, 1}}
-    });
-    input2.EqClasses.emplace_back(IOptimizer::TEq {
-        {{4, 1}, {3, 1}}
-    });
+    IOptimizer::TRel rel4 = {.Rows = 10001, .TotalCost = 9009, .TargetVars = {{'d'}}};
+    IOptimizer::TInput input2 = {.Rels = {rel1, rel2, rel3, rel4}, .EqClasses = {}, .Left = {}, .Right = {}};
+    input2.EqClasses.emplace_back(IOptimizer::TEq{
+        {{1, 1}, {2, 1}}});
+    input2.EqClasses.emplace_back(IOptimizer::TEq{
+        {{4, 1}, {3, 1}}});
 
     expected = R"__(Rels: [{rows: 100000,cost: 1000000,vars: [a]},
 {rows: 1000000,cost: 9000009,vars: [b]},

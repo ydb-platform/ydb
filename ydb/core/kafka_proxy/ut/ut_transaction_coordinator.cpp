@@ -17,10 +17,10 @@ namespace {
             TMaybe<NKikimr::NPQ::TTestContext> Ctx;
             TActorId ActorId;
             const TString Database = "/Root/PQ";
-            
+
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
-                
+
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
@@ -52,7 +52,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -71,7 +71,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -80,7 +80,7 @@ namespace {
                 message->TransactionalId = txnId;
                 message->ProducerId = producerId;
                 message->ProducerEpoch = producerEpoch;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
     };
@@ -98,7 +98,7 @@ namespace {
 
             auto response1 = SaveTxnProducer(txnId, producerId, 0); // save old epoch
             auto response2 = SaveTxnProducer(txnId, producerId, 1); // save old epoch
-            
+
             UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
         }
@@ -110,7 +110,7 @@ namespace {
 
             auto response1 = SaveTxnProducer(txnId, producerId, 10); // save old epoch
             auto response2 = SaveTxnProducer(txnId, producerId + 1, 1);
-            
+
             UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
         }
@@ -122,7 +122,7 @@ namespace {
 
             auto response1 = SaveTxnProducer(txnId, producerId, 10);
             auto response2 = SaveTxnProducer(txnId, producerId, 9); // seсond request comes with stale epoch
-            
+
             UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::PRODUCER_FENCED);
         }
@@ -134,7 +134,7 @@ namespace {
 
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            
+
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
@@ -151,7 +151,7 @@ namespace {
 
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            
+
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
@@ -209,9 +209,9 @@ namespace {
             ui32 eventCounter = 0;
             TActorId txnActorId;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
-                    // There will be four events TEvEndTxnRequest. We need only two of them 
-                    // with recipient not equal to our TTransactionCoordinatorActor id. 
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    // There will be four events TEvEndTxnRequest. We need only two of them
+                    // with recipient not equal to our TTransactionCoordinatorActor id.
                     // Those are event sent from TTransactionCoordinatorActor to TTransactionActor
                     if (input->Recipient != ActorId) {
                         if (eventCounter == 0) {
@@ -221,7 +221,7 @@ namespace {
                             UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
                             seenEvent = true;
                         }
-                    } 
+                    }
                 }
 
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -248,9 +248,9 @@ namespace {
             bool seenEvent = false;
             TActorId txnActorId;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     txnActorId = input->Recipient;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
                     seenEvent = true;
                 }
@@ -277,7 +277,7 @@ namespace {
 
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            
+
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::ADD_PARTITIONS_TO_TXN);
@@ -302,7 +302,7 @@ namespace {
 
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            
+
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
             UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::TXN_OFFSET_COMMIT);
@@ -336,7 +336,7 @@ namespace {
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
             auto firstResponse = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
-            
+
             UNIT_ASSERT(firstResponse != nullptr);
             UNIT_ASSERT_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
         }

@@ -8,14 +8,15 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
-#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_helper.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 
 #include <arrow/compute/exec_internal.h>
 
 namespace NKikimr::NMiniKQL {
+
+using namespace NTest;
 
 namespace {
 
@@ -81,8 +82,8 @@ namespace {
     void TestName##Execute(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 template <typename T>
-arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::vector<TMaybe<T>>& array, size_t offset) {
-    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, nullptr);
+arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, TVector<TMaybe<T>>& array, size_t offset) {
+    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, /*pgBuilder=*/nullptr);
     for (size_t i = 0; i < offset; i++) {
         if (array[0]) {
             rightArrayBuilder->Add(TBlockItem(array[0].GetRef()));
@@ -107,12 +108,11 @@ arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::ve
 }
 
 template <typename T, typename U, typename V>
-void TestScalarCoalesceKernel(T left, U right, V expected) {
-    TSetup<false> setup;
-    TestScalarKernel(left, right, expected, setup,
-                     [&](TRuntimeNode left, TRuntimeNode right) {
-                         return setup.PgmBuilder->BlockCoalesce(left, right);
-                     });
+void TestCoalesceKernel(T left, U right, V expected) {
+    TBlockHelper().TestKernelFuzzied(left, right, expected,
+                                     [](TSetup<false>& setup, TRuntimeNode left, TRuntimeNode right) {
+                                         return setup.PgmBuilder->BlockCoalesce(left, right);
+                                     });
 }
 
 enum class ERightOperandType {
@@ -124,10 +124,10 @@ enum class ERightOperandType {
 
 template <typename T>
 using InputOptionalVector =
-    std::vector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
+    TVector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
 
 std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* graph) {
-    std::vector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
+    TVector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
     for (auto node : graph->GetNodes()) {
         auto kernelNode = node->PrepareArrowKernelComputationNode(graph->GetContext());
         if (!kernelNode) {
@@ -135,7 +135,7 @@ std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* g
         }
         allKernels.push_back(std::move(kernelNode));
     }
-    UNIT_ASSERT_EQUAL(allKernels.size(), 1u);
+    UNIT_ASSERT_EQUAL(allKernels.size(), 1U);
     return std::move(allKernels[0]);
 }
 
@@ -230,90 +230,9 @@ void TestBlockCoalesce(InputOptionalVector<T> left,
     }
 }
 
-void BlockCoalesceGraphTest(size_t length, size_t offset) {
-    TSetup<false> setup;
-    TProgramBuilder& pb = *setup.PgmBuilder;
-
-    const auto ui32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
-    const auto optui32Type = pb.NewOptionalType(ui32Type);
-
-    const auto inputTupleType = pb.NewTupleType({ui32Type, optui32Type});
-    const auto outputTupleType = pb.NewTupleType({ui32Type});
-
-    TRuntimeNode::TList right;
-    TVector<bool> isNull;
-
-    const auto drng = CreateDeterministicRandomProvider(1);
-    std::vector<ui32> rightValues;
-    for (size_t i = 0; i < length; i++) {
-        const ui32 randomValue = drng->GenRand();
-        const auto maybeNull = (randomValue % 2 == 0)
-                                   ? pb.NewOptional(pb.NewDataLiteral<ui32>(randomValue / 2))
-                                   : pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-
-        const auto inputTuple = pb.NewTuple(inputTupleType, {
-                                                                pb.NewDataLiteral<ui32>(i),
-                                                                maybeNull,
-                                                            });
-
-        right.push_back(inputTuple);
-        rightValues.push_back(randomValue / 2);
-        isNull.push_back((randomValue % 2) != 0);
-    }
-
-    const auto list = pb.NewList(inputTupleType, std::move(right));
-
-    auto node = pb.ToFlow(list);
-    node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
-        return {
-            pb.Nth(item, 0),
-            pb.Nth(item, 1),
-        };
-    });
-
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
-    if (offset > 0) {
-        node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(offset));
-    }
-    node = pb.WideMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-        Y_ENSURE(items.size() == 3);
-        return {
-            pb.BlockCoalesce(items[1], items[0]),
-            items[2]};
-    });
-
-    node = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(node)));
-    node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
-        return pb.NewTuple(outputTupleType, {items[0]});
-    });
-
-    const auto pgmReturn = pb.Collect(node);
-    const auto graph = setup.BuildGraph(pgmReturn);
-
-    const auto iterator = graph->GetValue().GetListIterator();
-    for (size_t i = 0; i < length; i++) {
-        if (i < offset) {
-            continue;
-        }
-        NUdf::TUnboxedValue outputTuple;
-        UNIT_ASSERT(iterator.Next(outputTuple));
-        if (isNull[i]) {
-            UNIT_ASSERT_EQUAL(outputTuple.GetElement(0).Get<ui32>(), i);
-        } else {
-            UNIT_ASSERT_EQUAL(outputTuple.GetElement(0).Get<ui32>(), rightValues[i]);
-        }
-    }
-}
-
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest) {
-
-Y_UNIT_TEST(CoalesceGraphTest) {
-    for (auto offset : {0, 7, 8, 11,6}) {
-        BlockCoalesceGraphTest(32, offset);
-    }
-}
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsNotNullArray) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
@@ -359,29 +278,319 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
                                                                      {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77});
 }
 
-Y_UNIT_TEST(OptionalScalar) {
-    TestScalarCoalesceKernel(TMaybe<i32>{16}, 5, 16);
-    TestScalarCoalesceKernel(TMaybe<i32>(), 4, 4);
-    TestScalarCoalesceKernel(TMaybe<i32>(18), TMaybe<i32>(3), TMaybe<i32>(18));
-    TestScalarCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
+// Test for String type
+Y_UNIT_TEST(TestStringType) {
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"default1", "hello", "world"});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<TString>>{{}, "hello", "world"},
+        TString("default"),
+        TVector<TString>{"default", "hello", "world"});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TString>>{"a", "b", "c"},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"a", "b", "c"});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TString>>{{}, {}, {}},
+        TVector<TString>{"default1", "default2", "default3"},
+        TVector<TString>{"default1", "default2", "default3"});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<TString>>{{}, "hello", {}},
+        TVector<TMaybe<TString>>{"default1", {}, {}},
+        TVector<TMaybe<TString>>{"default1", "hello", {}});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<TString>{"constant"},
+        TVector<TString>{"a", "b", "c"},
+        TVector<TString>{"constant", "constant", "constant"});
 }
 
-Y_UNIT_TEST(Tuple) {
-    using TTuple = std::tuple<ui32, ui64, bool>;
-    TestScalarCoalesceKernel(TMaybe<TTuple>({16, 13, false}), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({16, 13, false}));
-    TestScalarCoalesceKernel(TMaybe<TTuple>(), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({15, 11, true}));
-    TestScalarCoalesceKernel(TMaybe<TTuple>(), TTuple{15, 11, true}, TTuple{15, 11, true});
+// Test for Boolean type
+Y_UNIT_TEST(TestBooleanType) {
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<bool>>{Nothing(), true, false},
+        TVector<bool>{false, false, false},
+        TVector<bool>{false, true, false});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<bool>>{Nothing(), true, false},
+        /*right=*/true,
+        TVector<bool>{true, true, false});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<bool>>{true, false, true},
+        TVector<bool>{false, true, false},
+        TVector<bool>{true, false, true});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<bool>>{Nothing(), Nothing(), Nothing()},
+        TVector<bool>{false, true, false},
+        TVector<bool>{false, true, false});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<bool>>{Nothing(), true, Nothing()},
+        TVector<TMaybe<bool>>{true, Nothing(), false},
+        TVector<TMaybe<bool>>{true, true, false});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<bool>{true},
+        TVector<bool>{false, false, false},
+        TVector<bool>{true, true, true});
 }
 
-Y_UNIT_TEST(ExternalOptionalScalar) {
-    using TDoubleMaybe = TMaybe<TMaybe<i32>>;
-    using TSingleMaybe = TMaybe<i32>;
+// Test for Tagged types
+Y_UNIT_TEST(TestTaggedType) {
+    using TaggedIntType = TTagged<ui32, TTag::A>;
 
-    TestScalarCoalesceKernel(TDoubleMaybe{TSingleMaybe{25}}, TSingleMaybe{1}, TSingleMaybe{25});
-    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe()), TSingleMaybe(9), TSingleMaybe());
-    TestScalarCoalesceKernel(TDoubleMaybe(), TSingleMaybe(8), TSingleMaybe(8));
-    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe(33)), TDoubleMaybe(TSingleMaybe(7)), TDoubleMaybe(TSingleMaybe(33)));
-    TestScalarCoalesceKernel(TDoubleMaybe(), TDoubleMaybe(TSingleMaybe(6)), TDoubleMaybe(TSingleMaybe(6)));
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{1}, TaggedIntType{2}});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{1}, TaggedIntType{2}},
+        TaggedIntType{99},
+        TVector<TaggedIntType>{TaggedIntType{99}, TaggedIntType{1}, TaggedIntType{2}});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TaggedIntType>>{Nothing(), Nothing(), Nothing()},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}},
+        TVector<TaggedIntType>{TaggedIntType{10}, TaggedIntType{20}, TaggedIntType{30}});
+
+    // Test with optional tagged types - mixed null/non-null
+    using OptTaggedIntType = TMaybe<TaggedIntType>;
+    TestCoalesceKernel(
+        TVector<TMaybe<OptTaggedIntType>>{Nothing(), OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}});
+
+    // Test with optional tagged types - all non-null
+    TestCoalesceKernel(
+        TVector<TMaybe<OptTaggedIntType>>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{1}}, OptTaggedIntType{TaggedIntType{2}}, OptTaggedIntType{TaggedIntType{3}}});
+
+    // Test with optional tagged types - all null
+    TestCoalesceKernel(
+        TVector<TMaybe<OptTaggedIntType>>{Nothing(), Nothing(), Nothing()},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}},
+        TVector<OptTaggedIntType>{OptTaggedIntType{TaggedIntType{10}}, OptTaggedIntType{TaggedIntType{20}}, OptTaggedIntType{TaggedIntType{30}}});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<TaggedIntType>>{Nothing(), TaggedIntType{5}, Nothing()},
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{50}, Nothing(), Nothing()},
+        TVector<TMaybe<TaggedIntType>>{TaggedIntType{50}, TaggedIntType{5}, Nothing()});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<TaggedIntType>{TaggedIntType{42}},
+        TVector<TaggedIntType>{TaggedIntType{1}, TaggedIntType{2}, TaggedIntType{3}},
+        TVector<TaggedIntType>{TaggedIntType{42}, TaggedIntType{42}, TaggedIntType{42}});
+}
+
+Y_UNIT_TEST(TestSingularNullType) {
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, TSingularNull{}},
+        TSingularNull{},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TSingularNull>>{Nothing(), Nothing(), Nothing()},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<TSingularNull>>{Nothing(), TSingularNull{}, Nothing()},
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, Nothing(), Nothing()},
+        TVector<TMaybe<TSingularNull>>{TSingularNull{}, TSingularNull{}, Nothing()});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<TSingularNull>{TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}},
+        TVector<TSingularNull>{TSingularNull{}, TSingularNull{}, TSingularNull{}});
+}
+
+// Test for PgInt type
+Y_UNIT_TEST(TestPgIntType) {
+    // Test with mixed null/non-null left operands
+
+    TestCoalesceKernel(
+        TVector<TPgInt>{TPgInt(), TPgInt{1}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
+
+    TestCoalesceKernel(
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
+        TPgInt{99},
+        TVector<TPgInt>{TPgInt{99}, TPgInt{1}, TPgInt{3}});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TPgInt>>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<TPgInt>>{Nothing(), Nothing(), Nothing()},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        TVector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<TPgInt>>{Nothing(), TPgInt{5}, Nothing()},
+        TVector<TMaybe<TPgInt>>{TPgInt{50}, Nothing(), Nothing()},
+        TVector<TMaybe<TPgInt>>{TPgInt{50}, TPgInt{5}, Nothing()});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<TPgInt>{TPgInt{42}},
+        TVector<TPgInt>{TPgInt{1}, TPgInt{2}, TPgInt{3}},
+        TVector<TPgInt>{TPgInt{42}, TPgInt{42}, TPgInt{42}});
+}
+
+// Test for Double optional objects
+Y_UNIT_TEST(TestDoubleOptionalType) {
+    using DoubleOptInt = TMaybe<TMaybe<ui32>>;
+
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        DoubleOptInt{TMaybe<ui32>{99}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{99}}, DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{3}}});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), Nothing(), Nothing()},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}});
+
+    // Test with inner nulls
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{10}}, DoubleOptInt{TMaybe<ui32>{20}}, DoubleOptInt{TMaybe<ui32>{30}}},
+        TVector<DoubleOptInt>{DoubleOptInt{Nothing()}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{Nothing()}});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<DoubleOptInt>>{Nothing(), DoubleOptInt{TMaybe<ui32>{5}}, Nothing()},
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, Nothing(), DoubleOptInt{Nothing()}},
+        TVector<TMaybe<DoubleOptInt>>{DoubleOptInt{TMaybe<ui32>{50}}, DoubleOptInt{TMaybe<ui32>{5}}, DoubleOptInt{Nothing()}});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{42}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{1}}, DoubleOptInt{TMaybe<ui32>{2}}, DoubleOptInt{TMaybe<ui32>{3}}},
+        TVector<DoubleOptInt>{DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}, DoubleOptInt{TMaybe<ui32>{42}}});
+}
+
+// Test for Optional objects of singular types
+Y_UNIT_TEST(TestOptionalSingularType) {
+    using OptVoid = TMaybe<TSingularVoid>;
+
+    // Test with mixed null/non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+
+    // Test with scalar right operand
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        OptVoid{TSingularVoid{}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+
+    // Test with all non-null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+
+    // Test with all null left operands
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{Nothing(), Nothing(), Nothing()},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
+
+    // Test with inner nulls
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{Nothing()}, OptVoid{TSingularVoid{}}, OptVoid{Nothing()}});
+
+    // Test with both operands optional
+    TestCoalesceKernel(
+        TVector<TMaybe<OptVoid>>{Nothing(), OptVoid{TSingularVoid{}}, Nothing()},
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, Nothing(), Nothing()},
+        TVector<TMaybe<OptVoid>>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, Nothing()});
+
+    // Test with scalar left operand and vector right operand
+    TestCoalesceKernel(
+        TMaybe<OptVoid>{OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}},
+        TVector<OptVoid>{OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}, OptVoid{TSingularVoid{}}});
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)

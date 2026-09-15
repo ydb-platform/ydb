@@ -11,7 +11,8 @@
 #include <util/system/tls.h>
 #include <util/generic/noncopyable.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NActors {
     class TActorSystem;
@@ -131,6 +132,10 @@ namespace NActors {
 
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();
+        static NHPTimer::STime GetCurrentEventEnqueuedTimestampTs();
+        static NHPTimer::STime GetCurrentMailboxScheduledTimestampTs();
+        static ui64 GetCurrentEventDeliveryTimeUs();
+        static ui64 GetCurrentActivationTimeUs();
 
         static void EnableMailboxStats();
 
@@ -143,7 +148,8 @@ namespace NActors {
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
-        explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
+        explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread,
+                NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
@@ -322,30 +328,6 @@ namespace NActors {
 
     };
 
-    template<bool>
-    struct TActorUsageImpl {
-        void OnEnqueueEvent(ui64 /*time*/) {} // called asynchronously when event is put in the mailbox
-        void OnDequeueEvent() {} // called when processed by Executor
-        double GetUsage(ui64 /*time*/) { return 0; } // called from collector thread
-        void DoActorInit() {}
-    };
-
-    template<>
-    struct TActorUsageImpl<true> {
-        static constexpr int TimestampBits = 40;
-        static constexpr int CountBits = 24;
-        static constexpr ui64 TimestampMask = ((ui64)1 << TimestampBits) - 1;
-        static constexpr ui64 CountMask = ((ui64)1 << CountBits) - 1;
-
-        std::atomic_uint64_t QueueSizeAndTimestamp = 0;
-        std::atomic_uint64_t UsedTime = 0; // how much time did we consume since last GetUsage() call
-        ui64 LastUsageTimestamp = 0; // when GetUsage() was called the last time
-
-        void OnEnqueueEvent(ui64 time);
-        void OnDequeueEvent();
-        double GetUsage(ui64 time);
-        void DoActorInit() { LastUsageTimestamp = GetCycleCountFast(); }
-    };
 
     /**
      * Optional interface for actors with exception handling
@@ -355,6 +337,20 @@ namespace NActors {
         ~IActorExceptionHandler() = default;
 
     public:
+        /**
+         * Handles std::exception_ptr which allows to catch any thrown object.
+         * By default ignores anything that is not an std::exception subclass.
+         */
+        virtual bool OnUnhandledException(const std::exception_ptr& excPtr) {
+            try {
+                std::rethrow_exception(excPtr);
+            } catch (const std::exception& exc) {
+                return OnUnhandledException(exc);
+            } catch (...) {
+                return false;
+            }
+        }
+
         /**
          * Called when actor's event handler throws an std::exception subclass
          *
@@ -418,9 +414,140 @@ namespace NActors {
         ui32 Index;
     };
 
+    /**
+     * A type erased actor task running within an actor
+     */
+    class TActorTask : public TIntrusiveListItem<TActorTask> {
+    protected:
+        ~TActorTask() = default;
+
+    public:
+        /**
+         * Requests task to cancel
+         */
+        virtual void Cancel() noexcept = 0;
+
+        /**
+         * Requests task to stop and destroy itself immediately
+         */
+        virtual void Destroy() noexcept = 0;
+    };
+
+    /**
+     * A type erased event awaiter, used for dynamic event dispatch
+     */
+    class TActorEventAwaiter : public TIntrusiveListItem<TActorEventAwaiter> {
+    public:
+        template<class TDerived>
+        class TImpl;
+
+        inline bool Handle(TAutoPtr<IEventHandle>& ev) {
+            return (*HandleFn)(this, ev);
+        }
+
+    private:
+        // All subclasses must use TImpl
+        TActorEventAwaiter() = default;
+        ~TActorEventAwaiter() = default;
+
+    protected:
+        // A single function pointer is cheaper than a vtable, may be changed at runtime and allows multiple instances in a class
+        bool (*HandleFn)(TActorEventAwaiter*, TAutoPtr<IEventHandle>&);
+    };
+
+    /**
+     * Base class for TActorEventAwaiter implementation classes
+     */
+    template<class TDerived>
+    class TActorEventAwaiter::TImpl : public TActorEventAwaiter {
+    public:
+        TImpl() noexcept {
+            this->HandleFn = +[](TActorEventAwaiter* self, TAutoPtr<IEventHandle>& ev) -> bool {
+                return static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoHandle(ev);
+            };
+        }
+
+        explicit TImpl(bool (*handleFn)(TActorEventAwaiter*, TAutoPtr<IEventHandle>&)) noexcept {
+            this->HandleFn = handleFn;
+        }
+    };
+
+    /**
+     * A type erased runnable item for local execution
+     */
+    class TActorRunnableItem : public TIntrusiveListItem<TActorRunnableItem> {
+    public:
+        template<class TDerived>
+        class TImpl;
+
+        inline void Run(IActor* actor) noexcept {
+            (*RunFn)(this, actor);
+        }
+
+    private:
+        // All subclasses must use TImpl
+        TActorRunnableItem() = default;
+        ~TActorRunnableItem() = default;
+
+    protected:
+        // A single function pointer is cheaper than a vtable, may be changed at runtime and allows multiple instances in a class
+        void (*RunFn)(TActorRunnableItem*, IActor*) noexcept;
+    };
+
+    /**
+     * Base class for TActorRunnableItem implementation classes
+     */
+    template<class TDerived>
+    class TActorRunnableItem::TImpl : public TActorRunnableItem {
+    public:
+        TImpl() noexcept {
+            this->RunFn = +[](TActorRunnableItem* self, IActor* actor) noexcept {
+                static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoRun(actor);
+            };
+        }
+
+        explicit TImpl(void (*runFn)(TActorRunnableItem*, IActor*) noexcept) noexcept {
+            this->RunFn = runFn;
+        }
+    };
+
+    /**
+     * A per-thread actor runnable queue available in an event handler
+     */
+    class TActorRunnableQueue {
+    public:
+        TActorRunnableQueue(IActor* actor) noexcept;
+        ~TActorRunnableQueue();
+
+        /**
+         * Schedules a runnable item for execution
+         */
+        static void Schedule(TActorRunnableItem* runnable) noexcept;
+
+        /**
+         * Removes a runnable item from the queue
+         */
+        static void Cancel(TActorRunnableItem* runnable) noexcept;
+
+        /**
+         * Execute currently scheduled items
+         */
+        void Execute() noexcept;
+
+    private:
+        IActor* Actor_;
+        TActorRunnableQueue* Prev_;
+        TIntrusiveList<TActorRunnableItem> Queue_;
+    };
+
+    namespace NDetail {
+        class TActorAsyncHandlerPromise;
+        template<class TEvent>
+        class TActorSpecificEventAwaiter;
+    }
+
     class IActor
         : protected IActorOps
-        , public TActorUsageImpl<ActorLibCollectUsageStats>
     {
     private:
         TActorIdentity SelfActorId;
@@ -441,15 +568,43 @@ namespace NActors {
 
     public:
         using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
+        enum class ESystemFlag : ui64 {
+            // Notify this actor only after an activation that processed one of
+            // its events. Activations of other actors in the same mailbox are
+            // not reported.
+            MailboxProcessingFinished = 1ull << 0,
+        };
 
     private:
         TReceiveFunc StateFunc_;
+        ui64 SystemFlags = 0;
+
+    private:
+        friend class NDetail::TActorAsyncHandlerPromise;
+        template<class TEvent>
+        friend class NDetail::TActorSpecificEventAwaiter;
+
+        TIntrusiveList<TActorTask> ActorTasks;
+        absl::flat_hash_map<ui64, TIntrusiveList<TActorEventAwaiter>> EventAwaiters;
+        bool PassedAway = false;
+
+        void FinishPassAway();
+        void DestroyActorTasks();
+        bool RegisterActorTask(TActorTask* task);
+        void UnregisterActorTask(TActorTask* task);
+        void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
+        void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
+        void HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev);
+        void HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:
         using TEventFlags = IEventHandle::TEventFlags;
         /// @sa services.proto NKikimrServices::TActivity::EType
         using EActorActivity = EInternalActorType;
         using EActivityType = EActorActivity;
+
+    private:
         TActorActivityType ActivityType;
 
     protected:
@@ -540,21 +695,35 @@ namespace NActors {
         } // must not be called for registered actors, see Die method instead
 
     protected:
+        void SetSystemFlag(ESystemFlag flag) noexcept {
+            SystemFlags |= static_cast<ui64>(flag);
+        }
+
+        void ClearSystemFlag(ESystemFlag flag) noexcept {
+            SystemFlags &= ~static_cast<ui64>(flag);
+        }
+
+        ui64 GetSystemFlags() const noexcept {
+            return SystemFlags;
+        }
+
+        bool HasSystemFlag(ESystemFlag flag) const noexcept {
+            return GetSystemFlags() & static_cast<ui64>(flag);
+        }
+
         virtual void Die(const TActorContext& ctx); // would unregister actor so call exactly once and only from inside of message processing
         virtual void PassAway();
 
     protected:
-        void SetActivityType(TActorActivityType activityType) {
-            ActivityType = activityType;
-        }
+        void SetActivityType(TActorActivityType activityType);
 
         template <typename EEnum>
         void SetActivityType(EEnum activityType) requires (std::is_enum_v<EEnum>) {
-            ActivityType = TActorActivityType::FromEnum(activityType);
+            SetActivityType(TActorActivityType::FromEnum(activityType));
         }
 
         void SetActivityType(TStringBuf activityName) {
-            ActivityType = TActorActivityType::FromName(activityName);
+            SetActivityType(TActorActivityType::FromName(activityName));
         }
 
     public:
@@ -636,15 +805,16 @@ namespace NActors {
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());
         }
-    
+
     private:
-        bool OnUnhandledExceptionSafe(const std::exception& exc);
+        bool OnUnhandledExceptionSafe(const std::exception_ptr& exc);
 
     protected:
         void SetEnoughCpu(bool isEnough);
 
         void Describe(IOutputStream&) const override;
         bool Send(TAutoPtr<IEventHandle> ev) const noexcept;
+        bool SendActorLivenessCheck(const TActorId& target, ui64 cookie = 0) const noexcept;
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
             return Send(recipient, ev.Release(), flags, cookie, std::move(traceId));
@@ -803,10 +973,10 @@ namespace NActors {
 #define STFUNC(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 #define STATEFN(funcName) void funcName(TAutoPtr<::NActors::IEventHandle>& ev)
 
-#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, etype);
+#define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type %s 0x%08" PRIx32, __func__, ev->GetTypeName().c_str(), etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
-    switch (const ui32 etype = ev->GetTypeRewrite()) {                  \
+    switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) { \
         HANDLERS                                                        \
     default:                                                            \
         UNHANDLED_MSG_HANDLER                                           \
@@ -888,6 +1058,13 @@ namespace NActors {
                 send = decorator->BeforeSending(ev);
             }
             return send && ev && DoBeforeSending(ev);
+        }
+
+        bool BeforeSending(std::unique_ptr<IEventHandle>& ev) {
+            TAutoPtr<IEventHandle> evPtr = ev.release();
+            bool result = BeforeSending(evPtr);
+            ev.reset(evPtr.Release());
+            return result;
         }
 
         virtual bool DoBeforeSending(TAutoPtr<IEventHandle>& /*ev*/) {

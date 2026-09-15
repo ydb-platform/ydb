@@ -25,9 +25,13 @@ public:
 
     const TString& GetRegion() const;
 
+    const TString& GetService() const;
+
     const TString& GetAccessKeyId() const;
 
     TString CalcSignature(const TString& secretKey) const;
+
+    bool Empty() const;
 
 private:
     void Process(const THttpInput& input, const TParsedHttpFull& parsed, const TMaybe<TBuffer>& inputData);
@@ -47,6 +51,7 @@ private:
     TString AwsRegion_;
     TString AwsService_;
     TString AwsRequest_ = "aws4_request";
+    bool Empty_ = true;
 };
 
 } // namespace NKikimr::NSQS

@@ -3,6 +3,8 @@
 #include "incrhuge_keeper_recovery_scan.h"
 #include "incrhuge_keeper.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 namespace NKikimr {
     namespace NIncrHuge {
 
@@ -149,7 +151,9 @@ namespace NKikimr {
                     deletes ? deletes->Lsn : none));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
             Y_ABORT_UNLESS(added);
-            IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] starting ReadLog", Keeper.State.Settings.PDiskId);
+            YDB_LOG_INFO_CTX((ctx), "Starting ReadLog",
+                {"logPrefix", LogPrefix},
+                {"PDisk", Keeper.State.Settings.PDiskId});
         }
 
         void TRecovery::ApplyReadLog(const TActorId& sender, TEvIncrHugeReadLogResult& msg, const TActorContext& ctx) {
@@ -158,7 +162,9 @@ namespace NKikimr {
 
             Y_ABORT_UNLESS(msg.Status == NKikimrProto::OK);
 
-            IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] finished ReadLog", Keeper.State.Settings.PDiskId);
+            YDB_LOG_INFO_CTX((ctx), "Finished ReadLog",
+                {"logPrefix", LogPrefix},
+                {"PDisk", Keeper.State.Settings.PDiskId});
 
             TStringStream str;
             str << "Chunks# [";
@@ -197,7 +203,9 @@ namespace NKikimr {
             }
             str << Sprintf("} CurrentSerNum# %s NextLsn# %" PRIu64,
                     TChunkSerNum(msg.Chunks.GetCurrentSerNum()).ToString().data(), msg.NextLsn);
-            IHLOG_DEBUG(ctx, "ApplyReadLog %s", str.Str().data());
+            YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, applyReadLog",
+                {"logPrefix", LogPrefix},
+                {"applyReadLog", str.Str().data()});
 
             // apply LSN and set starting points flag
             Keeper.Logger.SetLsnOnRecovery(msg.NextLsn, msg.IssueInitialStartingPoints);
@@ -344,9 +352,12 @@ namespace NKikimr {
             // find matching chunk
             TChunkInfo& chunk = Keeper.State.Chunks.at(scanResult.ChunkIdx);
 
-            IHLOG_DEBUG(ctx, "ProcessScanResult ChunkIdx# %" PRIu32 " ChunkSerNum# %s IndexOnly# %s IndexValid# %s",
-                    scanResult.ChunkIdx, chunk.ChunkSerNum.ToString().data(), scanResult.IndexOnly ? "true" : "false",
-                    scanResult.IndexValid ? "true" : "false");
+            YDB_LOG_DEBUG_CTX((ctx), "ProcessScanResult",
+                {"logPrefix", LogPrefix},
+                {"chunkIdx", scanResult.ChunkIdx},
+                {"chunkSerNum", chunk.ChunkSerNum},
+                {"indexOnly", scanResult.IndexOnly},
+                {"indexValid", scanResult.IndexValid});
 
             if (scanResult.Status == NKikimrProto::NODATA) {
                 // this is really empty chunk, put it to write intent queue
@@ -464,8 +475,11 @@ namespace NKikimr {
                     item.ChunkSerNum, static_cast<ui64>(EScanCookie::Recovery), Keeper.State));
             const bool added = Keeper.State.ChildActors.insert(actorId).second;
             Y_ABORT_UNLESS(added);
-            IHLOG_DEBUG(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] scan ChunkIdx# %" PRIu32
-                    " IndexOnly# %s", Keeper.State.Settings.PDiskId, item.ChunkIdx, item.IndexOnly ? "true" : "false");
+            YDB_LOG_DEBUG_CTX((ctx), "[IncrHugeKeeper] scan",
+                {"logPrefix", LogPrefix},
+                {"PDisk", Keeper.State.Settings.PDiskId},
+                {"chunkIdx", item.ChunkIdx},
+                {"indexOnly", item.IndexOnly});
             ScanBytesInFlight += bytes;
             return true;
         }
@@ -512,7 +526,9 @@ namespace NKikimr {
 
                 Keeper.Allocator.CheckForAllocationNeed(ctx);
 
-                IHLOG_INFO(ctx, "[IncrHugeKeeper PDisk# %09" PRIu32 "] ready", Keeper.State.Settings.PDiskId);
+                YDB_LOG_INFO_CTX((ctx), "[IncrHugeKeeper] ready",
+                    {"logPrefix", LogPrefix},
+                    {"PDisk", Keeper.State.Settings.PDiskId});
             }
         }
 

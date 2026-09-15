@@ -15,24 +15,21 @@ namespace builtins
   {
 
     template <typename T, typename U>
-    types::none_type symmetric_difference_update(types::set<T> &set,
-                                                 U const &other)
+    types::none_type symmetric_difference_update(types::set<T> &set, U const &other)
     {
       set.symmetric_difference_update(other);
       return {};
     }
 
     template <typename T, typename U>
-    types::none_type symmetric_difference_update(types::set<T> &&set,
-                                                 U const &other)
+    types::none_type symmetric_difference_update(types::set<T> &&set, U const &other)
     {
       // nothing to be done on rvalue
       return {};
     }
 
     template <typename U>
-    types::none_type symmetric_difference_update(types::empty_set const &set,
-                                                 U const &other)
+    types::none_type symmetric_difference_update(types::empty_set const &set, U const &other)
     {
       // nothing otherwise empty_set have ! its correct type.
       return {};

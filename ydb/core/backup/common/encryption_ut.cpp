@@ -28,11 +28,14 @@ const TEncryptionKey& SelectKey(const TString& alg) {
 Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(SerializeWholeFileAtATime) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-128_gcm", Key16, iv, "short data file");
-        TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(Key16, iv, fileData);
-        TString dataStr;
-        data.AsString(dataStr);
-        UNIT_ASSERT_STRINGS_EQUAL(dataStr, "short data file");
+        TString content = "Short example text file with data that is to be encrypted and the decrypted";
+        for (const TString& alg : Algorithms) {
+            TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, content);
+            TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(SelectKey(alg), iv, fileData);
+            TString dataStr;
+            data.AsString(dataStr);
+            UNIT_ASSERT_STRINGS_EQUAL(dataStr, content);
+        }
     }
 
     Y_UNIT_TEST(WrongParametersForSerializer) {
@@ -276,6 +279,18 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
             deserializer.AddData(fileData, false);
             UNIT_ASSERT_EXCEPTION_CONTAINS(deserializer.GetNextBlock(), yexception, "File is corrupted");
         }
+    }
+
+    Y_UNIT_TEST(WriteTooBigBlock) {
+        TEncryptionIV iv = TEncryptionIV::Generate();
+        TEncryptedFileSerializer serializer("AES-256-GCM", Key32, iv);
+        const TString tooBigBlock(MAX_BLOCK_SIZE + 1, 'a');
+        UNIT_ASSERT_EXCEPTION_CONTAINS(serializer.AddBlock(tooBigBlock, false), yexception,
+            "data_shard_config.backup_bytes_batch_size");
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TEncryptedFileSerializer::EncryptFullFile("AES-256-GCM", Key32, iv, tooBigBlock),
+            yexception, "min_write_batch_size");
     }
 
     Y_UNIT_TEST(RestoreFromState) {

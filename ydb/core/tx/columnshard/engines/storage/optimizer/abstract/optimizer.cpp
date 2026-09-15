@@ -1,22 +1,88 @@
+#include "counters.h"
 #include "optimizer.h"
+
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap::NStorageOptimizer {
 
-std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::GetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
-    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
-    return DoGetOptimizationTask(granule, dataLocksManager);
+std::vector<std::shared_ptr<TColumnEngineChanges>> IOptimizerPlanner::GetOptimizationTasks(
+    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"pathId", PathId});
+    return DoGetOptimizationTasks(granule, dataLocksManager);
+}
+
+std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::GetNextOptimizationTask(
+    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"pathId", PathId});
+    return DoGetNextOptimizationTask(granule, dataLocksManager);
+}
+
+std::shared_ptr<TColumnEngineChanges> IOptimizerPlanner::DoGetNextOptimizationTask(
+    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
+    const auto tasks = DoGetOptimizationTasks(granule, dataLocksManager);
+    return tasks.empty() ? nullptr : tasks.front();
 }
 
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::AddPortion(const std::shared_ptr<TPortionInfo>& portion) {
-    AFL_VERIFY(AddPortions.emplace(portion->GetPortionId(), portion).second);
-    return*this;
+    AddPortions.emplace_back(portion);
+    return *this;
 }
 
 IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-    AFL_VERIFY(RemovePortions.emplace(portion->GetPortionId(), portion).second);
-    return*this;
+    RemovePortions.emplace_back(portion);
+    return *this;
 }
 
-} // namespace NKikimr::NOlap
+ui64 IOptimizerPlanner::GetNodePortionsCountLimit() const {
+    if (RuntimeSettings) {
+        if (const auto& nodePortionsCountLimit = RuntimeSettings->GetNodePortionsCountLimit()) {
+            return *nodePortionsCountLimit;
+        }
+    }
+    return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
+}
+
+void TOptimizerRuntimeSettings::RefreshNodePortionsCountLimitCounter() const {
+    const ui64 nodePortionsCountLimit = NodePortionsCountLimit.value_or(IOptimizerPlanner::GetDefaultNodePortionsCountLimit());
+    TGlobalCounters::GetNodePortionsCountLimit()->Set(nodePortionsCountLimit);
+    const ui64 configuredBadPortionsLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetBadPortionsLimit() : 0;
+    TGlobalCounters::GetNodeBadPortionsCountLimit()->Set(configuredBadPortionsLimit ? configuredBadPortionsLimit : 2 * nodePortionsCountLimit);
+}
+
+void TOptimizerRuntimeSettings::LoadFromAppData() {
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit() &&
+        AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit() > 0) {
+        SetNodePortionsCountLimit(AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+    RefreshNodePortionsCountLimitCounter();
+}
+
+void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config) {
+    if (config.HasNodePortionsCountLimit() && config.GetNodePortionsCountLimit() > 0) {
+        SetNodePortionsCountLimit(config.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+    RefreshNodePortionsCountLimitCounter();
+}
+
+ui64 IOptimizerPlanner::GetBadPortionsLimit() const {
+    if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
+        return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
+    }
+    return 2 * GetNodePortionsCountLimit();
+}
+
+std::shared_ptr<IOptimizerPlannerConstructor> IOptimizerPlannerConstructor::BuildDefault() {
+    return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
+}
+
+}   // namespace NKikimr::NOlap::NStorageOptimizer

@@ -1,10 +1,10 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/controller/controller.h>
+#include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -19,19 +19,19 @@ private:
     YDB_READONLY(ui64, ChunksCount, 0);
 
 public:
-    TTaskConstructor(const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
+    TTaskConstructor(
+        const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
         : MemoryPredictor(predictor)
-        , Task(task) {
-
+        , Task(task)
+    {
     }
 
     bool CanTakePortionInTx(const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
         if (!PortionsCount) {
             return true;
         }
-        return 
-            (PortionsCount + 1 < 1000) &&
-            (ChunksCount + portion->GetApproxChunksCount(portion->GetSchema(index)->GetColumnsCount()) < 100000);
+        return (PortionsCount + 1 < 1000) &&
+               (ChunksCount + portion->GetApproxChunksCount(portion->GetSchema(index)->GetColumnsCount()) < 100000);
     }
 
     void TakePortionInTx(const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
@@ -57,6 +57,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     std::shared_ptr<NActualizer::TController> Controller;
     TInstant ActualInstant = AppData()->TimeProvider->Now();
+
 public:
     const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
@@ -86,7 +87,8 @@ public:
         return result;
     }
 
-    EAddPortionResult AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
+    EAddPortionResult AddPortion(
+        const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {
         auto it = Tasks.find(address);
@@ -102,4 +104,4 @@ public:
         const NColumnShard::TEngineLogsCounters& counters, const std::shared_ptr<TController>& controller);
 };
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

@@ -7,11 +7,12 @@ namespace NKikimr::NOlap::NReader::NCommon {
 TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context)
     : Context(context)
     , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadMetadata>())
-    , ReadyResults(context->GetCounters()) {
+    , ReadyResults(context->GetCounters())
+{
     IndexedData = ReadMetadata->BuildReader(Context);
 }
 
-TConclusion<std::shared_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
+TConclusion<std::unique_ptr<TPartialReadResult>> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
@@ -22,6 +23,12 @@ void TColumnShardScanIterator::PrepareResults() {
 
 TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
+}
+
+TString TColumnShardScanIterator::DebugString(const bool verbose) const {
+    return TStringBuilder() << "ready_results:(" << ReadyResults.DebugString() << ");"
+                            << "indexed_data:(" << IndexedData->DebugString(verbose) << ");"
+                            << Context->GetCounters().StepsCountersDebugString();
 }
 
 void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddress& address) {

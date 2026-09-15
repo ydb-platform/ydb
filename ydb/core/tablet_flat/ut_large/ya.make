@@ -1,11 +1,6 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
-IF (WITH_VALGRIND)
-    TAG(ya:fat)
-    SIZE(LARGE)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     flat_executor_ut_large.cpp

@@ -1,0 +1,9 @@
+select agglist(x) from (
+select 1 as x
+);
+
+
+select agglist(x) from (
+select 1 as x
+limit 0
+);

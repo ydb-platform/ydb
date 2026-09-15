@@ -4,10 +4,10 @@ This section provides information about deploying, configuring, maintaining, mon
 
 Main resources:
 
-- [{#T}](initial-deployment.md)
+- [{#T}](initial-deployment/index.md)
 - [{#T}](../../../maintenance/manual/index.md)
 - [{#T}](../../observability/monitoring.md)
 - [{#T}](../../observability/logging.md)
-- [{#T}](../../backup-and-recovery.md)
-- [{#T}](../../../reference/embedded-ui/index.md)
+- [{#T}](../../backup-and-recovery/index.md)
+- [{#T}](../../../reference/ydb-ui/index.md)
 - [{#T}](../../observability/system-views.md)

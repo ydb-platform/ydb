@@ -1,4 +1,6 @@
 #include "nodes_manager.h"
+#include "nodes_manager_events.h"
+
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -20,15 +22,8 @@
 
 #include <random>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_NODES_MANAGER
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
-#define LOG_T(stream) \
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 
 namespace NFq {
 
@@ -76,14 +71,16 @@ public:
     static constexpr char ActorName[] = "YQ_NODES_MANAGER";
 
     void PassAway() final {
-        LOG_I("PassAway, InstanceId: " << InstanceId);
+        YDB_LOG_INFO("PassAway",
+            {"instanceId", InstanceId});
         NActors::IActor::PassAway();
     }
 
     void Bootstrap() {
         Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
-        LOG_I("Bootstrap, InstanceId: " << InstanceId);
+        YDB_LOG_INFO("Bootstrap",
+            {"instanceId", InstanceId});
         ResolveSelfAddress();
     }
 
@@ -93,6 +90,8 @@ private:
         const auto &request = ev->Get()->Record;
         const auto count = request.GetCount();
         auto scheduler = request.GetScheduler();
+        const auto& filters = request.GetWorkerFilterPerTask();
+        Y_ABORT_UNLESS((ui32)count == (ui32)filters.size(), "count %" PRIu32 ", filters size %" PRIu32, (ui32)count, (ui32)filters.size());
 
         auto response = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
         if (count == 0) {
@@ -100,7 +99,7 @@ private:
             error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
             error.SetMessage("Incorrect request - 0 nodes requested");
         } else if (!scheduler) {
-            ScheduleUniformly(request, response);            
+            ScheduleUniformly(request, response);
         } else {
             try {
                 auto schedulerSettings = NSc::TValue::FromJsonThrow(scheduler);
@@ -118,7 +117,8 @@ private:
                 error.SetMessage(TStringBuilder{} << "Error choosing scheduler. Invalid settings: " << scheduler << ", error: " << CurrentExceptionMessage());
             }
         }
-        LOG_D("TEvAllocateWorkersResponse " << response->Record.DebugString());
+        YDB_LOG_DEBUG("TEvAllocateWorkersResponse",
+            {"response", response->Record.DebugString()});
 
         Send(ev->Sender, response.Release());
     }
@@ -126,6 +126,7 @@ private:
     void ScheduleUniformly(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -142,6 +143,8 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
+            const auto& nodeIdProto =  filtersPerTask.Get(i).GetNodeId();
+            TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
             TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
             bool selfPlacement = true;
             if (!Peers.empty()) {
@@ -155,8 +158,9 @@ private:
                     }
 
                     if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                         && (nextNode.MemoryLimit == 0 // memory is NOT limited
+                        && (nextNode.MemoryLimit == 0 // memory is NOT limited
                              || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
+                        && (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId))
                     ) {
                         // adjust allocated size to place next tasks correctly, will be reset after next health check
                         nextNode.MemoryAllocated += totalMemoryLimit;
@@ -203,6 +207,7 @@ private:
     void ScheduleOnSingleNode(const NYql::NDqProto::TAllocateWorkersRequest& request, THolder<NDqs::TEvAllocateWorkersResponse>& response) {
         const auto count = request.GetCount();
         auto resourceId = request.GetResourceId();
+        const auto& filtersPerTask = request.GetWorkerFilterPerTask();
         if (!resourceId) {
             resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
         }
@@ -214,12 +219,27 @@ private:
             }
             std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
         }
-
-        TVector<TPeer> nodes;
-        for (ui32 i = 0; i < count; ++i) {
-            Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
-            nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
+        TSet<ui64> nodeFilter;
+        if (!filtersPerTask.empty()) {
+            const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
+            nodeFilter.insert(nodeIdProto.begin(), nodeIdProto.end());
         }
+        TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+
+        if (!Peers.empty()) {
+            for (ui32 i = 0; i < Peers.size(); ++i) {
+                auto nextNode = Peers[SingleNodeScheduler.NodeOrder[NextPeer]];
+                if (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId)) {
+                    Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
+                    node = nextNode;
+                    break;
+                }
+                if (++NextPeer >= Peers.size()) {
+                    NextPeer = 0;
+                }
+            }
+        }
+
         if (++NextPeer >= Peers.size()) {
             NextPeer = 0;
         }
@@ -227,7 +247,7 @@ private:
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();
         group.SetResourceId(resourceId);
-        for (const auto& node : nodes) {
+        for (ui32 i = 0; i < count; ++i) {
             auto* worker = group.AddWorker();
             *worker->MutableGuid() = node.InstanceId;
             worker->SetNodeId(node.NodeId);
@@ -248,6 +268,7 @@ private:
         hFunc(NFq::TEvInternalService::TEvHealthCheckResponse, HandleResponse)
         hFunc(NActors::TEvAddressInfo, Handle)
         hFunc(NActors::TEvResolveError, Handle)
+        hFunc(NFq::TEvNodesManager::TEvGetNodesRequest, Handle)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -265,18 +286,30 @@ private:
             Address = NAddr::PrintHost(*ev->Get()->Address);
             NodesHealthCheck();
         } else {
-            LOG_E("TNodesManagerActor::TEvAddressInfo: empty Address");
+            YDB_LOG_ERROR("TNodesManagerActor::TEvAddressInfo: empty Address");
             ResolveSelfAddress();
         }
     }
 
     void Handle(NActors::TEvResolveError::TPtr& ev) {
-        LOG_E("TNodesManagerActor::TEvResolveError: " << ev->Get()->Explain << ", Host: " << ev->Get()->Host);
+        YDB_LOG_ERROR("TNodesManagerActor::TEvResolveError",
+            {"ev", ev->Get()->Explain},
+            {"host", ev->Get()->Host});
         ResolveSelfAddress();
     }
 
+    void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
+        YDB_LOG_TRACE("Received TNodesManagerActor::TEvGetNodesRequest");
+        auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
+        response->NodeIds.reserve(Peers.size());
+        for (const auto& info : Peers) {
+            response->NodeIds.push_back(info.NodeId);
+        }
+        Send(ev->Sender, response.Release());
+    }
+
     void ResolveSelfAddress() {
-        LOG_D("TNodesManagerActor::ResolveSelfAddress");
+        YDB_LOG_DEBUG("TNodesManagerActor::ResolveSelfAddress");
         auto resolve = MakeHolder<NActors::TEvResolveAddress>();
         resolve->Address = HostName();
         resolve->Port = IcPort;
@@ -284,7 +317,7 @@ private:
     }
 
     void NodesHealthCheck() {
-        LOG_T("TNodesManagerActor::NodesHealthCheck");
+        YDB_LOG_TRACE("TNodesManagerActor::NodesHealthCheck");
         const TDuration ttl = TDuration::Seconds(5);
         Schedule(ttl, new NActors::TEvents::TEvWakeup(WU_NodesHealthCheck));
 
@@ -311,7 +344,7 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_E("TNodesManagerActor::OnUndelivered");
+        YDB_LOG_ERROR("TNodesManagerActor::OnUndelivered");
         ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 
@@ -355,13 +388,15 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_T("Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
+            YDB_LOG_TRACE("Send NodeInfo with to DynamicNameserver",
+                {"size", nodesInfo->size()});
             if (!nodesInfo->empty()) {
                 THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {
-            LOG_E(e.what());
+            YDB_LOG_ERROR("Exception",
+                {"exception", e.what()});
             ServiceCounters.Counters->GetCounter("NodesHealthCheckFail", true)->Inc();
         }
     }

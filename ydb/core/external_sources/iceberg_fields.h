@@ -3,6 +3,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h> 
 
+#include <array>
+
 namespace NKikimr::NExternalSource::NIceberg {
 
 // Fields that belongs to a warehouse

@@ -20,12 +20,10 @@ namespace numpy
   {
 
     template <class pS>
-    types::ndarray<double, pS> uniform(double low, double high,
-                                       pS const &array_shape)
+    types::ndarray<double, pS> uniform(double low, double high, pS const &array_shape)
     {
       types::ndarray<double, pS> result{array_shape, types::none_type()};
-      std::generate(result.fbegin(), result.fend(),
-                    [&]() { return uniform(low, high); });
+      std::generate(result.fbegin(), result.fend(), [&]() { return uniform(low, high); });
       return result;
     }
 
@@ -37,8 +35,7 @@ namespace numpy
 
     inline double uniform(double low, double high, types::none_type d)
     {
-      return std::uniform_real_distribution<double>{low,
-                                                    high}(details::generator);
+      return std::uniform_real_distribution<double>{low, high}(details::generator);
     }
   } // namespace random
 } // namespace numpy

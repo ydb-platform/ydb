@@ -1,5 +1,9 @@
 #include "config.h"
 
+#include "backend.h"
+
+#include <yt/yt/core/misc/collection_helpers.h>
+
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -100,6 +104,14 @@ void TServiceConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TMethodTestingConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("random_delay", &TThis::RandomDelay)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("heavy", &TThis::Heavy)
@@ -132,6 +144,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("pooled", &TThis::Pooled)
         .Optional();
+    registrar.Parameter("testing", &TThis::Testing)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,14 +188,12 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
     registrar.Parameter("hashes_per_peer", &TThis::HashesPerPeer)
         .GreaterThan(0)
         .Default(10);
-    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
-        .Default(EPeerPriorityStrategy::None);
     registrar.Parameter("min_peer_count_for_priority_awareness", &TThis::MinPeerCountForPriorityAwareness)
         .GreaterThanOrEqual(0)
         .Default(0);
 
     registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
-        .Default(false);
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
@@ -209,6 +221,8 @@ void TDynamicChannelPoolConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("peer_polling_request_timeout", &TThis::PeerPollingRequestTimeout)
         .Default(TDuration::Seconds(15));
+    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
+        .Default(EPeerPriorityStrategy::None);
 
     registrar.Parameter("discovery_session_timeout", &TThis::DiscoverySessionTimeout)
         .Default(TDuration::Minutes(5))
@@ -376,17 +390,19 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethod::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethod::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();
     registrar.Parameter("method", &TThis::Method)
         .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethodConfig::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();
@@ -434,6 +450,55 @@ void TOverloadControllerConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
         .Default(TDuration::MilliSeconds(100));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::vector<std::string> TProtocolMapConfigBase::GetConfiguredProtocols() const
+{
+    std::vector<std::string> result;
+    for (const auto& [protocol, entry] : ProtocolToEntry_) {
+        if (!entry.IsNull(entry.CurrentConfig)) {
+            result.push_back(protocol);
+        }
+    }
+    return result;
+}
+
+std::any TProtocolMapConfigBase::GetUntypedConfig(TStringBuf protocol)
+{
+    return GetOrCrash(ProtocolToEntry_, protocol).CurrentConfig;
+}
+
+std::any TProtocolMapConfigBase::FindUntypedConfig(TStringBuf protocol)
+{
+    auto it = ProtocolToEntry_.find(protocol);
+    if (it == ProtocolToEntry_.end()) {
+        return {};
+    }
+    const auto& entry = it->second;
+    if (entry.IsNull(entry.CurrentConfig)) {
+        return {};
+    }
+    return entry.CurrentConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolClientConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterClientConfigField(registrar);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolServerConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterServerConfigField(registrar);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

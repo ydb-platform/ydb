@@ -16,7 +16,7 @@ const std::string GuestUserName("guest");
 const std::string JobUserName("job");
 const std::string SchedulerUserName("scheduler");
 const std::string ReplicatorUserName("replicator");
-const std::string BundleControllerUserName("bundle_controller");
+const std::string BundleControllerUserName("yt-bundle-controller");
 const std::string OwnerUserName("owner");
 const std::string FileCacheUserName("file_cache");
 const std::string OperationsCleanerUserName("operations_cleaner");
@@ -31,6 +31,7 @@ const std::string TabletBalancerUserName("tablet_balancer");
 const std::string PermissionCacheUserName("yt-permission-cache");
 const std::string ReplicatedTableTrackerUserName("yt-replicated-table-tracker");
 const std::string ChunkReplicaCacheUserName("yt-chunk-replica-cache");
+const std::string SignatureKeysmithUserName("yt-signature-keysmith");
 
 const std::string EveryoneGroupName("everyone");
 const std::string UsersGroupName("users");

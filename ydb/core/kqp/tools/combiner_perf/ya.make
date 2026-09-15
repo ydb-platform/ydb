@@ -19,11 +19,20 @@ PEERDIR(
     yql/essentials/minikql/codegen/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16
 
+    yql/essentials/ast
+    yql/essentials/core
+    yql/essentials/providers/common/arrow_resolve
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/udf_resolve
+
     library/cpp/testing/unittest
 
     ydb/core/kqp/runtime
 
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/comp_nodes/ut/utils
+
+    contrib/libs/apache/arrow
 
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
@@ -46,14 +55,18 @@ ENDIF()
 
 SRCS(
     converters.cpp
+    dq_block.cpp
+    dq_combine_vs.cpp
     factories.cpp
     printout.cpp
     simple.cpp
     simple_block.cpp
+    simple_grace_join.cpp
     simple_last.cpp
     subprocess.cpp
     streams.cpp
     tpch_last.cpp
+    fs_utils.cpp
 )
 
 END()

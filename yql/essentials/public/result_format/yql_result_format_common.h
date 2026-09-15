@@ -3,6 +3,6 @@
 
 namespace NYql::NResult {
 
-class TUnsupportedException : public yexception {};
+class TUnsupportedException: public yexception {};
 
-}
+} // namespace NYql::NResult

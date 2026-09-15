@@ -1,22 +1,16 @@
 # Переименование таблицы
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ```yql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% cut "См. правила наименования таблиц и колонок" %}
+{% note info %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
-{% endcut %}
+{% endnote %}
 
 {% endif %}
 

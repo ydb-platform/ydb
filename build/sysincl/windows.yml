@@ -72,6 +72,7 @@
   - encdec.h
   - errhandlingapi.h
   - eventtoken.h
+  - evntcons.h
   - evntprov.h
   - evntrace.h
   - exdisp.h
@@ -93,6 +94,7 @@
   - guiddef.h
   - handleapi.h
   - heapapi.h
+  - hidsdi.h
   - htmlhelp.h
   - http.h
   - hvsocket.h
@@ -239,6 +241,7 @@
   - stringapiset.h
   - strsafe.h
   - suppress.h
+  - swdevice.h
   - synchapi.h
   - sys/locking.h
   - sys/utime.h

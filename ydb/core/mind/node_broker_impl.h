@@ -67,19 +67,16 @@ public:
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
                     TSubDomainKey servicedSubDomain,
-                    std::optional<TBridgePileId> bridgePileId,
                     TString error)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
-                , BridgePileId(bridgePileId)
                 , Error(std::move(error))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
-            std::optional<TBridgePileId> BridgePileId;
             TString Error;
         };
 
@@ -117,7 +114,7 @@ private:
 
         bool IsFixed() const
         {
-            return Expire == TInstant::Max();
+            return Expire == TInstant::Max() || ExpireV2 == TInstant::Max();
         }
 
         static TString ExpirationString(TInstant expire)
@@ -136,21 +133,34 @@ private:
             return ExpirationString(Expire);
         }
 
+        TString ExpirationV2String() const
+        {
+            return ExpirationString(ExpireV2);
+        }
+
+        TString AliveUntilString() const
+        {
+            return AliveUntil.ToRfc822StringLocal();
+        }
+
         // Lease is incremented each time node extends its lifetime.
         ui32 Lease = 0;
         TInstant Expire;
+        TInstant ExpireV2;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
         TSubDomainKey ServicedSubDomain;
         ENodeState State = ENodeState::Removed;
         ui64 Version = 0;
-        std::optional<TBridgePileId> BridgePileId;
+        TInstant AliveUntil;
+        ENodeLiveness Liveness = ENodeLiveness::Alive;
     };
 
     // State changes to apply while moving to the next epoch.
     struct TStateDiff {
         TVector<ui32> NodesToExpire;
         TVector<ui32> NodesToRemove;
+        TVector<ui32> NodesToMakeDead;
         TEpochInfo NewEpoch;
         TApproximateEpochStartInfo NewApproxEpochStart;
     };
@@ -228,8 +238,9 @@ private:
                         const TString &reason,
                         const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "Reply with %s (%s)",
-                  NKikimrNodeBroker::TStatus::ECode_Name(code).data(), reason.data());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::ReplyWithError: reply with error",
+            {"statusCode", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
+            {"reason", reason.data()});
 
         TAutoPtr<TResponseEvent> resp = new TResponseEvent;
         resp->Record.MutableStatus()->SetCode(code);
@@ -239,8 +250,9 @@ private:
 
     STFUNC(StateInit)
     {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::NODE_BROKER, "TNodeBroker::StateInit: event",
+            {"eventType", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }
 
@@ -305,6 +317,8 @@ private:
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
+    void UpdateCommittedStateCounters();
+
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
@@ -339,6 +353,8 @@ private:
                 const TActorContext &ctx);
 
     bool EnableStableNodeNames = false;
+    bool EnableLongLease = false;
+
     ui64 MaxStaticId;
     ui64 MinDynamicId;
     ui64 MaxDynamicId;
@@ -369,6 +385,7 @@ private:
         // Internal state modifiers. Don't affect DB.
         void RegisterNewNode(const TNodeInfo &info);
         void AddNode(const TNodeInfo &info);
+        bool IsLeaseExtendable(const TNodeInfo &node) const;
         void ExtendLease(TNodeInfo &node);
         void FixNodeId(TNodeInfo &node);
         void RecomputeFreeIds();
@@ -387,6 +404,7 @@ private:
         THashMap<ui32, TNodeInfo> Nodes;
         THashMap<ui32, TNodeInfo> ExpiredNodes;
         THashMap<ui32, TNodeInfo> RemovedNodes;
+        ui64 DeadNodesCount = 0;
         // Maps <Host/Addr:Port> to NodeID.
         THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
         // Bitmap with free Node IDs (with no lower 5 bits).
@@ -399,6 +417,7 @@ private:
         // Current config.
         NKikimrNodeBroker::TConfig Config;
         TDuration EpochDuration = TDuration::Hours(1);
+        TDuration LeaseDuration = TDuration::Hours(72);
         TVector<std::pair<ui32, ui32>> BannedIds;
         ui64 ConfigSubscriptionId = 0;
         TString StableNodeNamePrefix = "slot-";

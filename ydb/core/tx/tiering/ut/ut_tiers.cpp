@@ -13,6 +13,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/av_bootstrapped.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -182,13 +183,18 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             return Manager->GetTiers();
         }
 
+        const TTiersManager& GetManager() const {
+            AFL_VERIFY(Manager);
+            return *Manager;
+        }
+
         void Bootstrap() {
             Become(&TThis::StateInit);
             Start = Now();
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [](const TActorContext&) {
             });
             Manager->Start(Manager);
-            Manager->ActivateTiers(ExpectedTiers);
+            Manager->ActivateTiers(ExpectedTiers, false);
         }
 
         TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)
@@ -350,6 +356,80 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         DSConfigsImpl(true);
     }
 
+
+    Y_UNIT_TEST(TierBecomesReadyAfterLateSecretsSnapshot) {
+        TPortManager pm;
+
+        ui32 grpcPort = pm.GetPort();
+        ui32 msgbPort = pm.GetPort();
+
+        Tests::TServerSettings serverSettings(msgbPort);
+        serverSettings.Port = msgbPort;
+        serverSettings.GrpcPort = grpcPort;
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMetadataProvider(true)
+            .SetEnableTieringInColumnShard(true)
+            .SetEnableExternalDataSources(true)
+        ;
+
+        Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
+        server->EnableGRpc(grpcPort);
+        Tests::TClient client(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_TIERING, NLog::PRI_DEBUG);
+
+        auto sender = runtime.AllocateEdgeActor();
+        server->SetupRootStoragePools(sender);
+        TLocalHelper lHelper(*server);
+        lHelper.CreateSecrets();
+        lHelper.CreateExternalDataSource("/Root/tier1", "http://fake.fake/abc");
+
+        // Hold secrets snapshots sent by the metadata provider to its subscribers (the tiers manager of the shard),
+        // so that the shard receives the external data source description first
+        bool holdSecrets = true;
+        std::vector<TAutoPtr<IEventHandle>> heldSecrets;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (holdSecrets && ev->GetTypeRewrite() == NMetadata::NProvider::TEvRefreshSubscriberData::EventType &&
+                ev->Get<NMetadata::NProvider::TEvRefreshSubscriberData>()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>()) {
+                Cerr << "HOLD secrets snapshot for " << ev->GetRecipientRewrite() << Endl;
+                heldSecrets.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const NTiers::TExternalStorageId tierId("/Root/tier1");
+        TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1" });
+        runtime.Register(emulator);
+        emulator->CheckRuntime(runtime);
+        for (const TInstant start = Now(); !emulator->GetTierConfigs().at(tierId).HasConfig() && Now() - start < TDuration::Seconds(30);) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(emulator->GetTierConfigs().at(tierId).HasConfig());
+        UNIT_ASSERT(!heldSecrets.empty());
+
+        const auto& manager = emulator->GetManager();
+        const auto* tierManager = manager.GetManagerOptional(tierId);
+        UNIT_ASSERT(tierManager);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetAwaitedConfigsCount(), 0);
+        // The tier has a config, but the secrets are not known yet
+        UNIT_ASSERT(!tierManager->IsReady());
+
+        // Deliver the secrets snapshot: the tier becomes ready
+        holdSecrets = false;
+        for (auto& ev : heldSecrets) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        heldSecrets.clear();
+        for (const TInstant start = Now(); !tierManager->IsReady() && Now() - start < TDuration::Seconds(30);) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetAwaitedConfigsCount(), 0);
+        UNIT_ASSERT(tierManager->IsReady());
+    }
+
 //#define S3_TEST_USAGE
 #ifdef S3_TEST_USAGE
     const TString TierConfigProtoStr =
@@ -442,7 +522,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         lHelper.CreateTestOlapTable("olapTable", 2);
         lHelper.StartSchemaRequest(
-            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`))"
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`))"
         );
         lHelper.StartSchemaRequest(
             R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
@@ -462,8 +542,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
         {
-            TAtomic unusedPrev;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
+            TControlBoard::SetValue(1, runtime.GetAppData().Icb->ColumnShardControls.GranuleIndexedPortionsCountLimit);
         }
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);
@@ -802,6 +881,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
+
+            // Internal TTL commits one plan step ahead of the current
+            // readable snapshot. 
+            // So we need to advance time again to let the readable snapshot cross the removal snapshot before reading.
+            runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+            runtime.SimulateSleep(TDuration::Seconds(1));
 
             TVector<THashMap<TString, NYdb::TValue>> result;
             lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);

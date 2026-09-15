@@ -1,6 +1,6 @@
 #include "suspendable_action_queue.h"
 
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "single_queue_scheduler_thread.h"
 #include "system_invokers.h"
 
@@ -15,7 +15,7 @@ class TSuspendableActionQueue
 {
 public:
     TSuspendableActionQueue(
-        TString threadName,
+        std::string threadName,
         TSuspendableActionQueueOptions options)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
@@ -96,7 +96,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 ISuspendableActionQueuePtr CreateSuspendableActionQueue(
-    TString threadName,
+    std::string threadName,
     TSuspendableActionQueueOptions options)
 {
     return New<TSuspendableActionQueue>(

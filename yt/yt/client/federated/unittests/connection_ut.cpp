@@ -4,10 +4,14 @@
 #include <yt/yt/client/unittests/mock/client.h>
 #include <yt/yt/client/unittests/mock/connection.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/net/local_address.h>
 
 namespace NYT::NClient::NFederated {
 namespace {
+
+using namespace NConcurrency;
 
 using ::testing::_;
 using ::testing::Return;
@@ -30,7 +34,7 @@ TEST(TFederatedConnectionTest, CreateClient)
     auto mockClientVla = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // To identify best (closest) cluster.
     NYson::TYsonString nodesYsonSas(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));
@@ -50,9 +54,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))
@@ -60,10 +64,10 @@ TEST(TFederatedConnectionTest, CreateClient)
     EXPECT_CALL(*mockConnectionVla, CreateClient(::testing::Ref(clientOptions)))
         .WillOnce(Return(mockClientVla));
 
-    EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
-    EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+    EXPECT_CALL(*mockConnectionSas, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "sas")));
+    EXPECT_CALL(*mockConnectionVla, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -71,13 +75,15 @@ TEST(TFederatedConnectionTest, CreateClient)
     NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
-    EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
+    EXPECT_THAT(
+        ToString(connection->GetLoggingTags()),
+        testing::HasSubstr("Clusters: [Cluster: sas, Cluster: vla]"));
     auto client = connection->CreateClient(clientOptions);
-    auto nodes = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes);
 
     Sleep(TDuration::Seconds(2));
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 
@@ -115,9 +121,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))
@@ -125,10 +131,10 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
     EXPECT_CALL(*mockConnectionVla, CreateClient(::testing::Ref(clientOptions)))
         .WillOnce(Return(mockClientVla));
 
-    EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
-    EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+    EXPECT_CALL(*mockConnectionSas, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "sas")));
+    EXPECT_CALL(*mockConnectionVla, GetLoggingTags())
+        .WillOnce(ReturnRefOfCopy(NLogging::TLoggingTagList().With("Cluster", "vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -136,17 +142,19 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
     NNet::SetLocalHostName("a-rpc-proxy.sas.yp-c.yandex.net");
 
     auto connection = CreateConnection({mockConnectionSas, mockConnectionVla}, config);
-    EXPECT_THAT(connection->GetLoggingTag(), testing::HasSubstr("Clusters: (sas; vla)"));
+    EXPECT_THAT(
+        ToString(connection->GetLoggingTags()),
+        testing::HasSubstr("Clusters: [Cluster: sas, Cluster: vla]"));
     auto client = connection->CreateClient(clientOptions);
 
     Sleep(TDuration::Seconds(2));
 
-    auto nodes1 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes1 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonVla, nodes1);
 
     Sleep(TDuration::Seconds(6));
 
-    auto nodes2 = client->GetNode("//test/node").Get().ValueOrThrow();
+    auto nodes2 = WaitForFast(client->GetNode("//test/node")).ValueOrThrow();
     EXPECT_EQ(nodesYsonSas, nodes2);
 }
 

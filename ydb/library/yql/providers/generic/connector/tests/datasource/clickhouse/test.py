@@ -2,7 +2,7 @@ import pytest
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings
-from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import runner_types, configure_runner
+from ydb.library.yql.providers.generic.connector.tests.utils.run.runners import configure_runner
 import ydb.library.yql.providers.generic.connector.tests.utils.scenario.clickhouse as scenario
 from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
 
@@ -40,20 +40,17 @@ tc_collection = Collection(
 )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_positive'), ids=tc_collection.ids('select_positive'))
 @pytest.mark.usefixtures("settings")
 def test_select_positive(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_positive(test_name=request.node.name, settings=settings, runner=runner, test_case=test_case)
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize(
     "test_case", tc_collection.get('select_missing_database'), ids=tc_collection.ids('select_missing_database')
 )
@@ -61,10 +58,9 @@ def test_select_positive(
 def test_select_missing_database(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_missing_database.TestCase,
 ):
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_missing_table(
         settings=settings,
         runner=runner,
@@ -73,7 +69,6 @@ def test_select_missing_database(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize(
     "test_case", tc_collection.get('select_missing_table'), ids=tc_collection.ids('select_missing_table')
 )
@@ -81,10 +76,9 @@ def test_select_missing_database(
 def test_select_missing_table(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_missing_table.TestCase,
 ):
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_missing_table(
         test_name=request.node.name,
         settings=settings,
@@ -93,16 +87,14 @@ def test_select_missing_table(
     )
 
 
-@pytest.mark.parametrize("runner_type", runner_types)
 @pytest.mark.parametrize("test_case", tc_collection.get('select_datetime'), ids=tc_collection.ids('select_datetime'))
 @pytest.mark.usefixtures("settings")
 def test_select_datetime(
     request: pytest.FixtureRequest,
     settings: Settings,
-    runner_type: str,
     test_case: select_positive_common.TestCase,
 ):
-    runner = configure_runner(runner_type=runner_type, settings=settings)
+    runner = configure_runner(settings=settings)
     scenario.select_positive(
         test_name=request.node.name,
         test_case=test_case,

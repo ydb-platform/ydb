@@ -51,16 +51,6 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
     }
 }
 
-TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index) {
-    const auto implTables = index.GetImplTables();
-    TVector<TString> paths;
-    paths.reserve(implTables.size());
-    for (const auto& implTable : implTables) {
-        paths.emplace_back(TStringBuilder() << tableName << "/" << index.Name << "/" << implTable);
-    }
-    return paths;
-}
-
 TString GetDomainDatabase(const TAppData* appData) {
     if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
         if (const auto& name = appData->DomainsInfo->GetDomain()->Name) {
@@ -83,14 +73,12 @@ TString SelectDatabaseForAlterLoginOperations(const TAppData* appData, const TSt
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
-                                       bool replaceIfExists,
                                        const TCreateExternalTableSettings& settings)
 {
     externalTableDesc.SetName(name);
     externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
     externalTableDesc.SetLocation(settings.Location);
     externalTableDesc.SetSourceType("General");
-    externalTableDesc.SetReplaceIfExists(replaceIfExists);
 
     Y_ENSURE(settings.ColumnOrder.size() == settings.Columns.size());
     for (const auto& name : settings.ColumnOrder) {
@@ -146,9 +134,11 @@ void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& n
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
     auto splitPos = path.find_last_of('/');
-    if (splitPos == path.npos || splitPos + 1 == path.size()) {
-        ythrow yexception() << "wrong path format '" << path << "'";
+
+    if (splitPos == path.npos) {
+        return {{}, path};
     }
+
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 

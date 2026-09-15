@@ -1,0 +1,10 @@
+package NYql;
+option java_package = "ru.yandex.yql.proto";
+
+message TFmrFileRemoteCache {
+    optional string Name = 1;
+    optional string Cluster = 2;
+    optional string Path = 3;
+    optional string TokenFile = 4;
+    optional uint64 FileExpirationInterval = 5 [default = 43200]; // Expiration time of files in fmr cache in seconds, default - 12h.
+}

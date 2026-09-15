@@ -141,17 +141,36 @@
 (let remove_optional_type (lambda '(type) (MatchType type 'Optional (lambda '() (OptionalItemType type)) (lambda '() type))))
 (let convert_interval_to_decimal (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Decimal '35 '0))))
 (let convert_decimal_to_interval (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval))))
+(let convert_decimal_to_interval64 (lambda '(value) (StrictCast (StrictCast value (DataType 'Int64)) (DataType 'Interval64))))
 
 # list_type:type
 # doesn't support optional values
 (let avg_traits_factory_raw (lambda '(list_type) (block '(
-  (let init (lambda '(value) '((MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double))) (Uint64 '1))))
-  (let update (lambda '(value state) '((AggrAdd (Nth state '0) (MatchType (TypeOf value) 'Decimal (lambda '() (WidenIntegral value)) 'Interval (lambda '() (Apply convert_interval_to_decimal value )) (lambda '() (Convert value 'Double)))) (Inc (Nth state '1)))))
+  (let init (lambda '(value) '(
+    (MatchType (TypeOf value)
+        'Decimal (lambda '() (WidenIntegral value))
+        'Interval (lambda '() (Apply convert_interval_to_decimal value ))
+        'Interval64 (lambda '() (Apply convert_interval_to_decimal value ))
+        (lambda '() (Convert value 'Double)))
+    (Uint64 '1))))
+
+  (let update (lambda '(value state) '(
+    (AggrAdd (Nth state '0) (MatchType (TypeOf value)
+        'Decimal (lambda '() (WidenIntegral value))
+        'Interval (lambda '() (Apply convert_interval_to_decimal value ))
+        'Interval64 (lambda '() (Apply convert_interval_to_decimal value ))
+        (lambda '() (Convert value 'Double))))
+    (Inc (Nth state '1)))))
+
   (let shift (lambda '(value state) '((- (Nth state '0) value) (Dec (Nth state '1)))))
-  (let current (lambda '(state) (MatchType (ListItemType list_type)
-                                           'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
-                                           'Interval (lambda '() (Unwrap (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ))
-                                           (lambda '() (Div (Nth state '0) (Nth state '1))))))
+
+  (let current (lambda '(state)
+    (MatchType (ListItemType list_type)
+        'Decimal (lambda '() (Cast (Div (Nth state '0) (Nth state '1)) (ListItemType list_type)))
+        'Interval (lambda '() (Unwrap (Apply convert_decimal_to_interval (Div (Nth state '0) (Nth state '1)) ) ))
+        'Interval64 (lambda '() (Unwrap (Apply convert_decimal_to_interval64 (Div (Nth state '0) (Nth state '1)) ) ))
+        (lambda '() (Div (Nth state '0) (Nth state '1))))))
+
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 
@@ -343,13 +362,15 @@
 # doesn't support optional values
 (let percentile_traits_factory_raw (lambda '(list_type n) (block '(
     (let convert_into (lambda  '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) ) # TODO:YQL-14129 cast to Decimal
+                                 'Interval (lambda '() (SafeCast value (DataType 'Double)) )
+                                 'Interval64 (lambda '() (SafeCast value (DataType 'Double)) )
                                  (lambda '() value)
                       ))
     )
     # Currently for Intervals: converts double value back to interval
     (let convert_out (lambda '(value) (MatchType (ListItemType list_type)
-                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) ) # TODO:YQL-14129 cast from Decimal
+                                 'Interval (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval))) )
+                                 'Interval64 (lambda '() (Unwrap (StrictCast (ToIntegral value (DataType 'Int64)) (DataType 'Interval64))) )
                                  (lambda '() value)
                       ))
     )
@@ -561,11 +582,17 @@
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
 (let sum_traits_factory_opt (lambda '(list_type) (block '(
     (let item_type (Apply remove_optional_type (ListItemType list_type)))
-    (return (Apply easy_traits_factory_map list_type 
-        (lambda '(val state) (AggrAdd val state)) 
-        (lambda '(val state) (AggrAdd state (Minus val))) 
-        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_interval_to_decimal value)) (lambda '() (WidenIntegral value))))
-        (lambda '(value) (MatchType item_type 'Interval (lambda '() (Apply convert_decimal_to_interval value)) (lambda '() value)))
+    (return (Apply easy_traits_factory_map list_type
+        (lambda '(val state) (AggrAdd val state))
+        (lambda '(val state) (AggrAdd state (Minus val)))
+        (lambda '(value) (MatchType item_type
+            'Interval (lambda '() (Apply convert_interval_to_decimal value))
+            'Interval64 (lambda '() (Apply convert_interval_to_decimal value))
+            (lambda '() (WidenIntegral value))))
+        (lambda '(value) (MatchType item_type
+            'Interval (lambda '() (Apply convert_decimal_to_interval value))
+            'Interval64 (lambda '() (Apply convert_decimal_to_interval64 value))
+            (lambda '() value)))
 ))))))
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
@@ -894,6 +921,56 @@
 (let bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count)
     (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '0)))
 
+
+
+(let reservoir_sampling_factory_raw (lambda '(list_type value_extractor count default_value finish_selector) (block '(
+    (let value_type (ListItemType list_type))
+
+    (let limit_type (DataType 'Uint64))
+    (let extra_types_tuple (TupleType value_type))
+    (let type_config '"")
+
+    (let create      (Udf 'ReservoirSampling.Create         (Void) (TupleType (TupleType value_type limit_type) (StructType) (TupleType)) type_config))
+
+    (let resource_type (TypeOf (Apply create (InstanceOf value_type) (InstanceOf limit_type))))
+
+    (let add         (Udf 'ReservoirSampling.Add            (Void) (TupleType (TupleType resource_type value_type)  (StructType) (TupleType)) type_config))
+
+    (let get_value   (Udf 'ReservoirSampling.GetResultValue  (Void) (TupleType (TupleType resource_type) (StructType) extra_types_tuple)  type_config))
+
+    (let get_list    (Udf 'ReservoirSampling.GetResultList   (Void) (TupleType (TupleType resource_type) (StructType) extra_types_tuple)  type_config))
+
+    (let init (lambda '(value parent) (
+        NamedApply create '(value count) (AsStruct) (DependsOn parent)
+    )))
+
+    (let update (lambda '(value state parent) (
+        NamedApply add '(state value) (AsStruct) (DependsOn parent)
+    )))
+
+    (let shift (lambda '(value state) (Void)))
+
+    (let current (lambda '(state) (
+        Apply finish_selector state get_value get_list
+    )))
+
+    (return (WindowTraits value_type init update shift current default_value))
+))))
+
+(let random_sample_factory (lambda '(list_type extractor count)
+    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
+        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
+            (Apply reservoir_sampling_factory_raw list_type extractor count (EmptyList) (lambda '(state get_value get_list) (
+                Apply get_list state
+            )))))))))
+
+(let random_value_factory (lambda '(list_type extractor)
+    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
+        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
+            (Apply reservoir_sampling_factory_raw list_type extractor (Uint64 '1) (Null) (lambda '(state get_value get_list) (
+                Apply get_value state
+            )))))))))
+
 (export min_traits_factory)
 (export max_traits_factory)
 (export sum_traits_factory)
@@ -950,5 +1027,6 @@
 (export bottom_traits_factory)
 (export top_by_traits_factory)
 (export bottom_by_traits_factory)
-
+(export random_sample_factory)
+(export random_value_factory)
 )

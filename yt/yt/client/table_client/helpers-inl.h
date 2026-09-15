@@ -313,10 +313,10 @@ void FromUnversionedValue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class TTag>
+template <class T, class TTag, TStrongTypedefOptions Options>
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
-    const TStrongTypedef<T, TTag>& value,
+    const TStrongTypedef<T, TTag, Options>& value,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags)
@@ -324,9 +324,9 @@ void ToUnversionedValue(
     ToUnversionedValue(unversionedValue, value.Underlying(), rowBuffer, id, flags);
 }
 
-template <class T, class TTag>
+template <class T, class TTag, TStrongTypedefOptions Options>
 void FromUnversionedValue(
-    TStrongTypedef<T, TTag>* value,
+    TStrongTypedef<T, TTag, Options>* value,
     TUnversionedValue unversionedValue)
 {
     FromUnversionedValue(&value->Underlying(), unversionedValue);
@@ -478,7 +478,7 @@ void ToUnversionedValue(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const NYson::TProtobufMessageType* type,
     TUnversionedValue unversionedValue);
 
@@ -495,6 +495,26 @@ void FromUnversionedValue(
             return &pair.first->second;
         },
         NYson::ReflectProtobufMessageType<TValue>(),
+        unversionedValue);
+}
+
+void UnversionedValueToMapImpl(
+    std::function<void(std::string, TUnversionedValue)> appender,
+    TUnversionedValue unversionedValue);
+
+template <class TKey, class TValue>
+void FromUnversionedValue(
+    THashMap<TKey, TValue>* map,
+    TUnversionedValue unversionedValue)
+    requires TUnversionedValueConversionTraits<TValue>::Scalar
+{
+    map->clear();
+    UnversionedValueToMapImpl(
+        [&] (std::string key, TUnversionedValue itemValue) {
+            auto [it, inserted] = map->emplace(FromString<TKey>(std::move(key)), TValue());
+            Y_UNUSED(inserted);
+            FromUnversionedValue(&it->second, itemValue);
+        },
         unversionedValue);
 }
 
@@ -570,6 +590,35 @@ T FromUnversionedValue(TUnversionedValue unversionedValue)
     T value;
     FromUnversionedValue(&value, unversionedValue);
     return value;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    TUnversionedValue unversionedValue;
+    ToUnversionedCompositeValue(&unversionedValue, std::forward<T>(value), rowBuffer, id, flags);
+    return unversionedValue;
+}
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    if (value) {
+        ToUnversionedCompositeValue(unversionedValue, *value, rowBuffer, id, flags);
+    } else {
+        *unversionedValue = MakeUnversionedSentinelValue(EValueType::Null, id, flags);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

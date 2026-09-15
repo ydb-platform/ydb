@@ -3,6 +3,8 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     namespace {
@@ -39,7 +41,9 @@ namespace NKikimr::NStorage {
                 if (!status.ok()) {
                     return FinishWithError("failed to parse JSON");
                 }
-                STLOG(PRI_DEBUG, BS_NODE, NWDC04, "sending TEvNodeConfigInvokeOnRoot", (Record, ev->Record));
+                YDB_LOG_DEBUG("Sending TEvNodeConfigInvokeOnRoot",
+                    {"marker", "NWDC04"},
+                    {"record", ev->Record});
 
                 // send it to the actor
                 const TActorId nondeliveryId = SelfId();
@@ -49,7 +53,9 @@ namespace NKikimr::NStorage {
             }
 
             void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC39, "receive TEvNodeConfigInvokeOnRootResult", (Record, ev->Get()->Record));
+                YDB_LOG_DEBUG("Receive TEvNodeConfigInvokeOnRootResult",
+                    {"marker", "NWDC39"},
+                    {"record", ev->Get()->Record});
 
                 TString data;
                 google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);
@@ -134,15 +140,60 @@ namespace NKikimr::NStorage {
                 return res;
             };
 
+            auto getAllBoundNodes = [&] {
+                NJson::TJsonValue res(NJson::JSON_ARRAY);
+
+                for (const auto& [nodeId, node] : AllBoundNodes) {
+                    NJson::TJsonValue item(NJson::JSON_MAP);
+                    item["node_id"] = NJson::TJsonMap{
+                        {"host", std::get<0>(nodeId)},
+                        {"port", std::get<1>(nodeId)},
+                        {"node_id", std::get<2>(nodeId)},
+                    };
+
+                    NJson::TJsonValue refs(NJson::JSON_MAP);
+                    for (const auto& [refererNodeId, it] : node.Refs) {
+                        refs[ToString(refererNodeId)] = NJson::TJsonMap{
+                            {"generation", it->GetGeneration()},
+                            {"fingerprint", HexEncode(it->GetFingerprint())},
+                        };
+                    }
+                    item["refs"] = std::move(refs);
+
+                    res.AppendValue(std::move(item));
+                }
+
+                return res;
+            };
+
+            auto getConfigMeta = [&](const TStorageConfigPtr& config) -> NJson::TJsonValue {
+                if (!config) {
+                    return NJson::JSON_NULL;
+                }
+
+                return NJson::TJsonMap{
+                    {"generation", config->GetGeneration()},
+                    {"fingerprint", HexEncode(config->GetFingerprint())},
+                };
+            };
+
             NJson::TJsonValue root = NJson::TJsonMap{
+                {"self_node_id", SelfId().NodeId()},
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
+                {"all_bound_nodes", getAllBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
-                {"has_quorum", StorageConfig && HasQuorum(*StorageConfig)},
+                {"has_quorum", GlobalQuorum},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
+                {"configs", NJson::TJsonMap{
+                    {"base", getConfigMeta(BaseConfig)},
+                    {"effective", getConfigMeta(StorageConfig)},
+                    {"committed", getConfigMeta(CommittedStorageConfig)},
+                    {"local_committed", getConfigMeta(LocalCommittedStorageConfig)},
+                }},
             };
 
             NJson::WriteJson(&out, &root);
@@ -170,7 +221,7 @@ namespace NKikimr::NStorage {
                     }
                 }
 
-                auto outputConfig = [&](const char *name, auto *config) {
+                auto outputConfig = [&](const char *name, const TStorageConfigPtr& config) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             out << name;
@@ -192,12 +243,9 @@ namespace NKikimr::NStorage {
                                         out << "<pre>" << yaml << "</pre>";
                                     }
                                 }
-                                if (config->HasCompressedStorageYaml()) {
-                                    TStringInput ss(config->GetCompressedStorageYaml());
-                                    TZstdDecompress zstd(&ss);
-                                    TString yaml = zstd.ReadAll();
-                                    out << "<strong>storage.yaml (size " << yaml.size() << ")</strong><br/><pre>"
-                                        << yaml << "</pre>";
+                                if (auto yaml = GetStorageYaml(*config)) {
+                                    out << "<strong>storage.yaml (size " << yaml->size() << ")</strong><br/><pre>"
+                                        << *yaml << "</pre>";
                                 }
                             } else {
                                 out << "not defined";
@@ -205,10 +253,10 @@ namespace NKikimr::NStorage {
                         }
                     }
                 };
-                outputConfig("StorageConfig", StorageConfig.get());
-                outputConfig("BaseConfig", BaseConfig.get());
-                outputConfig("InitialConfig", InitialConfig.get());
-                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
+                outputConfig("StorageConfig (effective storage config)", StorageConfig);
+                outputConfig("BaseConfig (startup config from YAML)", BaseConfig);
+                outputConfig("LocalCommittedStorageConfig (committed to local PDisks)", LocalCommittedStorageConfig);
+                outputConfig("CommittedStorageConfig (with quorum over cluster)", CommittedStorageConfig);
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
@@ -231,8 +279,10 @@ namespace NKikimr::NStorage {
                         if (ErrorReason) {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
-                        out << "Quorum: " << (StorageConfig && HasQuorum(*StorageConfig) ? "yes" : "no") << "<br/>";
+                        out << "Quorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
+                        out << "NodeIdsForOutgoingBinding: " << FormatList(NodeIdsForOutgoingBinding) << "<br/>";
+                        out << "NodeIdsForOtherPilesOutgoingBinding: " << FormatList(NodeIdsForOtherPilesOutgoingBinding) << "<br/>";
                     }
                 }
 
@@ -241,7 +291,7 @@ namespace NKikimr::NStorage {
                         out << "Static <-> dynamic node interaction";
                     }
                     DIV_CLASS("panel-body") {
-                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "yes" : "no") << "<br/>";
                         out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
                         out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
                         out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
@@ -254,7 +304,10 @@ namespace NKikimr::NStorage {
                     }
                     DIV_CLASS("panel-body") {
                         DIV() {
-                            out << "AllBoundNodes count: " << AllBoundNodes.size();
+                            out << "AllBoundNodes count: " << AllBoundNodes.size() << "<br/>";
+                            out << "GlobalQuorum: " << (GlobalQuorum ? "yes" : "no") << "<br/>";
+                            out << "NodeIdsForIncomingBinding: " << FormatList(NodeIdsForIncomingBinding) << "<br/>";
+                            out << "ConnectedUnsyncedPiles: " << FormatList(ConnectedUnsyncedPiles) << "<br/>";
                         }
                         TABLE_CLASS("table table-condensed") {
                             TABLEHEAD() {
@@ -304,6 +357,46 @@ namespace NKikimr::NStorage {
                                         TABLED() { out << info.SessionId; }
                                         TABLED() { out << makeBoundNodeIds(); }
                                         TABLED() { out << FormatList(info.ScatterTasks); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Bound nodes";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "NodeId"; }
+                                    TABLEH() { out << "FQDN:IcPort"; }
+                                    TABLEH() { out << "RefererNodeId"; }
+                                    TABLEH() { out << "Generation"; }
+                                    TABLEH() { out << "Fingerprint"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                auto r = AllBoundNodes | std::views::keys;
+                                std::vector<TNodeIdentifier> nodeIds(r.begin(), r.end());
+                                std::ranges::sort(nodeIds);
+                                for (const auto& nodeId : nodeIds) {
+                                    auto& node = AllBoundNodes.at(nodeId);
+                                    auto r = node.Refs | std::views::keys;
+                                    std::vector<ui32> refererNodeIds(r.begin(), r.end());
+                                    std::ranges::sort(refererNodeIds);
+                                    for (ui32 refererNodeId : refererNodeIds) {
+                                        const auto& it = node.Refs.at(refererNodeId);
+                                        TABLER() {
+                                            TABLED() { out << nodeId.NodeId(); }
+                                            TABLED() { out << std::get<0>(nodeId) << ':' << std::get<1>(nodeId); }
+                                            TABLED() { out << refererNodeId; }
+                                            TABLED() { out << it->GetGeneration(); }
+                                            TABLED() { out << HexEncode(it->GetFingerprint()); }
+                                        }
                                     }
                                 }
                             }

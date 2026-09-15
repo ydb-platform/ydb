@@ -42,25 +42,31 @@ void PipeReaderToWriter(
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options);
 
-//! Parameter #pipeDelay is used only for testing.
+struct TPipeReaderToWriterByBatchesOptions
+{
+    TRowBatchReadOptions StartingOptions;
+    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> OptionsUpdater;
+    std::function<TError(TError readerError)> ReaderErrorWrapper;
+    //! Used only for testing.
+    TDuration PipeDelay;
+};
+
 void PipeReaderToWriterByBatches(
     const NApi::IRowBatchReaderPtr& reader,
     const NFormats::ISchemalessFormatWriterPtr& writer,
-    TRowBatchReadOptions startingOptions,
-    TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater = {},
-    TDuration pipeDelay = TDuration::Zero());
+    const TPipeReaderToWriterByBatchesOptions& options);
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,
     i64 bufferBlockSize);
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const NConcurrency::IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize);
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const NConcurrency::IAsyncZeroCopyInputStreamPtr& input,
     IOutputStream* output);
 

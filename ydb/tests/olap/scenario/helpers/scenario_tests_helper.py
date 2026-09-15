@@ -63,7 +63,7 @@ class ScenarioTestHelper:
         )
         assert sth.get_table_rows_count(table_name) == 2
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(schema, 100), comment="100 sequetial ids")
-        sth.execute_scheme_query(DropTable(table_name))
+        sth.execute_scheme_query(DropTable(table_name), retries=5)
     """
 
     DEFAULT_RETRIABLE_ERRORS = {
@@ -333,7 +333,7 @@ class ScenarioTestHelper:
         n_retries=0,
         fail_on_error=True,
         return_error=False,
-        ignore_error=tuple(),
+        ignore_error: Set[str] = set(),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -356,8 +356,8 @@ class ScenarioTestHelper:
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
 
-            if any(sub in str(error) for sub in ignore_error):
-                return (result, error) if return_error else result
+            if error and any(sub in str(error) for sub in ignore_error):
+                return error if return_error else result
 
             if status in expected_status:
                 return result
@@ -390,6 +390,10 @@ class ScenarioTestHelper:
             self._run_with_expected_status(
                 lambda: _upsert(),
                 expected_status,
+                {
+                    ydb.StatusCode.SCHEME_ERROR
+                },
+                3,
             )
 
     @staticmethod
@@ -484,7 +488,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error=tuple()
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error: Set[str] = set()
     ):
         """Run a query on the tested database.
 
@@ -664,8 +668,15 @@ class ScenarioTestHelper:
                 'table': tablename,
             },
         ):
-            result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
-            return result_set.result_set.rows[0][0]
+            result = self.execute_query(
+                f'SELECT count(*) FROM `{self.get_full_path(tablename)}`',
+                fail_on_error=False,
+                return_error=True,
+                ignore_error={''},
+            )
+            if isinstance(result, ydb.issues.Error):
+                raise result
+            return result[0].rows[0][0]
 
     @allure.step('Describe table {path}')
     def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
@@ -740,30 +751,36 @@ class ScenarioTestHelper:
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
         root_path = self.get_full_path(folder)
+        secret_type = getattr(ydb.SchemeEntryType, 'SECRET', None)
         for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=5)
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=5)
             elif e.is_external_data_source():
-                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=5)
+            elif secret_type is not None and e.type == secret_type:
+                self.execute_scheme_query(dh.DropSecret(os.path.join(folder, e.name)), retries=5)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),
                     ydb.StatusCode.SUCCESS,
+                    ydb.StatusCode.SCHEME_ERROR,
+                    n_retries=10,
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
 
     def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
         path = table_name if table_name.startswith('/') else self.get_full_path(table_name)
-        query = f'''SELECT * FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
+        query = f'''SELECT SUM(RawBytes) AS RawBytes, SUM(BlobRangeSize) AS BlobRangeSize FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
-        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        result_sets = self.execute_query(query)
         raw_bytes = 0
         bytes = 0
-        for row in result_set.rows:
-            raw_bytes += row["RawBytes"]
-            bytes += row["BlobRangeSize"]
+        for result_set in result_sets:
+            for row in result_set.rows:
+                raw_bytes += row["RawBytes"]
+                bytes += row["BlobRangeSize"]
         return raw_bytes, bytes

@@ -241,6 +241,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             if (alterData->GetServerlessComputeResourcesMode()) {
                 event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
             }
+            event->Record.SetTablesMetricsLevel(alterData->GetTablesMetricsLevel());
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Send configure request to schemeshard: " << tabletID <<
                             " opId: " << OperationId <<
@@ -334,7 +335,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
             /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
             context.SS);
 
-    context.SS->SubDomains[pathId] = alter;
+    context.SS->SubDomains.Set(pathId, alter);
     context.SS->PersistSubDomain(db, pathId, *alter);
     context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
 

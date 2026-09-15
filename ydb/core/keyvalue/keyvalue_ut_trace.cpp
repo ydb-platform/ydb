@@ -100,14 +100,18 @@ void TestOneWrite(TString value, TVector<TString> &&expectedTraceVariants) {
     env.DoKVRequest(CreateWrite("key", std::move(value)));
 
     UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
-    UNIT_ASSERT_VALUES_EQUAL(env.WilsonUploader->Traces.size(), 1);
-    auto& trace = env.WilsonUploader->Traces.begin()->second;
+    // we expect one trace from DSProxy and one from KV-tablet
+    UNIT_ASSERT_VALUES_EQUAL(env.WilsonUploader->Traces.size(), 2);
 
-    bool found = false;
-    for (const TString &expectedTrace : expectedTraceVariants) {
-        found |= trace.ToString() == expectedTrace;
-    }
-    UNIT_ASSERT_C(found, trace.ToString());
+    bool oneIsGood = std::any_of(env.WilsonUploader->Traces.begin(), env.WilsonUploader->Traces.end(),
+        [&](const auto& v) {
+            const auto& [_, trace] = v;
+            return std::any_of(expectedTraceVariants.begin(), expectedTraceVariants.end(),
+                    [&](const TString& var) { return var == trace.ToString(); });
+        }
+    );
+
+    UNIT_ASSERT_C(oneIsGood, env.WilsonUploader->PrintTraces());
 }
 
 void TestOneRead(TString value, TString expectedTrace) {
@@ -121,10 +125,17 @@ void TestOneRead(TString value, TString expectedTrace) {
     UNIT_ASSERT_EQUAL(response.value(), value);
 
     UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
-    UNIT_ASSERT_EQUAL(env.WilsonUploader->Traces.size(), 1);
-    auto& trace = env.WilsonUploader->Traces.begin()->second;
+    // we expect one trace from DSProxy and one from KV-tablet
+    UNIT_ASSERT_VALUES_EQUAL(env.WilsonUploader->Traces.size(), 2);
 
-    UNIT_ASSERT_EQUAL(trace.ToString(), expectedTrace);
+    bool oneIsGood = std::any_of(env.WilsonUploader->Traces.begin(), env.WilsonUploader->Traces.end(),
+        [&](const auto& v) {
+            const auto& [_, trace] = v;
+            return trace.ToString() == expectedTrace;
+        }
+    );
+
+    UNIT_ASSERT_C(oneIsGood, env.WilsonUploader->PrintTraces());
 }
 
 Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {
@@ -146,6 +157,7 @@ TVector<std::string> PDiskLogWriteVariants = {
     "(PDisk.LogWrite -> "
         "[(PDisk.InScheduler) , (PDisk.InBlockDevice)]"
     ")",
+    "(PDisk.LogWrite)",
 };
 
 TVector<std::string> TabletWriteLogTempaltes = {
@@ -224,14 +236,10 @@ Y_UNIT_TEST(WriteSmall) {
     TVector<TString> canons = MakeCanons(
         "(KeyValue.Intermediate -> "
             "[(KeyValue.StorageRequest -> "
-                "[(DSProxy.Put -> "
-                    "[(Backpressure.InFlight -> "
-                        "[(VDisk.Log.Put)]"
-                    ")]"
-                ")]"
+                "[(DSProxy.Put)]"
             ") , "
             "(Tablet.Transaction -> "
-                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE}]"
+                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE} , (Tablet.Transaction.Complete)]"
             ")]"
         ")"
     );
@@ -242,19 +250,10 @@ Y_UNIT_TEST(WriteHuge) {
     TVector<TString> canons = MakeCanons(
         "(KeyValue.Intermediate -> "
             "[(KeyValue.StorageRequest -> "
-                "[(DSProxy.Put -> "
-                    "[(Backpressure.InFlight -> "
-                        "[(VDisk.HullHugeBlobChunkAllocator) , "
-                        "(VDisk.HullHugeKeeper.InWaitQueue -> "
-                            "[(VDisk.HugeBlobKeeper.Write -> "
-                                "[(VDisk.Log.PutHuge)]"
-                            ")]"
-                        ")]"
-                    ")]"
-                ")]"
+                "[(DSProxy.Put)]"
             ") , "
             "(Tablet.Transaction -> "
-                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE}]"
+                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE} , (Tablet.Transaction.Complete)]"
             ")]"
         ")"
     );
@@ -262,14 +261,12 @@ Y_UNIT_TEST(WriteHuge) {
 }
 
 Y_UNIT_TEST(ReadSmall) {
-    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get -> [(Backpressure.InFlight -> "
-        "[(VDisk.LevelIndexExtremeQueryViaBatcherMergeData)])])])])";
+    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get)])])";
     TestOneRead(SmallValue, std::move(canon));
 }
 
 Y_UNIT_TEST(ReadHuge) {
-    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get -> [(Backpressure.InFlight -> "
-        "[(VDisk.LevelIndexExtremeQueryViaBatcherMergeData -> [(VDisk.Query.ReadBatcher)])])])])])";
+    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageReadRequest -> [(DSProxy.Get)])])";
     TestOneRead(HugeValue, std::move(canon));
 }
 

@@ -1,0 +1,1 @@
+DECLARE $user_id AS Uint64; SELECT id, name, email FROM customers WHERE id = $user_id

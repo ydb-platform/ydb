@@ -1,4 +1,10 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "datashard_active_transaction.h"
+
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/read_table.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 
@@ -6,8 +12,22 @@ using namespace NKikimr::NDataShard;
 using namespace NSchemeShard;
 using namespace Tests;
 
+namespace {
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+        Tests::TServer::TPtr server,
+        NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+        ui64 tabletId,
+        ui64 ownerId,
+        ui64 cookie)
+{
+    return CompactTable(*server->GetRuntime(), tabletId, TTableId(ownerId, userTable.GetPathId()), false, cookie);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(DataShardCompaction) {
-    Y_UNIT_TEST(CompactBorrowed) {
+    Y_UNIT_TEST(ShouldCompact) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -18,75 +38,21 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
-        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-        // Split would fail otherwise :(
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-        auto senderSplit = runtime.AllocateEdgeActor();
-        ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1.at(0), 3);
-        WaitTxNotification(server, senderSplit, txId);
-
-        auto shards2 = GetTableShards(server, sender, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 2u);
-
-        {
-            auto stats = WaitTableStats(runtime, shards2.at(0));
-            Cerr << "Received shard stats:" << Endl << stats.DebugString();
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-            // NOTE: datashard always adds current shard to part owners, even if there are no parts
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 2u);
-            UNIT_ASSERT(owners.contains(shards1.at(0)));
-            UNIT_ASSERT(owners.contains(shards2.at(0)));
-        }
-
-        {
-            auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-            auto result = CompactBorrowed(runtime, shards2.at(0), tableId);
-            Cerr << "Compact result " << result.DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.GetTabletId(), shards2.at(0));
-            UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetOwnerId(), tableId.PathId.OwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetPathId().GetLocalId(), tableId.PathId.LocalPathId);
-        }
-
-        for (int i = 0; i < 5; ++i) {
-            auto stats = WaitTableStats(runtime, shards2.at(0));
-            // Cerr << "Received shard stats:" << Endl << stats.DebugString() << Endl;
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-            if (i < 4) {
-                if (owners.size() > 1) {
-                    continue;
-                }
-                if (owners.contains(shards1.at(0))) {
-                    continue;
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1u);
-            UNIT_ASSERT(owners.contains(shards2.at(0)));
-        }
-
-        {
-            auto result = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_VALUES_EQUAL(result,
-                "key = 1, value = 100\n"
-                "key = 2, value = 200\n"
-                "key = 3, value = 300\n"
-                "key = 4, value = 400\n");
-        }
+        auto [tables, ownerId] = GetTables(server, shards.at(0));
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 42u);
+        UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
-    Y_UNIT_TEST(CompactBorrowedTxStatus) {
+    Y_UNIT_TEST(ShouldNotCompactWhenBorrowed) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -97,88 +63,125 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Replicated(true)
-            .ReplicationConsistencyLevel(EConsistencyLevel::Global)
-        );
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
-        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1UL);
+        const auto originalShard = shards.at(0);
 
-        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        SetSplitMergePartCountLimit(&runtime, -1);
+        ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards.at(0), 3);
+        WaitTxNotification(server, sender, txId);
 
-        // We make some uncommitted changes first
-        ApplyChanges(server, shards1.at(0), tableId, "my-source", {
-            TChange{ .Offset = 0, .WriteTxId = 123, .Key = 1, .Value = 100 },
-            TChange{ .Offset = 1, .WriteTxId = 123, .Key = 2, .Value = 200 },
-            TChange{ .Offset = 2, .WriteTxId = 123, .Key = 3, .Value = 300 },
-            TChange{ .Offset = 3, .WriteTxId = 123, .Key = 4, .Value = 400 },
-        });
+        shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT(shards.size() > 1);
 
-        // Split would fail otherwise :(
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
-
-        // Redundant split, so we get an sst with uncommitted changes
-        auto senderSplit = runtime.AllocateEdgeActor();
-        ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards1.at(0), 10);
-        WaitTxNotification(server, senderSplit, txId);
-
-        auto shards2 = GetTableShards(server, sender, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 2u);
-
-        // Now we commit changes and split again, making borrowed sst + tx status
-        CommitWrites(server, { "/Root/table-1" }, 123);
-        txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards2.at(0), 3);
-        WaitTxNotification(server, senderSplit, txId);
-
-        auto shards3 = GetTableShards(server, sender, "/Root/table-1");
-        UNIT_ASSERT_VALUES_EQUAL(shards3.size(), 3u);
-
-        // Check stats on the first table, it would have borrowed parts from two shards
-        {
-            auto stats = WaitTableStats(runtime, shards3.at(0));
-            // Cerr << "Received shard stats:" << Endl << stats.DebugString();
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-            // NOTE: datashard always adds current shard to part owners, even if there are no parts
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 3u);
-            UNIT_ASSERT(owners.contains(shards1.at(0)));
-            UNIT_ASSERT(owners.contains(shards2.at(0)));
-            UNIT_ASSERT(owners.contains(shards3.at(0)));
-        }
-
-        CompactBorrowed(runtime, shards3.at(0), tableId);
-
-        for (int i = 0; i < 5; ++i) {
-            auto stats = WaitTableStats(runtime, shards3.at(0));
-            // Cerr << "Received shard stats:" << Endl << stats.DebugString();
-            const auto& ownersProto = stats.GetUserTablePartOwners();
-            THashSet<ui64> owners(ownersProto.begin(), ownersProto.end());
-            if (i < 4) {
-                if (owners.size() > 1) {
-                    continue;
-                }
-                if (owners.contains(shards1.at(0)) || owners.contains(shards2.at(0))) {
-                    continue;
-                }
-            }
-            UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1u);
-            UNIT_ASSERT(owners.contains(shards3.at(0)));
+        for (auto shard: shards) {
+            auto [tables, ownerId] = GetTables(server, shard);
+            auto compactionResult = CompactTable(server, tables["table-1"], shard, ownerId, 43u);
+            UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
         }
 
         {
-            auto result = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_VALUES_EQUAL(result,
-                "key = 1, value = 100\n"
-                "key = 2, value = 200\n"
-                "key = 3, value = 300\n"
-                "key = 4, value = 400\n");
+            auto [tables, ownerId] = GetTables(server, originalShard);
+            // try to compact original table (should be inactive now)
+            auto compactionResult = CompactTable(server, tables["table-1"], originalShard, ownerId, 21u);
+            UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::FAILED);
         }
+    }
+
+    Y_UNIT_TEST(ShouldNotCompactWhenCopyTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+
+        auto txIdCopy = AsyncCreateCopyTable(server, sender, "/Root", "table-2", "/Root/table-1");
+        WaitTxNotification(server, sender, txIdCopy);
+
+        {
+            auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+            auto [tables, ownerId] = GetTables(server, shards.at(0));
+            auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 33u);
+            UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::LOANED);
+        }
+
+        {
+            auto shards = GetTableShards(server, sender, "/Root/table-2");
+
+            auto [tables, ownerId] = GetTables(server, shards.at(0));
+            auto compactionResult = CompactTable(server, tables["table-2"], shards.at(0), ownerId, 55u);
+            UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldNotCompactEmptyTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        auto [tables, ownerId] = GetTables(server, shards.at(0));
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 134u);
+        UNIT_ASSERT(compactionResult.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+    }
+
+    Y_UNIT_TEST(ShouldNotCompactSecondTime) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        auto [tables, ownerId] = GetTables(server, shards.at(0));
+        auto compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 11u);
+        UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        compactionResult = CompactTable(server, tables["table-1"], shards.at(0), ownerId, 13u);
+        UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
     }
 }
 

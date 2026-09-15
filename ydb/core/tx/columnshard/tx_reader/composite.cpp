@@ -1,5 +1,3 @@
 #include "composite.h"
 
-namespace NKikimr {
-
-}
+namespace NKikimr {}

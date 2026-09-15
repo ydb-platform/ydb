@@ -4,7 +4,7 @@
 
     Lexers for CSS and related stylesheet formats.
 
-    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -96,7 +96,7 @@ _keyword_values = (
     'padding-box', 'page', 'pan-down', 'pan-left', 'pan-right', 'pan-up',
     'pan-x', 'pan-y', 'paused', 'petite-caps', 'pixelated', 'pointer',
     'preserve-3d', 'progress', 'proximity', 'relative', 'repeat',
-    'repeat no-repeat', 'repeat-x', 'repeat-y', 'reverse', 'ridge', 'right',
+    'repeat no-repeat', 'repeat-x', 'repeat-y', 'reverse', 'revert', 'ridge', 'right',
     'round', 'row', 'row-resize', 'row-reverse', 'rtl', 'ruby', 'ruby-base',
     'ruby-base-container', 'ruby-text', 'ruby-text-container', 'run-in',
     'running', 's-resize', 'sans-serif', 'saturation', 'scale-down', 'screen',
@@ -590,13 +590,43 @@ class LessCssLexer(CssLexer):
     version_added = '2.1'
 
     tokens = {
+        # FIXME: It's not currently possible to simply do the following,
+        #        as `include('basics')` doesn't take overrides into account:
+        # 'basics': [
+        #     (r'//.*\n', Comment.Single),
+        #     (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
+        #     inherit,
+        # ],
         'root': [
             (r'@\w+', Name.Variable),
+            (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
+            inherit,
+        ],
+        'atcontent': [
+            (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
+            inherit,
+        ],
+        'atrule': [
+            (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
             inherit,
         ],
         'content': [
             (r'\{', Punctuation, '#push'),
             (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
+            inherit,
+        ],
+        'value-start': [
+            (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
+            inherit,
+        ],
+        'function-start': [
+            (r'//.*\n', Comment.Single),
+            (r'/\*(?:.|\n)*?\*/', Comment.Multiline),
             inherit,
         ],
     }

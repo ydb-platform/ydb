@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr {
 
@@ -10,6 +12,7 @@ struct TPathId;
 namespace NSchemeShard {
 
 struct TOperationContext;
+struct TTxState;
 
 } // namespace NSchemeShard
 
@@ -31,4 +34,4 @@ void CheckSrcDirOnPropose(
     bool isInsideTableIndexPath,
     TTxId op = InvalidTxId);
 
-} // namespace NKikimr::NSchemeShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

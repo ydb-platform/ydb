@@ -17,6 +17,10 @@ Async http client/server framework
    :target: https://codecov.io/gh/aio-libs/aiohttp
    :alt: codecov.io status for master branch
 
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/aiohttp
+   :alt: Codspeed.io status for aiohttp
+
 .. image:: https://badge.fury.io/py/aiohttp.svg
    :target: https://pypi.org/project/aiohttp
    :alt: Latest PyPI package version
@@ -148,7 +152,7 @@ Communication channels
 
 *aio-libs Discussions*: https://github.com/aio-libs/aiohttp/discussions
 
-*gitter chat* https://gitter.im/aio-libs/Lobby
+*Matrix*: `#aio-libs:matrix.org <https://matrix.to/#/#aio-libs:matrix.org>`_
 
 We support `Stack Overflow
 <https://stackoverflow.com/questions/tagged/aiohttp>`_.
@@ -157,7 +161,6 @@ Please add *aiohttp* tag to your question there.
 Requirements
 ============
 
-- async-timeout_
 - attrs_
 - multidict_
 - yarl_

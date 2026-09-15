@@ -46,6 +46,9 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
             return EOperationClass::Create;
 
         // Simple operations that drop paths
@@ -79,6 +82,9 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransfer:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropTransferCascade:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
             return EOperationClass::Drop;
 
         // Simple operations that alter paths
@@ -106,6 +112,8 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTransfer:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterSecret:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
             return EOperationClass::Alter;
 
         // Compound or special operations
@@ -118,6 +126,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
         case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
@@ -132,16 +141,26 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamAtTable:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplicationCascade:
         case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
         case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
         case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreLockTargets:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreUnlockTargets:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
             return EOperationClass::Other;
 
         // intentionally no default -- to trigger [-Werror,-Wswitch] compile error on any new entry not handled here

@@ -1,0 +1,49 @@
+#include "ownerinfo.h"
+
+#include <ydb/core/persqueue/events/global.h>
+#include <util/generic/guid.h>
+#include <util/string/escape.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
+namespace NKikimr {
+namespace NPQ {
+
+    void TOwnerInfo::GenerateCookie(const TString& owner, const TActorId& pipeClient, const TActorId& sender,
+                                            const TString& topicName, const TPartitionId& partition, const TActorContext& ctx) {
+        TStringBuilder s;
+        s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
+        ++OwnerGeneration;
+        AFL_ENSURE(OwnerCookie != s)("topic_name", topicName)("partition", partition.ToString());
+        OwnerCookie = s;
+        NextMessageNo = 0;
+        NeedResetOwner = false;
+        PipeClient = pipeClient;
+        if (Sender) {
+            THolder<TEvPersQueue::TEvResponse> response = MakeHolder<TEvPersQueue::TEvResponse>();
+            response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+            response->Record.SetErrorCode(NPersQueue::NErrorCode::WRONG_COOKIE);
+            response->Record.SetErrorReason(TStringBuilder() << "ownership session is killed by another session with id " << OwnerCookie
+                                                             << " partition id " << partition.OriginalPartitionId);
+            ctx.Send(Sender, response.Release());
+        }
+        Sender = sender;
+        ReservedSize = 0;
+        Requests.clear();
+        //WaitToChageOwner not touched - they will wait for this owner to be dropped - this new owner must have force flag
+        YDB_LOG_INFO_CTX(ctx, "New Cookie generated for partition topic owner",
+            {"s", s},
+            {"partition", partition},
+            {"topicName", topicName},
+            {"escapeCOwner", EscapeC(owner)});
+    }
+
+    TStringBuf TOwnerInfo::GetOwnerFromOwnerCookie(const TString& cookie) {
+        auto pos = cookie.rfind('|');
+        if (pos == TString::npos)
+            pos = cookie.size();
+        TStringBuf res = TStringBuf(cookie.c_str(), pos);
+        return res;
+    }
+} // NPQ
+} // NKikimr

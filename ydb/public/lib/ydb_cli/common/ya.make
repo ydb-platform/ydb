@@ -2,21 +2,34 @@ LIBRARY(common)
 
 SRCS(
     aws.cpp
+    build_info.cpp
     cert_format_converter.cpp
     client_command_options.cpp
+    colors.cpp
     command.cpp
     command_utils.cpp
     common.cpp
+    completion_generator.cpp
+    completion_graph_json.cpp
+    completion.cpp
+    config.cpp
+    log.cpp
     csv_parser.cpp
+    describe.cpp
+    download_manager.cpp
+    duration.cpp
     examples.cpp
     format.cpp
+    ftxui.cpp
     interactive.cpp
-    interruptible.cpp
+    interruptable.cpp
+    lazy_driver.cpp
+    local_paths.cpp
+    markdown.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
     pg_dump_parser.cpp
-    plan2svg.cpp
     pretty_table.cpp
     print_operation.cpp
     print_utils.cpp
@@ -24,26 +37,39 @@ SRCS(
     progress_bar.cpp
     progress_indication.cpp
     query_stats.cpp
+    query_utils.cpp
+    scheme_query_utils.cpp
+    tx_mode_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp
     root.cpp
+    scoped_driver.cpp
+    scheme_path_completer.cpp
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
+    utf8_utils.cpp
     waiting_bar.cpp
+    ydb_path.cpp
     ydb_updater.cpp
     yt.cpp
 )
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    contrib/libs/ftxui
     contrib/libs/openssl
-    library/cpp/config
+    contrib/libs/yaml-cpp
+    contrib/restricted/patched/replxx
     library/cpp/getopt
+    library/cpp/http/simple
     library/cpp/json/writer
-    library/cpp/yaml/as
+    library/cpp/logger
+    library/cpp/regex/pcre
     library/cpp/string_utils/csv
+    library/cpp/string_utils/url
+    library/cpp/yaml/as
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
@@ -52,12 +78,17 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/secret
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
+    ydb/library/plan2svg
+    ydb/library/yverify_stream
+    ydb/public/lib/ydb_cli/common/ini_config
     ydb/public/lib/ydb_cli/common/yql_parser
 )
 
@@ -67,6 +98,7 @@ GENERATE_ENUM_SERIALIZATION(parameters.h)
 END()
 
 RECURSE(
+    ini_config
     yql_parser
 )
 

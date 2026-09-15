@@ -4,9 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -19,6 +20,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
+    ydb/library/superlemmer_stub
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/result
@@ -27,12 +29,17 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_filter_kmeans.cpp
+    ut_fulltext.cpp
+    ut_fulltext_dict.cpp
+    ut_helpers.cpp
     ut_local_kmeans.cpp
     ut_prefix_kmeans.cpp
     ut_recompute_kmeans.cpp
     ut_reshuffle_kmeans.cpp
     ut_sample_k.cpp
     ut_secondary_index.cpp
+    ut_unique_index.cpp
 )
 
 END()

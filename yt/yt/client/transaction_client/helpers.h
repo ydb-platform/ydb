@@ -23,7 +23,7 @@ struct TReadTimestampRange
 //! the type of #id must be either
 //! #EObjectType::Transaction, #EObjectType::NestedTransaction,
 //! #EObjectType::UploadTransaction, #EObjectType::UploadNestedTransaction.
-//! #EObjectType::SytemTransaction or #EObjectType::SystemNestedTransaction.
+//! #EObjectType::SystemTransaction or #EObjectType::SystemNestedTransaction.
 bool IsMasterTransactionId(TTransactionId id);
 
 //! Checks if #type is either #EObjectType::AtomicTabletTransaction or
@@ -39,7 +39,7 @@ void ValidateTabletTransactionId(TTransactionId id);
 //! the type of #id must be one of
 //! #EObjectType::Transaction, #EObjectType::NestedTransaction,
 //! #EObjectType::UploadTransaction, #EObjectType::UploadNestedTransaction.
-//! #EObjectType::SytemTransaction or #EObjectType::SystemNestedTransaction.
+//! #EObjectType::SystemTransaction or #EObjectType::SystemNestedTransaction.
 void ValidateMasterTransactionId(TTransactionId id);
 
 //! Returns a range of instants containing a given timestamp.

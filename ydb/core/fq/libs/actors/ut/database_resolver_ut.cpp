@@ -1,4 +1,3 @@
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/events/events.h>
@@ -33,7 +32,6 @@ TString MakeErrorPrefix(
 TString NoPermissionStr = "you have no permission to resolve database id into database endpoint.";
 
 struct TTestBootstrap : public TTestActorRuntime {
-    NConfig::TCheckpointCoordinatorConfig Settings;
     NActors::TActorId DatabaseResolver;
     NActors::TActorId HttpProxy;
     NActors::TActorId AsyncResolver;
@@ -49,7 +47,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         AsyncResolver = AllocateEdgeActor();
 
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
-        auto credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory("", true, "");
+        auto credentialsFactory = NYql::CreateStructuredTokenCredentialsOverTokenAccessorFactory("", true, "");
 
         DatabaseResolver = Register(CreateDatabaseResolver(
             HttpProxy,

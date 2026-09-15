@@ -5,7 +5,9 @@
 #include "yql_type_helpers.h"
 
 #include <yql/essentials/ast/yql_constraint.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_configuration.h>
 
 #include <util/stream/file.h>
 #include <util/string/join.h>
@@ -16,6 +18,24 @@ using namespace NKikimr;
 
 const TString ModuleResolverComponent = "ModuleResolver";
 
+TTypeAnnotationContext::TTypeAnnotationContext()
+    : RuntimeSettings(MakeRuntimeSettingsMutable())
+{
+}
+
+TTypeAnnotationContext::~TTypeAnnotationContext() = default;
+
+void TTypeAnnotationContext::UpdateDecimalConversionMode(EDecimalConversionMode decimalConversionMode) {
+    DecimalConversionMode_ = decimalConversionMode;
+}
+
+EDecimalConversionMode TTypeAnnotationContext::GetDecimalConversionMode() const {
+    if (IsAvailableOn(LangVer, BackportMode, NFeature::AlwaysWithFixDecimalConversionMode)) {
+        return EDecimalConversionMode::WithCommonTypeFixup;
+    }
+    return DecimalConversionMode_;
+}
+
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
         InitializeResult = DoInitialize(ctx);
@@ -25,9 +45,14 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
 }
 
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
-    for (auto& x : DataSources) {
-        if (!x->Initialize(ctx)) {
+    THashMap<TString, NLayers::ILayersIntegrationPtr> layersIntegrations;
+
+    for (auto& [name, source] : DataSourceMap) {
+        if (!source->Initialize(ctx)) {
             return false;
+        }
+        if (auto layersIntegration = source->GetLayersIntegration()) {
+            layersIntegrations[name] = layersIntegration;
         }
     }
 
@@ -40,7 +65,10 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataUrls();
 
+    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
+    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, layersIntegrations);
     return true;
 }
 
@@ -56,6 +84,7 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
     NoBlockRewriteCallableStats.clear();
     NoBlockRewriteTypeStats.clear();
+    LayersRegistry->ClearLayers();
 }
 
 void TTypeAnnotationContext::IncNoBlockCallable(TStringBuf callableName) {
@@ -80,7 +109,7 @@ void TTypeAnnotationContext::IncNoBlockType(NUdf::EDataSlot slot) {
 
 namespace {
 
-template<typename T>
+template <typename T>
 TVector<T> GetMaxByCount(const THashMap<T, size_t>& stats, size_t maxCount) {
     TVector<T> result;
     result.reserve(stats.size());
@@ -89,19 +118,19 @@ TVector<T> GetMaxByCount(const THashMap<T, size_t>& stats, size_t maxCount) {
     }
     size_t n = std::min(maxCount, stats.size());
     std::partial_sort(result.begin(), result.begin() + n, result.end(),
-        [&stats](const T& l, const T& r) {
-            const auto& cntLeft = stats.find(l)->second;
-            const auto& cntRight = stats.find(r)->second;
-            if (cntLeft != cntRight) {
-                return cntLeft < cntRight;
-            }
-            return l < r;
-        });
+                      [&stats](const T& l, const T& r) {
+                          const auto& cntLeft = stats.find(l)->second;
+                          const auto& cntRight = stats.find(r)->second;
+                          if (cntLeft != cntRight) {
+                              return cntLeft < cntRight;
+                          }
+                          return l < r;
+                      });
     result.resize(n);
     return result;
 }
 
-}
+} // namespace
 
 TVector<TString> TTypeAnnotationContext::GetTopNoBlocksCallables(size_t maxCount) const {
     return GetMaxByCount(NoBlockRewriteCallableStats, maxCount);
@@ -119,17 +148,11 @@ TString TColumnOrder::Find(const TString& name) const {
     return it->second;
 }
 
-TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) {
-    GeneratedToOriginal_ = rhs.GeneratedToOriginal_;
-    Order_ = rhs.Order_;
-    UseCountLcase_ = rhs.UseCountLcase_;
-    UseCount_ = rhs.UseCount_;
-    return *this;
-}
+TColumnOrder& TColumnOrder::operator=(const TColumnOrder& rhs) = default;
 
 TColumnOrder::TColumnOrder(const TVector<TString>& order) {
     Reserve(order.size());
-    for (auto& e: order) {
+    for (auto& e : order) {
         AddColumn(e);
     }
 }
@@ -183,7 +206,7 @@ void TColumnOrder::Clear() {
 
 void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {
     TColumnOrder newOrder;
-    for (const auto& e: Order_) {
+    for (const auto& e : Order_) {
         if (!fn(e.LogicalName)) {
             newOrder.AddColumn(e.LogicalName);
         }
@@ -193,7 +216,7 @@ void TColumnOrder::EraseIf(const std::function<bool(const TString&)>& fn) {
 
 void TColumnOrder::EraseIf(const std::function<bool(const TOrderedItem&)>& fn) {
     TColumnOrder newOrder;
-    for (const auto& e: Order_) {
+    for (const auto& e : Order_) {
         if (!fn(e)) {
             newOrder.AddColumn(e.LogicalName);
         }
@@ -211,7 +234,7 @@ TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t
         if (maxColumns.Defined() && columnOrder->Size() > *maxColumns) {
             size_t i = 0;
             ss << "[";
-            for (auto& [e, gen_e]: *columnOrder) {
+            for (auto& [e, gen_e] : *columnOrder) {
                 if (i++ >= *maxColumns) {
                     break;
                 }
@@ -224,8 +247,7 @@ TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t
         } else {
             ss << "[";
             size_t i = 0;
-            for (auto& [e, gen_e]: *columnOrder) {
-
+            for (auto& [e, gen_e] : *columnOrder) {
                 ss << "(" << e << "->" << gen_e << ")";
                 if (++i != columnOrder->Size()) {
                     ss << ", ";
@@ -252,13 +274,12 @@ ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash) {
     return hash;
 }
 
-
 TMaybe<TColumnOrder> TTypeAnnotationContext::LookupColumnOrder(const TExprNode& node) const {
     return ColumnOrderStorage->Lookup(node.UniqueId());
 }
 
 IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNode& node,
-    const TColumnOrder& columnOrder, TExprContext& ctx)
+                                                                  const TColumnOrder& columnOrder, TExprContext& ctx)
 {
     if (!DeriveColumnOrder) {
         return IGraphTransformer::TStatus::Ok;
@@ -269,7 +290,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 
     if (auto existing = ColumnOrderStorage->Lookup(node.UniqueId())) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content()));
+                            TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content()));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -283,7 +304,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
         auto worldType = nodeType->Cast<TTupleExprType>()->GetItems()[0];
         if (worldType->GetKind() != ETypeAnnotationKind::World) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                TStringBuilder() << "Expected world type as type of first tuple element, but got: " << *worldType));
+                                TStringBuilder() << "Expected world type as type of first tuple element, but got: " << *worldType));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -296,8 +317,8 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
         auto it = allColumns.find(gen_col);
         if (it == allColumns.end()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "
-                                 << node.Content() << " with type: " << *node.GetTypeAnn()));
+                                TStringBuilder() << "Unable to set column order " << FormatColumnOrder(columnOrder) << " for node "
+                                                 << node.Content() << " with type: " << *node.GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
         allColumns.erase(it);
@@ -305,8 +326,8 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 
     if (!allColumns.empty() && !(allColumns.size() == 1 && *allColumns.begin() == BlockLengthColumnName)) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Some columns are left unordered with column order " << FormatColumnOrder(columnOrder) << " for node "
-                             << node.Content() << " with type: " << *node.GetTypeAnn()));
+                            TStringBuilder() << "Some columns are left unordered with column order " << FormatColumnOrder(columnOrder) << " for node "
+                                             << node.Content() << " with type: " << *node.GetTypeAnn()));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -319,8 +340,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 TString TTypeAnnotationContext::GetDefaultDataSource() const {
     if (!PureResultDataSource.empty()) {
         YQL_ENSURE(Find(AvailablePureResultDataSources.begin(),
-            AvailablePureResultDataSources.end(), PureResultDataSource)
-            != AvailablePureResultDataSources.end());
+                        AvailablePureResultDataSources.end(), PureResultDataSource) != AvailablePureResultDataSources.end());
         return PureResultDataSource;
     }
 
@@ -432,34 +452,36 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         if (it != Libs_.end() && it->second.contains(packageVersion)) {
             // TODO (YQL-7170): find better fix
             // ctx.AddError(TIssue({0,0,TString(fullName)}, TStringBuilder() << "File is already loaded as library"));
-            return true;  // false
+            return true; // false
         }
     }
 
     TString body;
     if (!QContext_.CanRead()) {
         switch (block->Type) {
-        case EUserDataType::RAW_INLINE_DATA:
-            body = block->Data;
-            break;
-        case EUserDataType::PATH:
-            body = TFileInput(block->Data).ReadAll();
-            break;
-        case EUserDataType::URL:
-            if (!UrlLoader_) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
-                    << "\" from url, because url loader is not available"));
-                return false;
-            }
+            case EUserDataType::RAW_INLINE_DATA:
+                body = block->Data;
+                break;
+            case EUserDataType::PATH:
+                body = TFileInput(block->Data).ReadAll();
+                break;
+            case EUserDataType::URL: {
+                if (!UrlLoader_) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
+                                                              << "\" from url, because url loader is not available"));
+                    return false;
+                }
 
-            body = UrlLoader_->Load(block->Data, block->UrlToken);
-            break;
-        default:
-            throw yexception() << "Unknown block type " << block->Type;
+                auto blockForDownload = UserData_->GetUserDataBlockForDownload(UserData_->ComposeUserDataKey(fullName));
+                body = UrlLoader_->Load(blockForDownload.Data, blockForDownload.UrlToken);
+                break;
+            }
+            default:
+                throw yexception() << "Unknown block type " << block->Type;
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos);
+    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos);
 }
 
 bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
@@ -484,24 +506,40 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         if (it != Libs_.end() && it->second.contains(packageVersion)) {
             // TODO (YQL-7170): find better fix
             // ctx.AddError(TIssue({0,0,TString(fullName)}, TStringBuilder() << "File is already loaded as library"));
-            return true;  // false
+            return true; // false
         }
     }
 
-    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
+    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
+}
+
+bool TModuleResolver::IsSExpr(bool isYql, bool isYqls, const TString& body) const {
+    if (isYqls) {
+        return true;
+    }
+
+    if (!isYql) {
+        return false;
+    }
+
+    if (UseCanonicalLibrarySuffix_) {
+        return body.StartsWith('(');
+    } else {
+        return true;
+    }
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
     auto query = body;
     if (QContext_.CanRead()) {
-        auto item = QContext_.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
+        auto item = QContext_.GetReader()->Get({.Component = ModuleResolverComponent, .Label = fullName}).GetValueSync();
         if (!item) {
             throw yexception() << "Missing replay data";
         }
 
         query = item->Value;
     } else if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = ModuleResolverComponent, .Label = fullName}, query).GetValueSync();
     }
 
     const auto addSubIssues = [](TIssue&& issue, const TIssues& issues) {
@@ -513,13 +551,13 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
 
     TAstParseResult astRes;
     if (sExpr) {
-        astRes = ParseAst(query, nullptr, fullName);
+        astRes = ParseAst(query, /*externalPool=*/nullptr, fullName);
     } else {
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         settings.File = fullName;
         settings.ClusterMapping = ClusterMapping_;
-        settings.Flags = SqlFlags_;
+        ParseTranslationSettings(SqlFlags_, settings);
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix_;
@@ -669,7 +707,7 @@ TString TModuleResolver::SubstParameters(const TString& str) {
         return str;
     }
 
-    return ::NYql::SubstParameters(str, Parameters_, nullptr);
+    return ::NYql::SubstParameters(str, Parameters_, /*usedNames=*/nullptr);
 }
 
 } // namespace NYql

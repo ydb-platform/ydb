@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
 
     std::optional<TLogoBlobID> current;
 
-    const auto species = TBlobStorageGroupType::ErasureSpeciesByName(argv[1]);
-    if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
-        Cerr << "invalid erasure species name" << Endl;
+    TBlobStorageGroupType::EErasureSpecies species;
+    if (!TBlobStorageGroupType::ParseErasureName(species, argv[1])) {
+        Cerr << "invalid erasure species name: " << argv[1] << Endl;
         return 1;
     }
     TBlobStorageGroupType gtype(species);

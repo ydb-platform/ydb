@@ -2,8 +2,10 @@
 
 #include "constants.h"
 #include "data_splitter.h"
+#include "import_tui.h"
 #include "log.h"
 #include "log_backend.h"
+#include "path_checker.h"
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -17,6 +19,8 @@
 #include <util/random/random.h>
 #include <util/random/shuffle.h>
 #include <util/string/printf.h>
+
+#include <google/protobuf/arena.h>
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
@@ -43,17 +47,21 @@ using Clock = std::chrono::steady_clock;
 
 //-----------------------------------------------------------------------------
 
-constexpr int MAX_RETRIES = 100;
-constexpr int BACKOFF_MILLIS = 10;
-constexpr int BACKOFF_CEILING = 5;
+constexpr int UPSERT_MAX_RETRIES = 100;
+constexpr int UPSERT_BACKOFF_MILLIS = 10;
+constexpr int UPSERT_BACKOFF_CEILING = 5;
+
+constexpr int INDEX_CHECK_MAX_RETRIES = 10;
+constexpr int INDEX_CHECK_BACKOFF_MILLIS = 1000;
+constexpr int INDEX_CHECK_BACKOFF_CEILING = 6;
 
 constexpr auto INDEX_PROGRESS_CHECK_INTERVAL = std::chrono::seconds(1);
 
 //-----------------------------------------------------------------------------
 
-int GetBackoffWaitMs(int retryCount) {
-    const int waitTimeCeilingMs = (1 << BACKOFF_CEILING) * BACKOFF_MILLIS;
-    int waitTimeMs = BACKOFF_MILLIS;
+int GetBackoffWaitMs(int retryCount, int millis, int ceiling) {
+    const int waitTimeCeilingMs = (1 << ceiling) * millis;
+    int waitTimeMs = millis;
 
     for (int i = 0; i < retryCount; ++i) {
         waitTimeMs = std::min(waitTimeMs * 2, waitTimeCeilingMs);
@@ -66,14 +74,14 @@ int GetBackoffWaitMs(int retryCount) {
 //-----------------------------------------------------------------------------
 
 // Generates a random string of length (strLen-1) to match Benchbase's TPCCUtil.randomStr behavior
-TString RandomStringBenchbase(int strLen, char baseChar = 'a') {
+TString RandomStringBenchbase(TReallyFastRng32& fastRng, int strLen, char baseChar = 'a') {
     if (strLen > 1) {
         int actualLength = strLen - 1;
         TString result;
         result.reserve(actualLength);
 
         for (int i = 0; i < actualLength; ++i) {
-            result += static_cast<char>(baseChar + RandomNumber(0, 25));
+            result += static_cast<char>(baseChar + RandomNumber(fastRng, 0, 25));
         }
         return result;
     } else {
@@ -82,24 +90,24 @@ TString RandomStringBenchbase(int strLen, char baseChar = 'a') {
 }
 
 // Generates a random string with [a-z] characters
-TString RandomAlphaString(int minLength, int maxLength) {
-    int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'a');
+TString RandomAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
+    int length = RandomNumber(fastRng, minLength, maxLength);
+    return RandomStringBenchbase(fastRng, length, 'a');
 }
 
 // Generates a random string with [A-Z] characters
-TString RandomUpperAlphaString(int minLength, int maxLength) {
-    int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'A');
+TString RandomUpperAlphaString(TReallyFastRng32& fastRng, int minLength, int maxLength) {
+    int length = RandomNumber(fastRng, minLength, maxLength);
+    return RandomStringBenchbase(fastRng, length, 'A');
 }
 
 // Generates a random string with [09] characters
-TString RandomNumericString(int length) {
+TString RandomNumericString(TReallyFastRng32& fastRng, int length) {
     TString result;
     result.reserve(length);
 
     for (int i = 0; i < length; ++i) {
-        result += static_cast<char>('0' + RandomNumber(0, 9));
+        result += static_cast<char>('0' + RandomNumber(fastRng, 0, 9));
     }
     return result;
 }
@@ -120,38 +128,49 @@ int GetRandomCount(int warehouseId, int customerId, int districtId) {
 
 //-----------------------------------------------------------------------------
 
-NTable::TBulkUpsertResult LoadItems(NTable::TTableClient& client, const TString& tableFullPath, TLog* Log) {
+NTable::TBulkUpsertResult LoadItems(
+    NTable::TTableClient& client,
+    const TString& tableFullPath,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
+    TLog* Log)
+{
     LOG_T("Loading " << ITEM_COUNT << " items...");
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int i = 1; i <= ITEM_COUNT; ++i) {
         TString data;
-        int randPct = RandomNumber(1, 100);
-        int len = RandomNumber(26, 50);
+        int randPct = RandomNumber(fastRng, 1, 100);
+        int len = RandomNumber(fastRng, 26, 50);
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 .. 50]
-            data = RandomStringBenchbase(len);
+            data = RandomStringBenchbase(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere in
             // middle
-            int startORIGINAL = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(len - startORIGINAL - 8);
+            int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
+            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("I_ID").Int32(i)
-            .AddMember("I_NAME").Utf8(RandomAlphaString(14, 24))
-            .AddMember("I_PRICE").Double(RandomNumber(100, 10000) / 100.0)
+            .AddMember("I_NAME").Utf8(RandomAlphaString(fastRng, 14, 24))
+            .AddMember("I_PRICE").Double(RandomNumber(fastRng, 100, 10000) / 100.0)
             .AddMember("I_DATA").Utf8(data)
-            .AddMember("I_IM_ID").Int32(RandomNumber(1, 10000))
+            .AddMember("I_IM_ID").Int32(RandomNumber(fastRng, 1, 10000))
             .EndStruct();
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -161,30 +180,37 @@ NTable::TBulkUpsertResult LoadWarehouses(
     const TString& tableFullPath,
     int startId,
     int lastId,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading warehouses " << startId << " to " << lastId);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int warehouseId = startId; warehouseId <= lastId; ++warehouseId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("W_ID").Int32(warehouseId)
-            .AddMember("W_YTD").Double(300000.00)
-            .AddMember("W_TAX").Double(RandomNumber(0, 2000) / 10000.0)
-            .AddMember("W_NAME").Utf8(RandomAlphaString(6, 10))
-            .AddMember("W_STREET_1").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_STREET_2").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_CITY").Utf8(RandomAlphaString(10, 20))
-            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(3, 3))
+            .AddMember("W_YTD").Double(DISTRICT_INITIAL_YTD * DISTRICT_COUNT)
+            .AddMember("W_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
+            .AddMember("W_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
+            .AddMember("W_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("W_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
             .AddMember("W_ZIP").Utf8("123456789")
             .EndStruct();
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -195,11 +221,13 @@ NTable::TBulkUpsertResult LoadStock(
     int wh,
     int itemId,
     int itemsToLoad,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading stock for warehouse " << wh << " items " << itemId << " to " << (itemId + itemsToLoad - 1));
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int i = 0; i < itemsToLoad; ++i) {
@@ -207,42 +235,47 @@ NTable::TBulkUpsertResult LoadStock(
 
         // s_data - match Benchbase inline logic exactly
         TString data;
-        int randPct = RandomNumber(1, 100);
-        int len = RandomNumber(26, 50);
+        int randPct = RandomNumber(fastRng, 1, 100);
+        int len = RandomNumber(fastRng, 26, 50);
         if (randPct > 10) {
             // 90% of time i_data isa random string of length [26 ..
             // 50]
-            data = RandomStringBenchbase(len);
+            data = RandomStringBenchbase(fastRng, len);
         } else {
             // 10% of time i_data has "ORIGINAL" crammed somewhere
             // in middle
-            int startORIGINAL = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(len - startORIGINAL - 8);
+            int startORIGINAL = RandomNumber(fastRng, 2, len - 8);
+            data = RandomStringBenchbase(fastRng, startORIGINAL) + "ORIGINAL" + RandomStringBenchbase(fastRng, len - startORIGINAL - 8);
         }
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("S_W_ID").Int32(wh)
             .AddMember("S_I_ID").Int32(currentItemId)
-            .AddMember("S_QUANTITY").Int32(RandomNumber(10, 100))
+            .AddMember("S_QUANTITY").Int32(RandomNumber(fastRng, 10, 100))
             .AddMember("S_ORDER_CNT").Int32(0)
             .AddMember("S_REMOTE_CNT").Int32(0)
             .AddMember("S_DATA").Utf8(data)
-            .AddMember("S_DIST_01").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_02").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_03").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_04").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_05").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_06").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_07").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_08").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_09").Utf8(RandomStringBenchbase(24))
-            .AddMember("S_DIST_10").Utf8(RandomStringBenchbase(24))
+            .AddMember("S_DIST_01").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_02").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_03").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_04").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_05").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_06").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_07").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_08").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_09").Utf8(RandomStringBenchbase(fastRng, 24))
+            .AddMember("S_DIST_10").Utf8(RandomStringBenchbase(fastRng, 24))
             .EndStruct();
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -252,34 +285,41 @@ NTable::TBulkUpsertResult LoadDistricts(
     const TString& tableFullPath,
     int startId,
     int lastId,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading districts for warehouses " << startId << " to " << lastId);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int warehouseId = startId; warehouseId <= lastId; ++warehouseId) {
         for (int districtId = DISTRICT_LOW_ID; districtId <= DISTRICT_HIGH_ID; ++districtId) {
-            valueBuilder.AddListItem()
-                .BeginStruct()
-                .AddMember("D_W_ID").Int32(warehouseId)
-                .AddMember("D_ID").Int32(districtId)
-                .AddMember("D_YTD").Double(30000.00)
-                .AddMember("D_TAX").Double(RandomNumber(0, 2000) / 10000.0)
-                .AddMember("D_NEXT_O_ID").Int32(CUSTOMERS_PER_DISTRICT + 1)
-                .AddMember("D_NAME").Utf8(RandomAlphaString(6, 10))
-                .AddMember("D_STREET_1").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_STREET_2").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_CITY").Utf8(RandomAlphaString(10, 20))
-                .AddMember("D_STATE").Utf8(RandomUpperAlphaString(3, 3))
-                .AddMember("D_ZIP").Utf8("123456789")
-                .EndStruct();
+                    valueBuilder.AddListItem()
+            .BeginStruct()
+            .AddMember("D_W_ID").Int32(warehouseId)
+            .AddMember("D_ID").Int32(districtId)
+            .AddMember("D_YTD").Double(DISTRICT_INITIAL_YTD)
+            .AddMember("D_TAX").Double(RandomNumber(fastRng, 0, 2000) / 10000.0)
+            .AddMember("D_NEXT_O_ID").Int32(CUSTOMERS_PER_DISTRICT + 1)
+            .AddMember("D_NAME").Utf8(RandomAlphaString(fastRng, 6, 10))
+            .AddMember("D_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("D_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
+            .AddMember("D_ZIP").Utf8("123456789")
+            .EndStruct();
         }
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -289,14 +329,16 @@ NTable::TBulkUpsertResult LoadCustomers(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading customers for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         TString last;
         if (customerId <= 1000) {
             last = GetLastName(customerId - 1);
@@ -304,36 +346,41 @@ NTable::TBulkUpsertResult LoadCustomers(
             last = GetNonUniformRandomLastNameForLoad();
         }
 
-        TString credit = RandomNumber(1, 100) <= 10 ? "BC" : "GC";
+        TString credit = RandomNumber(fastRng, 1, 100) <= 10 ? "BC" : "GC";
 
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("C_W_ID").Int32(wh)
             .AddMember("C_D_ID").Int32(district)
             .AddMember("C_ID").Int32(customerId)
-            .AddMember("C_DISCOUNT").Double(RandomNumber(1, 5000) / 10000.0)
+            .AddMember("C_DISCOUNT").Double(RandomNumber(fastRng, 1, 5000) / 10000.0)
             .AddMember("C_CREDIT").Utf8(credit)
             .AddMember("C_LAST").Utf8(last)
-            .AddMember("C_FIRST").Utf8(RandomAlphaString(8, 16))
+            .AddMember("C_FIRST").Utf8(RandomAlphaString(fastRng, 8, 16))
             .AddMember("C_CREDIT_LIM").Double(50000.00)
             .AddMember("C_BALANCE").Double(-10.00)
             .AddMember("C_YTD_PAYMENT").Double(10.00)
             .AddMember("C_PAYMENT_CNT").Int32(1)
             .AddMember("C_DELIVERY_CNT").Int32(0)
-            .AddMember("C_STREET_1").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_STREET_2").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_CITY").Utf8(RandomAlphaString(10, 20))
-            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(3, 3))
-            .AddMember("C_ZIP").Utf8(RandomNumericString(4) + "11111")
-            .AddMember("C_PHONE").Utf8(RandomNumericString(16))
+            .AddMember("C_STREET_1").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_STREET_2").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_CITY").Utf8(RandomAlphaString(fastRng, 10, 20))
+            .AddMember("C_STATE").Utf8(RandomUpperAlphaString(fastRng, 3, 3))
+            .AddMember("C_ZIP").Utf8(RandomNumericString(fastRng, 4) + "11111")
+            .AddMember("C_PHONE").Utf8(RandomNumericString(fastRng, 16))
             .AddMember("C_SINCE").Timestamp(TInstant::Now())
             .AddMember("C_MIDDLE").Utf8("OE")
-            .AddMember("C_DATA").Utf8(RandomAlphaString(300, 500))
+            .AddMember("C_DATA").Utf8(RandomAlphaString(fastRng, 300, 500))
             .EndStruct();
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -343,23 +390,19 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
+    i64 baseTs,
     TLog* Log)
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    i64 prevTs = 0;
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
-        TInstant date = TInstant::Now();
-        // Match Benchbase: ensure monotonic nanosecond timestamps
-        i64 nanoTs = TInstant::Now().NanoSeconds();
-        if (nanoTs <= prevTs) {
-            nanoTs = prevTs + 1;
-        }
-        prevTs = nanoTs;
+    TInstant date = TInstant::Now();
 
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("H_C_W_ID").Int32(wh)
@@ -369,13 +412,18 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
             .AddMember("H_W_ID").Int32(wh)
             .AddMember("H_DATE").Timestamp(date)
             .AddMember("H_AMOUNT").Double(10.00)
-            .AddMember("H_DATA").Utf8(RandomAlphaString(10, 24))
-            .AddMember("H_C_NANO_TS").Int64(nanoTs)
+            .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 10, 24))
+            .AddMember("H_C_NANO_TS").Int64(baseTs++)
             .EndStruct();
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -385,11 +433,13 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading open orders for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     // TPC-C 4.3.3.1: o_c_id must be a permutation of [1, customersPerDistrict]
@@ -402,7 +452,10 @@ NTable::TBulkUpsertResult LoadOpenOrders(
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {
         int customerId = customerIds[orderId - 1]; // Use shuffled customer ID
-        int carrierId = (orderId < FIRST_UNPROCESSED_O_ID) ? RandomNumber(1, 10) : 0;
+        std::optional<int> carrierId;
+        if (orderId < FIRST_UNPROCESSED_O_ID) {
+            carrierId = RandomNumber(fastRng, 1, 10);
+        }
         int olCnt = GetRandomCount(wh, orderId, district); // Deterministic count
 
         valueBuilder.AddListItem()
@@ -411,7 +464,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
             .AddMember("O_D_ID").Int32(district)
             .AddMember("O_ID").Int32(orderId)
             .AddMember("O_C_ID").Int32(customerId)
-            .AddMember("O_CARRIER_ID").Int32(carrierId)
+            .AddMember("O_CARRIER_ID").OptionalInt32(carrierId)
             .AddMember("O_OL_CNT").Int32(olCnt)
             .AddMember("O_ALL_LOCAL").Int32(1)
             .AddMember("O_ENTRY_D").Timestamp(TInstant::Now())
@@ -419,7 +472,12 @@ NTable::TBulkUpsertResult LoadOpenOrders(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -429,11 +487,12 @@ NTable::TBulkUpsertResult LoadNewOrders(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
     TLog* Log)
 {
     LOG_T("Loading new orders for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     static_assert(FIRST_UNPROCESSED_O_ID < CUSTOMERS_PER_DISTRICT,
@@ -450,7 +509,12 @@ NTable::TBulkUpsertResult LoadNewOrders(
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
@@ -460,11 +524,13 @@ NTable::TBulkUpsertResult LoadOrderLines(
     const TString& tableFullPath,
     int wh,
     int district,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
     TLog* Log)
 {
     LOG_T("Loading order lines for warehouse " << wh << " district " << district);
 
-    auto valueBuilder = TValueBuilder();
+    auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {
@@ -472,18 +538,17 @@ NTable::TBulkUpsertResult LoadOrderLines(
 
         // Order Line data
         for (int lineNumber = 1; lineNumber <= olCnt; ++lineNumber) {
-            int itemId = RandomNumber(1, ITEM_COUNT);
+            int itemId = RandomNumber(fastRng, 1, ITEM_COUNT);
 
             // Set OL_DELIVERY_D and OL_AMOUNT based on itemId condition (like Benchbase!)
-            TInstant deliveryDate;
+            std::optional<TInstant> deliveryDate;
             double amount;
-            if (itemId < FIRST_UNPROCESSED_O_ID) {
+            if (orderId < FIRST_UNPROCESSED_O_ID) {
                 deliveryDate = TInstant::Now();
                 amount = 0.0;
             } else {
-                deliveryDate = TInstant::Zero(); // epoch timestamp
                 // random within [0.01 .. 9,999.99]
-                amount = RandomNumber(1, 999999) / 100.0;
+                amount = RandomNumber(fastRng, 1, 999999) / 100.0;
             }
 
             valueBuilder.AddListItem()
@@ -493,24 +558,29 @@ NTable::TBulkUpsertResult LoadOrderLines(
                 .AddMember("OL_O_ID").Int32(orderId)
                 .AddMember("OL_NUMBER").Int32(lineNumber)
                 .AddMember("OL_I_ID").Int32(itemId)
-                .AddMember("OL_DELIVERY_D").Timestamp(deliveryDate)
+                .AddMember("OL_DELIVERY_D").OptionalTimestamp(deliveryDate)
                 .AddMember("OL_AMOUNT").Double(amount)
                 .AddMember("OL_SUPPLY_W_ID").Int32(wh)
                 .AddMember("OL_QUANTITY").Double(5.0)
-                .AddMember("OL_DIST_INFO").Utf8(RandomStringBenchbase(24))
+                .AddMember("OL_DIST_INFO").Utf8(RandomStringBenchbase(fastRng, 24))
                 .EndStruct();
         }
     }
 
     valueBuilder.EndList();
-    return client.BulkUpsert(tableFullPath, valueBuilder.Build()).ExtractValueSync();
+
+    NTable::TBulkUpsertSettings bulkSettings;
+    bulkSettings.Arena(&arena);
+    auto result = client.BulkUpsert(tableFullPath, valueBuilder.Build(), bulkSettings).ExtractValueSync();
+    arena.Reset();
+    return result;
 }
 
 //-----------------------------------------------------------------------------
 
 template<typename LoadFunc>
-void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log) {
-    for (int retryCount = 0; retryCount < MAX_RETRIES; ++retryCount) {
+void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::protobuf::Arena& arena, TLog* Log) {
+    for (int retryCount = 0; retryCount < UPSERT_MAX_RETRIES; ++retryCount) {
         if (GetGlobalInterruptSource().stop_requested()) {
             break;
         }
@@ -520,24 +590,26 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
             return;
         }
 
+        arena.Reset();
+
         const auto status = result.GetStatus();
         bool shouldFail = status == EStatus::NOT_FOUND || status == EStatus::UNDETERMINED
             || status == EStatus::UNAUTHORIZED || status == EStatus::SCHEME_ERROR;
         if (shouldFail) {
             LOG_E(operationName << " failed: " << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
 
-        if (retryCount < MAX_RETRIES - 1) {
-            int waitMs = GetBackoffWaitMs(retryCount);
+        if (retryCount < UPSERT_MAX_RETRIES - 1) {
+            int waitMs = GetBackoffWaitMs(retryCount, UPSERT_BACKOFF_MILLIS, UPSERT_BACKOFF_CEILING);
             LOG_T("Retrying " << operationName << " after " << waitMs << " ms due to: "
                     << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
             Sleep(TDuration::MilliSeconds(waitMs));
         } else {
-            LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
+            LOG_E(operationName << " failed after " << UPSERT_MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
     }
@@ -545,7 +617,14 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
 
 //-----------------------------------------------------------------------------
 
-void LoadSmallTables(TDriver& driver, const TString& path, int warehouseCount, TLog* Log) {
+void LoadSmallTables(
+    TDriver& driver,
+    const TString& path,
+    int warehouseCount,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
+    TLog* Log)
+{
     NTable::TTableClient tableClient(driver);
 
     TString itemTablePath = path + "/" + TABLE_ITEM;
@@ -553,63 +632,32 @@ void LoadSmallTables(TDriver& driver, const TString& path, int warehouseCount, T
     TString districtTablePath = path + "/" + TABLE_DISTRICT;
 
     ExecuteWithRetry("LoadItems", [&]() {
-        return LoadItems(tableClient, itemTablePath, Log);
-    }, Log);
-    ExecuteWithRetry("LoadWarehouses", [&]() {
-        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, Log);
-    }, Log);
-    ExecuteWithRetry("LoadDistricts", [&]() {
-        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, Log);
-    }, Log);
+        return LoadItems(tableClient, itemTablePath, arena, fastRng, Log);
+    }, arena, Log);
+
+    for (int wh = 1; wh <= warehouseCount; wh += MAX_WAREHOUSES_PER_IMPORT_BATCH) {
+        int lastId = Min(wh + MAX_WAREHOUSES_PER_IMPORT_BATCH - 1, warehouseCount);
+        ExecuteWithRetry("LoadWarehouses", [&]() {
+            return LoadWarehouses(tableClient, warehouseTablePath, wh, lastId, arena, fastRng, Log);
+        }, arena, Log);
+        ExecuteWithRetry("LoadDistricts", [&]() {
+            return LoadDistricts(tableClient, districtTablePath, wh, lastId, arena, fastRng, Log);
+        }, arena, Log);
+    }
 }
 
 //-----------------------------------------------------------------------------
 
-struct TIndexBuildState {
-    TOperation::TOperationId Id;
-    TString Table;
-    TString Name;
-    double Progress = 0.0;
-
-    TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
-        : Id(id), Table(table), Name(name) {}
-};
-
-struct TLoadState {
-    enum ELoadState {
-        ELOAD_INDEXED_TABLES = 0,
-        ELOAD_TABLES_BUILD_INDICES,
-        EWAIT_INDICES,
-        ESUCCESS
-    };
-
-    explicit TLoadState(std::stop_token stopToken)
-        : State(ELOAD_INDEXED_TABLES)
-        , StopToken(stopToken)
-    {
-    }
-
-    ELoadState State;
-
-    // shared with loader threads
-
-    std::stop_token StopToken;
-
-    std::atomic<size_t> DataSizeLoaded{0};
-
-    std::atomic<size_t> IndexedRangesLoaded{0};
-    std::atomic<size_t> RangesLoaded{0};
-
-    // single threaded
-
-    std::vector<TIndexBuildState> IndexBuildStates;
-    size_t CurrentIndex = 0;
-    size_t ApproximateDataSize = 0;
-};
-
-//-----------------------------------------------------------------------------
-
-void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLoadState& state, TLog* Log) {
+void LoadRange(
+    TDriver& driver,
+    const TString& path,
+    int whStart,
+    int whEnd,
+    TImportState& state,
+    google::protobuf::Arena& arena,
+    TReallyFastRng32& fastRng,
+    TLog* Log)
+{
     NTable::TTableClient tableClient(driver);
 
     static_assert(ITEM_COUNT % 10 == 0, "ITEM_COUNT must be divisible by 10");
@@ -638,11 +686,11 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
 
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadCustomers", [&]() {
-                return LoadCustomers(tableClient, customerTablePath, wh, district, Log);
-            }, Log);
+                return LoadCustomers(tableClient, customerTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
             ExecuteWithRetry("LoadOpenOrders", [&]() {
-                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, Log);
-            }, Log);
+                return LoadOpenOrders(tableClient, oorderTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
         }
         state.DataSizeLoaded.fetch_add(indexedPerWh, std::memory_order_relaxed);
     }
@@ -661,20 +709,30 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
             int startItemId = batch * itemBatchSize + 1;
             int itemsToLoad = itemBatchSize;
             ExecuteWithRetry("LoadStock", [&]() {
-                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, Log);
-            }, Log);
+                return LoadStock(tableClient, stockTablePath, wh, startItemId, itemsToLoad, arena, fastRng, Log);
+            }, arena, Log);
         }
 
+        i64 prevTs = 0;
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
-                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, Log);
-            }, Log);
+                return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, fastRng, Log);
+            }, arena, Log);
+
+            // Match Benchbase: ensure monotonic nanosecond timestamps
+            i64 nanoTs = TInstant::Now().NanoSeconds();
+            if (nanoTs <= prevTs) {
+                nanoTs = prevTs + 1;
+            }
+            prevTs = nanoTs;
+
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
-                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, Log);
-            }, Log);
+                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, nanoTs, Log);
+            }, arena, Log);
+
             ExecuteWithRetry("LoadNewOrders", [&]() {
-                return LoadNewOrders(tableClient, newOrderTablePath, wh, district, Log);
-            }, Log);
+                return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
+            }, arena, Log);
         }
 
         state.DataSizeLoaded.fetch_add(perWhDatasize, std::memory_order_relaxed);
@@ -685,13 +743,20 @@ void LoadRange(TDriver& driver, const TString& path, int whStart, int whEnd, TLo
 
 //-----------------------------------------------------------------------------
 
-TOperation::TOperationId CreateIndex(
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
+}
+
+//-----------------------------------------------------------------------------
+
+TOperation::TOperationId CreateAlterTableOperation(
     NTable::TTableClient& client,
     const TString& path,
     const char* table,
-    const char* indexName,
-    const std::vector<std::string>& columns,
-    TLog* Log)
+    TLog* Log,
+    const TString& operationName,
+    const TOperation::TOperationId::EKind operationKind, 
+    const NTable::TAlterTableSettings& settings)
 {
     TString tablePath;
     if (!path.empty()) {
@@ -700,27 +765,42 @@ TOperation::TOperationId CreateIndex(
         tablePath = table;
     }
 
-    auto settings = NTable::TAlterTableSettings()
-        .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)});
-
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
         auto opResult = session.AlterTableLong(tablePath, settings).GetValueSync();
-        if (opResult.Ready() && !opResult.Status().IsSuccess()) {
-            LOG_W("Failed to create index " << indexName << " for " << tablePath << ": "
-                << opResult.ToString() << ", retrying");
+        if (IsOperationStarted(opResult.Status())) {
+            operationId = opResult.Id();
+            LOG_I("Started to " << operationName << ": " << operationId.ToString());
+            if (operationId.GetKind() == operationKind || opResult.Status().GetStatus() == EStatus::STATUS_UNDEFINED) {
+                return TStatus(EStatus::SUCCESS, NIssue::TIssues(opResult.Status().GetIssues()));
+            }
             return opResult.Status();
         } else {
-            operationId = opResult.Id();
+            LOG_W("Failed to " << operationName << " for " << tablePath << ": "
+                << opResult.ToString() << ", retrying");
+            return opResult.Status();
         }
-        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     });
 
     if (operationId.GetKind() == TOperation::TOperationId::UNUSED) {
-        LOG_E("Failed to create index " << indexName << " for " << tablePath);
+        LOG_E("Failed to " << operationName << " for " << tablePath);
     }
 
     return operationId;
+}
+
+TOperation::TOperationId CreateIndex(
+    NTable::TTableClient& client,
+    const TString& path,
+    const char* table,
+    const char* indexName,
+    const std::vector<std::string>& columns,
+    TLog* Log)
+{
+    return CreateAlterTableOperation(client, path, table, Log, TStringBuilder() << "create index " << indexName,
+        TOperation::TOperationId::BUILD_INDEX, NTable::TAlterTableSettings()
+            .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)})
+    );
 }
 
 TIndexBuildState CreateCustomerIndex(NTable::TTableClient& client, const TString& path, TLog* Log) {
@@ -737,7 +817,7 @@ TIndexBuildState CreateOpenOrderIndex(NTable::TTableClient& client, const TStrin
     return TIndexBuildState(id, TABLE_OORDER, INDEX_ORDER);
 }
 
-void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, TLog* Log) {
+void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState, TLog* Log) {
     NTable::TTableClient client(driver);
 
     loadState.IndexBuildStates = {
@@ -748,24 +828,79 @@ void CreateIndices(TDriver& driver, const TString& path, TLoadState& loadState, 
 
 //-----------------------------------------------------------------------------
 
-// returns either progress (100 – done) or string with error
-std::expected<double, std::string> GetIndexProgress(
-    NOperation::TOperationClient& client,
-    const TOperation::TOperationId& id)
+void CompactTable(
+    TDriver& driver,
+    TImportState& loadState,
+    const TRunConfig& config,
+    const char* table,
+    TLog* Log)
 {
-    auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
-    if (operation.Ready()) {
-        if (operation.Status().IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
-            return 100;
+    NTable::TTableClient client(driver);
+    auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
+        TOperation::TOperationId::COMPACTION, NTable::TAlterTableSettings()
+            .Compact(NTable::TCompact(false, 1000))
+    );
+    LOG_T("Compacting table " << table << ": " << id.ToString());
+    loadState.CompactionStates.emplace_back(id, table, table);
+    if (id.GetKind() == TOperation::TOperationId::UNUSED) {
+        GetGlobalInterruptSource().request_stop();
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+// returns either progress (100 – done) or string with error
+template<class TOperationClass, class TState>
+std::expected<double, std::string> GetOperationProgress(
+    NOperation::TOperationClient& client,
+    const TOperation::TOperationId& id,
+    TLog* Log) noexcept
+{
+    NYdb::TStatus lastStatus(EStatus::STATUS_UNDEFINED, NIssue::TIssues());
+    for (int i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
+        if (GetGlobalInterruptSource().stop_requested()) {
+            break;
         }
 
-        TStringStream ss;
-        ss << "Failed to create index, operation id " << id.ToString() << ": " << operation.Status()
-            << ", build state: " << operation.Metadata().State << ", " << operation.Metadata().Path;
-        return std::unexpected(ss.Str());
-    } else {
-        return operation.Metadata().Progress;
+        try {
+            auto operation = client.Get<TOperationClass>(id).GetValueSync();
+            lastStatus = operation.Status();
+            if (operation.Ready()) {
+                if (lastStatus.IsSuccess() && operation.Metadata().State == TState::Done) {
+                    return 100;
+                } else {
+                    if (lastStatus.GetStatus() == EStatus::CANCELLED) {
+                        TStringStream ss;
+                        ss << "Operation id " << id.ToString() << ", externally cancelled";
+                        return std::unexpected(ss.Str());
+                    }
+                    // we don't check which kind of failure is in status,
+                    // because we expect only retryable errors here
+                    LOG_D("Failed to check operation id: " << lastStatus);
+                }
+            } else {
+                return operation.Metadata().Progress;
+            }
+        } catch (const std::exception& ex) {
+            if (i + 1 < INDEX_CHECK_MAX_RETRIES) {
+                LOG_W("Failed to check operation " << id.ToString() << ": " << ex.what() << ", retrying");
+            } else {
+                TStringStream ss;
+                ss << "Failed to check operation id " << id.ToString() << ", exception: " << ex.what();
+                return std::unexpected(ss.Str());
+            }
+        }
+
+        int waitMs = GetBackoffWaitMs(i, INDEX_CHECK_BACKOFF_MILLIS, INDEX_CHECK_BACKOFF_CEILING);
+        Sleep(TDuration::MilliSeconds(waitMs));
     }
+
+    TStringStream ss;
+    ss << "Failed to check operation id " << id.ToString()
+       << ", after " << INDEX_CHECK_MAX_RETRIES << " retries. "
+       << "Last status: " << lastStatus;
+
+    return std::unexpected(ss.Str());
 }
 
 //-----------------------------------------------------------------------------
@@ -778,28 +913,18 @@ void InterruptHandler(int) {
 
 class TPCCLoader {
 public:
-    struct TCalculatedStatusData {
-        size_t CurrentDataSizeLoaded = 0;
-        double PercentLoaded = 0.0;
-        double InstantSpeedMiBs = 0.0;
-        double AvgSpeedMiBs = 0.0;
-        int ElapsedMinutes = 0;
-        int ElapsedSeconds = 0;
-        int EstimatedTimeLeftMinutes = 0;
-        int EstimatedTimeLeftSeconds = 0;
-        bool IsWaitingForIndices = false;
-        bool IsLoadingTablesAndBuildingIndices = false;
-    };
-
     TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
         , LogBackend(new TLogBackendWithCapture("cerr", runConfig.LogPriority, TUI_LOG_LINES))
-        , Log(std::make_unique<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
+        , Log(std::make_shared<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
         , PreviousDataSizeLoaded(0)
         , StartTime(Clock::now())
         , LoadState(GetGlobalInterruptSource().get_token())
     {
+        ConnectionConfig.IsNetworkIntensive = true;
+        ConnectionConfig.UsePerChannelTcpConnection = true;
+        ConnectionConfig.UseAllNodes = true;
     }
 
     void ImportSync() {
@@ -808,24 +933,57 @@ public:
             std::exit(1);
         }
 
+        CheckPathForImport(ConnectionConfig, Config.Path);
+
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // we want to switch buffers and draw UI ASAP to properly display logs
-        // produced after this point and before the first screen update
-        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
-            UpdateDisplayIfNeeded(Clock::now());
-        }
+        std::vector<NConsoleClient::TScopedDriver> drivers;
+        drivers.reserve(10);
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
 
-        // TODO: detect number of threads
         if (Config.LoadThreadCount == 0) {
-            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
-            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+            int32_t computeCores = 0;
+            std::string reason;
+            try {
+                computeCores = NumberOfComputeCpus(drivers[0]);
+            } catch (const std::exception& ex) {
+                reason = ex.what();
+            }
+
+            if (computeCores == 0) {
+                std::cerr << "Failed to autodetect max number of load threads";
+                if (!reason.empty()) {
+                    std::cerr << ": " << reason;
+                }
+
+                std::cerr << ". Please specify '--threads' manually." << std::endl;
+                std::exit(1);
+            }
+
+            const size_t clientCpuCount = NumberOfMyCpus();
+
+            const size_t optimalThreadCount =
+                (computeCores + COMPUTE_CORES_PER_IMPORT_THREAD - 1) / COMPUTE_CORES_PER_IMPORT_THREAD;
+
+            Config.LoadThreadCount = std::min(clientCpuCount, optimalThreadCount);
         }
 
         // TODO: detect number of threads
         size_t threadCount = std::min(Config.WarehouseCount, Config.LoadThreadCount);
         threadCount = std::max(threadCount, size_t(1));
+
+        // we want to switch buffers and draw UI ASAP to properly display logs
+        // produced after this point and before the first screen update
+        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
+            LogBackend->StartCapture();
+            TImportDisplayData dataToDisplay(LoadState);
+            Tui = std::make_unique<TImportTui>(Log, Config, *LogBackend, dataToDisplay);
+        }
+
+#ifndef NDEBUG
+        LOG_W("You're running a CLI binary built without NDEBUG defined, import will take much longer than expected");
+#endif
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
@@ -834,9 +992,9 @@ public:
                 threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
                 << GetFormattedSize(LoadState.ApproximateDataSize));
 
-        std::vector<TDriver> drivers;
+        // already have 1, add more if needed
         drivers.reserve(driverCount);
-        for (size_t i = 0; i < driverCount; ++i) {
+        for (size_t i = 1; i < driverCount; ++i) {
             drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 
@@ -856,13 +1014,15 @@ public:
             int whEnd = (threadId + 1) * Config.WarehouseCount / threadCount;
 
             threads.emplace_back([threadId, &drivers, driverCount, this, whStart, whEnd]() {
+                google::protobuf::Arena arena;
+                TReallyFastRng32 fastRng(threadId * TInstant::Now().Seconds());
                 auto& driver = drivers[threadId % driverCount];
                 if (threadId == 0) {
-                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, Log.get());
+                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, arena, fastRng, Log.get());
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(threadId));
                 }
-                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, Log.get());
+                LoadRange(driver, Config.Path, whStart, whEnd, LoadState, arena, fastRng, Log.get());
             });
         }
 
@@ -875,15 +1035,24 @@ public:
                 break;
             }
 
-            if (LoadState.State == TLoadState::ESUCCESS) {
+            if (LoadState.State == TImportState::ESUCCESS) {
                 break;
             }
 
             auto now = Clock::now();
-            UpdateDisplayIfNeeded(now);
+
+            try {
+                UpdateDisplayIfNeeded(now);
+            } catch (const std::exception& ex) {
+                // in theory might happen when TUI loop has exited
+                // and we haven't seen stop requested yet
+                LOG_E("Exception while updating display: " << ex.what());
+                GetGlobalInterruptSource().request_stop();
+                break;
+            }
 
             switch (LoadState.State) {
-            case TLoadState::ELOAD_INDEXED_TABLES: {
+            case TImportState::ELOAD_INDEXED_TABLES: {
                 // Check if all indexed ranges are loaded and start index creation
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
@@ -899,21 +1068,21 @@ public:
                     }
 
                     LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
-                    LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
+                    LoadState.State = TImportState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
                 }
                 break;
             }
-            case TLoadState::ELOAD_TABLES_BUILD_INDICES: {
+            case TImportState::ELOAD_TABLES_BUILD_INDICES: {
                 // Check if all ranges are loaded (work is complete)
                 size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
                 if (rangesLoaded >= threadCount) {
                     LOG_I("All tables loaded successfully. Waiting for indices to be ready");
-                    LoadState.State = TLoadState::EWAIT_INDICES;
+                    LoadState.State = TImportState::EWAIT_INDICES;
                 }
                 [[fallthrough]];
             }
-            case TLoadState::EWAIT_INDICES: {
+            case TImportState::EWAIT_INDICES: {
                 auto timeSinceLastCheck = now - lastIndexProgressCheck;
                 if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
                     break;
@@ -923,11 +1092,11 @@ public:
                 // update progress of all indices and advance LoadState.CurrentIndex
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     auto& indexState = LoadState.IndexBuildStates[i];
-                    auto progress = GetIndexProgress(operationClient, indexState.Id);
+                    auto progress = GetOperationProgress<NTable::TBuildIndexOperation, NTable::EBuildIndexState>(operationClient, indexState.Id, Log.get());
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        RequestStop();
-                        return;
+                        RequestStopWithError();
+                        break;
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
@@ -935,14 +1104,60 @@ public:
                     }
                 }
 
-                if (LoadState.State == TLoadState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                if (LoadState.State == TImportState::EWAIT_INDICES &&
+                    LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()
+                ) {
                     LOG_I("Indices created successfully");
-                    LoadState.State = TLoadState::ESUCCESS;
+                    if (Config.Compact) {
+                        for (const auto& table: TPCC_TABLES) {
+                            CompactTable(drivers.front(), LoadState, Config, table, Log.get());
+                        }
+                        for (const auto& indexState: LoadState.IndexBuildStates) {
+                            TStringBuilder indexImplTable;
+                            indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
+                            CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
+                        }
+                        LoadState.State = TImportState::EWAIT_COMPACTION;
+                    } else {
+                        LoadState.State = TImportState::ESUCCESS;
+                    }
                     continue;
                 }
                 break;
             }
-            case TLoadState::ESUCCESS:
+            case TImportState::EWAIT_COMPACTION: {
+                auto timeSinceLastCheck = now - lastIndexProgressCheck;
+                if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
+                    break;
+                }
+                lastIndexProgressCheck = now;
+
+                for (size_t i = 0; i < LoadState.CompactionStates.size(); ++i) {
+                    auto& compactionState = LoadState.CompactionStates[i];
+                    auto progress = GetOperationProgress<NTable::TCompactionOperation, NTable::ECompactState>(operationClient, compactionState.Id, Log.get());
+                    if (!progress) {
+                        LOG_E("Failed to compact table " << compactionState.Table <<  ": " << progress.error());
+                        RequestStopWithError();
+                        break;
+                    }
+                    compactionState.Progress = *progress;
+                    if (i == LoadState.CurrentCompaction && compactionState.Progress == 100.0) {
+                        ++LoadState.CurrentCompaction;
+                    }
+                }
+                if (GetGlobalInterruptSource().stop_requested()) {
+                    break;
+                }
+                if (LoadState.State == TImportState::EWAIT_COMPACTION &&
+                    LoadState.CurrentCompaction >= LoadState.CompactionStates.size()
+                ) {
+                    LOG_I("Tables compacted successfully");
+                    LoadState.State = TImportState::ESUCCESS;
+                    continue;
+                }
+                break;
+            }
+            case TImportState::ESUCCESS:
                 break;
             }
 
@@ -959,7 +1174,36 @@ public:
         }
 
         for (auto& thread : threads) {
-            thread.join();
+            if (thread.joinable()) {
+                thread.join();
+            }
+        }
+
+        // if there is either error we have failed to retry or user wants to cancel import,
+        // we must try to cancel indices being created
+        if (GetGlobalInterruptSource().stop_requested() && !LoadState.IndexBuildStates.empty()) {
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                auto& indexState = LoadState.IndexBuildStates[i];
+                try {
+                    auto operation = operationClient.Get<NTable::TBuildIndexOperation>(indexState.Id).GetValueSync();
+                    if (operation.Metadata().State == NTable::EBuildIndexState::TransferData) {
+                        auto cancelResult = operationClient.Cancel(indexState.Id).GetValueSync();
+                        if (cancelResult.IsSuccess()) {
+                            LOG_I("Cancelled creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        } else {
+                            LOG_W("Failed to cancel creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        }
+                    }
+                } catch (const std::exception& ex) {
+                    LOG_W("Exception while cancelling index '" << indexState.Name << "' for table '"
+                        << indexState.Table << "', operation id '" << indexState.Id.ToString() << "': "
+                        << ex.what());
+                }
+            }
         }
 
         for (auto& driver : drivers) {
@@ -969,7 +1213,7 @@ public:
         auto endTs = TInstant::Now();
         auto duration = endTs - startTs;
 
-        if (LoadState.State == TLoadState::ESUCCESS) {
+        if (LoadState.State == TImportState::ESUCCESS) {
             // Calculate average upload speed
             size_t totalDataLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
             auto totalElapsedSeconds = duration.Seconds();
@@ -982,6 +1226,8 @@ public:
 
             LOG_I("TPC-C data import completed successfully in " << duration.ToString()
                   << " (avg: " << avgSpeedMiBsStr << " MiB/s)");
+        } else {
+            ythrow yexception() << "either there was a critical error or user cancelled the import. See the logs.";
         }
     }
 
@@ -1006,43 +1252,65 @@ private:
         }
 
         // Calculate all status data
-        TCalculatedStatusData data;
-        data.IsWaitingForIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::EWAIT_INDICES;
-        data.IsLoadingTablesAndBuildingIndices = LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES;
+        TImportDisplayData displayData(LoadState);
 
-        if (!data.IsWaitingForIndices) {
-            data.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+        displayData.StatusData.IsWaitingForPostLoadOps =
+            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES ||
+            !LoadState.CompactionStates.empty() && LoadState.State == TImportState::EWAIT_COMPACTION;
 
-            data.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
-                (static_cast<double>(data.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+            displayData.StatusData.IsLoadingTablesAndBuildingIndices =
+                LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
+
+        auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+        displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+        displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+
+        if (!displayData.StatusData.IsWaitingForPostLoadOps) {
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+
+            displayData.StatusData.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
+                (static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
 
             auto deltaSeconds = std::chrono::duration<double>(delta).count();
-            data.InstantSpeedMiBs = deltaSeconds > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+            displayData.StatusData.InstantSpeedMiBs = deltaSeconds > 0 ?
+                static_cast<double>(
+                    displayData.StatusData.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
-            auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
-            data.AvgSpeedMiBs = totalElapsed > 0 ?
-                static_cast<double>(data.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+            displayData.StatusData.AvgSpeedMiBs = totalElapsed > 0 ?
+                static_cast<double>(displayData.StatusData.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
 
-            data.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
-            data.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
-
-            if (data.AvgSpeedMiBs > 0 && data.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
-                double remainingBytes = LoadState.ApproximateDataSize - data.CurrentDataSizeLoaded;
-                double remainingSeconds = remainingBytes / (1024 * 1024) / data.AvgSpeedMiBs;
-                data.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
-                data.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+            if (displayData.StatusData.AvgSpeedMiBs > 0
+                    && displayData.StatusData.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                double remainingBytes = LoadState.ApproximateDataSize - displayData.StatusData.CurrentDataSizeLoaded;
+                double remainingSeconds = remainingBytes / (1024 * 1024) / displayData.StatusData.AvgSpeedMiBs;
+                displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
             }
 
-            PreviousDataSizeLoaded = data.CurrentDataSizeLoaded;
+            PreviousDataSizeLoaded = displayData.StatusData.CurrentDataSizeLoaded;
+        } else {
+            // we still want to display that data is loaded while we are waiting for indices
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+            displayData.StatusData.PercentLoaded = 100;
+
+            double remainingSeconds = 0;
+            for (const auto& indexState: LoadState.IndexBuildStates) {
+                remainingSeconds = std::max(remainingSeconds, indexState.GetRemainingSeconds());
+            }
+            for (const auto& compactionState: LoadState.CompactionStates) {
+                remainingSeconds = std::max(remainingSeconds, compactionState.GetRemainingSeconds());
+            }
+            displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+            displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
         }
 
         switch (Config.DisplayMode) {
         case TRunConfig::EDisplayMode::Text:
-            UpdateDisplayTextMode(data);
+            UpdateDisplayTextMode(displayData.StatusData);
             break;
         case TRunConfig::EDisplayMode::Tui:
-            UpdateDisplayTuiMode(data);
+            Tui->Update(displayData);
             break;
         default:
             ;
@@ -1051,16 +1319,20 @@ private:
         LastDisplayUpdate = now;
     }
 
-    void UpdateDisplayTextMode(const TCalculatedStatusData& data) {
-        if (!data.IsWaitingForIndices) {
-            std::stringstream ss;
+    void AddTimeText(std::ostream& ss, const TImportStatusData& data) const {
+        ss << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
+            << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+            << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+    }
+
+    void UpdateDisplayTextMode(const TImportStatusData& data) const {
+        std::stringstream ss;
+        if (!data.IsWaitingForPostLoadOps) {
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
                 << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "
                 << std::setprecision(1) << data.InstantSpeedMiBs << " MiB/s "
-                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) "
-                << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) ";
+            AddTimeText(ss, data);
 
             if (data.IsLoadingTablesAndBuildingIndices) {
                 ss << " | ";
@@ -1069,155 +1341,35 @@ private:
                     if (i > 0) ss << ", ";
                     ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
+                for (const auto& compactionState: LoadState.CompactionStates) {
+                    ss << ", compaction " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+                }
             }
-
-            LOG_I(ss.str());
         } else {
             // waiting for indices
             if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                std::stringstream ss;
                 ss << "Waiting for indices ";
+                AddTimeText(ss, data);
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     const auto& indexState = LoadState.IndexBuildStates[i];
                     if (i > 0) ss << ", ";
                     ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
-                LOG_I(ss.str());
+            } else if (LoadState.CurrentCompaction < LoadState.CompactionStates.size()) {
+                // waiting for compactions
+                ss << "Waiting for compactions ";
+                AddTimeText(ss, data);
+                for (const auto& compactionState: LoadState.CompactionStates) {
+                    ss << ", " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+                }
             }
         }
-    }
-
-    void UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
-        using namespace ftxui;
-
-        // fist update is very special: we switch buffers and capture logs to display live logs
-        static bool firstUpdate = true;
-        if (firstUpdate) {
-            LogBackend->StartCapture();
-
-            // Switch to alternate screen buffer (like htop)
-            std::cout << "\033[?1049h";
-            std::cout << "\033[2J\033[H"; // Clear screen and move to top
-            firstUpdate = false;
-        }
-
-        // our header with main information
-
-        std::stringstream headerSs;
-        headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "
-                 << Config.LoadThreadCount << " threads   Estimated size: "
-                 << GetFormattedSize(LoadState.ApproximateDataSize);
-
-        std::stringstream progressSs;
-        progressSs << std::fixed << std::setprecision(1) << data.PercentLoaded << "% ("
-                   << GetFormattedSize(data.CurrentDataSizeLoaded) << ")";
-
-        std::stringstream speedSs;
-        speedSs << std::fixed << std::setprecision(1)
-                << "Speed: " << data.InstantSpeedMiBs << " MiB/s   "
-                << "Avg: " << data.AvgSpeedMiBs << " MiB/s   "
-                << "Elapsed: " << data.ElapsedMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << "   "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
-
-        // Calculate progress ratio for gauge
-        float progressRatio = static_cast<float>(data.PercentLoaded / 100.0);
-
-        // Left side: Import details
-        auto importDetails = vbox({
-            text(headerSs.str()),
-            hbox({
-                text("Progress: "),
-                gauge(progressRatio) | flex,
-                text("  " + progressSs.str())
-            }),
-            text(speedSs.str())
-        });
-
-        auto topRow = window(text("TPC-C data upload"), hbox({
-            importDetails
-        }));
-
-        // Index progress section (always shown)
-
-        Elements indexElements;
-        TString indexText;
-        if (LoadState.IndexBuildStates.empty()) {
-            indexText = "Index Creation Didn't Start";
-        } else {
-            indexText = "Index Creation";
-        }
-
-        if (LoadState.IndexBuildStates.empty()) {
-            // Index building not started yet, need to leave enough space
-            for (size_t i = 0; i < INDEX_COUNT; ++i) {
-                float indexRatio = static_cast<float>(0.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << 0.0 << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        } else {
-            // Show progress for each index
-            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                const auto& indexState = LoadState.IndexBuildStates[i];
-                float indexRatio = static_cast<float>(indexState.Progress / 100.0);
-
-                std::stringstream indexSs;
-                indexSs << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-
-                indexElements.push_back(
-                    hbox({
-                        text("  [ index " + std::to_string(i + 1) + " ] "),
-                        gauge(indexRatio) | flex,
-                        text(" " + indexSs.str())
-                    })
-                );
-            }
-        }
-
-        auto indicesRow = window(text(indexText), vbox(indexElements));
-
-        // Create scrollable logs panel
-
-        Elements logElements;
-        LogBackend->GetLogLines([&](const std::string& line) {
-            logElements.push_back(paragraph(line));
-        });
-
-        auto logsContent = vbox(logElements);
-        auto logsPanel = window(text(" Logs "), logsContent | vscroll_indicator | frame | flex);
-
-        // Main layout - fill the entire screen
-
-        auto layout = vbox({
-            topRow,
-            indicesRow,
-            logsPanel | flex
-        });
-
-        // Render full screen
-
-        std::cout << "\033[H"; // Move cursor to top
-        auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
-        Render(screen, layout);
-        std::cout << screen.ToString();
+        LOG_I(ss.str());
     }
 
     void ExitTuiMode() {
-        LogBackend->StopCapture();
-
-        // Switch back to main screen buffer (restore original content)
-        std::cout << "\033[?1049l";
-        std::cout.flush();
+        Tui.reset();
+        LogBackend->StopCaptureAndFlush(Cerr);
     }
 
 private:
@@ -1226,12 +1378,14 @@ private:
 
     // XXX Log instance owns LogBackend (unfortunately, it accepts THolder with LogBackend)
     TLogBackendWithCapture* LogBackend;
-    std::unique_ptr<TLog> Log;
+    std::shared_ptr<TLog> Log;
 
     Clock::time_point LastDisplayUpdate;
     size_t PreviousDataSizeLoaded;
     Clock::time_point StartTime;
-    TLoadState LoadState;
+    TImportState LoadState;
+
+    std::unique_ptr<TImportTui> Tui;
 };
 
 } // anonymous namespace
@@ -1239,8 +1393,13 @@ private:
 //-----------------------------------------------------------------------------
 
 void ImportSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCLoader loader(connectionConfig, runConfig);
-    loader.ImportSync();
+    try {
+        TPCCLoader loader(connectionConfig, runConfig);
+        loader.ImportSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

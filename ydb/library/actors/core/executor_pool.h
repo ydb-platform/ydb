@@ -101,8 +101,8 @@ namespace NActors {
         virtual void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         // for actorsystem
-        virtual bool Send(TAutoPtr<IEventHandle>& ev) = 0;
-        virtual bool SpecificSend(TAutoPtr<IEventHandle>& ev) = 0;
+        virtual bool Send(std::unique_ptr<IEventHandle>& ev) = 0;
+        virtual bool SpecificSend(std::unique_ptr<IEventHandle>& ev) = 0;
         virtual void ScheduleActivation(TMailbox* mailbox) = 0;
         virtual void SpecificScheduleActivation(TMailbox* mailbox) = 0;
         virtual void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) = 0;

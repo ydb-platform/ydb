@@ -7,13 +7,15 @@ Basic HTTP Proxy
 :copyright: 2007 Pallets
 :license: BSD-3-Clause
 """
+from __future__ import annotations
+
 import typing as t
 from http import client
+from urllib.parse import quote
+from urllib.parse import urlsplit
 
 from ..datastructures import EnvironHeaders
 from ..http import is_hop_by_hop_header
-from ..urls import url_parse
-from ..urls import url_quote
 from ..wsgi import get_input_stream
 
 if t.TYPE_CHECKING:
@@ -78,12 +80,12 @@ class ProxyMiddleware:
 
     def __init__(
         self,
-        app: "WSGIApplication",
-        targets: t.Mapping[str, t.Dict[str, t.Any]],
+        app: WSGIApplication,
+        targets: t.Mapping[str, dict[str, t.Any]],
         chunk_size: int = 2 << 13,
         timeout: int = 10,
     ) -> None:
-        def _set_defaults(opts: t.Dict[str, t.Any]) -> t.Dict[str, t.Any]:
+        def _set_defaults(opts: dict[str, t.Any]) -> dict[str, t.Any]:
             opts.setdefault("remove_prefix", False)
             opts.setdefault("host", "<auto>")
             opts.setdefault("headers", {})
@@ -98,13 +100,14 @@ class ProxyMiddleware:
         self.timeout = timeout
 
     def proxy_to(
-        self, opts: t.Dict[str, t.Any], path: str, prefix: str
-    ) -> "WSGIApplication":
-        target = url_parse(opts["target"])
-        host = t.cast(str, target.ascii_host)
+        self, opts: dict[str, t.Any], path: str, prefix: str
+    ) -> WSGIApplication:
+        target = urlsplit(opts["target"])
+        # socket can handle unicode host, but header must be ascii
+        host = target.hostname.encode("idna").decode("ascii")
 
         def application(
-            environ: "WSGIEnvironment", start_response: "StartResponse"
+            environ: WSGIEnvironment, start_response: StartResponse
         ) -> t.Iterable[bytes]:
             headers = list(EnvironHeaders(environ).items())
             headers[:] = [
@@ -157,7 +160,9 @@ class ProxyMiddleware:
                     )
 
                 con.connect()
-                remote_url = url_quote(remote_path)
+                # safe = https://url.spec.whatwg.org/#url-path-segment-string
+                # as well as percent for things that are already quoted
+                remote_url = quote(remote_path, safe="!$&'()*+,/:;=@%")
                 querystring = environ["QUERY_STRING"]
 
                 if querystring:
@@ -217,7 +222,7 @@ class ProxyMiddleware:
         return application
 
     def __call__(
-        self, environ: "WSGIEnvironment", start_response: "StartResponse"
+        self, environ: WSGIEnvironment, start_response: StartResponse
     ) -> t.Iterable[bytes]:
         path = environ["PATH_INFO"]
         app = self.app

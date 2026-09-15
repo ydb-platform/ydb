@@ -31,11 +31,11 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
 }
 
 bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
-    auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
+    auto mvccVersion = self->GetMvccVersion(this);
 
     // NOTE: may throw TNeedGlobalTxId exception, which is handled in direct tx unit
     absl::flat_hash_set<ui64> volatileReadDependencies;
-    if (!Impl->Execute(self, txc, readVersion, writeVersion, GetGlobalTxId(), volatileReadDependencies)) {
+    if (!Impl->Execute(self, txc, mvccVersion, GetGlobalTxId(), volatileReadDependencies)) {
         if (!volatileReadDependencies.empty()) {
             for (ui64 txId : volatileReadDependencies) {
                 AddVolatileDependency(txId);
@@ -47,15 +47,15 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
     }
 
     // Note: we always wait for completion, so we can ignore the result
-    self->PromoteImmediatePostExecuteEdges(writeVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+    self->PromoteImmediatePostExecuteEdges(mvccVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
 
     return true;
 }
 
 void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) {
     auto result = Impl->GetResult(self);
-    if (MvccReadWriteVersion) {
-        self->SendImmediateWriteResult(*MvccReadWriteVersion, result.Target, result.Event.Release(), result.Cookie);
+    if (CachedMvccVersion) {
+        self->SendImmediateWriteResult(*CachedMvccVersion, result.Target, result.Event.Release(), result.Cookie);
     } else {
         ctx.Send(result.Target, result.Event.Release(), 0, result.Cookie);
     }

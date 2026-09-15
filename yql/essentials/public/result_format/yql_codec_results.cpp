@@ -4,10 +4,7 @@
 
 #include <yql/essentials/utils/utf8.h>
 
-namespace NYql {
-namespace NResult {
-
-constexpr TStringBuf TYsonResultWriter::VoidString;
+namespace NYql::NResult {
 
 void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     if (!IsUtf8(value)) {
@@ -21,5 +18,4 @@ void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     }
 }
 
-}
-}
+} // namespace NYql::NResult

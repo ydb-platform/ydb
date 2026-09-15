@@ -1,15 +1,16 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
     test_schemeshard_limits.py
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:16)
 ENDIF()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 DEPENDS(
 )

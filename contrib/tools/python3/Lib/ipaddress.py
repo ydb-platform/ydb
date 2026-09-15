@@ -1416,6 +1416,16 @@ class IPv4Address(_BaseV4, _BaseAddress):
         """
         return self in self._constants._linklocal_network
 
+    @property
+    def ipv6_mapped(self):
+        """Return the IPv4-mapped IPv6 address.
+
+        Returns:
+            The IPv4-mapped IPv6 address per RFC 4291.
+
+        """
+        return IPv6Address(f'::ffff:{self}')
+
 
 class IPv4Interface(IPv4Address):
 
@@ -1549,7 +1559,7 @@ class IPv4Network(_BaseV4, _BaseNetwork):
         if self._prefixlen == (self._max_prefixlen - 1):
             self.hosts = self.__iter__
         elif self._prefixlen == (self._max_prefixlen):
-            self.hosts = lambda: [IPv4Address(addr)]
+            self.hosts = lambda: iter((IPv4Address(addr),))
 
     @property
     @functools.lru_cache()
@@ -2349,7 +2359,7 @@ class IPv6Network(_BaseV6, _BaseNetwork):
         if self._prefixlen == (self._max_prefixlen - 1):
             self.hosts = self.__iter__
         elif self._prefixlen == self._max_prefixlen:
-            self.hosts = lambda: [IPv6Address(addr)]
+            self.hosts = lambda: iter((IPv6Address(addr),))
 
     def hosts(self):
         """Generate Iterator over usable hosts in a network.

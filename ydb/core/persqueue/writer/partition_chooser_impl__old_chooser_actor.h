@@ -5,20 +5,6 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
-#endif
-
-
-#define LOG_PREFIX "TPartitionChooser " << SelfId()                         \
-                    << " (SourceId=" << TThis::SourceId                     \
-                    << ", PreferedPartition=" << TThis::PreferedPartition   \
-                    << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-
 template<typename TPipeCreator>
 class TPartitionChooserActor: public TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator> {
 public:
@@ -33,7 +19,9 @@ public:
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition,
                            NWilson::TTraceId traceId)
-        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
+        : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(
+                parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
+                config.GetPQTabletConfig().HasId() ? &config.GetPQTabletConfig().GetId() : nullptr)
         , PQRBHelper(config.GetBalancerTabletID()) {
     }
 
@@ -64,7 +52,9 @@ public:
 
 private:
     void RequestPQRB(const NActors::TActorContext& ctx) {
-        DEBUG("RequestPQRB")
+        LOG_D(
+            "RequestPQRB"
+        );
         TThis::Become(&TThis::StatePQRB);
 
         if (PQRBHelper.PartitionId()) {
@@ -77,7 +67,11 @@ private:
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         PartitionId = PQRBHelper.Handle(ev, ctx);
-        DEBUG("Received partition " << PartitionId << " from PQRB for SourceId=" << TThis::SourceId);
+        LOG_D(
+            "Received partition from PQRB",
+            {"partitionId", PartitionId},
+            {"sourceId", TThis::SourceId}
+        );
         TThis::Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
 
         PQRBHelper.Close(ctx);
@@ -110,7 +104,9 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        TRACE("OnPartitionChosen");
+        LOG_T(
+            "OnPartitionChosen"
+        );
 
         if (!TThis::Partition && TThis::PreferedPartition) {
             return TThis::ReplyError(ErrorCode::BAD_REQUEST,
@@ -152,11 +148,5 @@ private:
 
     TPQRBHelper<TPipeCreator> PQRBHelper;
 };
-
-#undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

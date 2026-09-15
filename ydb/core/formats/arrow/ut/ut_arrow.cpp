@@ -1,12 +1,13 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
 
 #include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -117,7 +118,7 @@ struct TDataRow {
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::boolean()),
+            arrow::field("bool", arrow::uint8()),
             arrow::field("i8", arrow::int8()),
             arrow::field("i16", arrow::int16()),
             arrow::field("i32", arrow::int32()),
@@ -540,6 +541,13 @@ std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::R
     return *result;
 }
 
+NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName, ui64 value) {
+    std::shared_ptr<arrow::Table> table =
+        arrow::Table::Make(arrow::schema({ arrow::field(columnName, arrow::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
+
+    return NArrow::NMerger::TCursor{table, 0, {columnName}};
+}
+
 THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow::UInt64Array>& array) {
     THashMap<ui64, ui32> out;
     for (int i = 0; i < array->length(); ++i) {
@@ -595,7 +603,7 @@ bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = f
     return true;
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(BatchBuilder) {
@@ -618,8 +626,108 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         }
     }
 
+    Y_UNIT_TEST(BatchBuilder_Decimal) {
+        std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
+            {"decimal_col", TTypeInfo(NScheme::TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE))}
+        };
+
+        TString err;
+        NArrow::TArrowBatchBuilder batchBuilder;
+        batchBuilder.Start(ydbSchema, 0, 0, err);
+        UNIT_ASSERT_C(err.empty(), err);
+
+        std::vector<std::string> testValues;
+        for (int i = 0; i < 5; ++i) {
+            auto decimal = NYql::NDecimal::FromString(TStringBuilder() << (i + 1) << ".123", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+            auto pair = NYql::NDecimal::MakePair(decimal);
+            std::string value(16, '\0');
+            std::memcpy(value.data(), &pair.first, sizeof(pair.first));
+            std::memcpy(value.data() + sizeof(pair.first), &pair.second, sizeof(pair.second));
+            testValues.push_back(value);
+        }
+
+        TTypeInfo decimalTypeInfo(NScheme::TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+        const TTypeInfo types[1] = {decimalTypeInfo};
+
+        for (const auto& value : testValues) {
+            TCell cells[1];
+            cells[0] = TCell(value.data(), value.size());
+            NKikimr::TDbTupleRef key;
+            NKikimr::TDbTupleRef row(types, cells, 1);
+            batchBuilder.AddRow(key, row);
+        }
+
+        auto batch = batchBuilder.FlushBatch(false);
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), testValues.size());
+
+        auto column = batch->column(0);
+        UNIT_ASSERT(column->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+        auto fsb_type = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+        UNIT_ASSERT_VALUES_EQUAL(fsb_type->byte_width(), NScheme::FSB_SIZE);
+
+        auto fsb_array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        for (size_t i = 0; i < testValues.size(); ++i) {
+            auto value = fsb_array->GetString(i);
+            UNIT_ASSERT_VALUES_EQUAL(value, testValues[i]);
+        }
+    }
+
+    Y_UNIT_TEST(BatchBuilder_Uuid) {
+        std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
+            {"uuid_col", TTypeInfo(NTypeIds::Uuid)}
+        };
+
+        TString err;
+        NArrow::TArrowBatchBuilder batchBuilder;
+        batchBuilder.Start(ydbSchema, 0, 0, err);
+        UNIT_ASSERT_C(err.empty(), err);
+
+        std::vector<std::string> testValues;
+        for (int i = 0; i < 5; ++i) {
+            std::string uuid(16, '\0');
+            for (size_t j = 0; j < 16; ++j) {
+                uuid[j] = static_cast<char>((i * 16 + j) % 256);
+            }
+            testValues.push_back(uuid);
+        }
+
+        TTypeInfo uuidTypeInfo(NTypeIds::Uuid);
+        const TTypeInfo types[1] = {uuidTypeInfo};
+
+        for (const auto& value : testValues) {
+            TCell cells[1];
+            cells[0] = TCell(value.data(), value.size());
+            NKikimr::TDbTupleRef key;
+            NKikimr::TDbTupleRef row(types, cells, 1);
+            batchBuilder.AddRow(key, row);
+        }
+
+        auto batch = batchBuilder.FlushBatch(false);
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), testValues.size());
+
+        auto column = batch->column(0);
+        UNIT_ASSERT(column->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+        auto fsb_type = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+        UNIT_ASSERT_VALUES_EQUAL(fsb_type->byte_width(), NScheme::FSB_SIZE);
+
+        auto fsb_array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        for (size_t i = 0; i < testValues.size(); ++i) {
+            auto value = fsb_array->GetString(i);
+            UNIT_ASSERT_VALUES_EQUAL(value, testValues[i]);
+        }
+    }
+
     Y_UNIT_TEST(ArrowToYdbConverter) {
-        std::vector<TDataRow> rows = TestRows();
+        std::vector<TDataRow> rows;
+        for (size_t i = 0; i < 50; ++i) { // converter process elements in cycles with 32 elems, then tail
+            std::vector<TDataRow> tmp = TestRows();
+            rows.insert(rows.end(), tmp.begin(), tmp.end());
+        }
+        // Special case: empty strings
+        rows.back().String.clear();
+        rows.back().Utf8.clear();
 
         std::vector<TOwnedCellVec> cellRows;
         for (const TDataRow& row : rows) {
@@ -657,6 +765,103 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         }
     }
 
+    Y_UNIT_TEST(ArrowToYdbConverter_Decimal) {
+        std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
+            {"decimal_col", TTypeInfo(NScheme::TDecimalType(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE))}
+        };
+
+        std::vector<std::string> testValues;
+        for (int i = 0; i < 5; ++i) {
+            auto decimal = NYql::NDecimal::FromString(TStringBuilder() << (i + 1) << ".456", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+            auto pair = NYql::NDecimal::MakePair(decimal);
+            std::string value(16, '\0');
+            std::memcpy(value.data(), &pair.first, sizeof(pair.first));
+            std::memcpy(value.data() + sizeof(pair.first), &pair.second, sizeof(pair.second));
+            testValues.push_back(value);
+        }
+
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(NScheme::FSB_SIZE), arrow::default_memory_pool());
+        for (const auto& value : testValues) {
+            UNIT_ASSERT(builder.Append(value).ok());
+        }
+        std::shared_ptr<arrow::FixedSizeBinaryArray> array;
+        UNIT_ASSERT(builder.Finish(&array).ok());
+
+        auto schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{
+            arrow::field("decimal_col", arrow::fixed_size_binary(NScheme::FSB_SIZE))
+        });
+        auto batch = arrow::RecordBatch::Make(schema, testValues.size(), {array});
+
+        struct TRowWriter : public NArrow::IRowWriter {
+            std::vector<TOwnedCellVec> Rows;
+            void AddRow(const TConstArrayRef<TCell>& cells) override {
+                Rows.push_back(TOwnedCellVec(cells));
+            }
+        } rowWriter;
+
+        NArrow::TArrowToYdbConverter toYdbConverter(ydbSchema, rowWriter);
+        TString errStr;
+        bool ok = toYdbConverter.Process(*batch, errStr);
+        UNIT_ASSERT_C(ok, errStr);
+
+        UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows.size(), testValues.size());
+
+        for (size_t i = 0; i < testValues.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows[i].size(), 1);
+            TCell cell = rowWriter.Rows[i][0];
+            UNIT_ASSERT_VALUES_EQUAL(cell.Size(), NScheme::FSB_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(std::string(cell.Data(), cell.Size()), testValues[i]);
+        }
+    }
+
+    Y_UNIT_TEST(ArrowToYdbConverter_Uuid) {
+        std::vector<std::pair<TString, TTypeInfo>> ydbSchema = {
+            {"uuid_col", TTypeInfo(NTypeIds::Uuid)}
+        };
+
+        std::vector<std::string> testValues;
+        for (int i = 0; i < 5; ++i) {
+            std::string uuid(16, '\0');
+            for (size_t j = 0; j < 16; ++j) {
+                uuid[j] = static_cast<char>((i * 32 + j) % 256);
+            }
+            testValues.push_back(uuid);
+        }
+
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(NScheme::FSB_SIZE), arrow::default_memory_pool());
+        for (const auto& value : testValues) {
+            UNIT_ASSERT(builder.Append(value).ok());
+        }
+        std::shared_ptr<arrow::FixedSizeBinaryArray> array;
+        UNIT_ASSERT(builder.Finish(&array).ok());
+
+        auto schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{
+            arrow::field("uuid_col", arrow::fixed_size_binary(NScheme::FSB_SIZE))
+        });
+        auto batch = arrow::RecordBatch::Make(schema, testValues.size(), {array});
+
+        struct TRowWriter : public NArrow::IRowWriter {
+            std::vector<TOwnedCellVec> Rows;
+            void AddRow(const TConstArrayRef<TCell>& cells) override {
+                Rows.push_back(TOwnedCellVec(cells));
+            }
+        } rowWriter;
+
+        NArrow::TArrowToYdbConverter toYdbConverter(ydbSchema, rowWriter);
+        TString errStr;
+        bool ok = toYdbConverter.Process(*batch, errStr);
+        UNIT_ASSERT_C(ok, errStr);
+
+        UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows.size(), testValues.size());
+
+        for (size_t i = 0; i < testValues.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rowWriter.Rows[i].size(), 1);
+            TCell cell = rowWriter.Rows[i][0];
+            UNIT_ASSERT_VALUES_EQUAL(cell.Size(), NScheme::FSB_SIZE);
+            UNIT_ASSERT_VALUES_EQUAL(std::string(cell.Data(), cell.Size()), testValues[i]);
+        }
+    }
+
     Y_UNIT_TEST(SortWithCompositeKey) {
         std::shared_ptr<arrow::Table> table = Shuffle(MakeTable1000());
 
@@ -690,9 +895,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batch->schema(), false, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -718,8 +923,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
-            const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batch->schema(), true, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
@@ -744,9 +950,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
-            const std::vector<std::string> vColumns = {"snap"};
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt);
+            const std::vector<std::string> vColumns = { "snap" };
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -775,17 +981,15 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
         batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
 
-        std::shared_ptr<arrow::RecordBatch> maxVersion =
-            arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
-        maxVersion = AddSnapColumn(maxVersion, 1);
-        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+        NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
+        NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 100)};
 
         std::shared_ptr<arrow::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -817,7 +1021,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         std::shared_ptr<arrow::RecordBatch> maxVersion =
             arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
         maxVersion = AddSnapColumn(maxVersion, 1);
-        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+        NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
+        NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 1000)};
 
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batchesByKey[0], 1));
@@ -830,8 +1035,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
-            auto merger =
-                std::make_shared<NArrow::NMerger::TMergePartialStream>(sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(
+                sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor, uncommittedVersionCursor);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -856,4 +1061,4 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 }
 
-}
+}   // namespace NKikimr

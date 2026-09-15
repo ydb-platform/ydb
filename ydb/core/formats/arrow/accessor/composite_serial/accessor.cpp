@@ -17,10 +17,14 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
             "buffer", DataBuffer.size());
     }
     if (!!Data) {
-        return TLocalChunkedArrayAddress(Loader->ApplyVerified(Data, GetRecordsCount()), 0, 0);
+        auto result = Loader->ApplyConclusion(Data, GetRecordsCount(), std::nullopt, AdditionalAccessorData);
+        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
         AFL_VERIFY(!!DataBuffer);
-        return TLocalChunkedArrayAddress(Loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount()), 0, 0);
+        auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount(), std::nullopt, AdditionalAccessorData);
+        AFL_VERIFY(result.IsSuccess())("event", "deserialization_error")("error", result.GetErrorMessage());
+        return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     }
 }
 

@@ -40,7 +40,7 @@ that should work if you're unable to use Bazel.)
 
 With CMake:
 
-1.  Make sure you have CMake >= 2.8.12 installed.
+1.  Make sure you have CMake >= 3.16 installed.
 2.  Get the cctz source: `git clone https://github.com/google/cctz.git` then `cd
     cctz`.
 3.  Build cctz so that is can be used by shared libraries and run the tests (use

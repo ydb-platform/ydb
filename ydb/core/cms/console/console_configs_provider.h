@@ -196,6 +196,7 @@ private:
                       const TActorContext &ctx);
 
     void ProcessScheduledUpdates(const TActorContext &ctx);
+    void RemoveSubscription(const TActorId& subscriber);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
@@ -220,7 +221,7 @@ private:
 
     void HandlePoison(const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::HandlePoison");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::HandlePoison");
 
         Die(ctx);
     }

@@ -24,7 +24,7 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
     for (auto parent : it->second) {
         if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(parent)) {
             auto flatMap = maybeFlatMap.Cast();
-            auto newParent = FlatMapOverEquiJoin(flatMap, ctx, *optCtx.ParentsMap, true, optCtx.Types);
+            auto newParent = FlatMapOverEquiJoin(flatMap, ctx, *optCtx.ParentsMap, /*multiUsage=*/true, optCtx.Types);
             if (!newParent.Raw()) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -49,9 +49,8 @@ IGraphTransformer::TStatus MultiUsageFlatMapOverJoin(const TExprNode::TPtr& node
 
 bool IsFilterMultiusageEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString multiUsageFlags = to_lower(TString("FilterPushdownEnableMultiusage"));
-    static const TString noMultiUsageFlags = to_lower(TString("FilterPushdownDisableMultiusage"));
-    return optCtx.Types->OptimizerFlags.contains(multiUsageFlags) && !optCtx.Types->OptimizerFlags.contains(noMultiUsageFlags);
+    static const char OptName[] = "FilterPushdownEnableMultiusage";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
 void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -65,7 +64,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         return;
     }
 
-    static const THashSet<TStringBuf> skipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
+    static const THashSet<TStringBuf> SkipNodes = {"ExtractMembers", "Unordered", "AssumeColumnOrder"};
 
     TVector<const TExprNode*> immediateParents;
     YQL_ENSURE(optCtx.ParentsMap);
@@ -92,7 +91,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     const auto genColumnNames = GenNoClashColumns(*inputStructType, "_yql_filter_pushdown", immediateParents.size());
     for (size_t i = 0; i < immediateParents.size(); ++i) {
         const TExprNode* parent = immediateParents[i];
-        while (skipNodes.contains(parent->Content())) {
+        while (SkipNodes.contains(parent->Content())) {
             auto newParent = optCtx.GetParentIfSingle(*parent);
             if (newParent) {
                 parent = newParent;
@@ -147,12 +146,14 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
             if (!pushdownPreds.empty()) {
                 ++pushdownCount;
                 restPreds.push_back(
+                    // clang-format off
                     ctx.Builder(pos)
                         .Callable("Member")
                             .Add(0, lambdaArg.Ptr())
                             .Atom(1, consumer.ColumnName)
                         .Seal()
                         .Build());
+                    // clang-format on
                 auto restPred = ctx.NewCallable(pos, "And", std::move(restPreds));
                 auto pushdownPred = ctx.NewCallable(pos, "And", std::move(pushdownPreds));
 
@@ -180,9 +181,9 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
     TExprNode::TPtr mapBody = mapArg;
     TExprNode::TPtr filterArg = ctx.NewArgument(node->Pos(), "row");
     TExprNodeList filterPreds;
-    for (size_t i = 0; i < consumers.size(); ++i) {
-        const TConsumerInfo& consumer = consumers[i];
+    for (const auto& consumer : consumers) {
         if (consumer.PushdownLambda) {
+            // clang-format off
             mapBody = ctx.Builder(mapBody->Pos())
                 .Callable("AddMember")
                     .Add(0, mapBody)
@@ -197,16 +198,20 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
+        // clang-format off
         filterPreds.push_back(ctx.Builder(node->Pos())
             .Apply(consumer.FilterLambda)
                 // CastStruct is not needed here, since FilterLambda is AND over column references
                 .With(0, filterArg)
             .Seal()
             .Build());
+        // clang-format on
     }
 
+    // clang-format off
     auto newNode = ctx.Builder(node->Pos())
         .Callable(hasOrdered ? "OrderedFilter" : "Filter")
             .Callable(0, hasOrdered ? "OrderedMap" : "Map")
@@ -216,6 +221,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
             .Add(1, ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { filterArg }), ctx.NewCallable(node->Pos(), "Or", std::move(filterPreds))))
         .Seal()
         .Build();
+    // clang-format on
 
     for (size_t i = 0; i < immediateParents.size(); ++i) {
         const TExprNode* curr = immediateParents[i];
@@ -240,6 +246,7 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         TCoFlatMapBase flatMap(curr);
         TCoConditionalValueBase cond = flatMap.Lambda().Body().Cast<TCoConditionalValueBase>();
         TExprNode::TPtr input = flatMap.Input().Ptr();
+        // clang-format off
         toOptimize[consumer.OriginalFlatMap] = ctx.Builder(curr->Pos())
             .Callable(flatMap.CallableName())
                 .Add(0, resultNode)
@@ -261,11 +268,12 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 }
 
 bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& parents, TNodeSet& unorderedConsumers) {
-    static const THashSet<TStringBuf> traverseCallables = {
+    static const THashSet<TStringBuf> TraverseCallables = {
         TCoExtractMembers::CallableName(),
         TCoAssumeDistinct::CallableName(),
         TCoAssumeUnique::CallableName(),
@@ -285,7 +293,7 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
                     unorderedConsumers.insert(parent);
                     continue;
                 }
-                if (!parent->IsCallable(traverseCallables)) {
+                if (!parent->IsCallable(TraverseCallables)) {
                     return false;
                 }
                 YQL_ENSURE(&parent->Head() == curr);
@@ -314,13 +322,6 @@ bool AllConsumersAreMembers(const TExprNode::TPtr& node, const TParentsMap& pare
 }
 
 bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
-    static const char optName[] = "UnorderedOverSortImproved";
-    YQL_ENSURE(optCtx.Types);
-    const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
-    if (!optEnabled) {
-        return false;
-    }
-
     if (!node->IsCallable({"Sort", "AssumeSorted", "TopSort"})) {
         return false;
     }
@@ -342,19 +343,7 @@ bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwned
     return true;
 }
 
-bool IsFieldSubsetForOptionalsEnabled(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "MemberNthOverFlatMap";
-    return !IsOptimizerDisabled<optName>(*optCtx.Types);
-}
-
 void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "MemberNthOverFlatMap";
-    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-        return;
-    }
-
     auto maybeAsStruct = self.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
     if (!maybeAsStruct) {
         return;
@@ -386,6 +375,7 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
             restMembers.insert(memberNode);
         } else {
             ++separableMembersCount;
+            // clang-format off
             toOptimize[memberNode] = ctx.Builder(memberNode->Pos())
                 .Callable(self.CallableName())
                     .Add(0, self.Input().Ptr())
@@ -395,28 +385,35 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
             structItems.erase(it);
         }
     }
 
     if (separableMembersCount && !restMembers.empty()) {
+        // clang-format off
         auto restBody = ctx.Builder(self.Lambda().Body().Pos())
             .Callable("Just")
                 .Callable(0, "AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         ui32 i = 0U;
                         for (const auto& [name, value] : structItems) {
+                            // clang-format off
                             parent.List(i)
                                 .Atom(0, name)
                                 .Add(1, value)
                             .Seal();
+                            // clang-format on
                             ++i;
                         }
                         return parent;
+                    // clang-format off
                     })
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
         auto restFlatMap = ctx.ChangeChild(self.Ref(), TCoFlatMapBase::idx_Lambda,
             ctx.DeepCopyLambda(*ctx.ChangeChild(self.Lambda().Ref(), TCoLambda::idx_Body, std::move(restBody))));
         for (auto restMember : restMembers) {
@@ -429,15 +426,79 @@ void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap&
     }
 }
 
+TExprNode::TPtr FuseFilterWithCalcOverWindow(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (!TCoConditionalValueBase::Match(node.Lambda().Body().Raw())) {
+        return node.Ptr();
+    }
+
+    if (!node.Input().Maybe<TCoCalcOverWindowBase>() && !node.Input().Maybe<TCoCalcOverWindowGroup>()) {
+        return node.Ptr();
+    }
+
+    if (!optCtx.IsSingleUsage(node.Input().Ref())) {
+        return node.Ptr();
+    }
+
+    auto calcs = ExtractCalcsOverWindow(node.Input().Ptr(), ctx);
+    YQL_ENSURE(!calcs.empty(), "Empty CalcOverWindow should be processed earlier");
+    TCoCalcOverWindowTuple calc(calcs.back());
+    if (!calc.SessionSpec().Maybe<TCoVoid>()) {
+        // we are not ready for fusing session windows yet
+        return node.Ptr();
+    }
+    YQL_ENSURE(calc.SessionColumns().Empty());
+
+    TExprNode::TPtr calcInput = node.Input().Cast<TCoInputBase>().Input().Ptr();
+    const TCoConditionalValueBase body = node.Lambda().Body().Cast<TCoConditionalValueBase>();
+
+    auto filterLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, body.Predicate().Ptr());
+
+    auto frames = calc.Frames().Ref().ChildrenList();
+    // clang-format off
+    frames.push_back(ctx.Builder(filterLambda->Pos())
+        .Callable("WinFilter")
+            .Add(0, MakeRowsUPCRFrameSpec(filterLambda->Pos(), ctx.NewCallable(filterLambda->Pos(), "Void", {}), ctx, *optCtx.Types))
+            .Add(1, ExpandType(node.Input().Pos(), *node.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx))
+            .Lambda(2)
+                .Param("row")
+                .Apply(filterLambda)
+                    .With(0, "row")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build());
+    // clang-format on
+
+    // clang-format off
+    calcs.back() = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
+        .InitFrom(calc)
+        .Frames(ctx.NewList(calc.Frames().Pos(), std::move(frames)))
+        .Done().Ptr();
+    // clang-format on
+
+    auto newCalc = BuildCalcOverWindowGroup(node.Input().Pos(), calcInput, calcs, ctx);
+
+    auto flatmapBody = ctx.ChangeChild(body.Ref(), TCoConditionalValueBase::idx_Predicate, MakeBool<true>(body.Predicate().Pos(), ctx));
+    auto flatmapLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(flatmapBody));
+
+    YQL_CLOG(DEBUG, Core) << "Fuse Filter with " << node.Input().Ref().Content();
+    // clang-format off
+    return Build<TCoFlatMapBase>(ctx, node.Pos())
+        .InitFrom(node)
+        .Input(newCalc)
+        .Lambda(ctx.DeepCopyLambda(*flatmapLambda))
+        .Done().Ptr();
+    // clang-format on
 }
+
+} // namespace
 
 void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     map[TCoExtend::CallableName()] = map[TCoOrderedExtend::CallableName()] = map[TCoMerge::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToExtend(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -447,8 +508,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToTake(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -458,8 +518,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToSkip(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -470,9 +529,8 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
     [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [&] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
-                return ApplyExtractMembersToFilterSkipNullMembers(input, members, ctx, optCtx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+                return ApplyExtractMembersToFilterSkipNullMembers(input, members, ctx, " with multi-usage");
+            }
         );
 
         return true;
@@ -482,8 +540,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToFlatMap(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get())) {
@@ -500,8 +557,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -511,8 +567,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -522,8 +577,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToAssumeUnique(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -536,8 +590,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToTop(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -547,8 +600,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [](const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToEquiJoin(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
         if (!toOptimize.empty()) {
             return true;
@@ -566,12 +618,13 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
-    map[TCoPartitionByKey::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map[TCoPartitionByKey::CallableName()] = map[TCoPartitionsByKeys::CallableName()] =
+        [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx)
+    {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToPartitionByKey(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -584,8 +637,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToCalcOverWindow(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -595,8 +647,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToAggregate(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -606,8 +657,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToChopper(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -617,8 +667,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToCollect(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -628,8 +677,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToMapNext(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -639,8 +687,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToChain1Map(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -650,8 +697,7 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
                 return ApplyExtractMembersToCondense1(input, members, parentsMap, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
         );
 
         return true;
@@ -661,8 +707,17 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToCombineCore(input, members, ctx, " with multi-usage");
-            },
-            IsFieldSubsetForOptionalsEnabled(optCtx)
+            }
+        );
+
+        return true;
+    };
+
+    map[TCoSqlCombine::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToSqlCombine(input, members, ctx, " with multi-usage");
+            }
         );
 
         return true;
@@ -670,6 +725,24 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
 
     map[""] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         FilterPushdownWithMultiusage(node, toOptimize, ctx, optCtx);
+        if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get()) && CanPushdownFiltersOverWindow(optCtx.Types)) {
+            // we want to fuse filter with CalcOverWindow after FilterPushdownWithMultiusage
+            auto opt = FuseFilterWithCalcOverWindow(TCoFlatMapBase(node), ctx, optCtx);
+            if (opt != node) {
+                toOptimize[node.Get()] = opt;
+            }
+        }
+
+        return true;
+    };
+
+    map[TCoWithWorld::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToWithWorld(input, members, ctx, " with multi-usage");
+            }
+        );
+
         return true;
     };
 }

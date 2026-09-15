@@ -6,8 +6,7 @@
 
 #include <arrow/type.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 // ABI stable
 class IBlockTypeHelper1 {
@@ -17,19 +16,19 @@ public:
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 34)
-class IBlockTypeHelper2 : public IBlockTypeHelper1 {
+class IBlockTypeHelper2: public IBlockTypeHelper1 {
 public:
-    virtual IBlockItemHasher::TPtr MakeHasher(TType *type) const = 0;
+    virtual IBlockItemHasher::TPtr MakeHasher(TType* type) const = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 34)
-class IBlockTypeHelper : public IBlockTypeHelper2 {
+class IBlockTypeHelper: public IBlockTypeHelper2 {
 public:
     IBlockTypeHelper();
 };
 #else
-class IBlockTypeHelper : public IBlockTypeHelper1 {
+class IBlockTypeHelper: public IBlockTypeHelper1 {
 public:
     IBlockTypeHelper();
 };
@@ -37,11 +36,10 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IBlockTypeHelper, 8);
 
-template<EDataSlot slot>
+template <EDataSlot slot>
 std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == EDataSlot::TzDate || slot == EDataSlot::TzDatetime || slot == EDataSlot::TzTimestamp
-        || slot == EDataSlot::TzDate32 || slot == EDataSlot::TzDatetime64 || slot == EDataSlot::TzTimestamp64,
-        "Expected tz date type slot");
+    static_assert(slot == EDataSlot::TzDate || slot == EDataSlot::TzDatetime || slot == EDataSlot::TzTimestamp || slot == EDataSlot::TzDate32 || slot == EDataSlot::TzDatetime64 || slot == EDataSlot::TzTimestamp64,
+                  "Expected tz date type slot");
 
     if constexpr (slot == EDataSlot::TzDate) {
         return arrow::uint16();
@@ -63,5 +61,4 @@ std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
     }
 }
 
-}
-}
+} // namespace NYql::NUdf

@@ -54,6 +54,8 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage
+    ydb/core/control
+    ydb/core/mon
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/groupinfo
@@ -74,6 +76,18 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
 )
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
+
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+    )
+ENDIF()
 
 END()
 

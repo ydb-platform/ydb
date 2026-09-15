@@ -1,0 +1,350 @@
+#pragma once
+
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp/settings.h>
+
+#include <ydb/library/intersection_tree/intersection_tree.h>
+
+#include <util/generic/function_ref.h>
+
+namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
+
+template <std::totally_ordered TKey, typename TPortion>
+struct LastLevel: ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
+    using TLevelCounters = typename TBase::TLevelCounters;
+    TLastLevelSettings Settings;
+
+    LastLevel(TLastLevelSettings settings, const TCounters& counters)
+        : TBase(counters.GetLastLevelCounters())
+        , Settings(settings)
+    {
+    }
+
+    /// Right-border-sorted views — used by Borders()/Measure() and the candidate scan.
+    using PortionsEndSorted = TSet<typename TPortion::TConstPtr, TPortionByIndexKeyEndComparator<TKey, TPortion>>;
+    PortionsEndSorted Portions;
+    PortionsEndSorted Candidates;
+    THashSet<ui64> PortionIds;
+    THashSet<ui64> CandidateIds;
+    /// Width (LastLevel.Measure at insert time) for incremental width histogram; paired with DoAdd/DoRemove.
+    THashMap<ui64, ui64> WidthByPortionId;
+
+    void DoAddPortion(typename TPortion::TPtr p) override {
+        const ui64 portionId = p->GetPortionId();
+        const ui64 measure = Measure(p);
+        this->Counters.Portions->AddWidth(measure);
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
+        if (measure == 0) {
+            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+            Portions.insert(p);
+        } else {
+            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            Candidates.insert(p);
+        }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
+    }
+
+    void AddCandidatePortion(typename TPortion::TPtr p) {
+        if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
+            this->Counters.Portions->AddPortion(p);
+        }
+        const ui64 portionId = p->GetPortionId();
+        const ui64 measure = Measure(p);
+        this->Counters.Portions->AddWidth(measure);
+        AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
+        if (!Portions.size()) {
+            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            Portions.insert(p);
+        } else {
+            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            Candidates.insert(p);
+        }
+        this->Counters.Portions->SetHeight(CandidateIds.size());
+    }
+
+    void DoRemovePortion(typename TPortion::TConstPtr p) override {
+        const ui64 portionId = p->GetPortionId();
+        const auto wit = WidthByPortionId.find(portionId);
+        AFL_VERIFY(wit != WidthByPortionId.end())("portion_id", portionId);
+        this->Counters.Portions->RemoveWidth(wit->second);
+        WidthByPortionId.erase(wit);
+        // Route the bucket choice via identity-keyed presence sets, not via border-sorted membership.
+        if (PortionIds.erase(portionId)) {
+            AFL_VERIFY(Portions.erase(p))("portion_id", portionId);
+        } else if (CandidateIds.erase(portionId)) {
+            AFL_VERIFY(Candidates.erase(p))("portion_id", portionId);
+        } else {
+            AFL_VERIFY(false)("portion_id", portionId);
+        }
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(CandidateIds.size());
+    }
+
+    TOptimizationPriority BuildPriority(ui64 locked) const {
+        return TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, CandidateIds.size() - locked);
+    }
+
+    std::optional<typename TPortion::TConstPtr> NearestNeighbour(
+        typename TPortion::TConstPtr candidate, TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
+        const auto cmp = TPortionByIndexKeyEndComparator<TKey, TPortion>();
+
+        typename TPortion::TConstPtr succ = nullptr;
+        if (auto sIt = Portions.upper_bound(candidate); sIt != Portions.end()) {
+            succ = *sIt;
+        }
+        auto selfCand = Candidates.find(candidate);
+        if (selfCand != Candidates.end()) {
+            if (auto nxt = std::next(selfCand); nxt != Candidates.end() && (!succ || cmp(*nxt, succ))) {
+                succ = *nxt;
+            }
+        }
+
+        typename TPortion::TConstPtr pred = nullptr;
+        if (auto sIt = Portions.lower_bound(candidate); sIt != Portions.begin()) {
+            pred = *std::prev(sIt);
+        }
+        if (selfCand != Candidates.end() && selfCand != Candidates.begin()) {
+            if (auto prv = std::prev(selfCand); !pred || cmp(pred, *prv)) {
+                pred = *prv;
+            }
+        }
+
+        if (succ && !isLocked(succ)) {
+            return succ;
+        }
+        if (pred && !isLocked(pred)) {
+            return pred;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        ui64 locked = 0;
+        for (auto candidate : Candidates) {
+            if (isLocked(candidate)) {
+                locked++;
+                continue;
+            }
+            std::vector<typename TPortion::TConstPtr> result;
+            result.push_back(candidate);
+            ui64 currentBlobBytes = candidate->GetTotalBlobBytes();
+            auto [begin, end] = Borders(candidate);
+
+            bool success = true;
+            for (auto it = begin; it != end; ++it) {
+                if (isLocked(*it)) {
+                    success = false;
+                    break;
+                }
+                result.push_back(*it);
+                currentBlobBytes += (*it)->GetTotalBlobBytes();
+                if (currentBlobBytes > Settings.Compaction.Bytes || result.size() > Settings.Compaction.Portions) {
+                    break;
+                }
+            }
+            if (!success) {
+                continue;
+            }
+            if (result.size() == 1) {
+                if (std::optional<typename TPortion::TConstPtr> neighbour = NearestNeighbour(candidate, isLocked);
+                    neighbour && !isLocked(*neighbour)) {
+                    result.push_back(*neighbour);
+                } else {
+                    continue;
+                }
+            }
+            return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
+        }
+        return std::nullopt;
+    }
+
+    TOptimizationPriority DoGetUsefulMetric() const override {
+        return BuildPriority(0);
+    }
+
+    std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const {
+        auto begin = Portions.lower_bound(p->IndexKeyStart());
+        auto end = Portions.upper_bound(p->IndexKeyEnd());
+        if (end != Portions.end() && (*end)->IndexKeyStart() <= p->IndexKeyEnd()) {
+            ++end;
+        }
+        return std::make_pair(begin, end);
+    }
+
+    ui64 Measure(typename TPortion::TConstPtr p) const {
+        auto [begin, end] = Borders(p);
+        return std::distance(begin, end);
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Candidates", Candidates.size());
+        result.InsertValue("Portions", Portions.size());
+        return result;
+    }
+};
+
+template <std::totally_ordered TKey, typename TPortion>
+struct Accumulator: ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
+    using TLevelCounters = typename TBase::TLevelCounters;
+    TAccumulatorSettings Settings;
+    TSet<typename TPortion::TConstPtr, TPortionByIdComparator<TPortion>> Portions;
+
+    Accumulator(TAccumulatorSettings settings, const TCounters& counters)
+        : TBase(counters.GetAccumulatorCounters(0))
+        , Settings(settings)
+    {
+    }
+
+    void DoAddPortion(typename TPortion::TPtr p) override {
+        AFL_VERIFY(Portions.insert(p).second)("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Portions.size());
+    }
+
+    void DoRemovePortion(typename TPortion::TConstPtr p) override {
+        AFL_VERIFY(Portions.erase(p))("portion_id", p->GetPortionId());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Portions.size());
+    }
+
+    TOptimizationPriority BuildPriority(ui64 locked) const {
+        return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.OverloadPortions, Portions.size() - locked);
+    }
+
+    bool IsBelowThreshold() const {
+        return Portions.size() < Settings.Trigger.Portions;
+    }
+
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        CompactionTask<TKey, TPortion> result;
+        result.TargetLevel = 0;
+        ui64 currentBlobBytes = 0;
+        ui64 locked = 0;
+        for (auto it : Portions) {
+            if (isLocked(it)) {
+                locked++;
+                continue;
+            }
+            result.Portions.push_back(it);
+            currentBlobBytes += it->GetTotalBlobBytes();
+            if (currentBlobBytes > Settings.Compaction.Bytes || result.Portions.size() > Settings.Compaction.Portions) {
+                break;
+            }
+        }
+
+        if (result.Portions.size() > 1) {
+            result.Priority = BuildPriority(locked);
+            return result;
+        }
+        return {};
+    }
+
+    TOptimizationPriority DoGetUsefulMetric() const override {
+        return BuildPriority(0);
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        return result;
+    }
+};
+
+template <std::totally_ordered TKey, typename TPortion>
+struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
+    using TBase = ICompactionUnit<TKey, TPortion>;
+    using TLevelCounters = typename TBase::TLevelCounters;
+    TMiddleLevelSettings Settings;
+    ui32 LevelIdx;
+
+    MiddleLevel(TMiddleLevelSettings settings, ui32 levelIdx, const TCounters& counters)
+        : TBase(counters.GetLevelCounters(levelIdx))
+        , Settings(settings)
+        , LevelIdx(levelIdx)
+    {
+    }
+
+    TIntersectionTree<TKey, ui64> Intersections;
+    THashMap<ui64, typename TPortion::TConstPtr> PortionById;
+    /// Width at insert time (same value tiling used for routing); paired with AddWidth/RemoveWidth on this bucket.
+    THashMap<ui64, ui64> WidthByPortionId;
+
+    void RegisterRoutingWidth(ui64 portionId, ui64 width) {
+        AFL_VERIFY(!WidthByPortionId.contains(portionId))("portion_id", portionId);
+        WidthByPortionId.emplace(portionId, width);
+        this->Counters.Portions->AddWidth(width);
+    }
+
+    void UnregisterRoutingWidth(ui64 portionId) {
+        const auto it = WidthByPortionId.find(portionId);
+        AFL_VERIFY(it != WidthByPortionId.end())("portion_id", portionId);
+        this->Counters.Portions->RemoveWidth(it->second);
+        WidthByPortionId.erase(it);
+    }
+
+    void DoAddPortion(typename TPortion::TPtr p) override {
+        const ui64 id = p->GetPortionId();
+        PortionById.emplace(id, p);
+        Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
+    }
+
+    void DoRemovePortion(typename TPortion::TConstPtr p) override {
+        const ui64 id = p->GetPortionId();
+        Intersections.Remove(id);
+        AFL_VERIFY(PortionById.erase(id))("portion_id", id);
+        this->Counters.Portions->SetOverload(DoGetUsefulMetric().GetLevel());
+        this->Counters.Portions->SetHeight(Intersections.GetMaxCount());
+    }
+
+    TOptimizationPriority BuildPriority() const {
+        return TOptimizationPriority::Normalize(Settings.TriggerHeight, Settings.OverloadHeight, Intersections.GetMaxCount());
+    }
+
+    std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
+        TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
+        CompactionTask<TKey, TPortion> result;
+        auto range = Intersections.GetMaxRange();
+        range.ForEachValue([&](const ui64 id) {
+            auto it = PortionById.find(id);
+            if (it == PortionById.end()) {
+                return true;
+            }
+            const typename TPortion::TConstPtr& p = it->second;
+            if (!isLocked(p)) {
+                result.Portions.push_back(p);
+            }
+            return true;
+        });
+        if (result.Portions.size() > 1) {
+            result.TargetLevel = LevelIdx;
+            result.Priority = BuildPriority();
+            return result;
+        }
+
+        return {};
+    }
+
+    TOptimizationPriority DoGetUsefulMetric() const override {
+        return BuildPriority();
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Height", Intersections.GetMaxCount());
+        result.InsertValue("Portions", PortionById.size());
+        return result;
+    }
+};
+
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

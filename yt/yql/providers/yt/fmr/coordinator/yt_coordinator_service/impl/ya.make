@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
+    yt/yql/providers/yt/fmr/utils
 )
 
 YQL_LAST_ABI_VERSION()

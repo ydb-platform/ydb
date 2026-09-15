@@ -1,0 +1,168 @@
+#pragma once
+
+#include "direct_block_group_mock.h"
+#include "partition_direct_service_mock.h"
+#include "vchunk.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+
+#include <ydb/core/testlib/actors/test_runtime.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Default vchunk size.
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GenerateRandomString(size_t size);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TScheduledTask
+{
+    TDuration Delay;
+    TCallback Callback;
+};
+
+struct TBaseFixture: public NUnitTest::TBaseFixture
+{
+    static constexpr ui32 FixtureVChunkIndex = 100;
+
+    const ui32 BlockSize = DefaultBlockSize;
+    const ui64 VChunkBlockCount = DefaultVChunkSize / BlockSize;
+    const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
+    const THostIndex FreshDDisk = 1;
+    TVChunkConfig VChunkConfig = TVChunkConfig::MakeDefault(
+        FixtureVChunkIndex,
+        DirectBlockGroupHostCount,
+        DefaultPrimaryCount);
+    TDirtyMapStateProto DirtyMapStateProto;
+    TDiskDescription DiskDescription{
+        .DiskId = "disk-id",
+        .TabletId = 100,
+        .Generation = 1};
+    TLogTitle LogTitle{
+        GetCycleCount(),
+        TLogTitle::TVChunk{
+            .DiskId = DiskDescription.DiskId,
+            .VChunkIndex = VChunkConfig.GetVChunkIndex()}};
+
+    std::unique_ptr<NActors::TTestActorRuntime> Runtime;
+    std::shared_ptr<TTraceServiceMock> TraceService =
+        std::make_shared<TTraceServiceMock>();
+    TPartitionDirectServiceMockPtr PartitionDirectService;
+    TDirectBlockGroupMockPtr DirectBlockGroup;
+    TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        VChunkConfig,
+        BlockSize,
+        VChunkBlockCount);
+
+    THostIndex ExpectedHost = 0;
+    TBlockRange16 ExpectedRange;
+    TString RangeData;
+
+    TMutex PromisesGuard;
+    TVector<TScheduledTask> ScheduledTasks;
+    TVector<NThreading::TPromise<TDBGReadBlocksResponse>> ReadPromises;
+    TVector<NThreading::TPromise<TDBGWriteBlocksResponse>> WritePromises;
+    TVector<NThreading::TPromise<TDBGFlushResponse>> FlushPromises;
+    TVector<NThreading::TPromise<TDBGEraseResponse>> ErasePromises;
+
+    virtual void Init();
+
+    TGuardedSgList MakeSgList() const;
+
+    bool WaitScheduledTasks(size_t count, TDuration timeout);
+    NThreading::TFuture<void> RunScheduledTasks();
+
+    void SetReadResult(TDBGReadBlocksResponse response, bool async);
+    bool WaitReadRequests(size_t count, TDuration timeout);
+
+    void SetWriteResult(TDBGWriteBlocksResponse response, bool async);
+    bool WaitWriteRequests(size_t count, TDuration timeout);
+
+    void SetFlushResult(TDBGFlushResponse response, bool async);
+    bool WaitFlushRequests(size_t count, TDuration timeout);
+
+    void SetEraseResult(TDBGEraseResponse response, bool async);
+    bool WaitEraseRequests(size_t count, TDuration timeout);
+
+    size_t ReplyUpdateRequests();
+    size_t ReplyUpdateDirtyMapStateRequests();
+
+    static auto& AccessBlocksDirtyMap(TVChunk& vchunk)
+    {
+        return *vchunk.BlocksDirtyMap;
+    }
+
+    static auto& AccessConfig(TVChunk& vchunk)
+    {
+        return vchunk.VChunkConfig;
+    }
+
+    static bool IsDirtyMapReady(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady.HasValue();
+    }
+
+    static bool IsDirtyMapStatePersisting(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapStatePersisting;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokePersistDirtyMap(TVChunk& vchunk)
+    {
+        vchunk.DoPersistDirtyMap();
+    }
+
+    static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeOnCopyComplete(
+        TVChunk& vchunk,
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result)
+    {
+        vchunk.OnCopyComplete(hostIndex, result);
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeUpdateDirtyMap(
+        TVChunk& vchunk,
+        const TDBGRestoreResponse& response)
+    {
+        vchunk.UpdateDirtyMap(response);
+    }
+
+private:
+    template <typename T>
+    void SetResult(
+        TVector<NThreading::TPromise<T>>& promises,
+        T response,
+        bool async);
+
+    template <typename T>
+    bool Wait(TVector<T>& items, size_t count, TDuration timeout);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

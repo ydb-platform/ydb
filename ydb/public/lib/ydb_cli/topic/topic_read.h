@@ -4,7 +4,7 @@
 #include "ydb/public/lib/ydb_cli/commands/ydb_command.h"
 #include <util/stream/null.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -16,10 +16,13 @@ namespace NYdb::NConsoleClient {
 
     class TTopicReaderSettings {
     public:
+        using TPartitionReadOffsetMap = std::unordered_map<ui64, ui64>;
+
         TTopicReaderSettings(
             TMaybe<i64> limit,
             bool commit,
             bool wait,
+            TPartitionReadOffsetMap partitionReadOffset,
             EMessagingFormat format,
             TVector<ETopicMetadataField> metadataFields,
             ETransformBody transform,
@@ -33,6 +36,7 @@ namespace NYdb::NConsoleClient {
         GETTER(bool, Commit);
         GETTER(TMaybe<i64>, Limit);
         GETTER(bool, Wait);
+        GETTER(TPartitionReadOffsetMap, PartitionReadOffset);
         GETTER(EMessagingFormat, MessagingFormat);
         GETTER(ETransformBody, Transform);
         GETTER(TDuration, IdleTimeout);
@@ -48,6 +52,7 @@ namespace NYdb::NConsoleClient {
         EMessagingFormat MessagingFormat_ = EMessagingFormat::SingleMessage;
         ETransformBody Transform_ = ETransformBody::None;
         TMaybe<i64> Limit_ = Nothing();
+        TPartitionReadOffsetMap PartitionReadOffset_;
         bool Commit_ = false;
         bool Wait_ = false;
     };
@@ -55,7 +60,7 @@ namespace NYdb::NConsoleClient {
     class TTopicReaderTests;
 
     // TODO(shmel1k@): think about interruption here.
-    class TTopicReader: public TInterruptibleCommand {
+    class TTopicReader: public TInterruptableCommand {
         using TReceivedMessage = NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
     public:
@@ -79,6 +84,12 @@ namespace NYdb::NConsoleClient {
     private:
         void PrintMessagesInPrettyFormat(IOutputStream& output) const;
         void PrintMessagesInJsonArrayFormat(IOutputStream& output) const;
+        void PrintMessagesInCsvFormat(IOutputStream& output, char delimiter) const;
+        void PrintMessageAsJson(const TReceivedMessage& message, IOutputStream& output) const;
+        void PrintCsvHeader(IOutputStream& output, char delimiter);
+        void PrintMessageAsCsvRow(const TReceivedMessage& message, IOutputStream& output, char delimiter) const;
+        void PrintCsvFieldValue(const ETopicMetadataField& f, TReceivedMessage const& message, IOutputStream& output, char delimiter) const;
+        TString GetFieldWithEscaping(const TString& body, char delimiter) const;
 
         enum EReadingStatus {
             NoPartitionTaken = 0,
@@ -86,7 +97,14 @@ namespace NYdb::NConsoleClient {
             PartitionWithData = 2,
         };
 
+        struct TPartitionSessionInfo {
+            NTopic::TPartitionSession::TPtr PartitionSession;
+            EReadingStatus ReadingStatus;
+            std::optional<ui64> LastReadOffset;
+        };
+
         bool HasSession(ui64 sessionId) const;
+        std::optional<uint64_t> GetNextReadOffset(ui64 partitionId) const;
 
     private:
         std::shared_ptr<NTopic::IReadSession> ReadSession_;
@@ -100,9 +118,13 @@ namespace NYdb::NConsoleClient {
         TVector<TReceivedMessage> ReceivedMessages_;
 
         ui32 PartitionsBeingRead_ = 0;
+        bool CsvHeaderPrinted_ = false;
+        bool FirstPartitionSessionCreated = false;
+        std::optional<TInstant> AllPartitionsAreFullyReadTime;
 
         friend class TTopicReaderTests;
 
-        THashMap<ui64, std::pair<NTopic::TPartitionSession::TPtr, EReadingStatus>> ActivePartitionSessions_;
+        THashMap<ui64, TPartitionSessionInfo> ActivePartitionSessions_;
+        TTopicReaderSettings::TPartitionReadOffsetMap PartitionReadOffset_;
     };
 } // namespace NYdb::NConsoleClient

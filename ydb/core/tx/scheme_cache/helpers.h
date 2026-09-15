@@ -12,8 +12,10 @@ namespace NKikimr::NSchemeCache {
 struct TSchemeCacheHelpers {
     using TNavigate = TSchemeCacheNavigate;
     using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvNavigateResult = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
     using TResolve = TSchemeCacheRequest;
     using TEvResolve = TEvTxProxySchemeCache::TEvResolveKeySet;
+    using TEvResolveResult = TEvTxProxySchemeCache::TEvResolveKeySetResult;
     using TCheckFailFunc = std::function<void(const TString&)>;
 
     inline static TNavigate::TEntry MakeNavigateEntry(const TTableId& tableId, TNavigate::EOp op) {

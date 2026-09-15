@@ -58,7 +58,8 @@ public:
         , ChunkRawBytesLimit(chunkRawBytesLimit)
         , UseWholeChunksOptimization(!schema->GetIndexInfo().GetReplaceKey()->GetFieldByName(ResultField->name()))
         , ColumnStat(columnStat)
-        , IndexInfo(schema->GetIndexInfo()) {
+        , IndexInfo(schema->GetIndexInfo())
+    {
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
     }
 };

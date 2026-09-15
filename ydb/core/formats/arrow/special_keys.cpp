@@ -4,7 +4,6 @@
 
 #include "reader/position.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 

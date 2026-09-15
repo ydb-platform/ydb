@@ -6,7 +6,7 @@ import re
 from jinja2 import Environment, FileSystemLoader
 
 templateFile = sys.argv[1]
-(templateDir, templateFilename) = os.path.split(templateFile)
+templateDir, templateFilename = os.path.split(templateFile)
 
 jsonFile = sys.argv[2]
 headerOutFile = sys.argv[3]
@@ -182,7 +182,7 @@ for node in model["Nodes"]:
 
     addUsages(model["NodeRootType"])
     addUsages(node["Base"])
-    if ("Children" in node):
+    if "Children" in node:
         for child in node["Children"]:
             addUsages(child["Type"])
     aux["usages"] = usages

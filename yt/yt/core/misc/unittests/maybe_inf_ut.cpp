@@ -7,7 +7,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TMaybeInf, Increase)
+TEST(TMaybeInfTest, Increase)
 {
     using TLimit = TMaybeInf<ui32>;
     TLimit a(1);
@@ -18,7 +18,7 @@ TEST(TMaybeInf, Increase)
     EXPECT_TRUE(a.IsFinite());
 }
 
-TEST(TMaybeInf, DecreaseBy)
+TEST(TMaybeInfTest, DecreaseBy)
 {
     using TLimit = TMaybeInf<ui32>;
     TLimit a(1);

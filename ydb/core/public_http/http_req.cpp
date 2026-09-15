@@ -7,6 +7,8 @@
 #include <util/generic/guid.h>
 #include <util/string/ascii.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PUBLIC_HTTP
+
 namespace NKikimr::NPublicHttp {
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
     constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id";
@@ -217,23 +219,19 @@ namespace NKikimr::NPublicHttp {
     }
 
     void THttpRequestContext::DoResponse(TStringBuf status, TStringBuf message, TStringBuf body, TStringBuf contentType) const {
-        auto res = Request->CreateResponse(status, message, contentType, body);
-        ActorSystem->Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
-
         const TDuration elapsed = TInstant::Now() - StartedAt;
-        LOG_INFO_S(*ActorSystem, NKikimrServices::PUBLIC_HTTP,
-                "HTTP response -> code: " << status <<
-                ", method: " << Request->Method <<
-                ", url: " << Request->URL <<
-                ", content type: " << ContentType <<
-                ", request body size: " << Request->Body.size() <<
-                ", response body size: " << body.size() <<
-                ", elapsed: " << elapsed <<
-                ", from: " << Request->Address <<
-                ", forwarded for: " << ForwardedFor <<
-                ", request id: " << RequestId <<
-                ", idempotency key: " << IdempotencyKey
-                );
+        YDB_LOG_INFO_CTX(*ActorSystem, "HTTP response",
+            {"code", status},
+            {"method", Request->Method},
+            {"url", Request->URL},
+            {"contentType", ContentType},
+            {"requestBodySize", Request->Body.size()},
+            {"responseBodySize", body.size()},
+            {"elapsed", elapsed},
+            {"from", Request->Address},
+            {"forwardedFor", ForwardedFor},
+            {"requestId", RequestId},
+            {"idempotencyKey", IdempotencyKey});
 
         auto group = Counters;
         if (Db) {
@@ -245,6 +243,9 @@ namespace NKikimr::NPublicHttp {
         group = group->GetSubgroup("path_pattern", PathPattern)->GetSubgroup("method", TString(Request->Method));
         group->GetSubgroup("code", TString(status))->GetCounter("count", true)->Inc();
         group->GetSubgroup("code", HttpCodeFamily(status))->GetCounter("count", true)->Inc();
+
+        ActorSystem->Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+                    Request->CreateResponse(status, message, contentType, body)));
     }
 
     void THttpRequestContext::ParseHeaders(TStringBuf str) {

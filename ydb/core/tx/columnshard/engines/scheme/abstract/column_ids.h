@@ -24,7 +24,8 @@ private:
 public:
     template <typename It>
     TColumnIdsView(const It begin, const It end)
-        : ColumnIds(begin, end) {
+        : ColumnIds(begin, end)
+    {
     }
 
     TIterator begin() const {

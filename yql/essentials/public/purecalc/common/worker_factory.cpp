@@ -3,9 +3,10 @@
 #include "type_from_schema.h"
 #include "worker.h"
 #include "compile_mkql.h"
+#include "default_runtime_settings.h"
 
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -17,6 +18,7 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
@@ -43,6 +45,28 @@
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
+namespace {
+
+NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
+    NSQLTranslation::TSqlFlags flags = {
+        "AnsiOrderByLimitInUnionAll",
+        "AnsiRankForNullableKeys",
+        "DisableAnsiOptionalAs",
+        "DisableCoalesceJoinKeysOnQualifiedAll",
+        "DisableUnorderedSubqueries",
+        "FlexibleTypes"};
+    if (blockEngineMode != EBlockEngineMode::Disable) {
+        flags.insert("EmitAggApply");
+    }
+    return flags;
+}
+
+NYql::TRuntimeSettings::TConstPtr GetRuntimeSettings() {
+    return NYql::NPureCalc::NPrivate::GetDefaultRuntimeSettings();
+}
+
+} // namespace
+
 template <typename TBase>
 TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorMode processorMode)
     : Factory_(std::move(options.Factory))
@@ -57,8 +81,14 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , RuntimeSettings_(::GetRuntimeSettings())
+    , IssueReportTarget_(options.IssueReportTarget)
+    , RemoveUnsupportedPragmas_(options.RemoveUnsupportedPragmas)
 {
+    HandleInternalSettings(options.InternalSettings);
+
     // Prepare input struct types and extract all column names from inputs
+    auto typeCtx = PrepareTypeContext(options.ModuleResolver);
 
     const auto& inputSchemas = options.InputSpec.GetSchemas();
     const auto& allVirtualColumns = options.InputSpec.GetAllVirtualColumns();
@@ -68,13 +98,13 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     const auto inputsCount = inputSchemas.size();
 
     for (ui32 i = 0; i < inputsCount; ++i) {
-        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
-        if (!ValidateInputSchema(originalInputType, ExprContext_)) {
+        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_, IssueReportTarget_);
+        if (!ValidateInputSchema(originalInputType, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
         const auto* originalStructType = originalInputType->template Cast<TStructExprType>();
-        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_);
+        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_, IssueReportTarget_);
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
@@ -96,8 +126,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     auto outputSchema = options.OutputSpec.GetSchema();
     if (!outputSchema.IsNull()) {
-        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
-        if (!ValidateOutputSchema(OutputType_, ExprContext_)) {
+        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_, IssueReportTarget_);
+        if (!ValidateOutputSchema(OutputType_, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
     } else {
@@ -112,10 +142,10 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         SerializedProgram_ = TString{options.Query};
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
-            options.ModuleResolver, options.SyntaxVersion, options.LangVer, options.Modules,
-            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode);
+                            options.SyntaxVersion, options.Modules,
+                            options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
-        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), /*allowMultiIO=*/true, ExprContext_);
 
         // Deduce output type if it wasn't provided by output spec
 
@@ -136,53 +166,74 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 }
 
 template <typename TBase>
-TExprNode::TPtr TWorkerFactory<TBase>::Compile(
-    TStringBuf query,
-    ETranslationMode mode,
-    IModuleResolver::TPtr factoryModuleResolver,
-    ui16 syntaxVersion,
-    NYql::TLangVersion langver,
-    const THashMap<TString, TString>& modules,
-    const TInputSpecBase& inputSpec,
-    const TOutputSpecBase& outputSpec,
-    bool useAntlr4,
-    EProcessorMode processorMode
-) {
-    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
-    if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
-        ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
+void TWorkerFactory<TBase>::HandleInternalSettings(const TInternalProgramSettings& settings) {
+    if (settings.NodesAllocationLimit) {
+        ExprContext_.NodesAllocationLimit = *settings.NodesAllocationLimit;
     }
 
-    TMaybe<TIssue> verIssue;
-    if (!CheckLangVersion(langver, GetMaxReleasedLangVersion(), verIssue)) {
-        TIssues issues;
-        issues.AddIssue(*verIssue);
-        ythrow TCompileError("", issues.ToString());
+    if (settings.StringsAllocationLimit) {
+        ExprContext_.StringsAllocationLimit = *settings.StringsAllocationLimit;
     }
 
+    if (settings.RepeatTransformLimit) {
+        ExprContext_.RepeatTransformLimit = *settings.RepeatTransformLimit;
+    }
+}
+
+template <typename TBase>
+TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
+    IModuleResolver::TPtr factoryModuleResolver) {
     // Prepare type annotation context
 
-    TTypeAnnotationContextPtr typeContext;
-
     IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
-    typeContext = MakeIntrusive<TTypeAnnotationContext>();
-    typeContext->LangVer = langver;
+    auto typeContext = MakeIntrusive<TTypeAnnotationContext>();
+    typeContext->LangVer = LangVer_;
     typeContext->UseTypeDiffForConvertToError = true;
     typeContext->RandomProvider = CreateDefaultRandomProvider();
-    typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
-        CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :
-        CreateDefaultTimeProvider();
+    typeContext->TimeProvider = DeterministicTimeProviderSeed_ ? CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) : CreateDefaultTimeProvider();
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
     typeContext->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
     typeContext->BlockEngineMode = BlockEngineMode_;
-    auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
+    auto configProvider = CreateConfigProvider(*typeContext, /*config=*/nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
+    typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
+    typeContext->RuntimeSettings = RuntimeSettings_;
+
+    if (BlockEngineMode_ != EBlockEngineMode::Disable) {
+        typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
+    }
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
+        modules->SetUseCanonicalLibrarySuffix(true);
+    }
+
+    return typeContext;
+}
+
+template <typename TBase>
+TExprNode::TPtr TWorkerFactory<TBase>::Compile(
+    TStringBuf query,
+    ETranslationMode mode,
+    ui16 syntaxVersion,
+    const THashMap<TString, TString>& modules,
+    const TInputSpecBase& inputSpec,
+    const TOutputSpecBase& outputSpec,
+    EProcessorMode processorMode,
+    TTypeAnnotationContext* typeContext) {
+    if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
+        ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
+    }
+
+    TMaybe<TIssue> verIssue;
+    if (!CheckLangVersion(LangVer_, GetMaxReleasedLangVersion(), verIssue)) {
+        TIssues issues;
+        issues.AddIssue(*verIssue);
+        ythrow TCompileError("", issues.ToString());
     }
 
     // Parse SQL/s-expr into AST
@@ -197,30 +248,24 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             settings.PgParser = true;
         }
 
-        settings.LangVer = langver;
+        settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.EmitReadsForExists = true;
-        settings.Antlr4Parser = useAntlr4;
+        settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
-        settings.Flags = {
-            "AnsiOrderByLimitInUnionAll",
-            "AnsiRankForNullableKeys",
-            "DisableAnsiOptionalAs",
-            "DisableCoalesceJoinKeysOnQualifiedAll",
-            "DisableUnorderedSubqueries",
-            "FlexibleTypes"
-        };
-        if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-            settings.Flags.insert("EmitAggApply");
-        }
-        for (const auto& [key, block] : UserData_) {
+        settings.Flags = GetSqlFlags(BlockEngineMode_);
+        settings.AllowTablesFunction = true;
+        const TString libraryPrefix = NYql::GetDefaultFilePrefix() + "yql_libs/";
+        for (auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
+            if (alias.StartsWith(libraryPrefix)) {
+                block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
+            }
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
                 alias.SkipPrefix("/home/");
                 settings.Libraries.emplace(alias);
@@ -231,18 +276,23 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth);
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth);
 
         NSQLTranslation::TTranslators translators(
             nullptr,
             NSQLTranslationV1::MakeTranslator(lexers, parsers),
-            NSQLTranslationPG::MakeTranslator()
-        );
+            NSQLTranslationPG::MakeTranslator());
 
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
-        astRes = ParseAst(TString(query));
+        astRes = ParseAst(query);
     }
 
     if (verIssue) {
@@ -262,17 +312,15 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     // Translate AST into expression
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, moduleResolver.get(), nullptr, 0, syntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), /*urlListerManager=*/nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
     }
 
-
     // Prepare transformation pipeline
     THolder<IGraphTransformer> calcTransformer = CreateFunctorTransformer([&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx)
-        -> IGraphTransformer::TStatus
-    {
+                                                                              -> IGraphTransformer::TStatus {
         output = input;
         auto valueNode = input->HeadPtr();
 
@@ -283,7 +331,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         }
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, /*enableRaw=*/true);
         writer.OnBeginMap();
 
         writer.OnKeyedItem("Data");
@@ -303,13 +351,13 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             CountersProvider_,
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
-            langver,
-            true
-        );
+            LangVer_,
+            /*insideEvaluation=*/true,
+            RuntimeSettings_);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
-            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), nullptr);
+            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), /*structPositions=*/nullptr);
         }
         writer.OnEndMap();
 
@@ -319,8 +367,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     });
 
     const TString& selfName = TString(inputSpec.ProvidesBlocks()
-                            ? PurecalcBlockInputCallableName
-                            : PurecalcInputCallableName);
+                                          ? PurecalcBlockInputCallableName
+                                          : PurecalcInputCallableName);
 
     TTypeAnnCallableFactory typeAnnCallableFactory = [&]() {
         return MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName);
@@ -332,41 +380,62 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();
-    pipeline.AddPreTypeAnnotation();
+    if (RemoveUnsupportedPragmas_) {
+        pipeline.Add(CreateFunctorTransformer(
+                         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                             return OptimizeExpr(input, output, [typeContext](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                                 if (node->IsCallable(ConfigureName)) {
+                                     if (!EnsureMinArgsCount(*node, 2, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!EnsureMinArgsCount(*node->Child(1), 1, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!typeContext->DataSourceMap.contains(node->Child(1)->Head().Content())) {
+                                         return node->HeadPtr();
+                                     }
+                                 }
+                                 return node;
+                             }, ctx, TOptimizeExprSettings(nullptr));
+                         }), "Unsupported pragmas", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                     "Unsupported pragmas optimizations");
+    }
+    pipeline.AddPreTypeAnnotation(/*expandCons=*/false);
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({
-                    PurecalcInputCallableName, PurecalcBlockInputCallableName
-                })) {
-                    return node->ChildPtr(0);
-                }
-                return node;
-            }, ctx, TOptimizeExprSettings(nullptr));
-        }), "Unordered", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
-        "Unordered optimizations");
+                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                             if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({PurecalcInputCallableName, PurecalcBlockInputCallableName})) {
+                                 return node->ChildPtr(0);
+                             }
+                             return node;
+                         }, ctx, TOptimizeExprSettings(nullptr));
+                     }), "Unordered", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Unordered optimizations");
     pipeline.Add(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
-                    return node->Head().ChildPtr(1);
-                }
+                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                             if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
+                                 return node->Head().ChildPtr(1);
+                             }
+                             if (node->IsCallable("Left!") && node->Head().IsCallable("Cons!")) {
+                                 return node->Head().ChildPtr(0);
+                             }
 
-                return node;
-            }, ctx, TOptimizeExprSettings(nullptr));
-        }), "Cons", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
-        "Cons optimizations");
+                             return node;
+                         }, ctx, TOptimizeExprSettings(nullptr));
+                     }), "Cons", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Cons optimizations");
     pipeline.Add(MakeOutputColumnsFilter(outputSpec.GetOutputColumnsFilter()),
                  "Filter", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Filter output columns");
     pipeline.Add(MakeRootToBlocks(outputSpec.AcceptsBlocks(), processorMode),
                  "RootToBlocks", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Rewrite the root if the output spec accepts blocks");
-    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode),
+    pipeline.Add(MakeOutputAligner(OutputType_, outputSpec.AcceptsBlocks(), processorMode, *typeContext),
                  "Convert", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Align return type of the program to output schema");
     pipeline.AddCommonOptimization();
@@ -377,7 +446,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakePeepholeOptimization(typeContext),
                  "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Peephole optimizations");
-    pipeline.AddCheckExecution(false);
+    pipeline.AddCheckExecution(/*checkWorld=*/false);
 
     // Apply optimizations
 
@@ -401,10 +470,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     if (exprOut) {
         *exprOut << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root
-            ->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine
-                                    | TAstPrintFlags::ShortQuote
-                                    | TAstPrintFlags::AdaptArbitraryContent);
+        ConvertToAst(*exprRoot, ExprContext_, 0, /*refAtoms=*/true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }
@@ -510,7 +576,7 @@ const THashSet<TString>& TWorkerFactory<TBase>::GetUsedColumns() const {
 template <typename TBase>
 TIssues TWorkerFactory<TBase>::GetIssues() const {
     auto issues = ExprContext_.IssueManager.GetCompletedIssues();
-    CheckFatalIssues(issues);
+    CheckFatalIssues(issues, IssueReportTarget_);
     return issues;
 }
 
@@ -518,7 +584,7 @@ template <typename TBase>
 TString TWorkerFactory<TBase>::GetCompiledProgram() {
     if (ExprRoot_) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            FuncRegistry_->SupportsSizedAllocators());
+                                              FuncRegistry_->SupportsSizedAllocators());
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);
@@ -536,47 +602,41 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
     }
 }
 
-
-#define DEFINE_WORKER_MAKER(MODE)                                                       \
-    TWorkerHolder<I##MODE##Worker> T##MODE##WorkerFactory::MakeWorker() {               \
-        if (!WorkerPool_.empty()) {                                                     \
-            auto res = std::move(WorkerPool_.back());                                   \
-            WorkerPool_.pop_back();                                                     \
-            return TWorkerHolder<I##MODE##Worker>((I##MODE##Worker *)res.Release());    \
-        }                                                                               \
-        return TWorkerHolder<I##MODE##Worker>(new T##MODE##Worker(                      \
-            weak_from_this(),                                                           \
-            ExprRoot_,                                                                  \
-            ExprContext_,                                                               \
-            SerializedProgram_,                                                         \
-            *FuncRegistry_,                                                             \
-            UserData_,                                                                  \
-            InputTypes_,                                                                \
-            OriginalInputTypes_,                                                        \
-            RawInputTypes_,                                                             \
-            OutputType_,                                                                \
-            RawOutputType_,                                                             \
-            LLVMSettings_,                                                              \
-            CountersProvider_,                                                          \
-            NativeYtTypeFlags_,                                                         \
-            DeterministicTimeProviderSeed_,                                             \
-            LangVer_                                                                    \
-        ));                                                                             \
+#define DEFINE_WORKER_MAKER(MODE)                                                   \
+    TWorkerHolder<I##MODE##Worker> T##MODE##WorkerFactory::MakeWorker() {           \
+        if (!WorkerPool_.empty()) {                                                 \
+            auto res = std::move(WorkerPool_.back());                               \
+            WorkerPool_.pop_back();                                                 \
+            return TWorkerHolder<I##MODE##Worker>((I##MODE##Worker*)res.Release()); \
+        }                                                                           \
+        return TWorkerHolder<I##MODE##Worker>(new T##MODE##Worker(                  \
+            weak_from_this(),                                                       \
+            ExprRoot_,                                                              \
+            ExprContext_,                                                           \
+            SerializedProgram_,                                                     \
+            *FuncRegistry_,                                                         \
+            UserData_,                                                              \
+            InputTypes_,                                                            \
+            OriginalInputTypes_,                                                    \
+            RawInputTypes_,                                                         \
+            OutputType_,                                                            \
+            RawOutputType_,                                                         \
+            LLVMSettings_,                                                          \
+            CountersProvider_,                                                      \
+            NativeYtTypeFlags_,                                                     \
+            DeterministicTimeProviderSeed_,                                         \
+            LangVer_,                                                               \
+            RuntimeSettings_));                                                     \
     }
 
 DEFINE_WORKER_MAKER(PullStream)
 DEFINE_WORKER_MAKER(PullList)
 DEFINE_WORKER_MAKER(PushStream)
 
-namespace NYql {
-    namespace NPureCalc {
-        template
-        class TWorkerFactory<IPullStreamWorkerFactory>;
+namespace NYql::NPureCalc {
+template class TWorkerFactory<IPullStreamWorkerFactory>;
 
-        template
-        class TWorkerFactory<IPullListWorkerFactory>;
+template class TWorkerFactory<IPullListWorkerFactory>;
 
-        template
-        class TWorkerFactory<IPushStreamWorkerFactory>;
-    }
-}
+template class TWorkerFactory<IPushStreamWorkerFactory>;
+} // namespace NYql::NPureCalc

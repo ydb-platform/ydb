@@ -127,7 +127,7 @@ namespace {
 TError MakeCanceledError(TGuid requestId)
 {
     return TError(NYT::EErrorCode::Canceled, "Ares DNS resolver is stopped")
-        << TErrorAttribute("request_id", requestId);
+        .With("request_id", requestId);
 }
 
 } // namespace
@@ -149,7 +149,7 @@ public:
         SetAresSocketCallback();
     }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         ResolverThread_ = New<TResolverThread>(this);
         ShutdownCookie_ = RegisterShutdownCallback(
@@ -376,7 +376,7 @@ private:
                 bool shouldDequeue = ProcessFDEvents(PollTimeout);
 
                 if (shouldDequeue) {
-                    if (bool noRequestsLeft = !TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false)) {
+                    if (!TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false)) {
                         // We make WakeUpHandle triggerable again
                         // and then double check the queue for requests.
                         // This way we ensure that either we observe
@@ -414,17 +414,17 @@ private:
         event.data.fd = socket;
         result = epoll_ctl(this_->EpollFD_, EPOLL_CTL_ADD, socket, &event);
         if (result != 0) {
-            YT_LOG_WARNING(TError::FromSystem(), "epoll_ctl() failed in Ares DNS resolver");
+            YT_TLOG_WARNING("epoll_ctl() failed in Ares DNS resolver")
+                .With(TError::FromSystem());
             result = -1;
         }
     #else
         Y_UNUSED(opaque);
         #ifndef _win_
             if (socket >= FD_SETSIZE) {
-                YT_LOG_WARNING(
-                    "File descriptor is out of valid range (FD: %v, Limit: %v)",
-                    socket,
-                    FD_SETSIZE);
+                YT_TLOG_WARNING("File descriptor is out of valid range")
+                    .With("FD", socket)
+                    .With("Limit", FD_SETSIZE);
                 result = -1;
             }
         #endif
@@ -463,9 +463,8 @@ private:
             = TError(NNet::EErrorCode::ResolveTimedOut, "Ares DNS resolve timed out");
         if (promise.TrySet(std::move(timeoutError))) {
             TimeoutCounter_.Increment();
-            YT_LOG_WARNING(
-                "Ares DNS resolve timed out (RequestId: %v)",
-                requestId);
+            YT_TLOG_WARNING("Ares DNS resolve timed out")
+                .With("RequestId", requestId);
         }
     }
 
@@ -501,7 +500,7 @@ private:
 
     void Shutdown()
     {
-        if (Y_UNLIKELY(ShuttingDown_.exchange(true, std::memory_order::relaxed))) { // (d)
+        if (ShuttingDown_.exchange(true, std::memory_order::relaxed)) [[unlikely]] { // (d)
             return;
         }
         std::atomic_thread_fence(std::memory_order::seq_cst); // (e)
@@ -622,9 +621,8 @@ private:
         // safe to drain it from producer side.
         std::unique_ptr<TResolveRequest> request;
         while (Queue_.try_dequeue(request)) {
-            YT_LOG_DEBUG(
-                "Canceling request because Ares DNS resolver is shutting down (RequestId: %v)",
-                request->RequestId);
+            YT_TLOG_DEBUG("Canceling request because Ares DNS resolver is shutting down")
+                .With("RequestId", request->RequestId);
             TDelayedExecutor::CancelAndClear(request->TimeoutCookie);
             request->Promise.Set(MakeCanceledError(request->RequestId));
         }
@@ -666,20 +664,30 @@ private:
     */
     bool TryEnqueue(std::unique_ptr<TResolveRequest> request)
     {
+        // Fast path: Check if we're shutting down before enqueueing.
+        // This is an optimization to avoid enqueueing requests during shutdown.
         if (ShuttingDown_.load(std::memory_order::relaxed)) {
-            YT_LOG_DEBUG(
-                "Canceling request because Ares DNS resolver is shutting down (RequestId: %v)",
-                request->RequestId);
+            YT_TLOG_DEBUG("Canceling request because Ares DNS resolver is shutting down")
+                .With("RequestId", request->RequestId);
             TDelayedExecutor::CancelAndClear(request->TimeoutCookie);
             request->Promise.Set(MakeCanceledError(request->RequestId));
             return false;
         }
-        // <- Concurrent shutdown compelition will cause request to be lost.
-        // Thus we double check after enqueue.
+
+        // NOTE: There is a potential race window here: between the check above
+        // and the enqueue below, shutdown could start. To handle this, we use
+        // a double-check pattern with seq_cst fences that guarantees either:
+        // 1. The post-enqueue check (c) will observe ShuttingDown_==true, OR
+        // 2. The DrainQueue call in Shutdown will observe this enqueued request.
+        // See the detailed memory-ordering proof in comments above for mathematical proof.
 
         Queue_.enqueue(std::move(request)); // (a)
 
+        // Memory fence ensures total ordering with shutdown's fence at (e).
         std::atomic_thread_fence(std::memory_order::seq_cst); // (b)
+
+        // Post-enqueue check: If shutdown started after our enqueue,
+        // we must drain the queue to ensure our request gets canceled.
         if (ShuttingDown_.load(std::memory_order::relaxed)) { // (c)
             DrainQueue();
             return false;
@@ -691,11 +699,10 @@ private:
     void EnqueueRequest(std::unique_ptr<TResolveRequest> request)
     {
         RequestCounter_.Increment();
-        YT_LOG_DEBUG(
-            "Started Ares DNS resolve (RequestId: %v, HostName: %v, Options: %v)",
-            request->RequestId,
-            request->HostName,
-            request->Options);
+        YT_TLOG_DEBUG("Started Ares DNS resolve")
+            .With("RequestId", request->RequestId)
+            .With("HostName", request->HostName)
+            .With("Options", request->Options);
 
         if (TryEnqueue(std::move(request))) {
             WakeupHandle_.Raise();
@@ -710,12 +717,11 @@ private:
         RequestTimeGauge_.Update(elapsed);
 
         if (elapsed > Config_->WarningTimeout || timeouts > 0) {
-            YT_LOG_WARNING(
-                "Ares DNS resolve took too long (RequestId: %v, HostName: %v, Timeouts: %v, Elapsed: %v)",
-                request->RequestId,
-                request->HostName,
-                timeouts,
-                elapsed);
+            YT_TLOG_WARNING("Ares DNS resolve took too long")
+                .With("RequestId", request->RequestId)
+                .With("HostName", request->HostName)
+                .With("Timeouts", timeouts)
+                .With("Elapsed", elapsed);
         }
 
         return elapsed;
@@ -735,9 +741,9 @@ private:
         return TError(
             "Ares DNS resolve failed for %Qv",
             request->HostName)
-            << TErrorAttribute("enable_ipv4", request->Options.EnableIPv4)
-            << TErrorAttribute("enable_ipv6", request->Options.EnableIPv6)
-            << TError(TRuntimeFormat(ares_strerror(status)));
+            .With("enable_ipv4", request->Options.EnableIPv4)
+            .With("enable_ipv6", request->Options.EnableIPv6)
+            .With(TError(TRuntimeFormat(ares_strerror(status))));
     }
 
     void FailRequest(
@@ -753,11 +759,10 @@ private:
         bool isShuttingDown = ShuttingDown_.load(std::memory_order::relaxed);
 
         if (request->Promise.TrySet(MakeFailedRequestError(request, status, isShuttingDown))) {
-            YT_LOG_WARNING(
-                "Ares DNS resolve failed (RequestId: %v, HostName: %v, IsShuttingDown: %v)",
-                request->RequestId,
-                request->HostName,
-                isShuttingDown);
+            YT_TLOG_WARNING("Ares DNS resolve failed")
+                .With("RequestId", request->RequestId)
+                .With("HostName", request->HostName)
+                .With("IsShuttingDown", isShuttingDown);
         }
     }
 
@@ -772,13 +777,12 @@ private:
         TNetworkAddress result(hostent->h_addrtype, hostent->h_addr, hostent->h_length);
 
         if (request->Promise.TrySet(result)) {
-            YT_LOG_DEBUG(
-                "Ares DNS resolve completed (RequestId: %v, HostName: %v, Result: %v, Hostent: %v, Elapsed: %v)",
-                request->RequestId,
-                request->HostName,
-                result,
-                hostent,
-                elapsed);
+            YT_TLOG_DEBUG("Ares DNS resolve completed")
+                .With("RequestId", request->RequestId)
+                .With("HostName", request->HostName)
+                .With("Result", result)
+                .With("Hostent", hostent)
+                .With("Elapsed", elapsed);
         }
     }
 
@@ -805,9 +809,7 @@ private:
 
 IDnsResolverPtr CreateAresDnsResolver(TAresDnsResolverConfigPtr config)
 {
-    auto resolver =  New<TAresDnsResolver>(std::move(config));
-    resolver->Initialize();
-    return resolver;
+    return New<TAresDnsResolver>(std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

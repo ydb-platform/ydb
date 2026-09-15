@@ -1,27 +1,29 @@
 Metadata-Version: 2.4
 Name: prompt_toolkit
-Version: 3.0.51
+Version: 3.0.53
 Summary: Library for building powerful interactive command lines in Python
 Author: Jonathan Slenders
+Project-URL: Homepage, https://github.com/prompt-toolkit/python-prompt-toolkit
+Project-URL: Documentation, https://python-prompt-toolkit.readthedocs.io/en/stable/
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: BSD License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: Free Threading :: 3 - Stable
 Classifier: Programming Language :: Python
 Classifier: Topic :: Software Development
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: AUTHORS.rst
-Requires-Dist: wcwidth
+Requires-Dist: wcwidth>=0.1.4
 Dynamic: license-file
 
 Python Prompt Toolkit
@@ -29,7 +31,7 @@ Python Prompt Toolkit
 
 |AppVeyor|  |PyPI|  |RTD|  |License|  |Codecov|
 
-.. image :: https://github.com/prompt-toolkit/python-prompt-toolkit/raw/master/docs/images/logo_400px.png
+.. image :: /docs/images/logo_400px.png
 
 ``prompt_toolkit`` *is a library for building powerful interactive command line applications in Python.*
 
@@ -43,7 +45,7 @@ Gallery
 `ptpython <http://github.com/prompt-toolkit/ptpython/>`_ is an interactive
 Python Shell, build on top of ``prompt_toolkit``.
 
-.. image :: https://github.com/prompt-toolkit/python-prompt-toolkit/raw/master/docs/images/ptpython.png
+.. image :: /docs/images/ptpython.png
 
 `More examples <https://python-prompt-toolkit.readthedocs.io/en/stable/pages/gallery.html>`_
 
@@ -167,4 +169,3 @@ Special thanks to
 
 .. |Codecov| image:: https://codecov.io/gh/prompt-toolkit/python-prompt-toolkit/branch/master/graphs/badge.svg?style=flat
     :target: https://codecov.io/gh/prompt-toolkit/python-prompt-toolkit/
-

@@ -4,7 +4,7 @@
 
 #include "ydb/core/kafka_proxy/actors/actors.h"
 
-#include "ydb/core/kafka_proxy/kafka.h"
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka.h>
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
@@ -205,6 +205,14 @@ public:
         return DatabaseName;
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
+    }
+
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
         return UserToken;
     }
@@ -386,5 +394,8 @@ enum class ECleanupPolicy {
 
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
                                                                                     std::optional<ECleanupPolicy>& cleanupPolicy);
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
+        const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType);
 
 } //namespace NKafka

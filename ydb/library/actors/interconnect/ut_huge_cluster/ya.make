@@ -1,11 +1,10 @@
 UNITTEST()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:4)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(
-        ram:32
-    )
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -22,6 +21,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/actors/interconnect/ut/lib
+    ydb/library/actors/interconnect/ut/lib/port_manager
     ydb/library/actors/interconnect/ut/protos
     library/cpp/testing/unittest
     ydb/library/actors/testlib

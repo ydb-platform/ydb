@@ -8,7 +8,7 @@ from . import model
 from .error import VerificationError
 
 
-class VGenericEngine(object):
+class VGenericEngine:
     _class_key = 'g'
     _gen_python_module = False
 

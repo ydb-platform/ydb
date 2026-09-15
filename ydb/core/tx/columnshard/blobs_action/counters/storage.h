@@ -32,6 +32,7 @@ enum class EConsumer {
     STATISTICS,
     STATISTICS_FLUSH,
     FETCH_ON_LOAD,
+    DUPLICATE_FILTERING,
     UNDEFINED,
 
     COUNT

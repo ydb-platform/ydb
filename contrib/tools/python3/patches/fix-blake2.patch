@@ -1,11 +1,10 @@
---- contrib/tools/python3/Modules/_blake2/blake2module.h	(index)
-+++ contrib/tools/python3/Modules/_blake2/blake2module.h	(working tree)
-@@ -2,7 +2,7 @@
- #define Py_BLAKE2MODULE_H
+--- a/Modules/_blake2/blake2module.h	(index)
++++ b/Modules/_blake2/blake2module.h	(working tree)
+@@ -38,6 +38,6 @@
+ #endif // HAVE_LIBB2
  
- #ifdef HAVE_LIBB2
--#include <blake2.h>
-+#error #include <blake2.h>
+ // for secure_zero_memory(), store32(), store48(), and store64()
+-#include "impl/blake2-impl.h"
++#include "contrib/libs/blake2/src/blake2-impl.h"
  
- #else
- // use vendored copy of blake2
+ #endif // Py_BLAKE2MODULE_H

@@ -26,6 +26,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, PassCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, AllocationCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RegularAttachments);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DirectPlacementAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NullAndEmptyAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, Compression);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, DoNothing);
@@ -36,6 +37,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, LatchedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NoReply);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, FlakyCall);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DelayedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequireCoolFeature);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequestBytesThrottledCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, StreamingEcho,
@@ -49,6 +51,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetTraceBaggage);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, CustomMetadata);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetChannelFailureError);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, ManuallyCanceledByServer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +75,8 @@ ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
-    IMemoryUsageTrackerPtr memoryUsageTracker);
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    bool useAuthenticator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

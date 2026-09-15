@@ -74,7 +74,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     txState->ClearShardsInProgress();
 
-    TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes[txState->TargetPathId];
+    TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(txState->TargetPathId);
     Y_VERIFY_S(volume, "volume is null. PathId: " << txState->TargetPathId);
 
     ui64 version = volume->AlterVersion;
@@ -86,11 +86,13 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     for (auto shard : txState->Shards) {
         if (shard.TabletType == ETabletType::BlockStorePartition ||
-            shard.TabletType == ETabletType::BlockStorePartition2) {
+            shard.TabletType == ETabletType::BlockStorePartition2 ||
+            shard.TabletType == ETabletType::BlockStorePartitionDirect) {
             continue;
         }
 
-        Y_ABORT_UNLESS(shard.TabletType == ETabletType::BlockStoreVolume);
+        Y_ABORT_UNLESS(shard.TabletType == ETabletType::BlockStoreVolume
+            || shard.TabletType == ETabletType::BlockStoreVolumeDirect);
         TShardIdx shardIdx = shard.Idx;
         TTabletId tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 

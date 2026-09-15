@@ -1,10 +1,10 @@
-#include "common.h"
-#include "events.h"
-#include "keys.h"
-#include "schema.h"
-#include "scan_actor_base_impl.h"
+#pragma once
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/sys_view/common/common.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/keys.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -26,10 +26,10 @@ public:
     }
 
     TProcessorScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         NKikimrSysView::EStatsType type)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         ConvertKeyRange<TRequest, T...>(Request, this->TableRange);
         Request.SetType(type);
@@ -44,7 +44,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, this->HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                SVLOG_CRIT("NSysView::TProcessorScan: unexpected event# " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::StateWork: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -58,8 +59,8 @@ private:
 
     void RequestBatch() {
         if (!this->SysViewProcessorId) {
-            SVLOG_W("NSysView::TProcessorScan: no sysview processor for database " << this->TenantName
-                << ", sending empty response");
+            YDB_LOG_WARN_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::ProceedToScan: sysview processor not configured, sending empty response",
+                {"database", this->TenantName});
             this->ReplyEmptyAndDie();
             return;
         }

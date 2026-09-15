@@ -46,7 +46,7 @@ protected:
     { }
 
 public:
-    using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+    using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
     TPartStore(const TLogoBlobID &label, TPart::TParams egg, TStat stat)
         : TPart(label, egg, stat)
@@ -125,7 +125,7 @@ public:
         return dynamic_cast<const NPageCollection::TPageCollection*>(pageCollection);
     }
 
-    TCache* Locate(ELargeObj lob, ui64 ref) const
+    TPageCollection* Locate(ELargeObj lob, ui64 ref) const
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
             Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
@@ -134,7 +134,7 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const
+    TVector<TPageId> GetPages(ui32 room) const
     {
         Y_ENSURE(room < PageCollections.size());
 
@@ -145,31 +145,31 @@ public:
             pages[i] = i;
         }
 
-        return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
+        return pages;
     }
 
-    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components)
+    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
     {
-        TVector<TIntrusivePtr<TCache>> caches;
+        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
 
         for (auto &one: components) {
-            caches.emplace_back(new TCache(std::move(one.Packet)));
+            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
         }
 
-        return caches;
+        return pageCollections;
     }
 
-    static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView)
+    static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)
     {
         auto *part = partView.As<TPartStore>();
 
         Y_ENSURE(!partView || part, "Got an unexpected type of TPart part");
 
-        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
+        return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TPageCollection>> { };
     }
 
-    TVector<TIntrusivePtr<TCache>> PageCollections;
-    TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */
+    TVector<TIntrusivePtr<TPageCollection>> PageCollections;
+    TIntrusivePtr<TPageCollection> Pseudo;    /* Cache for NPage::TBlobs */
 };
 
 class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {

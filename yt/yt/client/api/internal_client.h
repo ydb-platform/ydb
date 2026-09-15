@@ -24,11 +24,10 @@ struct THunkDescriptor
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSerializableHunkDescriptor
+struct TSerializableHunkDescriptor
     : public THunkDescriptor
     , public NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSerializableHunkDescriptor);
 
     static void Register(TRegistrar registrar);
@@ -104,25 +103,45 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
     NTransactionClient::TTimestamp Timestamp;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-struct TRegisterShuffleChunksOptions
-    : public TTimeoutOptions
+struct TSerializableGetOrderedTabletSafeTrimRowCountRequest
+    : public TGetOrderedTabletSafeTrimRowCountRequest
+    , public NYTree::TYsonStruct
 {
-    bool OverwriteExistingWriterData = false;
+    REGISTER_YSON_STRUCT(TSerializableGetOrderedTabletSafeTrimRowCountRequest);
+
+    static void Register(TRegistrar registrar);
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-struct TFetchShuffleChunksOptions
-    : public TTimeoutOptions
-{ };
+using TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr =
+    TIntrusivePtr<TSerializableGetOrderedTabletSafeTrimRowCountRequest>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TForsakeChaosCoordinatorOptions
     : public TTimeoutOptions
 { };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TForsakeChaosShortcutOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRemoveChaosCellMailboxOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TGetConnectionOrchidValueOptions
+    : public TTimeoutOptions
+{
+    //! Path can be used to access opaque fields.
+    //! By default root orchid value is returned.
+    NYPath::TYPath Path = "";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -194,22 +213,23 @@ struct IInternalClient
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
 
-    virtual TFuture<void> RegisterShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
-        std::optional<int> writerIndex,
-        const TRegisterShuffleChunksOptions& options = {}) = 0;
-
-    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const TFetchShuffleChunksOptions& options = {}) = 0;
-
     virtual TFuture<void> ForsakeChaosCoordinator(
         NHydra::TCellId chaosCellId,
-        NHydra::TCellId coordiantorCellId,
+        NHydra::TCellId coordinatorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosShortcut(
+        NHydra::TCellId coordinatorCellId,
+        NChaosClient::TChaosObjectId chaosObjectId,
+        const TForsakeChaosShortcutOptions& options = {}) = 0;
+
+    virtual TFuture<void> RemoveChaosCellMailbox(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId destinationCellId,
+        const TRemoveChaosCellMailboxOptions& options = {}) = 0;
+
+    virtual TFuture<NYson::TYsonString> GetConnectionOrchidValue(
+        const TGetConnectionOrchidValueOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

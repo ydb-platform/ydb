@@ -1,10 +1,9 @@
 #include "yql_codec_buf.h"
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
-NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", true);
-NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", true);
+NKikimr::NMiniKQL::TStatKey InputBytes("Job_InputBytes", /*deriv=*/true);
+NKikimr::NMiniKQL::TStatKey OutputBytes("Job_OutputBytes", /*deriv=*/true);
 
 ui32 TInputBuf::CopyVarUI32(TVector<char>& yson) {
     char cmd = Read();
@@ -66,11 +65,10 @@ ui64 TInputBuf::ReadVarUI64Slow(char cmd) {
     return value;
 }
 
-
 TStringBuf TInputBuf::ReadYtString(ui32 lookAhead) {
     i32 length = ReadVarI32();
     CHECK_STRING_LENGTH(length);
-    if (Current_ + length + lookAhead  <= End_) {
+    if (Current_ + length + lookAhead <= End_) {
         TStringBuf ret(Current_, length);
         Current_ += length;
         return ret;
@@ -134,11 +132,11 @@ extern "C" char InputBufReadSlowThunk(TInputBuf& in) {
 }
 
 extern "C" void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count) {
-    return in.ReadManySlow(buffer, count);
+    in.ReadManySlow(buffer, count);
 }
 
 extern "C" void InputBufSkipManySlowThunk(TInputBuf& in, size_t count) {
-    return in.SkipManySlow(count);
+    in.SkipManySlow(count);
 }
 
 char TInputBuf::ReadSlow() {
@@ -175,7 +173,6 @@ void TInputBuf::SkipManySlow(size_t count) {
         Current_ += toSkip;
     }
 }
-
 
 TOutputBuf::TOutputBuf(IBlockWriter& target, NKikimr::NMiniKQL::TStatTimer* writeTimer)
     : Target_(target)
@@ -236,7 +233,7 @@ void TOutputBuf::Flush() {
         if (WriteTimer_) {
             WriteTimer_->Release();
         }
-   }
+    }
 }
 
 void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {
@@ -262,5 +259,4 @@ void TOutputBuf::WriteManySlow(const char* buffer, size_t count) {
     Current_ += count;
 }
 
-}
-}
+} // namespace NYql::NCommon

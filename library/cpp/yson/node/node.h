@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/yexception.h>
 #include <util/generic/cast.h>
+#include <util/generic/typetraits.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -68,6 +68,41 @@ private:
         TUndefined
         >;
 
+    template <typename T>
+    struct TImplicitNodeConversion {
+        using TUnderlyingType = void;
+    };
+
+    template <typename T, typename... Us>
+    static constexpr bool IsSameAsAny = TDisjunction<std::is_same<T, Us>...>::value;
+
+    template <typename T>
+        requires IsSameAsAny<T, bool, TMapType, TNull, TUndefined>
+    struct TImplicitNodeConversion<T> {
+        using TUnderlyingType = T;
+    };
+
+    template <typename T>
+        requires IsSameAsAny<T, int, long, long long>
+    struct TImplicitNodeConversion<T> {
+        using TUnderlyingType = i64;
+    };
+
+    template <typename T>
+        requires IsSameAsAny<T, unsigned int, unsigned long, unsigned long long>
+    struct TImplicitNodeConversion<T> {
+        using TUnderlyingType = ui64;
+    };
+
+    template <typename T>
+        requires IsSameAsAny<T, const char*, TStringBuf, TString>
+    struct TImplicitNodeConversion<T> {
+        using TUnderlyingType = TString;
+    };
+
+    template <typename T>
+    static constexpr bool IsImplicitlyConstructible = !std::is_same_v<typename TImplicitNodeConversion<T>::TUnderlyingType, void>;
+
 public:
 
     TNode();
@@ -102,11 +137,18 @@ public:
     TNode(bool b);
     TNode(TMapType map);
 
+    // Note that copy- and move- assignment operators don't check that the new value has the same type as the current
+    // so the type could be changed as a result of these operations
+
     TNode(const TNode& rhs);
     TNode& operator=(const TNode& rhs);
 
     TNode(TNode&& rhs) noexcept;
     TNode& operator=(TNode&& rhs) noexcept;
+
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    TNode& operator=(T rhs);
 
     ~TNode();
 
@@ -192,12 +234,28 @@ public:
     TNode& Add(TNode&& node) &;
     TNode Add(TNode&& node) &&;
 
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    TNode& Add(T value) &;
+
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    TNode Add(T value) &&;
+
     bool HasKey(const TStringBuf key) const;
 
     TNode& operator()(const TString& key, const TNode& value) &;
     TNode operator()(const TString& key, const TNode& value) &&;
     TNode& operator()(const TString& key, TNode&& value) &;
     TNode operator()(const TString& key, TNode&& value) &&;
+
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    TNode& operator()(const TString& key, T value) &;
+
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    TNode operator()(const TString& key, T value) &&;
 
     const TNode& operator[](const TStringBuf key) const;
     TNode& operator[](const TStringBuf key);
@@ -260,6 +318,9 @@ public:
     TNode& Attributes();
 
     void MoveWithoutAttributes(TNode&& rhs);
+    template <typename T>
+        requires TNode::IsImplicitlyConstructible<T>
+    void MoveWithoutAttributes(T rhs);
 
     // Serialize TNode using binary yson format.
     // Methods for ysaveload.
@@ -291,6 +352,49 @@ bool GetBool(const TNode& node);
 
 /// Debug printer for gtest
 void PrintTo(const TNode& node, std::ostream* out);
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+inline TNode& TNode::operator=(T rhs) {
+    MoveWithoutAttributes(std::move(rhs));
+    ClearAttributes();
+    return *this;
+}
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+inline TNode& TNode::Add(T value) & {
+    AssureList();
+    std::get<TListType>(Value_).emplace_back(std::move(value));
+    return *this;
+}
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+inline TNode TNode::Add(T value) && {
+    return std::move(Add(std::move(value)));
+}
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+TNode& TNode::operator()(const TString& key, T value) & {
+    AssureMap();
+    std::get<TMapType>(Value_)[key] = std::move(value);
+    return *this;
+}
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+TNode TNode::operator()(const TString& key, T value) && {
+    return std::move(operator()(key, std::move(value)));
+}
+
+template <typename T>
+    requires TNode::IsImplicitlyConstructible<T>
+void TNode::MoveWithoutAttributes(T rhs) {
+    using TUnderlying = typename TImplicitNodeConversion<T>::TUnderlyingType;
+    Value_.emplace<TUnderlying>(static_cast<TUnderlying>(std::move(rhs)));
+}
 
 inline bool TNode::IsArithmetic() const {
     return IsInt64() || IsUint64() || IsDouble() || IsBool();

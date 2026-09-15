@@ -1,8 +1,11 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/signals/agent.h>
 #include <ydb/library/signals/client.h>
+#include <ydb/library/signals/histogram.h>
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/json/writer/json_value.h>
@@ -16,6 +19,7 @@ class TSimplePortionsGroupInfo {
 private:
     using TCountByChannel = THashMap<ui16, i64>;
     TPositiveControlInteger BlobBytes;
+    TPositiveControlInteger IndexBlobBytes;
     TPositiveControlInteger RawBytes;
     TPositiveControlInteger Count;
     TPositiveControlInteger RecordsCount;
@@ -23,6 +27,7 @@ private:
 protected:
     void Add(const TSimplePortionsGroupInfo& item) {
         BlobBytes.Add(item.BlobBytes);
+        IndexBlobBytes.Add(item.IndexBlobBytes);
         RawBytes.Add(item.RawBytes);
         Count.Add(item.Count);
         RecordsCount.Add(item.RecordsCount);
@@ -41,6 +46,17 @@ public:
         return BlobBytes.Val();
     }
 
+    ui64 GetIndexBlobBytes() const {
+        return IndexBlobBytes.Val();
+    }
+
+    ui64 GetDataBlobBytes() const {
+        const ui64 blob = BlobBytes.Val();
+        const ui64 index = IndexBlobBytes.Val();
+        AFL_VERIFY(blob >= index)("blob", blob)("index", index);
+        return blob - index;
+    }
+
     ui64 GetRawBytes() const {
         return RawBytes.Val();
     }
@@ -48,6 +64,7 @@ public:
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("blob_bytes", BlobBytes.Val());
+        result.InsertValue("index_blob_bytes", IndexBlobBytes.Val());
         result.InsertValue("raw_bytes", RawBytes.Val());
         result.InsertValue("count", Count.Val());
         result.InsertValue("records_count", RecordsCount.Val());
@@ -63,8 +80,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{blob_bytes=" << BlobBytes.Val() << ";raw_bytes=" << RawBytes.Val() << ";count=" << Count.Val()
-                                << ";records=" << RecordsCount.Val() << "}";
+        return TStringBuilder() << "{blob_bytes=" << BlobBytes.Val() << ";index_blob_bytes=" << IndexBlobBytes.Val()
+                                << ";raw_bytes=" << RawBytes.Val() << ";count=" << Count.Val() << ";records=" << RecordsCount.Val() << "}";
     }
 
     TSimplePortionsGroupInfo& operator+=(const TSimplePortionsGroupInfo& item) {
@@ -95,6 +112,7 @@ public:
     bool IsEmpty() const {
         if (!Count.Val()) {
             AFL_VERIFY(!BlobBytes.Val())("this", DebugString());
+            AFL_VERIFY(!IndexBlobBytes.Val())("this", DebugString());
             AFL_VERIFY(!RawBytes.Val())("this", DebugString());
             AFL_VERIFY(!RecordsCount.Val())("this", DebugString());
             return true;
@@ -169,7 +187,8 @@ private:
 
 public:
     TPortionGroupCounters(const TString& kind, const NColumnShard::TCommonCountersOwner& baseOwner)
-        : TBase(baseOwner, "kind", kind) {
+        : TBase(baseOwner, "kind", kind)
+    {
         Count = TBase::GetDeriviative("Portions/Count");
         RawBytes = TBase::GetDeriviative("Portions/Raw/Bytes");
         BlobBytes = TBase::GetDeriviative("Portions/Blob/Bytes");
@@ -201,12 +220,16 @@ public:
     const std::shared_ptr<TValueAggregationAgent> Count;
     const std::shared_ptr<TValueAggregationAgent> BlobBytes;
     const std::shared_ptr<TValueAggregationAgent> RawBytes;
+    const NColumnShard::TIncrementalHistogram BlobBytesHistogram;
+
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, "category", categoryName)
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
-        , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes")) {
+        , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes"))
+        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders)
+    {
     }
 };
 
@@ -216,6 +239,7 @@ private:
     std::shared_ptr<TValueAggregationClient> Count;
     std::shared_ptr<TValueAggregationClient> BlobBytes;
     std::shared_ptr<TValueAggregationClient> RawBytes;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> BlobBytesHistogram;
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents) {
@@ -223,6 +247,7 @@ public:
         Count = agents.Count->GetClient();
         BlobBytes = agents.BlobBytes->GetClient();
         RawBytes = agents.RawBytes->GetClient();
+        BlobBytesHistogram = agents.BlobBytesHistogram.BuildGuard();
     }
 
     void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p);

@@ -95,6 +95,9 @@ message TMiscExt
     // If present, chunk values are comressed with dictionary of respective id.
     optional NYT.NProto.TGuid compression_dictionary_id = 25;
 
+    // Indicates if the chunk does not contain large rows or values (tables only).
+    optional bool is_compatible_with_dynamic_table_constraints = 26;
+
     reserved 20;
 }
 

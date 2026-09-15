@@ -2,9 +2,10 @@
 
 #include "public.h"
 #include "hyperloglog_bias.h"
-#include "farm_hash.h"
 
 #include <yt/yt_proto/yt/core/misc/proto/hyperloglog.pb.h>
+
+#include <library/cpp/yt/farmhash/farm_hash.h>
 
 #include <library/cpp/yt/memory/range.h>
 
@@ -133,7 +134,7 @@ double THyperLogLog<Precision>::EstimateBias(double cardinality) const
     if (index == 0) {
         return BiasData[0];
     } else if (index >= Size) {
-        return BiasData[Size];
+        return BiasData[Size - 1];
     } else {
         double w1 = cardinality - RawEstimates[index - 1];
         double w2 = RawEstimates[index] - cardinality;

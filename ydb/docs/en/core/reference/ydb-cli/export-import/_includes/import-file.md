@@ -10,6 +10,14 @@ If the table already includes data, it's replaced by imported data on primary ke
 
 The imported file must be in the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding. Line feeds aren't supported in the data field.
 
+{% note info %}
+
+If the table doesn't exist yet, you can use the [{{ ydb-cli }} tools infer csv](../../tools-infer.md) command to generate the `CREATE TABLE` statement based on an existing CSV file.
+
+You can also try to import into a non-existent table. In that case, the command will suggest running [{{ ydb-cli }} tools infer csv](../../tools-infer.md) with the correct options.
+
+{% endnote %}
+
 General format of the command:
 
 ```bash
@@ -32,7 +40,7 @@ General format of the command:
 * `--skip-rows NUM`: A number of rows from the beginning of the file that will be skipped at import. The default value is `0`.
 * `--header`: Use this option if the first row (excluding the rows skipped by `--skip-rows`) includes names of data columns to be mapped to table columns. If the header row is missing, the data is mapped according to the order in the table schema.
 * `--delimiter STRING`: The data column delimiter character. You can't use the tabulation character as a delimiter in this option. For tab-delimited import, use the `import file tsv` subcommand. Default value: `,`.
-* `--null-value STRING`: The value to be imported as `NULL`. Default value: `""`.
+* `--null-value STRING`: The value to be imported as `NULL`. By default, no value is interpreted as `NULL`. To interpret an empty field as `NULL`, specify `--null-value ""`.
 * `--batch-bytes VAL`: Split the imported file into batches of specified sizes. If a row fails to fit into a batch completely, it's discarded and added to the next batch. Whatever the batch size is, the batch must include at least one row. Default value: `1 MiB`.
 * `--max-in-flight VAL`: The number of data batches imported in parallel. You can increase this option value to import large files faster. The default value is `100`.
 * `--threads VAL`: Maximum number of threads used to import data. Default value: Number of logical processors.

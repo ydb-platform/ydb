@@ -18,6 +18,9 @@
 #include <ydb/library/security/util.h>
 
 #include <util/datetime/base.h>  // for ToInstant
+#include <util/generic/guid.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::HTTP
 
 
 namespace {
@@ -39,7 +42,7 @@ void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TStri
         AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         //NOTE: no database specified as web logout considered cluster-wide
         AUDIT_PART("operation", LogoutOperationName)
-        AUDIT_PART("status", TString("SUCCESS"))
+        AUDIT_PART("status", "SUCCESS")
     );
 }
 
@@ -99,7 +102,11 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL);
+        YDB_LOG_WARN("Web UI login request",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()}
+        );
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -196,7 +203,9 @@ public:
     }
 
     void ReplyCookieAndPassAway(const TString& cookie) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << User);
+        YDB_LOG_DEBUG("Login success",
+            {"user", User}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         TDuration maxAge = ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now();
@@ -206,7 +215,10 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        ALOG_ERROR(NActorsServices::HTTP, "Login fail for " << User << ": " << error);
+        YDB_LOG_ERROR("Login fail",
+            {"user", User},
+            {"error", error}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");
@@ -245,7 +257,11 @@ public:
     }
 
     void Bootstrap() {
-        ALOG_WARN(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL);
+        YDB_LOG_WARN("Web UI logout request",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()}
+        );
 
         if (Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
@@ -255,16 +271,28 @@ public:
             return ReplyErrorAndPassAway("400", "Bad Request", "Invalid method");
         }
 
-        NHttp::TCookies cookies(NHttp::THeaders(Request->Headers)["Cookie"]);
+        NHttp::THeaders headers(Request->Headers);
+        NHttp::TCookies cookies(headers["Cookie"]);
         TStringBuf ydbSessionId = cookies["ydb_session_id"];
         if (ydbSessionId.empty()) {
             return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
         }
 
+        TString requestId(headers["x-request-id"]);
+        if (requestId.empty()) {
+            requestId = CreateGuidAsString();
+            YDB_LOG_NOTICE("x-request-id is missing in Web UI logout request, generated a new one",
+                {"requestId", requestId},
+                {"address", Request->Address},
+                {"method", Request->Method},
+                {"uri", Request->GetURI()}
+            );
+        }
+
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = TString(),
             .Ticket = TString("Login ") + ydbSessionId,
-            .PeerName = Request->Address->ToString(),
+            .Database = TString(),
+            .TraceContext = {Request->Address->ToString(), std::move(requestId)},
         }));
 
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
@@ -272,7 +300,7 @@ public:
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
-        if (result.Error) {
+        if (result.HasError()) {
             return ReplyErrorAndPassAway("403", "Forbidden", result.Error.Message);
         }
         if (result.Token == nullptr) {
@@ -287,7 +315,11 @@ public:
     }
 
     void HandleTimeout() {
-        ALOG_ERROR(NActorsServices::HTTP, Request->Address << " " << Request->Method << " " << Request->URL << " timeout");
+        YDB_LOG_ERROR("Timeout",
+            {"address", Request->Address},
+            {"method", Request->Method},
+            {"uri", Request->GetURI()}
+        );
         ReplyErrorAndPassAway("504", "Gateway Timeout", "Timeout");
     }
 
@@ -311,7 +343,7 @@ public:
     }
 
     void ReplyDeleteCookieAndPassAway(const TString& userSID, const TString& sanitizedToken) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
+        YDB_LOG_DEBUG("Logout success");
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
@@ -323,7 +355,9 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        ALOG_ERROR(NActorsServices::HTTP, "Logout: " << error);
+        YDB_LOG_ERROR("Logout failed",
+            {"error", error}
+        );
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");
@@ -361,9 +395,9 @@ public:
     }
 
     void HandleRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
-        if (ev->Get()->Request->URL == "/login") {
+        if (ev->Get()->Request->GetURI() == "/login") {
             Register(new TLoginRequest(ev));
-        } else if (ev->Get()->Request->URL == "/logout") {
+        } else if (ev->Get()->Request->GetURI() == "/logout") {
             Register(new TLogoutRequest(ev));
         } else {
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseNotFound()));

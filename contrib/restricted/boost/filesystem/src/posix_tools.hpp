@@ -57,7 +57,7 @@ file_status symlink_status_impl
 #endif
 );
 
-#if defined(BOOST_POSIX_API)
+#if defined(BOOST_FILESYSTEM_POSIX_API)
 
 //! Opens a directory file and returns a file descriptor. Returns a negative value in case of error.
 boost::scope::unique_fd open_directory(path const& p, directory_options opts, system::error_code& ec);
@@ -67,7 +67,7 @@ boost::scope::unique_fd open_directory(path const& p, directory_options opts, sy
 boost::scope::unique_fd openat_directory(int basedir_fd, path const& p, directory_options opts, system::error_code& ec);
 #endif // defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
 
-#endif // defined(BOOST_POSIX_API)
+#endif // defined(BOOST_FILESYSTEM_POSIX_API)
 
 } // namespace detail
 } // namespace filesystem

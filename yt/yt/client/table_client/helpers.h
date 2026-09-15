@@ -52,7 +52,7 @@ TVersionedOwningRow YsonToVersionedRow(
     const std::vector<TTimestamp>& deleteTimestamps = {},
     const std::vector<TTimestamp>& extraWriteTimestamps = {});
 TUnversionedOwningRow YsonToKey(TStringBuf yson);
-TString KeyToYson(TUnversionedRow row);
+std::string KeyToYson(TUnversionedRow row);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -237,6 +237,11 @@ void FromUnversionedValue(
     THashMap<TKey, TValue>* map,
     TUnversionedValue unversionedValue)
     requires std::is_convertible<TValue*, ::google::protobuf::Message*>::value;
+template <class TKey, class TValue>
+void FromUnversionedValue(
+    THashMap<TKey, TValue>* map,
+    TUnversionedValue unversionedValue)
+    requires TUnversionedValueConversionTraits<TValue>::Scalar;
 
 //! Values get sequential ids 0..N-1 (unless wrapped into TValueWithId).
 template <class... Ts>
@@ -244,6 +249,33 @@ auto ToUnversionedValues(
     const TRowBufferPtr& rowBuffer,
     Ts&&... values)
 -> std::array<TUnversionedValue, sizeof...(Ts)>;
+
+/////////////////////////////////////////////////////////////////////////////////
+
+// NB(apachee): FromUnversionedValue can handle unversioned composite value, but ToUnversionedValue always returns unversioned any value,
+// to produce unversioned composite values these helpers were introduced.
+
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    NYson::TYsonStringBuf value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
 
 ////////////////////////////////////////////////////////////////////////////////
 

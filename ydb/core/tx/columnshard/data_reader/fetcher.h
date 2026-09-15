@@ -4,13 +4,14 @@
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/signals/states.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
@@ -37,7 +38,8 @@ private:
 
 public:
     TCounters()
-        : TBase("data_fetcher") {
+        : TBase("data_fetcher")
+    {
     }
 
     std::shared_ptr<TClassCounters> GetClassCounters(const TString& className) {
@@ -52,7 +54,7 @@ public:
 
 class TPortionsDataFetcher: TNonCopyable {
 private:
-    const TRequestInput Input;
+    TRequestInput Input;
     const std::shared_ptr<IFetchCallback> Callback;
     std::shared_ptr<TClassCounters> ClassCounters;
     NCounters::TStateSignalsOperator<EFetchingStage>::TGuard Guard;
@@ -68,8 +70,8 @@ public:
             CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
     }
 
-    ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
+    ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const {
         return Callback->GetNecessaryDataMemory(columnIds, acc);
     }
 
@@ -80,13 +82,18 @@ public:
         , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
         , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
+        , CurrentContext(Input.GetMemoryProcessGuardOptional())
         , Environment(environment)
-        , ConveyorCategory(conveyorCategory) {
+        , ConveyorCategory(conveyorCategory)
+    {
         AFL_VERIFY(Environment);
         AFL_VERIFY(Callback);
     }
 
     ~TPortionsDataFetcher() {
+        if (NActors::TActorSystem::IsStopped() || Callback->IsAborted()) {
+            CurrentContext.Abort();
+        }
         AFL_VERIFY(NActors::TActorSystem::IsStopped() || IsFinishedFlag || Guard.GetStage() == EFetchingStage::Created
             || Callback->IsAborted())("stage", Guard.GetStage())("class_name", Callback->GetClassName());
     }
@@ -97,9 +104,17 @@ public:
     static void StartFullPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
         const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
-    static void StartColumnsFetching(TRequestInput&& input, std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+    static void StartColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
         std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
         const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetching(TRequestInput&& input, const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds,
+        std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
+        const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
+
+    static void StartAssembledColumnsFetchingNoAllocation(TRequestInput&& input,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& entityIds, std::shared_ptr<IFetchCallback>&& callback,
+        const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 
     TScriptExecution& MutableScript() {
         return Script;
@@ -127,8 +142,11 @@ public:
     }
 
     void OnError(const TString& errMessage) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_error")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_error"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
@@ -136,8 +154,11 @@ public:
     }
 
     void OnFinished() {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_finished")("consumer", Input.GetConsumer())(
-            "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
+        YDB_LOG_CREATE_CONTEXT(
+            {"event", "on_finished"},
+            {"consumer", Input.GetConsumer()},
+            {"taskId", Input.GetExternalTaskId()},
+            {"script", Script.GetScriptClassName()});
         AFL_VERIFY(!IsFinishedFlag);
         IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);

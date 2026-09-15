@@ -1,12 +1,11 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TShiftRight : public TShiftArithmeticBinary<TInput, TOutput, TShiftRight<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TShiftRight: public TShiftArithmeticBinary<TInput, TOutput, TShiftRight<TInput, TOutput>> {
     static TOutput Do(TInput arg, ui8 bits)
     {
         return (bits < sizeof(arg) * CHAR_BIT) ? (arg >> bits) : 0;
@@ -26,11 +25,10 @@ struct TShiftRight : public TShiftArithmeticBinary<TInput, TOutput, TShiftRight<
 #endif
 };
 
-}
+} // namespace
 
 void RegisterShiftRight(IBuiltinFunctionRegistry& registry) {
     RegisterUnsignedShiftFunctionOpt<TShiftRight, TBinaryShiftArgsOpt>(registry, "ShiftRight");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

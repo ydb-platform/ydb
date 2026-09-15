@@ -1,0 +1,5 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>:22:13: Error: Invalid value "barfoo" for type Interval
+

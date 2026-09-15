@@ -71,7 +71,6 @@ private:
     std::shared_ptr<TInnerState> InnerState_;
     std::vector<TReaderState> StateByReader_;
     NYT::TRawTableReaderPtr CurrentReader_ = nullptr;
-    bool Eof_ = false;
     const TMkqlIOSpecs* Spec_;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
     const size_t BlockSize_;

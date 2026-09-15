@@ -2,9 +2,11 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(60)
+SPLIT_FACTOR(200)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:4)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -13,12 +15,14 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/double-conversion
+    library/cpp/streams/zstd
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
+    ydb/library/aws_init
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers
@@ -26,6 +30,7 @@ PEERDIR(
 
 SRCS(
     ut_restore.cpp
+    ut_restore_fs.cpp
 )
 
 YQL_LAST_ABI_VERSION()

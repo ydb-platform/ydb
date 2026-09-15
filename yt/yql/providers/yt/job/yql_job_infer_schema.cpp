@@ -8,6 +8,19 @@
 
 namespace NYql {
 
+void TYqlInferSchemaJob::Save(IOutputStream& stream) const {
+    TYqlJobBase::Save(stream);
+}
+
+void TYqlInferSchemaJob::Load(IInputStream& stream) {
+    TYqlJobBase::Load(stream);
+}
+
+void TYqlInferSchemaJob::Do(const NYT::TRawJobContext& jobContext) {
+    DoImpl(jobContext.GetInputFile(), jobContext.GetOutputFileList());
+    Finish();
+}
+
 void TYqlInferSchemaJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) {
     NYT::TTableReader<NYT::TNode> reader(MakeIntrusive<NYT::TNodeTableReader>(MakeIntrusive<NYT::TJobReader>(inHandle)));
     NYT::TTableWriter<NYT::TNode> writer(MakeIntrusive<NYT::TNodeTableWriter>(MakeHolder<NYT::TJobWriter>(outHandles)));

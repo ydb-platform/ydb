@@ -4,12 +4,14 @@
 
 namespace NKikimr::NOlap::NCleanDeprecatedSnapshot {
 
-class TCleanDeprecatedSnapshotNormalizer : public TNormalizationController::INormalizerComponent {
+class TCleanDeprecatedSnapshotNormalizer: public TNormalizationController::INormalizerComponent {
 private:
     using TBase = TNormalizationController::INormalizerComponent;
+
     static TString ClassName() {
         return "CleanDeprecatedSnapshot";
     }
+
     static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanDeprecatedSnapshotNormalizer>(ClassName());
 
     NColumnShard::TBlobGroupSelector DsGroupSelector;
@@ -17,7 +19,8 @@ private:
 public:
     TCleanDeprecatedSnapshotNormalizer(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
@@ -28,7 +31,8 @@ public:
         return ClassName();
     }
 
-    TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
+        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 
-} //namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NCleanDeprecatedSnapshot

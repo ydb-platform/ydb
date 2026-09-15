@@ -4,8 +4,8 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString ApiServiceName = "ApiService";
-const TString DiscoveryServiceName = "DiscoveryService";
+const std::string ApiServiceName = "ApiService";
+const std::string DiscoveryServiceName = "DiscoveryService";
 
 ////////////////////////////////////////////////////////////////////////////////
 

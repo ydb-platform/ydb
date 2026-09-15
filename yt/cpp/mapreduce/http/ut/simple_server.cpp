@@ -7,9 +7,17 @@
 #include <util/system/thread.h>
 #include <util/thread/pool.h>
 
-TSimpleServer::TSimpleServer(int port, TRequestHandler requestHandler)
+TSimpleServer::TSimpleServer(
+    int port,
+    TRequestHandler requestHandler,
+    bool dontStartServer,
+    TDuration acceptDelay)
     : Port_(port)
 {
+    if (dontStartServer) {
+        return;
+    }
+
     auto listenSocket = MakeAtomicShared<TInetStreamSocket>();
     TSockAddrInet addr((TIpHost)INADDR_ANY, Port_);
     SetSockOpt(*listenSocket, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -29,7 +37,7 @@ TSimpleServer::TSimpleServer(int port, TRequestHandler requestHandler)
     ThreadPool_->Start(1);
 
     auto receiveFinish = MakeAtomicShared<TInetStreamSocket>(socketPair[0]);
-    ListenerThread_ = ThreadPool_->Run([listenSocket, receiveFinish, requestHandler] {
+    ListenerThread_ = ThreadPool_->Run([listenSocket, receiveFinish, requestHandler, acceptDelay] {
         TSocketPoller socketPoller;
         socketPoller.WaitRead(*receiveFinish, nullptr);
         socketPoller.WaitRead(*listenSocket, (void*)1);
@@ -44,6 +52,9 @@ TSimpleServer::TSimpleServer(int port, TRequestHandler requestHandler)
                 } else {
                     TSockAddrInet addr;
                     TAtomicSharedPtr<TStreamSocket> socket = MakeAtomicShared<TInetStreamSocket>();
+                    if (acceptDelay) {
+                        Sleep(acceptDelay);
+                    }
                     int ret = listenSocket->Accept(socket.Get(), &addr);
                     Y_ENSURE_EX(ret == 0, TSystemError() << "Can not accept connection");
 

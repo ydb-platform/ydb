@@ -12,12 +12,15 @@ class TInterconnectLoad : public TClientCommand {
     ui32 SizeMin = 0;
     ui32 SizeMax = 0;
     ui32 InFlyMax = 0;
+    ui32 NumLoadActors = 1;
     TDuration IntervalMin;
     TDuration IntervalMax;
     bool Soft = false;
     TDuration Duration;
     bool UseProtobufWithPayload = false;
     TString ServicePool;
+    ui32 RdmaMode = 0;
+    bool WaitForCompletion = false;
 
 public:
     TInterconnectLoad()
@@ -83,6 +86,19 @@ public:
         config.Opts->AddLongOption("service-pool", "service pool name")
             .RequiredArgument()
             .StoreResult(&ServicePool);
+
+        config.Opts->AddLongOption("rdma-mode", "rdma mode for data transfer (0 - disabled; 1 - use rdma)")
+            .RequiredArgument()
+            .StoreResult(&RdmaMode);
+
+        config.Opts->AddLongOption("num", "number of load actors")
+            .RequiredArgument()
+            .StoreResult(&NumLoadActors);
+
+        config.Opts->AddLongOption("wait", "wait for load actors and print completion statistics as JSON")
+            .Optional()
+            .NoArgument()
+            .StoreTrue(&WaitForCompletion);
     }
 
     int Run(TConfig& config) override {
@@ -110,8 +126,34 @@ public:
             request.SetServicePool(ServicePool);
         }
 
-        auto callback = [](const NMsgBusProxy::TBusResponse& response) {
-            return response.Record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1;
+        if (RdmaMode) {
+            request.SetRdmaMode(RdmaMode);
+        }
+
+        request.SetNumLoadActors(NumLoadActors);
+        request.SetWaitForCompletion(WaitForCompletion);
+
+        const bool waitForCompletion = WaitForCompletion;
+        auto callback = [waitForCompletion](const NMsgBusProxy::TBusResponse& response) {
+            if (response.Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+                return 1;
+            }
+            if (!waitForCompletion) {
+                return 0;
+            }
+            if (!response.Record.HasInterconnectLoadResult()) {
+                Cerr << "Interconnect load completion response is missing" << Endl;
+                return 1;
+            }
+
+            const auto& result = response.Record.GetInterconnectLoadResult();
+            Cout << "{\"throughput_bytes\":" << result.GetThroughputBytes()
+                 << ",\"throughput_samples\":" << result.GetThroughputSamples()
+                 << ",\"rtt_samples\":" << result.GetRttSamples()
+                 << ",\"duration_us\":" << result.GetDurationUs()
+                 << ",\"max_rtt_gap_us\":" << result.GetMaxRttGapUs()
+                 << '}' << Endl;
+            return 0;
         };
 
         return MessageBusCall<NMsgBusProxy::TBusInterconnectDebug, NMsgBusProxy::TBusResponse>(config, msg, callback);

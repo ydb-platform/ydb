@@ -3,15 +3,13 @@
 PROGRAM(curl)
 
 LICENSE(
-    BSD-3-Clause AND
     ISC AND
-    Public-Domain AND
     curl
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.5.0)
+VERSION(8.17.0)
 
 PEERDIR(
     contrib/libs/c-ares
@@ -29,7 +27,6 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
-    -DBUILDING_CURL
     -DHAVE_CONFIG_H
     -DARCADIA_CURL_DNS_RESOLVER_ARES
 )
@@ -37,22 +34,30 @@ CFLAGS(
 SRCDIR(contrib/libs/curl)
 
 SRCS(
-    lib/base64.c
-    lib/curl_multibyte.c
-    lib/dynbuf.c
-    lib/nonblock.c
-    lib/strtoofft.c
-    lib/timediff.c
-    lib/version_win32.c
-    lib/warnless.c
+    lib/curlx/base64.c
+    lib/curlx/dynbuf.c
+    lib/curlx/fopen.c
+    lib/curlx/multibyte.c
+    lib/curlx/nonblock.c
+    lib/curlx/strerr.c
+    lib/curlx/strparse.c
+    lib/curlx/timediff.c
+    lib/curlx/timeval.c
+    lib/curlx/version_win32.c
+    lib/curlx/wait.c
+    lib/curlx/warnless.c
+    lib/curlx/winapi.c
+    src/config2setopts.c
     src/slist_wc.c
-    src/tool_binmode.c
+    src/terminal.c
     src/tool_bname.c
+    src/tool_ca_embed.c
     src/tool_cb_dbg.c
     src/tool_cb_hdr.c
     src/tool_cb_prg.c
     src/tool_cb_rea.c
     src/tool_cb_see.c
+    src/tool_cb_soc.c
     src/tool_cb_wrt.c
     src/tool_cfgable.c
     src/tool_dirhie.c
@@ -77,7 +82,7 @@ SRCS(
     src/tool_parsecfg.c
     src/tool_progress.c
     src/tool_setopt.c
-    src/tool_sleep.c
+    src/tool_ssls.c
     src/tool_stderr.c
     src/tool_strdup.c
     src/tool_urlglob.c

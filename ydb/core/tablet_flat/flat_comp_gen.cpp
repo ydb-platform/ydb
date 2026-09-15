@@ -307,8 +307,6 @@ void TGenCompactionStrategy::Stop() {
 
     CurrentForcedGenCompactionId = 0;
     NextForcedGenCompactionId = 0;
-    FinishedForcedGenCompactionId = 0;
-    FinishedForcedGenCompactionTs = {};
 
     // Make it possible to Start again
     Generations.clear();

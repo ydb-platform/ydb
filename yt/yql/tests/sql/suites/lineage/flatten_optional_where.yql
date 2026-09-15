@@ -1,0 +1,10 @@
+USE plato;
+
+INSERT INTO Output
+SELECT * FROM (
+    SELECT
+        key,
+        CAST(subkey AS Int32) AS s
+    FROM Input
+    WHERE value > ''
+) FLATTEN OPTIONAL BY s

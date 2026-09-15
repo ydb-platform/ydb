@@ -134,7 +134,7 @@ inline typename enable_if<is_mapped_reference_combinable<StdPairT>, bool>::type
 operator == (                         const StdPairT& left, 
              const mapped_reference<FirstT, SecondT>& right)
 { 
-    return right == left; 
+    return right.operator ==(left); 
 }
 
 template<class FirstT, class SecondT, class StdPairT>
@@ -142,7 +142,7 @@ inline typename enable_if<is_mapped_reference_combinable<StdPairT>, bool>::type
 operator != (                         const StdPairT& left, 
              const mapped_reference<FirstT, SecondT>& right)
 { 
-    return !(right == left); 
+    return !(right.operator ==(left)); 
 }
 
 //------------------------------------------------------------------------------

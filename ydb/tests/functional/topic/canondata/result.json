@@ -1,0 +1,23 @@
+{
+    "test_topic_audit.test_alter_topic": {
+        "uri": "file://test_topic_audit.test_alter_topic/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_alter_topic_error": {
+        "uri": "file://test_topic_audit.test_alter_topic_error/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_create_changefeed_internal_topic_event": {
+        "uri": "file://test_topic_audit.test_create_changefeed_internal_topic_event/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_create_topic": {
+        "uri": "file://test_topic_audit.test_create_topic/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_create_topic_error": {
+        "uri": "file://test_topic_audit.test_create_topic_error/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_drop_topic": {
+        "uri": "file://test_topic_audit.test_drop_topic/topic_cloud_events.json"
+    },
+    "test_topic_audit.test_drop_topic_error": {
+        "uri": "file://test_topic_audit.test_drop_topic_error/topic_cloud_events.json"
+    }
+}

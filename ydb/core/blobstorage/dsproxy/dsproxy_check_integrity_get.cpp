@@ -12,6 +12,8 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     const TLogoBlobID Id;
     const TInstant Deadline;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
+    const bool SingleLine;
+    const bool OmitDataInfoUnlessError;
 
     TGroupQuorumTracker QuorumTracker;
 
@@ -23,6 +25,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     bool HasErrorDisks = false;
 
     ui32 VGetsInFlight = 0;
+    THashMap<ui32, TAutoPtr<TEvBlobStorage::TEvVGetResult>> VGetsResults;
 
     using TEvCheckIntegrityResult = TEvBlobStorage::TEvCheckIntegrityResult;
     std::unique_ptr<TEvCheckIntegrityResult> PendingResult;
@@ -33,9 +36,10 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             PendingResult->ErrorReason = ErrorReason;
             PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
             PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN;
-            PendingResult->Id = Id;
         }
 
+        PendingResult->Id = Id;
+        PendingResult->Erasure = Info->Type.GetErasure();
         SendResponseAndDie(std::move(PendingResult));
     }
 
@@ -104,6 +108,9 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         Y_ABORT_UNLESS(VGetsInFlight > 0);
         --VGetsInFlight;
 
+        TEvBlobStorage::TEvVGetResult* msg = ev->Get();
+        const ui32 idxInSubgroup = Info->GetIdxInSubgroup(vDiskId, Id.Hash());
+
         switch (NKikimrProto::EReplyStatus newStatus = QuorumTracker.ProcessReply(vDiskId, status)) {
             case NKikimrProto::ERROR:
                 ErrorReason = "Group is disintegrated or has network problems";
@@ -120,11 +127,13 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
         if (status == NKikimrProto::OK) {
             for (size_t i = 0; i < record.ResultSize(); ++i) {
-                UpdateFromResponseData(ev->Get(), record.GetResult(i), vDiskId);
+                UpdateFromResponseData(msg, record.GetResult(i), vDiskId);
             }
         } else {
             HasErrorDisks = true;
         }
+
+        VGetsResults[idxInSubgroup] = ev->Release();
 
         if (!VGetsInFlight) {
             Analyze();
@@ -133,7 +142,6 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
     void Analyze() {
         PendingResult.reset(new TEvCheckIntegrityResult(NKikimrProto::OK));
-        PendingResult->Id = Id;
         PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN;
 
         TBlobStorageGroupInfo::TSubgroupVDisks faultyDisks(&Info->GetTopology()); // empty set
@@ -171,8 +179,10 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             }
         }
 
+        char separator = SingleLine ? ' ' : '\n';
+
         const auto& dataChecker = Info->GetTopology().GetDataIntegrityChecker();
-        auto partsState = dataChecker.GetDataState(Id, PartsData);
+        auto partsState = dataChecker.GetDataState(Id, PartsData, separator);
 
         if (partsState.IsOk) {
             PendingResult->DataStatus = (PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_UNKNOWN) ?
@@ -181,15 +191,31 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             PendingResult->DataStatus = TEvCheckIntegrityResult::DS_ERROR;
         }
 
-        TStringStream str;
-        str << "Disks:" << Endl;
-        for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
-            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
-            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << Endl;
-        }
+        const bool omitDataInfo = OmitDataInfoUnlessError
+            && PendingResult->PlacementStatus == TEvCheckIntegrityResult::PS_OK
+            && PendingResult->DataStatus == TEvCheckIntegrityResult::DS_OK;
+        if (!omitDataInfo) {
+            TStringStream str;
+            str << "Disks:" << separator;
+            for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
+                auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
+                str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort);
+                if (auto it = VGetsResults.find(diskIdx); it != VGetsResults.end()) {
+                    const auto& msg = *it->second;
+                    str << " " << NKikimrProto::EReplyStatus_Name(msg.Record.GetStatus());
+                    for (const auto& result : msg.Record.GetResult()) {
+                        str << " {Part " << LogoBlobIDFromLogoBlobID(result.GetBlobID()).PartId()
+                            << " " << NKikimrProto::EReplyStatus_Name(result.GetStatus())
+                            << " " << result.GetSize() << "/" << result.GetFullDataSize()
+                            << "}";
+                    }
+                }
+                str << separator;
+            }
 
-        PendingResult->DataErrorInfo = str.Str();
-        PendingResult->DataErrorInfo += partsState.DataErrorInfo;
+            PendingResult->DataInfo = str.Str();
+            PendingResult->DataInfo += partsState.DataInfo;
+        }
 
         ReplyAndDie(NKikimrProto::OK);
     }
@@ -198,7 +224,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         ++*Mon->NodeMon->RestartCheckIntegrity;
 
         auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
-            Id, Deadline, GetHandleClass);
+            Id, Deadline, GetHandleClass, SingleLine, OmitDataInfoUnlessError);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -217,6 +243,8 @@ public:
         , Id(params.Common.Event->Id)
         , Deadline(params.Common.Event->Deadline)
         , GetHandleClass(params.Common.Event->GetHandleClass)
+        , SingleLine(params.Common.Event->SingleLine)
+        , OmitDataInfoUnlessError(params.Common.Event->OmitDataInfoUnlessError)
         , QuorumTracker(Info.Get())
     {}
 

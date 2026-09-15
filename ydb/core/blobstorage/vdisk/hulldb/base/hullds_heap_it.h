@@ -136,6 +136,10 @@ namespace NKikimr {
             return SeekImpl([](auto *iter) { iter->SeekToFirst(); });
         }
 
+        void SeekToLast() {
+            return SeekImpl([](auto *iter) { iter->SeekToLast(); });
+        }
+
         template<typename TMerger, typename TCallback>
         void Walk(std::optional<TKey> key, TMerger merger, TCallback&& callback) {
             if (key.has_value()) {

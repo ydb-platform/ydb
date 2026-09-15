@@ -1,0 +1,1 @@
+SELECT id . column_0 , id . column_2 , id . column_5 FROM table_0 AS id JOIN table_1 AS id ON id . column_1 = id . column_0 WHERE id . column_4 = 'str'

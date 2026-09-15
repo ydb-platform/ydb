@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -26,7 +25,7 @@ public:
             *res = MakeTrueArray(ctx->memory_pool(), arr.length);
         } else {
             *res = MakeBitmapArray(ctx->memory_pool(), arr.length, arr.offset,
-                arr.buffers[0]->data());
+                                   arr.buffers[0]->data());
         }
 
         return arrow::Status::OK();
@@ -40,9 +39,9 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockExistsKernel(const TVecto
     Y_DEBUG_ABORT_UNLESS(returnArrowType == arrow::uint8());
     auto exec = std::make_shared<TBlockExistsExec>();
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        return exec->Exec(ctx, batch, res);
-    });
+                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                                                                     return exec->Exec(ctx, batch, res);
+                                                                 });
     kernel->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
     return kernel;
 }
@@ -52,11 +51,10 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockExistsKernel(const TVecto
 IComputationNode* WrapBlockExists(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     auto compute = LocateNode(ctx.NodeLocator, callable, 0);
-    TComputationNodePtrVector argsNodes = { compute };
-    TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType() };
+    TComputationNodePtrVector argsNodes = {compute};
+    TVector<TType*> argsTypes = {callable.GetInput(0).GetStaticType()};
     auto kernel = MakeBlockExistsKernel(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, "Exists", std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), "Exists", std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

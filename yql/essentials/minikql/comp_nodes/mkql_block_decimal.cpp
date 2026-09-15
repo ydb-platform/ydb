@@ -11,27 +11,26 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename T, typename TRight>
+template <typename T, typename TRight>
 struct TDecimalBlockExec {
     NYql::NDecimal::TInt128 Apply(NYql::NDecimal::TInt128 left, TRight right) const {
         return static_cast<const T*>(this)->Do(left, right);
     }
 
-    template<typename U>
+    template <typename U>
     const U* GetScalarValue(const arrow::Scalar& scalar) const {
         return reinterpret_cast<const U*>(GetPrimitiveScalarValuePtr(scalar));
     }
-    
-    template<>
+
+    template <>
     const NYql::NDecimal::TInt128* GetScalarValue<NYql::NDecimal::TInt128>(const arrow::Scalar& scalar) const {
         return reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(scalar).data());
     }
- 
+
     void ArrayScalarCore(
         const NYql::NDecimal::TInt128* val1Ptr,
         const ui8* valid1,
@@ -87,8 +86,7 @@ struct TDecimalBlockExec {
         ui8* resValid,
         int64_t length,
         int64_t offset1,
-        int64_t offset2) const
-    {
+        int64_t offset2) const {
         val1Ptr += offset1;
         val2Ptr += offset2;
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
@@ -103,8 +101,7 @@ struct TDecimalBlockExec {
     }
 
     arrow::Status ExecScalarScalar(arrow::compute::KernelContext* kernelCtx,
-        const arrow::compute::ExecBatch& batch, arrow::Datum* res) const 
-    {
+                                   const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -119,12 +116,11 @@ struct TDecimalBlockExec {
             *mem = Apply(*val1Ptr, *val2Ptr);
             *res = resDatum;
         }
-    
+
         return arrow::Status::OK();
     }
 
-    arrow::Status ExecScalarArray(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const
-    {
+    arrow::Status ExecScalarArray(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -138,16 +134,15 @@ struct TDecimalBlockExec {
             const auto valid2 = (nullCount2 == 0) ? nullptr : arr2.GetValues<uint8_t>(0);
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
             auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-            ScalarArrayCore(val1Ptr, nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
+            ScalarArrayCore(val1Ptr, /*valid1=*/nullptr, val2Ptr, valid2, resPtr, resValid, length, 0, arr2.offset);
         } else {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
-    
+
         return arrow::Status::OK();
     }
 
-    arrow::Status ExecArrayScalar(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const
-    {
+    arrow::Status ExecArrayScalar(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -161,7 +156,7 @@ struct TDecimalBlockExec {
             const auto val2Ptr = GetScalarValue<TRight>(*arg2.scalar());
             auto resPtr = reinterpret_cast<NYql::NDecimal::TInt128*>(resArr.buffers[1]->mutable_data());
             auto resValid = res->array()->GetMutableValues<uint8_t>(0);
-            ArrayScalarCore(val1Ptr, valid1, val2Ptr, nullptr, resPtr, resValid, length, arr1.offset, 0);
+            ArrayScalarCore(val1Ptr, valid1, val2Ptr, /*valid2=*/nullptr, resPtr, resValid, length, arr1.offset, 0);
         } else {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
@@ -215,34 +210,37 @@ struct TDecimalBlockExec {
     }
 };
 
-template<typename TRight>
+template <typename TRight>
 struct TDecimalMulBlockExec: NYql::NDecimal::TDecimalMultiplicator<TRight>, TDecimalBlockExec<TDecimalMulBlockExec<TRight>, TRight> {
     TDecimalMulBlockExec(
         ui8 precision,
         ui8 scale)
         : NYql::NDecimal::TDecimalMultiplicator<TRight>(precision, scale)
-    { }
+    {
+    }
 };
 
-template<typename TRight>
+template <typename TRight>
 struct TDecimalDivBlockExec: NYql::NDecimal::TDecimalDivisor<TRight>, TDecimalBlockExec<TDecimalDivBlockExec<TRight>, TRight> {
     TDecimalDivBlockExec(
         ui8 precision,
         ui8 scale)
         : NYql::NDecimal::TDecimalDivisor<TRight>(precision, scale)
-    { }
+    {
+    }
 };
 
-template<typename TRight>
+template <typename TRight>
 struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder<TRight>, TDecimalBlockExec<TDecimalModBlockExec<TRight>, TRight> {
     TDecimalModBlockExec(
         ui8 precision,
         ui8 scale)
         : NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
-    { }
+    {
+    }
 };
 
-template<template <typename> class TExec>
+template <template <typename> class TExec>
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TType*>& argTypes, TType* resultType) {
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
@@ -263,33 +261,33 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     MKQL_ENSURE(decimalType1->GetParams() == decimalResultType->GetParams(), "Require same precision/scale");
 
     auto [precision, scale] = decimalType1->GetParams();
-    MKQL_ENSURE(precision >= 1&& precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
+    MKQL_ENSURE(precision >= 1 && precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
     auto createKernel = [&](auto exec) {
-        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType), 
-            [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-            return exec->Exec(ctx, batch, res);
-        });
+        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                                                                    return exec->Exec(ctx, batch, res);
+                                                                });
         k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-        return k;       
+        return k;
     };
 
     switch (dataType2->GetSchemeType()) {
-    case NUdf::TDataType<NUdf::TDecimal>::Id: {
-        return createKernel(std::make_shared<TExec<NYql::NDecimal::TInt128>>(precision, scale));
-    }
-#define MAKE_PRIMITIVE_TYPE_MUL(type) \
-    case NUdf::TDataType<type>::Id: { \
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            return createKernel(std::make_shared<TExec<NYql::NDecimal::TInt128>>(precision, scale));
+        }
+#define MAKE_PRIMITIVE_TYPE_MUL(type)                                         \
+    case NUdf::TDataType<type>::Id: {                                         \
         return createKernel(std::make_shared<TExec<type>>(precision, scale)); \
     }
-    INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
-#undef MAKE_PRIMITIVE_TYPE_MUL    
-    default:
-        Y_ABORT("Unupported type.");
+            INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MUL)
+#undef MAKE_PRIMITIVE_TYPE_MUL
+        default:
+            Y_ABORT("Unupported type.");
     }
 }
 
-template<template <typename> class TExec>
+template <template <typename> class TExec>
 IComputationNode* WrapBlockDecimal(TStringBuf name, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
@@ -301,14 +299,14 @@ IComputationNode* WrapBlockDecimal(TStringBuf name, TCallable& callable, const T
 
     auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
     auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
-    TVector<TType*> argsTypes = { firstType, secondType };
+    TComputationNodePtrVector argsNodes = {firstCompute, secondCompute};
+    TVector<TType*> argsTypes = {firstType, secondType};
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TExec>(argsTypes, callable.GetType()->GetReturnType());
-    return new TBlockFuncNode(ctx.Mutables, name, std::move(argsNodes), argsTypes, *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), name, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-}
+} // namespace
 
 IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapBlockDecimal<TDecimalMulBlockExec>("DecimalMul", callable, ctx);
@@ -322,5 +320,4 @@ IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNod
     return WrapBlockDecimal<TDecimalModBlockExec>("DecimalMod", callable, ctx);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/formats/arrow
     ydb/core/formats/arrow/accessor/abstract
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos

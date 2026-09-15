@@ -2,7 +2,9 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
-#include <ydb/library/aclib/protos/aclib.pb.h>
+#include <ydb/library/aclib/protos/identity/user_token.pb.h>
+#include <ydb/library/aclib/protos/acl/acl.pb.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NACLib {
 
@@ -13,6 +15,13 @@ namespace NACLib {
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
 #define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_ACL_BASIC_OWNER "owner@" BUILTIN_SYSTEM_DOMAIN
+
+
+// This definition used to mark anonymous user sid
+#define BUILTIN_ACL_NO_USER_SID ""
+
+#define BUILTIN_ACL_CDC_TTL "ttl@" BUILTIN_SYSTEM_DOMAIN
 
 class TUserToken;
 class TSystemUsers {
@@ -66,6 +75,8 @@ enum EInheritanceType : ui32 { // bitmask
     InheritObject = 0x01, // this ACE will inherit on child objects
     InheritContainer = 0x02, // this ACE will inherit on child containers
     InheritOnly = 0x04, // this ACE will not be used for access checking but for inheritance only
+
+    DefaultInheritanceType = InheritObject | InheritContainer,
 };
 
 enum class EDiffType : ui32 {
@@ -93,9 +104,10 @@ public:
     explicit TUserToken(const TString& token);
     bool IsExist(const TSID& someSID) const; // check for presence of SID specified in the token
     TSID GetUserSID() const;
-    using NACLibProto::TUserToken::GetAuthType;
     using NACLibProto::TUserToken::GetSanitizedToken;
     using NACLibProto::TUserToken::SetSanitizedToken;
+    using NACLibProto::TUserToken::GetSubjectType;
+    using NACLibProto::TUserToken::SetSubjectType;
     TVector<TSID> GetGroupSIDs() const;
     TString GetOriginalUserToken() const;
     TString SerializeAsString() const;
@@ -118,8 +130,8 @@ class TACL : public NACLibProto::TACL {
 public:
     TACL() = default;
     TACL(const TString& string); // proto format
-    std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
-    std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
+    std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    std::pair<ui32, ui32> RemoveAccess(EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
@@ -130,9 +142,9 @@ public:
     static TString ToString(const NACLibProto::TACE& ace);
     static void FromString(NACLibProto::TACE& ace, const TString& string);
 
-protected:
     static ui32 SpecialRightsFromString(const TString& string);
 
+protected:
     void SortACL();
 };
 
@@ -140,8 +152,8 @@ class TDiffACL : public NACLibProto::TDiffACL {
 public:
     TDiffACL() = default;
     TDiffACL(const TString& string);
-    void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
-    void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
+    void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     void AddAccess(const NACLibProto::TACE& access);
     void RemoveAccess(const NACLibProto::TACE& access);
     void ClearAccess();
@@ -160,8 +172,8 @@ public:
     ui32 GetEffectiveAccessRights(const TUserToken& user) const;
     TSecurityObject MergeWithParent(const NACLibProto::TSecurityObject& parent) const; // returns effective ACL as result of merging parent with this
     NACLibProto::TACL GetImmediateACL() const;
-    void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
-    void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = InheritObject | InheritContainer);
+    void AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    void RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     void ApplyDiff(const NACLibProto::TDiffACL& diffACL);
     void ClearAccess();
     TInstant GetExpireTime() const;
@@ -173,10 +185,5 @@ public:
 protected:
     bool IsContainer;
 };
-
-
-
-
-
 
 }

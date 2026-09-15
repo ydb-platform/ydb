@@ -92,8 +92,27 @@ Y_UNIT_TEST_SUITE(ReadRows) {
             UNIT_ASSERT_VALUES_EQUAL(res.status(), ::Ydb::StatusIds::UNAVAILABLE);
         }
 
-    }
+        dsReadResultOberver.Remove();
+        
 
+        // Slow read
+        auto dsReadResultObserver = runtime.AddObserver<TEvDataShard::TEvReadResult>([&](auto&) {
+            SimulateSleep(runtime, TDuration::Seconds(100));
+        });
+
+        // Timeout
+        {
+            Ydb::Table::ReadRowsRequest request = MakeReadRowsRequest("/Root/table-1", {1, 5});
+            auto readRowsFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
+                std::move(request), "/Root", "", runtime.GetActorSystem(0));
+            auto res = runtime.WaitFuture(readRowsFuture, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(res.status(), ::Ydb::StatusIds::TIMEOUT);
+            UNIT_ASSERT_VALUES_EQUAL(
+                res.issues().begin()->Getmessage(), 
+                "ReadRows from table /Root/table-1 timed out, duration: 60 sec\n"
+            );
+        }
+    }
 }
 
 } // namespace NKikimr

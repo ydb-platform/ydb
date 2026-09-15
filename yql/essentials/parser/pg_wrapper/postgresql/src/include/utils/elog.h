@@ -226,6 +226,7 @@ extern int	internalerrquery(const char *query);
 extern int	err_generic_string(int field, const char *str);
 
 extern int	geterrcode(void);
+extern int	geterrlevel(void);
 extern int	geterrposition(void);
 extern int	getinternalerrposition(void);
 
@@ -539,6 +540,7 @@ extern void write_jsonlog(ErrorData *edata);
  * safely (memory context, GUC load etc)
  */
 extern void write_stderr(const char *fmt,...) pg_attribute_printf(1, 2);
+extern void vwrite_stderr(const char *fmt, va_list ap) pg_attribute_printf(1, 0);
 
 /*
  * Write a message to STDERR using only async-signal-safe functions.  This can

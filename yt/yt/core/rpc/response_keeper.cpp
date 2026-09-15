@@ -7,11 +7,11 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 namespace NYT::NRpc {
 
@@ -45,10 +45,10 @@ public:
         EvictionExecutor_->Start();
 
         profiler.AddFuncGauge("/response_keeper/kept_response_count", MakeStrong(this), [this] {
-            return FinishedResponseCount_;
+            return FinishedResponseCount_.load(std::memory_order::relaxed);
         });
         profiler.AddFuncGauge("/response_keeper/kept_response_space", MakeStrong(this), [this] {
-            return FinishedResponseSpace_;
+            return FinishedResponseSpace_.load(std::memory_order::relaxed);
         });
     }
 
@@ -65,9 +65,9 @@ public:
             : 0;
         Started_ = true;
 
-        YT_LOG_INFO("Response keeper started (WarmupTime: %v, ExpirationTime: %v)",
-            Config_->WarmupTime,
-            Config_->ExpirationTime);
+        YT_TLOG_INFO("Response keeper started")
+            .With("WarmupTime", Config_->WarmupTime)
+            .With("ExpirationTime", Config_->ExpirationTime);
     }
 
     void Stop() override
@@ -81,11 +81,11 @@ public:
         PendingResponses_.clear();
         FinishedResponses_.clear();
         ResponseEvictionQueue_.clear();
-        FinishedResponseSpace_ = 0;
-        FinishedResponseCount_ = 0;
+        FinishedResponseCount_.store(0, std::memory_order::release);
+        FinishedResponseSpace_.store(0, std::memory_order::release);
         Started_ = false;
 
-        YT_LOG_INFO("Response keeper stopped");
+        YT_TLOG_INFO("Response keeper stopped");
     }
 
     TFuture<TSharedRefArray> TryBeginRequest(TMutationId id, bool isRetry) override
@@ -117,9 +117,9 @@ public:
         }
 
         if (!response) {
-            YT_LOG_ALERT("Null response passed to response keeper (MutationId: %v, Remember: %v)",
-                id,
-                remember);
+            YT_TLOG_ALERT("Null response passed to response keeper")
+                .With("MutationId", id)
+                .With("Remember", remember);
         }
 
 
@@ -138,11 +138,11 @@ public:
                     id,
                     NProfiling::GetCpuInstant(),
                     space,
-                    it
+                    it,
                 });
 
-                FinishedResponseCount_ += 1;
-                FinishedResponseSpace_ += space;
+                FinishedResponseCount_.fetch_add(1, std::memory_order::acq_rel);
+                FinishedResponseSpace_.fetch_add(space, std::memory_order::acq_rel);
             }
         }
 
@@ -206,7 +206,8 @@ public:
             promise.TrySet(error);
         }
 
-        YT_LOG_INFO(error, "All pending requests canceled");
+        YT_TLOG_INFO("All pending requests canceled")
+            .With(error);
     }
 
     bool TryReplyFrom(const IServiceContextPtr& context, bool subscribeToResponse) override
@@ -258,6 +259,13 @@ public:
         return NProfiling::GetCpuInstant() < WarmupDeadline_;
     }
 
+    bool IsPersistent() const override
+    {
+        YT_ASSERT_THREAD_AFFINITY_ANY();
+
+        return false;
+    }
+
 private:
     const TResponseKeeperConfigPtr Config_;
     const IInvokerPtr Invoker_;
@@ -273,8 +281,8 @@ private:
     using TFinishedResponseMap = THashMap<TMutationId, TSharedRefArray>;
     TFinishedResponseMap FinishedResponses_;
 
-    int FinishedResponseCount_ = 0;
-    i64 FinishedResponseSpace_ = 0;
+    std::atomic<int> FinishedResponseCount_ = 0;
+    std::atomic<i64> FinishedResponseSpace_ = 0;
 
     struct TEvictionItem
     {
@@ -312,7 +320,8 @@ private:
         if (pendingIt != PendingResponses_.end()) {
             ValidateRetry(id, isRetry);
 
-            YT_LOG_DEBUG("Replying with pending response (MutationId: %v)", id);
+            YT_TLOG_DEBUG("Replying with pending response")
+                .With("MutationId", id);
             return pendingIt->second;
         }
 
@@ -320,14 +329,15 @@ private:
         if (finishedIt != FinishedResponses_.end()) {
             ValidateRetry(id, isRetry);
 
-            YT_LOG_DEBUG("Replying with finished response (MutationId: %v)", id);
+            YT_TLOG_DEBUG("Replying with finished response")
+                .With("MutationId", id);
             return MakeFuture(finishedIt->second);
         }
 
         if (isRetry && IsWarmingUp()) {
             THROW_ERROR_EXCEPTION("Cannot reliably check for a duplicate mutating request")
-                << TErrorAttribute("mutation_id", id)
-                << TErrorAttribute("warmup_time", Config_->WarmupTime);
+                .With("mutation_id", id)
+                .With("warmup_time", Config_->WarmupTime);
         }
 
         return {};
@@ -341,7 +351,7 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Response keeper eviction tick started");
+        YT_TLOG_DEBUG("Response keeper eviction tick started");
 
         NProfiling::TWallTimer timer;
         int counter = 0;
@@ -355,22 +365,22 @@ private:
 
             if (++counter % Config_->EvictionTickTimeCheckPeriod == 0) {
                 if (timer.GetElapsedTime() > Config_->MaxEvictionTickTime) {
-                    YT_LOG_DEBUG("Response keeper eviction tick interrupted (ResponseCount: %v)",
-                        counter);
+                    YT_TLOG_DEBUG("Response keeper eviction tick interrupted")
+                        .With("ResponseCount", counter);
                     return;
                 }
             }
 
             FinishedResponses_.erase(item.Iterator);
 
-            FinishedResponseCount_ -= 1;
-            FinishedResponseSpace_ -= item.Space;
+            FinishedResponseCount_.fetch_sub(1, std::memory_order::acq_rel);
+            FinishedResponseSpace_.fetch_sub(item.Space, std::memory_order::acq_rel);
 
             ResponseEvictionQueue_.pop();
         }
 
-        YT_LOG_DEBUG("Response keeper eviction tick completed (ResponseCount: %v)",
-            counter);
+        YT_TLOG_DEBUG("Response keeper eviction tick completed")
+            .With("ResponseCount", counter);
     }
 };
 
@@ -387,7 +397,7 @@ void ValidateRetry(TMutationId mutationId, bool isRetry)
 {
     if (!isRetry) {
         THROW_ERROR_EXCEPTION("Duplicate request is not marked as \"retry\"")
-             << TErrorAttribute("mutation_id", mutationId);
+             .With("mutation_id", mutationId);
     }
 }
 

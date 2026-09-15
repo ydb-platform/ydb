@@ -11,7 +11,8 @@ enum class EModificationType {
     Update,
     Replace,
     Delete,
-    Increment
+    Increment,
+    UpsertIncrement
 };
 
 }
@@ -34,6 +35,7 @@ public:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
             case NEvWrite::EModificationType::Increment:
+            case NEvWrite::EModificationType::UpsertIncrement:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -47,6 +49,7 @@ public:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
             case NEvWrite::EModificationType::Increment:
+            case NEvWrite::EModificationType::UpsertIncrement:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -68,6 +71,8 @@ public:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT;
+            case NEvWrite::EModificationType::UpsertIncrement:
+                return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT;
         }
     }
 
@@ -87,6 +92,8 @@ public:
                 return NEvWrite::EModificationType::Replace;
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
                 return NEvWrite::EModificationType::Increment;
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
+                return NEvWrite::EModificationType::UpsertIncrement;
         }
     }
 
@@ -103,6 +110,7 @@ public:
             case NEvWrite::EModificationType::Update:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
+            case NEvWrite::EModificationType::UpsertIncrement:
                 Y_ENSURE(false);
         }
     }

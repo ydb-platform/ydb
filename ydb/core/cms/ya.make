@@ -13,6 +13,7 @@ SRCS(
     cms_tx_get_log_tail.cpp
     cms_tx_init_scheme.cpp
     cms_tx_load_state.cpp
+    cms_tx_persist_ddisk_info.cpp
     cms_tx_log_and_send.cpp
     cms_tx_log_cleanup.cpp
     cms_tx_process_notification.cpp
@@ -21,21 +22,25 @@ SRCS(
     cms_tx_remove_permissions.cpp
     cms_tx_remove_request.cpp
     cms_tx_remove_task.cpp
+    cms_tx_store_first_boot_timestamp.cpp
     cms_tx_store_permissions.cpp
     cms_tx_store_walle_task.cpp
     cms_tx_update_config.cpp
     cms_tx_update_downtimes.cpp
     defs.h
-    downtime.h
     downtime.cpp
-    erasure_checkers.h
+    downtime.h
     erasure_checkers.cpp
+    erasure_checkers.h
     error_info.h
     http.cpp
     http.h
+    http_dump.cpp
+    http_dump.h
     info_collector.cpp
     info_collector.h
     json_proxy.h
+    json_proxy_ddisk.h
     json_proxy_config_items.h
     json_proxy_config_updates.h
     json_proxy_config_validators.h
@@ -45,12 +50,13 @@ SRCS(
     json_proxy_proto.h
     json_proxy_sentinel.h
     json_proxy_toggle_config_validator.h
+    log_formatter.h
     logger.cpp
     logger.h
     node_checkers.cpp
     node_checkers.h
-    log_formatter.h
     pdiskid.h
+    priority_lock.h
     scheme.h
     sentinel.cpp
     services.cpp
@@ -68,6 +74,8 @@ RESOURCE(
     ui/cms.js cms/ui/cms.js
     ui/config_dispatcher.css cms/ui/config_dispatcher.css
     ui/cms_log.js cms/ui/cms_log.js
+    ui/nbs2_tablets.css cms/ui/nbs2_tablets.css
+    ui/nbs2_tablets.js cms/ui/nbs2_tablets.js
     ui/console_log.js cms/ui/console_log.js
     ui/common.css cms/ui/common.css
     ui/common.js cms/ui/common.js
@@ -203,8 +211,10 @@ RESOURCE(
     ui/res/remove.png cms/ui/res/remove.png
     ui/validators.js cms/ui/validators.js
     ui/sentinel_state.js cms/ui/sentinel_state.js
+    ui/state_storage_state.js cms/ui/state_storage_state.js
     ui/nanotable.js cms/ui/nanotable.js
     ui/sentinel.css cms/ui/sentinel.css
+    ui/state_storage.css cms/ui/state_storage.css
 )
 
 PEERDIR(

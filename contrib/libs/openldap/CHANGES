@@ -1,5 +1,83 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.13 Release (2026/03/09)
+	Fixed liblber ber_bvreplace_x potential NULL dereference (ITS#10438)
+	Fixed libldap heap buffer overflow in parse_whsp (ITS#10430)
+	Fixed slap(add|modify) to not recreate config frontend (ITS#10414)
+	Fixed slapd authzPrettyNormal function memory leak (ITS#10446)
+	Fixed slapd memory leak in get_mra function (ITS#10445)
+	Fixed slapd memory leak in parseAssert and parseReturnFilter functions (ITS#10450)
+	Fixed slapd memory leak in parseReadAttrs function (ITS#10449)
+	Fixed slapd slapd_sasl_mechs race condition (ITS#10443)
+	Fixed slapd syncrepl to be more efficient with refresh task (ITS#10413)
+	Fixed slapd unbind/close race condition (ITS#10258)
+	Fixed slapd-ldap memory leak in ldap_chain_parse_ctrl function (ITS#10447)
+	Fixed slapd-mdb always initialize pausepoll (ITS#10191)
+	Fixed slapo-constraint to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-dds minttl incorrectly set in certain scenarios (ITS#10442)
+	Fixed slapo-memberof to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-nestgroup to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-retcode to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-syncprov to not propagate request controls to internal ops (ITS#10440)
+	Fixed slapo-syncprov memory leak in syncprov_parseCtrl (ITS#10448)
+	Fixed slapo-translucent to not propagate request controls to internal ops (ITS#10440)
+	Contrib
+		Fixed slapo-autogroup to not propagate request controls to internal ops (ITS#10440)
+	Minor Cleanup
+		ITS#10427
+		ITS#10425
+		ITS#10451
+
+OpenLDAP 2.6.12 Release (2026/01/29)
+	Fixed libldap to reject empty types in LDIF (ITS#10429)
+	Fixed libldap to not scroll past nul bytes (ITS#10430)
+	Fixed libldap to enforce stop when encountering nul-leading line (ITS#10431)
+
+OpenLDAP 2.6.11 Release (2026/01/28)
+	Fixed slapd to use fresh timestamp for lastbind (ITS#10379)
+	Fixed slapd delta-syncrepl to always use logDB rootdn (ITS#10360)
+	Fixed slapd reverse lookup of proxied IPv6 addresses (ITS#10387)
+	Fixed slapd logging buffer overflow (ITS#10410)
+	Fixed slapd-ldap response when invalid secprops is configured (ITS#10392)
+	Fixed slapd-mdb error when deleting last child of a branch (ITS#10304)
+	Fixed slapd-mdb check for pool pause in search (ITS#10191)
+	Fixed slapo-memberof clash with refint on subtree rename (ITS#10398)
+	Fixed slapo-syncprov use correct rootDN for accesslog replay (ITS#10385)
+	Minor Cleanup
+		ITS#7901
+		ITS#10329
+		ITS#10335
+		ITS#10339
+		ITS#10343
+		ITS#10344
+		ITS#10345
+		ITS#10347
+		ITS#10348
+		ITS#10349
+		ITS#10353
+		ITS#10358
+		ITS#10359
+		ITS#10366
+		ITS#10367
+		ITS#10369
+		ITS#10370
+		ITS#10371
+		ITS#10372
+		ITS#10374
+		ITS#10375
+		ITS#10376
+		ITS#10377
+		ITS#10379
+		ITS#10380
+		ITS#10381
+		ITS#10384
+		ITS#10388
+		ITS#10390
+		ITS#10391
+		ITS#10400
+		ITS#10401
+		ITS#10408
+
 OpenLDAP 2.6.10 Release (2025/05/22)
 	Added slapd microsecond timestamp format for local logging (ITS#10140)
 	Fixed libldap ldap_result behavior with LDAP_MSG_RECEIVED (ITS#10229)

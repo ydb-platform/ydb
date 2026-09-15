@@ -59,6 +59,10 @@ public:
         return true;
     }
 
+    void SetWakeUpCallback(TWakeUpCallback&& /* wakeUpCallback */) override {
+
+    }
+
 public:
     void SetBlankGetRequests(ui32 count) {
         GetBlankRequests = count;

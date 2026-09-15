@@ -2,17 +2,18 @@
 
 #include "address.h"
 
-#include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
-#include <ydb/core/tx/columnshard/counters/blobs_manager.h>
-
-#include <ydb/core/tablet_flat/flat_executor.h>
-#include <ydb/core/util/backoff.h>
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/counters/blobs_manager.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/util/backoff.h>
 
 #include <util/generic/string.h>
+
 #include <map>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
@@ -23,10 +24,9 @@ namespace NKikimr::NOlap {
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
-
 // A batch of blobs that are written by a single task.
 // The batch is later saved or discarded as a whole.
-class TBlobBatch : public TMoveOnly {
+class TBlobBatch: public TMoveOnly {
     friend class TBlobManager;
 
     struct TBatchInfo;
@@ -36,13 +36,13 @@ class TBlobBatch : public TMoveOnly {
 private:
     explicit TBlobBatch(std::unique_ptr<TBatchInfo> batchInfo);
 
-    void SendWriteRequest(const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId,
-        const TString& data, ui64 cookie, TInstant deadline);
+    void SendWriteRequest(
+        const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId, const TString& data, ui64 cookie, TInstant deadline);
 
 public:
     TBlobBatch();
     TBlobBatch(TBlobBatch&& other);
-    TBlobBatch& operator = (TBlobBatch&& other);
+    TBlobBatch& operator=(TBlobBatch&& other);
     ~TBlobBatch();
 
     bool operator!() const {
@@ -75,6 +75,7 @@ class IBlobManager {
 protected:
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) = 0;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) = 0;
+
 public:
     virtual ~IBlobManager() = default;
 
@@ -92,6 +93,7 @@ public:
         }
         return DoSaveBlobBatchOnExecute(blobBatch, db);
     }
+
     void SaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
         if (blobBatch.GetBlobCount() == 0) {
             return;
@@ -105,12 +107,13 @@ public:
 
 // A ref-counted object to keep track when GC barrier can be moved to some step.
 // This means that all needed blobs below this step have been KeepFlag-ed and Ack-ed
-struct TAllocatedGenStep : public TThrRefBase {
+struct TAllocatedGenStep: public TThrRefBase {
     const TGenStep GenStep;
 
     explicit TAllocatedGenStep(const TGenStep& genStep)
         : GenStep(genStep)
-    {}
+    {
+    }
 
     bool Finished() const {
         return RefCount() == 1;
@@ -132,7 +135,7 @@ struct TBlobManagerCounters {
 };
 
 // The implementation of BlobManager that hides all GC-related details
-class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
+class TBlobManager: public IBlobManager, public TCommonBlobsTracker {
 private:
     using TBlobAddress = NBlobOperations::NBlobStorage::TBlobAddress;
     class TGCContext;
@@ -165,12 +168,13 @@ private:
     // Then the counters are reset and start accumulating new delta
     TBlobManagerCounters CountersUpdate;
 
-    TInstant PreviousGCTime; // Used for delaying next GC if there are too few blobs to collect
+    TInstant PreviousGCTime;   // Used for delaying next GC if there are too few blobs to collect
 
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) override;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
     void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
     [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
+
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -183,6 +187,11 @@ public:
         result.Add(BlobsToDeleteDelayed);
         return result;
     }
+
+    TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const;
+
+    // We suppose that all the blob storage groups for a database have the same type
+    TBlobStorageGroupType GetBlobStorageGroupType() const;
 
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override;
 
@@ -208,8 +217,8 @@ public:
     bool LoadState(IBlobManagerDb& db, const TTabletId selfTabletId);
 
     // Prepares Keep/DontKeep lists and GC barrier
-    std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId,
-        const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
+    std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId, const std::shared_ptr<TBlobManager>& manager,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
         const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
 
     void OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
@@ -228,6 +237,7 @@ public:
     TBlobBatch StartBlobBatch() override;
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
+
 private:
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
@@ -240,4 +250,4 @@ private:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

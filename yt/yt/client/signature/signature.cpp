@@ -49,7 +49,7 @@ void ToProto(NProto::TSignature* protoSignature, const TSignaturePtr& signature)
 void Deserialize(TSignature& signature, INodePtr node)
 {
     auto mapNode = node->AsMap();
-    signature.Header_ = TYsonString(mapNode->GetChildValueOrThrow<TString>("header"));
+    signature.Header_ = TYsonString(mapNode->GetChildValueOrThrow<std::string>("header"));
     signature.Payload_ = mapNode->GetChildValueOrThrow<std::string>("payload");
     signature.Signature_ = mapNode->GetChildValueOrThrow<std::string>("signature");
 }

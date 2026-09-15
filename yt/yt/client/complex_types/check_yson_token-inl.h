@@ -1,7 +1,7 @@
 #ifndef CHECK_YSON_TOKEN_INL_H_
-#error "Direct inclusion of this file is not allowed, include check_yson.h"
+#error "Direct inclusion of this file is not allowed, include check_yson_token.h"
 // For the sake of sane code completion.
-#include "check_yson_token-inl.h"
+#include "check_yson_token.h"
 #endif
 
 #include <yt/yt/core/yson/pull_parser.h>

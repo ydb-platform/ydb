@@ -153,10 +153,8 @@ void Test(
     THashSet<TString> allowScans = {},
     NYdb::TParams params = TParamsBuilder().Build())
 {
-    NKikimrConfig::TAppConfig appConfig;
     TKikimrSettings settings;
     settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-    settings.SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -192,9 +190,7 @@ void Test(
 }
 
 void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1) {
-    NKikimrConfig::TAppConfig appConfig;
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig);
+    TKikimrSettings settings;
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();

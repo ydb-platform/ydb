@@ -4,6 +4,9 @@
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
+#ifndef BOOST_SRC_LOCALE_MO_HASH_HPP
+#define BOOST_SRC_LOCALE_MO_HASH_HPP
+
 #include <cstdint>
 
 namespace boost { namespace locale { namespace gnu_gettext {
@@ -49,3 +52,5 @@ namespace boost { namespace locale { namespace gnu_gettext {
         return state;
     }
 }}} // namespace boost::locale::gnu_gettext
+
+#endif

@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -85,7 +86,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps,
-    const TSet<TString>& addSecTags)
+    const TSet<TString>& addSecTags,
+    const TVector<TString>& layerPaths)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -93,6 +95,11 @@ void FillSpec(NYT::TNode& spec,
         NYT::TNode tmpSpec = *val;
         NYT::MergeNodes(tmpSpec, spec);
         spec = std::move(tmpSpec);
+    }
+
+    const auto supportRLSTables = settings->_EnableRLSTablesSupport.Get(cluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
+    if (supportRLSTables && AnyOf(execCtx.InputTables_, [](const auto& input) { return input.RLS; })) {
+        spec["omit_inaccessible_rows"] = true;
     }
 
     auto& sampling = execCtx.Sampling;
@@ -232,9 +239,24 @@ void FillSpec(NYT::TNode& spec,
         spec["description"] = *val;
     }
 
-    if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
-        if (auto val = settings->MaxJobCount.Get(cluster)) {
-            spec["max_job_count"] = static_cast<i64>(*val);
+    if (auto val = settings->MaxJobCount.Get(cluster)) {
+        const bool applyToIntermediate = settings->ApplyMaxJobCountToAll.Get(cluster).GetOrElse(DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL) ||
+            opProps.HasFlags(EYtOpProp::ForceApplyMaxJobCount);
+        TMaybe<TStringBuf> settingName;
+        if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
+            settingName = "max_job_count";
+        } else if (applyToIntermediate) {
+            if (opProps.HasAnyOfFlags(EYtOpProp::WithReducer)) {
+                // mapreduce: apply even if map stage is empty
+                settingName = "max_map_job_count";
+            } else {
+                // sort
+                settingName = "max_partition_job_count";
+            }
+        }
+        if (settingName) {
+            YQL_ENSURE(!settingName->empty());
+            spec[*settingName] = static_cast<i64>(*val);
         }
     }
 
@@ -337,7 +359,7 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->IntermediateAccount.Get(cluster)) {
             spec["intermediate_data_account"] = *val;
         }
-        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster)) {
+        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster, execCtx.Session_->UseSecureTmp_, execCtx.Session_->OperationOptions_)) {
             auto attrs = entry->Tx->Get(tmpFolder + "/@", NYT::TGetOptions().AttributeFilter(NYT::TAttributeFilter().AddAttribute(TString("account"))));
             if (attrs.HasKey("account")) {
                 spec["intermediate_data_account"] = attrs["account"];
@@ -482,6 +504,10 @@ void FillSpec(NYT::TNode& spec,
         spec["user_file_columnar_statistics"]["enabled"] = settings->TableContentColumnarStatistics.Get(cluster).GetOrElse(true);
     }
 
+    if (layerPaths.size() && settings->LayerPaths.Get(cluster)) {
+        throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+    }
+
     if (auto val = settings->LayerPaths.Get(cluster)) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
@@ -493,6 +519,21 @@ void FillSpec(NYT::TNode& spec,
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: *val) {
                 layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+    }
+
+    if (layerPaths.size()) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
+            }
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
             }
         }
     }
@@ -538,6 +579,10 @@ void FillSpec(NYT::TNode& spec,
             secTagsNode.Add(tag);
         }
         spec["additional_security_tags"] = std::move(secTagsNode);
+    }
+
+    if (auto val = settings->ValidatePool.Get(cluster)) {
+        spec["require_specified_pools_existence"] = *val;
     }
 }
 
@@ -594,24 +639,26 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     ui64 fileMemUsage,
     ui64 llvmMemUsage,
     bool localRun,
-    const TString& cmdPrefix)
+    const TString& cmdPrefix,
+    NKikimr::NUdf::EBridgeMode bridgeMode,
+    const TString& bridgeBinaryPath)
 {
     auto cluster = execCtx.Cluster_;
-    auto mrJobBin = execCtx.Config_->GetMrJobBin();
+    auto mrJobBin = execCtx.StaticConfig_->GetMrJobBin();
     TMaybe<TString> mrJobBinMd5;
     if (!mrJobBin.empty()) {
-        if (execCtx.Config_->HasMrJobBinMd5()) {
-            mrJobBinMd5 = execCtx.Config_->GetMrJobBinMd5();
+        if (execCtx.StaticConfig_->HasMrJobBinMd5()) {
+            mrJobBinMd5 = execCtx.StaticConfig_->GetMrJobBinMd5();
         } else {
             YQL_CLOG(WARN, ProviderYt) << "MrJobBin without MD5";
         }
     }
 
     TVector<std::pair<TString, TString>> mrJobSystemLibs;
-    if (execCtx.Config_->MrJobSystemLibsWithMd5Size() > 0) {
-        mrJobSystemLibs.reserve(execCtx.Config_->MrJobSystemLibsWithMd5Size());
+    if (execCtx.StaticConfig_->MrJobSystemLibsWithMd5Size() > 0) {
+        mrJobSystemLibs.reserve(execCtx.StaticConfig_->MrJobSystemLibsWithMd5Size());
 
-        for (const auto& systemLib : execCtx.Config_->GetMrJobSystemLibsWithMd5()) {
+        for (const auto& systemLib : execCtx.StaticConfig_->GetMrJobSystemLibsWithMd5()) {
             mrJobSystemLibs.push_back({systemLib.GetFile(), systemLib.GetMd5()});
 
             const auto libSize = TFileStat(systemLib.GetFile()).Size;
@@ -622,6 +669,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         spec.AddEnvironment("LD_LIBRARY_PATH", ".");
     }
 
+    if (settings->UseDefaultArrowAllocatorInJobs.Get().GetOrElse(false)) {
+        spec.AddEnvironment("YQL_USE_DEFAULT_ARROW_ALLOCATOR", "1");
+    }
 
     if (!localRun) {
         for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {
@@ -706,6 +756,15 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         fileMemUsage += binSize;
     }
 
+    if (bridgeMode == NKikimr::NUdf::EBridgeMode::OutProcess && !bridgeBinaryPath.empty()) {
+        const auto bridgeSize = TFileStat(bridgeBinaryPath).Size;
+        YQL_ENSURE(bridgeSize != 0, "udf_bridge binary not found or empty: " << bridgeBinaryPath);
+        fileMemUsage += bridgeSize;
+        NYT::TAddLocalFileOptions opts;
+        opts.PathInJob("udf_bridge");
+        spec.AddLocalFile(bridgeBinaryPath, opts);
+    }
+
     auto defaultMemoryLimit = settings->DefaultMemoryLimit.Get(cluster).GetOrElse(0);
     ui64 tmpFsSize = settings->UseTmpfs.Get(cluster).GetOrElse(false)
         ? (ui64)settings->ExtraTmpfsSize.Get(cluster).GetOrElse(8_MB)
@@ -742,6 +801,9 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
+    if (auto minSize = settings->_MinJobStateSizeToPassViaFile.Get().GetOrElse(DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE)) {
+        opOpts.MinJobStateSizeToPassViaFile(minSize);
+    }
     if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);
 

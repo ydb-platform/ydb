@@ -27,6 +27,7 @@ class TProtoSerializedAsString
 {
 public:
     using TMessage::TMessage;
+    using TMessage::operator=;
 };
 
 template <CProtobufMessage TMessage>
@@ -35,6 +36,7 @@ class TProtoSerializedAsYson
 {
 public:
     using TMessage::TMessage;
+    using TMessage::operator=;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

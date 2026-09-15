@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
+#include <variant>
+
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -20,10 +22,25 @@ enum class EExportProgress {
 };
 
 struct TExportItemProgress {
-    uint32_t PartsTotal;
-    uint32_t PartsCompleted;
+    uint32_t PartsTotal = 0;
+    uint32_t PartsCompleted = 0;
     TInstant StartTime;
     TInstant EndTime;
+};
+
+struct TEncryptionAlgorithm {
+    static const std::string AES_128_GCM;
+    static const std::string AES_256_GCM;
+    static const std::string CHACHA_20_POLY_1305;
+};
+
+struct TYdbDumpFormat {
+};
+
+struct TParquetFormat {
+    using TSelf = TParquetFormat;
+
+    FLUENT_SETTING_DEFAULT(uint32_t, RowGroupSize, 10000);
 };
 
 /// YT
@@ -40,13 +57,14 @@ struct TExportToYtSettings : public TOperationRequestSettings<TExportToYtSetting
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_DEFAULT(bool, UseTypeV3, false);
+    FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };
 
 class TExportToYtResponse : public TOperation {
 public:
     struct TMetadata {
         TExportToYtSettings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
@@ -79,11 +97,8 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
         UNKNOWN = std::numeric_limits<int>::max(),
     };
 
-    struct TEncryptionAlgorithm {
-        static const std::string AES_128_GCM;
-        static const std::string AES_256_GCM;
-        static const std::string CHACHA_20_POLY_1305;
-    };
+    // For backward compatibility
+    using TEncryptionAlgorithm = NExport::TEncryptionAlgorithm;
 
     struct TItem {
         std::string Src;
@@ -97,6 +112,11 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
+    FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
+
+    using FormatVariant = std::variant<TYdbDumpFormat, TParquetFormat>;
+    FLUENT_SETTING(FormatVariant, Format);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
         EncryptionAlgorithm_ = algorithm;
@@ -112,13 +132,59 @@ class TExportToS3Response : public TOperation {
 public:
     struct TMetadata {
         TExportToS3Settings Settings;
-        EExportProgress Progress;
+        EExportProgress Progress = EExportProgress::Unspecified;
         std::vector<TExportItemProgress> ItemsProgress;
     };
 
 public:
     using TOperation::TOperation;
     TExportToS3Response(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    const TMetadata& Metadata() const;
+
+private:
+    TMetadata Metadata_;
+};
+
+/// FS
+struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSettings> {
+    using TSelf = TExportToFsSettings;
+
+    struct TItem {
+        std::string Src;
+        std::string Dst;
+    };
+
+    FLUENT_SETTING(std::string, BasePath);
+    FLUENT_SETTING_VECTOR(TItem, Item);
+    FLUENT_SETTING_OPTIONAL(std::string, Description);
+    FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(std::string, Compression);
+    FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
+    FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
+
+    TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {
+        EncryptionAlgorithm_ = algorithm;
+        SymmetricKey_ = key;
+        return *this;
+    }
+
+    std::string EncryptionAlgorithm_;
+    std::string SymmetricKey_;
+};
+
+class TExportToFsResponse : public TOperation {
+public:
+    struct TMetadata {
+        TExportToFsSettings Settings;
+        EExportProgress Progress = EExportProgress::Unspecified;
+        std::vector<TExportItemProgress> ItemsProgress;
+    };
+
+public:
+    using TOperation::TOperation;
+    TExportToFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
 
     const TMetadata& Metadata() const;
 
@@ -134,6 +200,7 @@ public:
 
     NThreading::TFuture<TExportToYtResponse> ExportToYt(const TExportToYtSettings& settings);
     NThreading::TFuture<TExportToS3Response> ExportToS3(const TExportToS3Settings& settings);
+    NThreading::TFuture<TExportToFsResponse> ExportToFs(const TExportToFsSettings& settings);
 
 private:
     std::shared_ptr<TImpl> Impl_;

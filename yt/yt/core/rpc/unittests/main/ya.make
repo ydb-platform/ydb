@@ -5,8 +5,11 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    yt/yt/core/rpc/unittests/authentificated_identity_guard_ut.cpp
+    yt/yt/core/rpc/unittests/endpoint_address_ut.cpp
     yt/yt/core/rpc/unittests/overload_controller_ut.cpp
     yt/yt/core/rpc/unittests/handle_channel_failure_ut.cpp
+    yt/yt/core/rpc/unittests/multi_protocol_config_ut.cpp
     yt/yt/core/rpc/unittests/roaming_channel_ut.cpp
     yt/yt/core/rpc/unittests/rpc_ut.cpp
     yt/yt/core/rpc/unittests/viable_peer_registry_ut.cpp
@@ -23,6 +26,10 @@ PEERDIR(
 )
 
 SIZE(MEDIUM)
+
+SIZE(LARGE)
+
+TAG(ya:fat)
 
 IF (OS_DARWIN)
     SIZE(LARGE)

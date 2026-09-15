@@ -1,7 +1,7 @@
 //  filesystem path.cpp  -------------------------------------------------------------  //
 
 //  Copyright Beman Dawes 2008
-//  Copyright Andrey Semashev 2021-2024
+//  Copyright Andrey Semashev 2021-2025
 
 //  Distributed under the Boost Software License, Version 1.0.
 //  See http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,7 @@
 #include <boost/filesystem/detail/path_traits.hpp> // codecvt_error_category()
 #include <boost/system/error_category.hpp> // for BOOST_SYSTEM_HAS_CONSTEXPR
 #include <boost/assert.hpp>
+#include <functional>
 #include <algorithm>
 #include <iterator>
 #include <utility>
@@ -23,12 +24,43 @@
 #include <cstring>
 #include <cstdlib> // std::atexit
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
 #include "windows_file_codecvt.hpp"
 #include "windows_tools.hpp"
 #include <windows.h>
-#elif defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__HAIKU__)
+#elif defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__) || \
+    defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__) || defined(__NETBSD__) || defined(__NetBSD__) || \
+    defined(sun) || defined(__sun) || \
+    defined(__HAIKU__)
+// "All BSD system functions expect their string parameters to be in UTF-8 encoding
+// and nothing else." See
+// http://developer.apple.com/mac/library/documentation/MacOSX/Conceptual/BPInternational/Articles/FileEncodings.html
+//
+// "The kernel will reject any filename that is not a valid UTF-8 string, and it will
+// even be normalized (to Unicode NFD) before stored on disk, at least when using HFS.
+// The right way to deal with it would be to always convert the filename to UTF-8
+// before trying to open/create a file." See
+// http://lists.apple.com/archives/unix-porting/2007/Sep/msg00023.html
+//
+// "How a file name looks at the API level depends on the API. Current Carbon APIs
+// handle file names as an array of UTF-16 characters; POSIX ones handle them as an
+// array of UTF-8, which is why UTF-8 works well in Terminal. How it's stored on disk
+// depends on the disk format; HFS+ uses UTF-16, but that's not important in most
+// cases." See
+// http://lists.apple.com/archives/applescript-users/2002/Sep/msg00319.html
+//
+// Many thanks to Peter Dimov for digging out the above references!
+//
+// BSD systems have historically been largely encoding-agnostic wrt. filesystem paths,
+// but more recent versions have come to universally use UTF-8.
+//
+// On DragonFly BSD 6.4.0, std::locale("") fails unless LANG is set to some locale that
+// is supported in libc.
+//
+// On Solaris 11.4, std::locale("") fails even if LANG is set correctly in the environment.
+// Recent versions of Solaris seem to have transitioned to UTF-8 for filename encoding.
 #include <boost/filesystem/detail/utf8_codecvt_facet.hpp>
+#define BOOST_FILESYSTEM_DETAIL_USE_UTF8_CODECVT_FACET
 #endif
 
 #ifdef BOOST_FILESYSTEM_DEBUG
@@ -60,7 +92,7 @@ typedef path::value_type value_type;
 typedef path::string_type string_type;
 typedef string_type::size_type size_type;
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
 
 const wchar_t dot_path_literal[] = L".";
 const wchar_t dot_dot_path_literal[] = L"..";
@@ -102,7 +134,7 @@ inline size_type find_separator(const wchar_t* p, size_type size) noexcept
     return pos;
 }
 
-#else // BOOST_WINDOWS_API
+#else // BOOST_FILESYSTEM_WINDOWS_API
 
 const char dot_path_literal[] = ".";
 const char dot_dot_path_literal[] = "..";
@@ -118,7 +150,7 @@ inline size_type find_separator(const char* p, size_type size) noexcept
     return pos;
 }
 
-#endif // BOOST_WINDOWS_API
+#endif // BOOST_FILESYSTEM_WINDOWS_API
 
 // pos is position of the separator
 bool is_root_separator(string_type const& str, size_type root_dir_pos, size_type pos);
@@ -137,6 +169,13 @@ void first_element(string_type const& src, size_type& element_pos, size_type& el
 inline void first_element(string_type const& src, size_type& element_pos, size_type& element_size)
 {
     first_element(src, element_pos, element_size, src.size());
+}
+
+// Checks if the second string overlaps in memory with the first string
+inline bool is_overlapping(string_type const& str, const value_type* arg)
+{
+    std::less< const value_type* > ptr_less{};
+    return !(ptr_less(arg, str.data()) || ptr_less(str.data() + str.size(), arg));
 }
 
 } // unnamed namespace
@@ -173,7 +212,7 @@ BOOST_FILESYSTEM_DECL path path_algorithms::lexically_normal_v3(path const& p)
     size_type root_dir_pos = find_root_directory_start(pathname, pathname_size, root_name_size);
     path normal(pathname, pathname + root_name_size);
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     for (size_type i = 0; i < root_name_size; ++i)
     {
         if (normal.m_pathname[i] == path::separator)
@@ -372,7 +411,7 @@ BOOST_FILESYSTEM_DECL path path_algorithms::generic_path_v3(path const& p)
     if (root_name_size > 0u)
     {
         tmp.m_pathname.append(pathname, root_name_size);
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
         std::replace(tmp.m_pathname.begin(), tmp.m_pathname.end(), L'\\', L'/');
 #endif
     }
@@ -446,7 +485,7 @@ BOOST_FILESYSTEM_DECL path path_algorithms::generic_path_v4(path const& p)
     return tmp;
 }
 
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 //  make_preferred -------------------------------------------------------------------//
 
@@ -470,7 +509,7 @@ BOOST_FILESYSTEM_DECL void path_algorithms::make_preferred_v4(path& p)
     }
 }
 
-#endif // defined(BOOST_WINDOWS_API)
+#endif // defined(BOOST_FILESYSTEM_WINDOWS_API)
 
 //  append  --------------------------------------------------------------------------//
 
@@ -478,7 +517,7 @@ BOOST_FILESYSTEM_DECL void path_algorithms::append_v3(path& p, const value_type*
 {
     if (begin != end)
     {
-        if (BOOST_LIKELY(begin < p.m_pathname.data() || begin >= (p.m_pathname.data() + p.m_pathname.size())))
+        if (BOOST_LIKELY(!is_overlapping(p.m_pathname, begin)))
         {
             if (!detail::is_directory_separator(*begin))
                 path_algorithms::append_separator_if_needed(p);
@@ -497,7 +536,7 @@ BOOST_FILESYSTEM_DECL void path_algorithms::append_v4(path& p, const value_type*
 {
     if (begin != end)
     {
-        if (BOOST_LIKELY(begin < p.m_pathname.data() || begin >= (p.m_pathname.data() + p.m_pathname.size())))
+        if (BOOST_LIKELY(!is_overlapping(p.m_pathname, begin)))
         {
             const size_type that_size = end - begin;
             size_type that_root_name_size = 0;
@@ -506,7 +545,7 @@ BOOST_FILESYSTEM_DECL void path_algorithms::append_v4(path& p, const value_type*
             // if (p.is_absolute())
             if
             (
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
                 that_root_name_size > 0 &&
 #endif
                 that_root_dir_pos < that_size
@@ -611,15 +650,15 @@ BOOST_FILESYSTEM_DECL int path_algorithms::compare_v4(path const& left, path con
 
 BOOST_FILESYSTEM_DECL path_algorithms::string_type::size_type path_algorithms::append_separator_if_needed(path& p)
 {
-    if (!p.m_pathname.empty() &&
-#ifdef BOOST_WINDOWS_API
-        *(p.m_pathname.end() - 1) != colon &&
+    string_type::size_type size(p.m_pathname.size());
+    if (size > static_cast< string_type::size_type >(0) &&
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
+        p.m_pathname[size - 1] != colon &&
 #endif
-        !detail::is_directory_separator(*(p.m_pathname.end() - 1)))
+        !detail::is_directory_separator(p.m_pathname[size - 1]))
     {
-        string_type::size_type tmp(p.m_pathname.size());
         p.m_pathname.push_back(path::preferred_separator);
-        return tmp;
+        return size;
     }
     return 0;
 }
@@ -631,7 +670,7 @@ BOOST_FILESYSTEM_DECL void path_algorithms::erase_redundant_separator(path& p, s
     if (sep_pos                                          // a separator was added
         && sep_pos < p.m_pathname.size()                 // and something was appended
         && (p.m_pathname[sep_pos + 1] == path::separator // and it was also separator
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
             || p.m_pathname[sep_pos + 1] == path::preferred_separator // or preferred_separator
 #endif
             ))
@@ -1000,7 +1039,7 @@ size_type find_root_directory_start(const value_type* path, size_type size, size
                 root_name_size = 2;
                 return 2;
             }
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
             // https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
             // cases "\\?\" and "\\.\"
             else if (size >= 4 && (path[2] == questionmark || path[2] == fs::path::dot) && fs::detail::is_directory_separator(path[3]))
@@ -1022,7 +1061,7 @@ size_type find_root_directory_start(const value_type* path, size_type size, size
                 goto find_next_separator;
             }
         }
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         // https://stackoverflow.com/questions/23041983/path-prefixes-and
         // case "\??\" (NT path prefix)
         else if (size >= 4 && path[1] == questionmark && path[2] == questionmark && fs::detail::is_directory_separator(path[3]))
@@ -1038,7 +1077,7 @@ size_type find_root_directory_start(const value_type* path, size_type size, size
         }
     }
 
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
     // case "c:" or "prn:"
     // Note: There is ambiguity in a "c:x" path interpretation. It could either mean a file "x" located at the current directory for drive C:,
     //       or an alternative stream "x" of a file "c". Windows API resolve this as the former, and so do we.
@@ -1372,7 +1411,7 @@ BOOST_FILESYSTEM_DECL path::iterator path::begin() const
     if (element_size > 0)
     {
         itr.m_element = m_pathname.substr(itr.m_pos, element_size);
-#ifdef BOOST_WINDOWS_API
+#ifdef BOOST_FILESYSTEM_WINDOWS_API
         if (itr.m_element.m_pathname.size() == 1u && itr.m_element.m_pathname[0] == path::preferred_separator)
             itr.m_element.m_pathname[0] = path::separator;
 #endif
@@ -1416,29 +1455,10 @@ namespace {
 
 std::locale default_locale()
 {
-#if defined(BOOST_WINDOWS_API)
+#if defined(BOOST_FILESYSTEM_WINDOWS_API)
     std::locale global_loc = std::locale();
     return std::locale(global_loc, new boost::filesystem::detail::windows_file_codecvt());
-#elif defined(macintosh) || defined(__APPLE__) || defined(__APPLE_CC__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__HAIKU__)
-    // "All BSD system functions expect their string parameters to be in UTF-8 encoding
-    // and nothing else." See
-    // http://developer.apple.com/mac/library/documentation/MacOSX/Conceptual/BPInternational/Articles/FileEncodings.html
-    //
-    // "The kernel will reject any filename that is not a valid UTF-8 string, and it will
-    // even be normalized (to Unicode NFD) before stored on disk, at least when using HFS.
-    // The right way to deal with it would be to always convert the filename to UTF-8
-    // before trying to open/create a file." See
-    // http://lists.apple.com/archives/unix-porting/2007/Sep/msg00023.html
-    //
-    // "How a file name looks at the API level depends on the API. Current Carbon APIs
-    // handle file names as an array of UTF-16 characters; POSIX ones handle them as an
-    // array of UTF-8, which is why UTF-8 works well in Terminal. How it's stored on disk
-    // depends on the disk format; HFS+ uses UTF-16, but that's not important in most
-    // cases." See
-    // http://lists.apple.com/archives/applescript-users/2002/Sep/msg00319.html
-    //
-    // Many thanks to Peter Dimov for digging out the above references!
-
+#elif defined(BOOST_FILESYSTEM_DETAIL_USE_UTF8_CODECVT_FACET)
     std::locale global_loc = std::locale();
     return std::locale(global_loc, new boost::filesystem::detail::utf8_codecvt_facet());
 #else // Other POSIX

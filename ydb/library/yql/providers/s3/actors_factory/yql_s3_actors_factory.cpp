@@ -1,5 +1,7 @@
 #include "yql_s3_actors_factory.h"
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
 namespace NYql::NDq {
 
     class TDefaultS3ActorsFactory : public IS3ActorsFactory {
@@ -12,9 +14,9 @@ namespace NYql::NDq {
             std::optional<ui32> restartNumber,
             bool commit,
             const THashMap<TString, TString>& secureParams,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             const NYql::NDqProto::TExternalEffect& externalEffect) override {
-            
+
             Y_UNUSED(parentId);
             Y_UNUSED(gateway);
             Y_UNUSED(queryId);
@@ -29,7 +31,7 @@ namespace NYql::NDq {
 
         void RegisterS3WriteActorFactory(
             TDqAsyncIoFactory& factory,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) override {
 
@@ -41,7 +43,7 @@ namespace NYql::NDq {
 
         void RegisterS3ReadActorFactory(
             TDqAsyncIoFactory& factory,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& factoryConfig = {},
@@ -63,28 +65,28 @@ namespace NYql::NDq {
     }
 
     TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config) {
-        TS3ReadActorFactoryConfig s3ReadActoryConfig;
+        TS3ReadActorFactoryConfig s3ReadFactoryConfig;
         if (const ui64 rowsInBatch = s3Config.GetRowsInBatch()) {
-            s3ReadActoryConfig.RowsInBatch = rowsInBatch;
+            s3ReadFactoryConfig.RowsInBatch = rowsInBatch;
         }
         if (const ui64 maxInflight = s3Config.GetMaxInflight()) {
-            s3ReadActoryConfig.MaxInflight = maxInflight;
+            s3ReadFactoryConfig.MaxInflight = maxInflight;
         }
         if (const ui64 dataInflight = s3Config.GetDataInflight()) {
-            s3ReadActoryConfig.DataInflight = dataInflight;
+            s3ReadFactoryConfig.DataInflight = dataInflight;
         }
-        for (auto& formatSizeLimit: s3Config.GetFormatSizeLimit()) {
+        for (auto& formatSizeLimit : s3Config.GetFormatSizeLimit()) {
             if (formatSizeLimit.GetName()) { // ignore unnamed limits
-                s3ReadActoryConfig.FormatSizeLimits.emplace(
+                s3ReadFactoryConfig.FormatSizeLimits.emplace(
                     formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
             }
         }
         if (s3Config.HasFileSizeLimit()) {
-            s3ReadActoryConfig.FileSizeLimit = s3Config.GetFileSizeLimit();
+            s3ReadFactoryConfig.FileSizeLimit = s3Config.GetFileSizeLimit();
         }
         if (s3Config.HasBlockFileSizeLimit()) {
-            s3ReadActoryConfig.BlockFileSizeLimit = s3Config.GetBlockFileSizeLimit();
+            s3ReadFactoryConfig.BlockFileSizeLimit = s3Config.GetBlockFileSizeLimit();
         }
-        return s3ReadActoryConfig;
+        return s3ReadFactoryConfig;
     }
-}
+} // namespace NYql::NDq

@@ -4,6 +4,20 @@
 
 namespace NKikimr::NBlobDepot {
 
+    inline ui32 S3ControlLimit(i64 icbValue) {
+        return static_cast<ui32>(Max<i64>(1, icbValue));
+    }
+
+    inline bool ClampToS3ControlLimit(ui32& currentMax, i64 icbValue) {
+        const ui32 limit = S3ControlLimit(icbValue);
+        if (currentMax <= limit) {
+            return false;
+        }
+
+        currentMax = limit;
+        return true;
+    }
+
     static constexpr ui32 BaseDataChannel = 2;
 
     struct TChannelKind {
@@ -34,7 +48,7 @@ namespace NKikimr::NBlobDepot {
         ui32 Generation = 0;
         ui32 Step = 0;
         ui32 Index = 0;
-        
+
         auto AsTuple() const { return std::make_tuple(Channel, Generation, Step, Index); }
 
         friend bool operator ==(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() == y.AsTuple(); }
@@ -279,22 +293,6 @@ namespace NKikimr::NBlobDepot {
         }
         return true;
     }
-
-#define BDEV(MARKER, TEXT, ...) \
-    do { \
-        auto& ctx = *TlsActivationContext; \
-        const auto priority = NLog::PRI_TRACE; \
-        const auto component = NKikimrServices::BLOB_DEPOT_EVENTS; \
-        if (IS_LOG_PRIORITY_ENABLED(priority, component)) { \
-            struct MARKER {}; \
-            TStringStream __stream; \
-            { \
-                NJson::TJsonWriter __json(&__stream, false); \
-                ::NKikimr::NStLog::TMessage<MARKER>("", 0, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
-            } \
-            ::NActors::MemLogAdapter(ctx, priority, component, __FILE_NAME__, __LINE__, __stream.Str()); \
-        }; \
-    } while (false)
 
 } // NKikimr::NBlobDepot
 

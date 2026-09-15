@@ -4,7 +4,7 @@
 
 {% note info %}
 
-В дополнение к своему собственному нативному протоколу, {{ ydb-name }} обладает слоем совместимости, что позволяет внешним системам подключаться к базам данных по сетевым протоколам [PostgreSQL](../postgresql/intro.md) или [Apache Kafka](../reference/kafka-api/index.md). Благодаря слою совместимости, множество инструментов, разработанных для работы с этими системами, могут также взаимодействовать с {{ ydb-name }}. Уровень совместимости каждого конкретного приложения необходимо уточнять отдельно.
+В дополнение к своему собственному нативному протоколу, {{ ydb-name }} обладает слоем совместимости, что позволяет внешним системам подключаться к базам данных по сетевому протоколу [Apache Kafka](../reference/kafka-api/index.md). Благодаря слою совместимости, множество инструментов, разработанных для работы с Kafka, могут также взаимодействовать с {{ ydb-name }}. Уровень совместимости каждого конкретного приложения необходимо уточнять отдельно.
 
 {% endnote %}
 
@@ -31,20 +31,35 @@
 
 {% include notitle [Содержание](ingestion/_includes/toc-table-streaming.md) %}
 
-## Миграции данных {#schema_migration}
+## Миграции данных {#data_migration}
+
+{% include notitle [Содержание](data-migration/_includes/toc-table.md) %}
+
+## Миграции схемы {#schema_migration}
 
 {% include notitle [Содержание](migration/_includes/toc-table.md) %}
+
+## Движки выполнения запросов {#query_engines}
+
+{% include notitle [Содержание](query-engines/_includes/toc-table.md) %}
 
 ## Объектно-реляционное отображение (ORM) {#orm}
 
 {% include notitle [Содержание](orm/_includes/toc-table.md) %}
 
+## Spring {#spring}
+
+{% include notitle [Содержание](spring/_includes/toc-table.md) %}
+
 ## Векторный поиск {#vectorsearch}
 
 {% include notitle [Содержание](vectorsearch/_includes/toc-table.md) %}
 
+## Конвертация SQL-диалектов {#sql-translation}
+
+{% include notitle [Содержание](sql-translation/_includes/toc-table.md) %}
+
 ## Смотрите также
 
 * [{#T}](../reference/ydb-sdk/index.md)
-* [{#T}](../postgresql/intro.md)
 * [{#T}](../reference/kafka-api/index.md)

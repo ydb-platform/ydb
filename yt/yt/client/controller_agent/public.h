@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yt/misc/enum.h>
+#include <yt/yt/client/ypath/public.h>
 
 namespace NYT::NControllerAgent {
 
@@ -12,6 +12,11 @@ DEFINE_ENUM(EOperationIncarnationSwitchReason,
     (JobInterrupted)
     (JobLackAfterRevival)
 );
+
+////////////////////////////////////////////////////////////////////////////////
+
+using NYPath::ELayerAccessMethod;
+using NYPath::ELayerFilesystem;
 
 ////////////////////////////////////////////////////////////////////////////////
 

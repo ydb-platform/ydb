@@ -25,7 +25,7 @@ void PushCodicilBuilder(TCodicilBuilder&& builder)
     NDetail::CodicilBuilderStackSlot()->push_back(std::move(builder));
 }
 
-void PopCodicilBuilder()
+void PopCodicilBuilder() noexcept
 {
     auto& stack = *NDetail::CodicilBuilderStackSlot();
     YT_ASSERT(!stack.empty());
@@ -83,13 +83,13 @@ TCodicilGuard::~TCodicilGuard()
     Release();
 }
 
-TCodicilGuard::TCodicilGuard(TCodicilGuard&& other)
+TCodicilGuard::TCodicilGuard(TCodicilGuard&& other) noexcept
     : Active_(other.Active_)
 {
     other.Active_ = false;
 }
 
-TCodicilGuard& TCodicilGuard::operator=(TCodicilGuard&& other)
+TCodicilGuard& TCodicilGuard::operator=(TCodicilGuard&& other) noexcept
 {
     if (this != &other) {
         Release();
@@ -99,7 +99,7 @@ TCodicilGuard& TCodicilGuard::operator=(TCodicilGuard&& other)
     return *this;
 }
 
-void TCodicilGuard::Release()
+void TCodicilGuard::Release() noexcept
 {
     if (Active_) {
         PopCodicilBuilder();

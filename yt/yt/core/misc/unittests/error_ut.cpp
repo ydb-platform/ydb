@@ -31,7 +31,7 @@ TEST(TErrorTest, SerializationDepthLimit)
     constexpr int Depth = 1000;
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth - 1; i >= 0; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
@@ -40,7 +40,7 @@ TEST(TErrorTest, SerializationDepthLimit)
 
     for (int i = 0; i < ErrorSerializationDepthLimit - 1; ++i) {
         ASSERT_EQ(errorNode->GetChildValueOrThrow<i64>("code"), i);
-        ASSERT_EQ(errorNode->GetChildValueOrThrow<TString>("message"), "error");
+        ASSERT_EQ(errorNode->GetChildValueOrThrow<std::string>("message"), "error");
         ASSERT_FALSE(errorNode->GetChildOrThrow("attributes")->AsMap()->FindChild("original_error_depth"));
         auto innerErrors = errorNode->GetChildOrThrow("inner_errors")->AsList()->GetChildren();
         ASSERT_EQ(innerErrors.size(), 1u);
@@ -52,7 +52,7 @@ TEST(TErrorTest, SerializationDepthLimit)
     for (int i = 0; i < std::ssize(children); ++i) {
         auto child = children[i]->AsMap();
         ASSERT_EQ(child->GetChildValueOrThrow<i64>("code"), i + ErrorSerializationDepthLimit);
-        ASSERT_EQ(child->GetChildValueOrThrow<TString>("message"), "error");
+        ASSERT_EQ(child->GetChildValueOrThrow<std::string>("message"), "error");
         auto originalErrorDepth = child->GetChildOrThrow("attributes")->AsMap()->FindChild("original_error_depth");
         if (i > 0) {
             ASSERT_TRUE(originalErrorDepth);
@@ -70,7 +70,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     auto error = TError(TErrorCode(Depth), "error");
     for (int i = Depth; i >= 2; --i) {
-        error = TError(TErrorCode(i), "error") << std::move(error);
+        error = TError(TErrorCode(i), "error").With(std::move(error));
     }
 
     auto errorYson = ConvertToYsonString(error);
@@ -78,7 +78,7 @@ TEST(TErrorTest, DoNotDuplicateOriginalErrorDepth)
 
     // Due to reserialization, error already contains "original_error_depth" attribute.
     // It should not be duplicated after the next serialization.
-    error = TError(TErrorCode(1), "error") << std::move(error);
+    error = TError(TErrorCode(1), "error").With(std::move(error));
 
     // Use intermediate conversion to test YSON parser depth limit simultaneously.
     errorYson = ConvertToYsonString(error);
@@ -138,7 +138,7 @@ TEST(TErrorTest, ErrorSanitizer)
         auto instant1 = TInstant::Days(123);
         TErrorSanitizerGuard guard1(
             instant1,
-            /*localHostNameOverride*/ TSharedRef::FromString("<host-override>"));
+            /*localHostNameOverride*/ TSharedRef::FromString(std::string("<host-override>")));
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -149,7 +149,7 @@ TEST(TErrorTest, ErrorSanitizer)
             TErrorSanitizerGuard guard2(
                 instant2,
                 /*localHostNameOverride*/
-                TSharedRef::FromString("<host-override>"));
+                TSharedRef::FromString(std::string("<host-override>")));
 
             auto error3 = TError("error3");
             checkSantizied(error3);
@@ -232,7 +232,7 @@ TEST(TErrorTest, ErrorCodicils)
 {
     EXPECT_FALSE(TError("ErrorCodicils").Attributes().Contains("test_attribute"));
     {
-        auto guard = TErrorCodicils::Guard("test_attribute", [] () -> std::string {
+        auto guard = TErrorCodicils::MakeGuard("test_attribute", [] () -> std::string {
             return "test_value";
         });
         EXPECT_EQ("test_value",

@@ -4,19 +4,21 @@
 #include "distributed_commit_helper.h"
 
 
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-
+#include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest> {
-
+class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>
+                         , public NActors::IActorExceptionHandler
+                         , public NPQ::TLogPrefix {
     using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
 
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
@@ -31,12 +33,19 @@ public:
              const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
+
+     TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
+
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
-
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_COMMIT; }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"consumer", ClientId});
+    }
 
     bool HasCancelOperation() {
         return false;
@@ -77,7 +86,6 @@ private:
     void SendCommit(const TTopicInitInfo& topicInitInfo, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
-    void ProcessAnswers(const TActorContext& ctx);
 
 private:
     TActorId SchemeCache;
@@ -94,7 +102,8 @@ private:
 
     TActorId PipeClient;
 
-    NPersQueue::TTopicsListController TopicsHandler;
+    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory;
+    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler = nullptr;
 
     std::unique_ptr<TDistributedCommitHelper> Kqp;
 };

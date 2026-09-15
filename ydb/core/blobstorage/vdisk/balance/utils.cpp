@@ -18,7 +18,8 @@ namespace NBalancing {
     {
     }
 
-    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/, ui64 /*lsn*/, const void* /*sst*/) {
+    void TPartsCollectorMerger::AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound,
+            const TKeyLogoBlob& /*key*/, ui64 /*lsn*/, const void* /*sst*/) {
         Ingress.Merge(memRec.GetIngress());
 
         const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
@@ -33,7 +34,7 @@ namespace NBalancing {
             case TBlobType::DiskBlob: {
                 const TDiskPart &data = extr.SwearOne();
                 if (data.ChunkIdx && data.Size) {
-                    Parts.emplace_back(local, data);
+                    Parts.emplace_back(local, data, false);
                 }
                 break;
             }
@@ -42,7 +43,7 @@ namespace NBalancing {
                 ui8 partIdx = local.FirstPosition();
                 for (const TDiskPart *part = extr.Begin; part != extr.End; ++part, partIdx = local.NextPosition(partIdx)) {
                     if (part->ChunkIdx && part->Size) {
-                        Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(partIdx, GType.TotalPartCount()), *part);
+                        Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(partIdx, GType.TotalPartCount()), *part, true);
                     }
                 }
                 break;
@@ -65,13 +66,14 @@ namespace NBalancing {
             auto diskBlob = TDiskBlob(data, local, GType, key.LogoBlobID());
             TDiskBlob::TPartIterator it(&diskBlob, local.FirstPosition());
             for (ui32 i = 0; i < local.CountBits(); ++i, ++it) {
-                Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(it.GetPartId() - 1, GType.TotalPartCount()), it.GetPart());
+                Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(it.GetPartId() - 1, GType.TotalPartCount()), it.GetPart(), false);
             }
         } else {
             Y_DEBUG_ABORT_UNLESS(local.CountBits() == 1, "Only one part can be on disk");
             TDiskDataExtractor extr;
             memRec.GetDiskData(&extr, nullptr);
-            Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(local.FirstPosition(), GType.TotalPartCount()), extr.SwearOne());
+            Y_ABORT_UNLESS(extr.BlobType == TBlobType::HugeBlob);
+            Parts.emplace_back(NMatrix::TVectorType::MakeOneHot(local.FirstPosition(), GType.TotalPartCount()), extr.SwearOne(), true);
         }
     }
 

@@ -26,10 +26,10 @@ using TPartitionSessionClosedEvent = TReadSessionEvent::TPartitionSessionClosedE
 std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& dataReceivedEvent, uint64_t index) {
     if (dataReceivedEvent.HasCompressedMessages()) {
         const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(), msg.GetOffset() + 1};
+        return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
     }
     const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
+    return {msg.GetOffset(), msg.GetOffset() + msg.GetLogicalMessageCount()};
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -37,14 +37,15 @@ std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& da
 
 TMessageInformation::TMessageInformation(
     uint64_t offset,
-    std::string producerId,
+    std::string_view producerId,
     uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
     TWriteSessionMeta::TPtr meta,
     TMessageMeta::TPtr messageMeta,
     uint64_t uncompressedSize,
-    std::string messageGroupId
+    std::string messageGroupId,
+    uint64_t logicalMessageCount
 )
     : Offset(offset)
     , ProducerId(producerId)
@@ -54,7 +55,8 @@ TMessageInformation::TMessageInformation(
     , Meta(meta)
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
-    , MessageGroupId(messageGroupId)
+    , MessageGroupId(std::move(messageGroupId))
+    , LogicalMessageCount(logicalMessageCount)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,8 +90,16 @@ const std::string& TMessageBase::GetData() const {
     return Data;
 }
 
+const std::string& TMessageBase::GetBrokenData() const {
+    return Data;
+}
+
 uint64_t TMessageBase::GetOffset() const {
     return Information.Offset;
+}
+
+uint64_t TMessageBase::GetLogicalMessageCount() const {
+    return Information.LogicalMessageCount;
 }
 
 const std::string& TMessageBase::GetProducerId() const {
@@ -135,6 +145,7 @@ void TPrintable<TMessageBase>::DebugString(TStringBuilder& ret, bool printData) 
     }
     ret << " Information: {"
         << " Offset: " << self->GetOffset()
+        << " LogicalMessageCount: " << self->GetLogicalMessageCount()
         << " ProducerId: \"" << self->GetProducerId() << "\""
         << " SeqNo: " << self->GetSeqNo()
         << " CreateTime: " << self->GetCreateTime()
@@ -175,13 +186,20 @@ const std::string& TMessage::GetData() const {
     return TMessageBase::GetData();
 }
 
+const std::string& TMessage::GetBrokenData() const {
+    if (DecompressionException) {
+        return TMessageBase::GetData();
+    }
+    ythrow yexception() << "Can not get broken data after successful decompression";
+}
+
 bool TMessage::HasException() const {
     return DecompressionException != nullptr;
 }
 
 void TMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+    static_cast<TPartitionSessionControl*>(PartitionSession.Get())
+        ->Commit(Information.Offset, Information.Offset + Information.LogicalMessageCount);
 }
 
 template<>
@@ -214,8 +232,8 @@ uint64_t TCompressedMessage::GetUncompressedSize() const {
 }
 
 void TCompressedMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+    static_cast<TPartitionSessionControl*>(PartitionSession.Get())
+        ->Commit(Information.Offset, Information.Offset + Information.LogicalMessageCount);
 }
 
 template<>
@@ -253,7 +271,7 @@ void TDataReceivedEvent::Commit() {
     }
 
     for (auto [from, to] : OffsetRanges) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -304,10 +322,10 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
     , EndOffset(endOffset) {
 }
 
-void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
+void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-            ->ConfirmCreate(readOffset, commitOffset);
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())
+            ->ConfirmCreate(readOffset, commitOffset, maxOffset);
     }
 }
 
@@ -331,7 +349,7 @@ TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr p
 
 void TStopPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->ConfirmDestroy();
     }
 }
 
@@ -355,7 +373,7 @@ TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr par
 
 void TEndPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+        static_cast<TPartitionSessionControl*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
     }
 }
 
@@ -443,4 +461,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::NPersQueue
+} // namespace NYdb::NTopic

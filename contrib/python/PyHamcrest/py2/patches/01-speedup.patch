@@ -7,7 +7,7 @@ revision: 3199619
 
 --- contrib/python/PyHamcrest/py2/hamcrest/core/string_description.py	(94523234ff338f573e50b70f8cf7f6c8456bd3a1)
 +++ contrib/python/PyHamcrest/py2/hamcrest/core/string_description.py	(4dc0f71a2788ed3530b053c0363738a8964f6a86)
-@@ -24,15 +24,14 @@ def tostring(selfdescribing):
+@@ -24,21 +24,20 @@ def tostring(selfdescribing):
  class StringDescription(BaseDescription):
      """A :py:class:`~hamcrest.core.description.Description` that is stored as a
      string.
@@ -21,8 +21,15 @@ revision: 3199619
      def __str__(self):
          """Returns the description."""
 -        return self.out
-+        return ''.join(self.__out_list)
++        return ''.join(map(six.ensure_str, self.__out_list))
  
      def append(self, string):
--        self.out += six.text_type(string)
-+        self.__out_list.append(six.text_type(string))
+         if six.PY3:
+             self.out += str(string)
+         else:
+             if isinstance(string, unicode):
+-                self.out += string
++                self.__out_list.append(string)
+             else:
+-                self.out += unicode(string, errors="ignore")
++                self.__out_list.append(unicode(string, errors="ignore"))

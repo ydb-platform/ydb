@@ -15,7 +15,7 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -452,12 +452,6 @@ private:
 struct TRSData {
     TString Body;
     ui64 Origin = 0;
-
-    explicit TRSData(const TString &body = TString(),
-                     ui64 origin = 0)
-        : Body(body)
-        , Origin(origin)
-    {}
 };
 
 struct TInputOpData {
@@ -531,9 +525,9 @@ public:
 
     virtual ~TValidatedTx() = default;
 
-    enum class EType { 
+    enum class EType {
         DataTx,
-        WriteTx 
+        WriteTx,
     };
 
 public:
@@ -862,6 +856,34 @@ public:
     }
 
     /**
+     * Called to attempt migrating volatile operations to a newer generation
+     *
+     * This may be used to migrate prepared (but not yet executed) volatile
+     * operations, which could then be restored and executed by newer
+     * generation.
+     *
+     * Should return a serialized TxBody when migration is possible.
+     */
+    virtual std::optional<TString> OnMigration(TDataShard& self, const TActorContext& ctx);
+
+    /**
+     * Called to restore a migrated operation
+     *
+     * When this method returns false the operation will be skipped as
+     * unsupported, which is useful when operation cannot be executed by a
+     * newer instance for some reason.
+     */
+    virtual bool OnRestoreMigrated(TDataShard& self, const TString& txBody);
+
+    /**
+     * Called to finish migration and prepare transaction to add to the pipeline
+     *
+     * Operation should validate it is possible to execute with the given
+     * schema, build operation plan and prepare itself for future execution.
+     */
+    virtual bool OnFinishMigration(TDataShard& self, const NTable::TScheme& scheme);
+
+    /**
      * Called when datashard is going to stop soon
      *
      * Operation may override this method to support sending notifications or
@@ -882,7 +904,6 @@ public:
      * the given operation wasn't planned yet.
      */
     virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
-
 
     // CommittingOps book keeping
     const std::optional<TRowVersion>& GetCommittingOpsVersion() const { return CommittingOpsVersion; }
@@ -965,12 +986,12 @@ private:
     std::optional<TRowVersion> CommittingOpsVersion;
 
 public:
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> CachedMvccVersion;
 
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
-    
+
     NWilson::TSpan OperationSpan;
 };
 

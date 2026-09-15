@@ -12,21 +12,24 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
+            std::optional<THostRecordMap> EnforceHostRecords;
             THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
             bool Success = true;
+            bool RollbackSuccess = false;
             TString Error;
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
-                    bool selfHeal, bool groupLayoutSanitizer, TBlobStorageController *controller)
+                    bool selfHeal, bool groupLayoutSanitizer, std::optional<THostRecordMap> enforceHostRecords, TBlobStorageController *controller)
                 : TTransactionBase(controller)
                 , NotifyId(notifyId)
                 , Cookie(cookie)
                 , Cmd(cmd)
                 , SelfHeal(selfHeal)
                 , GroupLayoutSanitizer(groupLayoutSanitizer)
+                , EnforceHostRecords(std::move(enforceHostRecords))
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
             {}
@@ -50,114 +53,141 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            void Rollback() {
+                Y_ENSURE(Success);
+                Success = false;
+                RollbackSuccess = true;
+                Error = "transaction rollback";
+            }
+
             void Finish() {
                 Response->SetSuccess(Success);
+                Response->SetRollbackSuccess(RollbackSuccess);
                 if (!Success) {
                     Response->SetErrorDescription(Error);
                 }
             }
 
-            bool ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
+            bool IsSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd) {
+                switch (cmd.GetCommandCase()) {
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            void ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
                 NIceDb::TNiceDb db(txc.DB);
                 switch (cmd.GetCommandCase()) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
                         Self->SelfHealEnable = cmd.GetEnableSelfHeal().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::SelfHealEnable>(Self->SelfHealEnable);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
                         Self->DonorMode = cmd.GetEnableDonorMode().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::DonorModeEnable>(Self->DonorMode);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity: {
                         const ui32 seconds = cmd.GetSetScrubPeriodicity().GetScrubPeriodicity();
                         Self->ScrubPeriodicity = TDuration::Seconds(seconds);
                         db.Table<Schema::State>().Key(true).Update<Schema::State::ScrubPeriodicity>(seconds);
                         Self->ScrubState.OnScrubPeriodicityChange();
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille: {
                         const ui32 value = cmd.GetSetPDiskSpaceMarginPromille().GetPDiskSpaceMarginPromille();
                         Self->PDiskSpaceMarginPromille = value;
                         db.Table<Schema::State>().Key(true).Update<Schema::State::PDiskSpaceMarginPromille>(value);
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
-                        if (settings.HasDefaultMaxSlots()) {
-                            Self->DefaultMaxSlots = settings.GetDefaultMaxSlots();
+                        for (ui32 value : settings.GetDefaultMaxSlots()) {
+                            Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
                         }
-                        if (settings.HasEnableSelfHeal()) {
-                            Self->SelfHealEnable = settings.GetEnableSelfHeal();
+                        for (bool value : settings.GetEnableSelfHeal()) {
+                            Self->SelfHealEnable = value;
                             db.Table<T>().Key(true).Update<T::SelfHealEnable>(Self->SelfHealEnable);
                         }
-                        if (settings.HasEnableDonorMode()) {
-                            Self->DonorMode = settings.GetEnableDonorMode();
+                        for (bool value : settings.GetEnableDonorMode()) {
+                            Self->DonorMode = value;
                             db.Table<T>().Key(true).Update<T::DonorModeEnable>(Self->DonorMode);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->DonorMode = Self->DonorMode;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasScrubPeriodicitySeconds()) {
-                            Self->ScrubPeriodicity = TDuration::Seconds(settings.GetScrubPeriodicitySeconds());
+                        for (ui64 value : settings.GetScrubPeriodicitySeconds()) {
+                            Self->ScrubPeriodicity = TDuration::Seconds(value);
                             db.Table<T>().Key(true).Update<T::ScrubPeriodicity>(Self->ScrubPeriodicity.Seconds());
                             Self->ScrubState.OnScrubPeriodicityChange();
                         }
-                        if (settings.HasPDiskSpaceMarginPromille()) {
-                            Self->PDiskSpaceMarginPromille = settings.GetPDiskSpaceMarginPromille();
+                        for (ui32 value : settings.GetPDiskSpaceMarginPromille()) {
+                            Self->PDiskSpaceMarginPromille = value;
                             db.Table<T>().Key(true).Update<T::PDiskSpaceMarginPromille>(Self->PDiskSpaceMarginPromille);
                         }
-                        if (settings.HasGroupReserveMin()) {
-                            Self->GroupReserveMin = settings.GetGroupReserveMin();
+                        for (ui32 value : settings.GetGroupReserveMin()) {
+                            Self->GroupReserveMin = value;
                             db.Table<T>().Key(true).Update<T::GroupReserveMin>(Self->GroupReserveMin);
                             Self->SysViewChangedSettings = true;
                         }
-                        if (settings.HasGroupReservePartPPM()) {
-                            Self->GroupReservePart = settings.GetGroupReservePartPPM();
+                        for (ui32 value : settings.GetGroupReservePartPPM()) {
+                            Self->GroupReservePart = value;
                             db.Table<T>().Key(true).Update<T::GroupReservePart>(Self->GroupReservePart);
                             Self->SysViewChangedSettings = true;
                         }
-                        if (settings.HasMaxScrubbedDisksAtOnce()) {
-                            Self->MaxScrubbedDisksAtOnce = settings.GetMaxScrubbedDisksAtOnce();
+                        for (ui32 value : settings.GetMaxScrubbedDisksAtOnce()) {
+                            Self->MaxScrubbedDisksAtOnce = value;
                             db.Table<T>().Key(true).Update<T::MaxScrubbedDisksAtOnce>(Self->MaxScrubbedDisksAtOnce);
                             Self->ScrubState.OnMaxScrubbedDisksAtOnceChange();
                         }
-                        if (settings.HasPDiskSpaceColorBorder()) {
-                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(settings.GetPDiskSpaceColorBorder());
+                        for (auto value : settings.GetPDiskSpaceColorBorder()) {
+                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
-                        if (settings.HasEnableGroupLayoutSanitizer()) {
-                            Self->GroupLayoutSanitizerEnabled = settings.GetEnableGroupLayoutSanitizer();
+                        for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
+                            Self->GroupLayoutSanitizerEnabled = value;
                             db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizerEnabled);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->GroupLayoutSanitizerEnabled = Self->GroupLayoutSanitizerEnabled;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasAllowMultipleRealmsOccupation()) {
-                            Self->AllowMultipleRealmsOccupation = settings.GetAllowMultipleRealmsOccupation();
+                        for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            Self->AllowMultipleRealmsOccupation = value;
                             db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->AllowMultipleRealmsOccupation = Self->AllowMultipleRealmsOccupation;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasUseSelfHealLocalPolicy()) {
-                            Self->UseSelfHealLocalPolicy = settings.GetUseSelfHealLocalPolicy();
+                        for (bool value : settings.GetUseSelfHealLocalPolicy()) {
+                            Self->UseSelfHealLocalPolicy = value;
                             db.Table<T>().Key(true).Update<T::UseSelfHealLocalPolicy>(Self->UseSelfHealLocalPolicy);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->UseSelfHealLocalPolicy = Self->UseSelfHealLocalPolicy;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
-                        if (settings.HasTryToRelocateBrokenDisksLocallyFirst()) {
-                            Self->TryToRelocateBrokenDisksLocallyFirst = settings.GetTryToRelocateBrokenDisksLocallyFirst();
+                        for (bool value : settings.GetTryToRelocateBrokenDisksLocallyFirst()) {
+                            Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
+                            Self->Send(Self->SelfHealId, ev.release());
                         }
-                        return true;
+                        return;
                     }
 
                     default:
-                        return false;
+                        throw TExError() << "unsupported sole command " << static_cast<int>(cmd.GetCommandCase());
                 }
             }
 
@@ -166,31 +196,37 @@ namespace NKikimr::NBsController {
                 THPTimer timer;
 
                 // check if there is some special sole command
-                if (Cmd.CommandSize() == 1) {
-                    bool res = true;
+                if (Cmd.CommandSize() == 1 && IsSoleCommand(Cmd.GetCommand(0))) {
                     WrapCommand([&] {
-                        res = ExecuteSoleCommand(Cmd.GetCommand(0), txc);
+                        if (Cmd.GetRollback()) {
+                            Rollback();
+                        } else {
+                            ExecuteSoleCommand(Cmd.GetCommand(0), txc);
+                        }
                     });
-                    if (res) {
-                        Finish();
-                        LogCommand(txc, TDuration::Seconds(timer.Passed()));
-                        return true;
-                    }
-                    Y_ABORT_UNLESS(Success);
-                    Response->MutableStatus()->RemoveLast();
+                    Finish();
+                    LogCommand(txc, TDuration::Seconds(timer.Passed()));
+                    return true;
                 }
 
-                State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
+                std::optional<NKikimrBlobStorage::TStorageConfig> storageConfig;
+                if (Cmd.HasStorageConfig() && Self->SelfManagementEnabled) {
+                    Cmd.GetStorageConfig().UnpackTo(&storageConfig.emplace());
+                }
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
+                    storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
                 TString m;
                 google::protobuf::TextFormat::Printer printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(Cmd, &m);
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA02, "Generic command",
-                    (UniqueId, State->UniqueId),
-                    (Request, Cmd),
-                    (SelfHeal, SelfHeal));
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Generic command",
+                    {"marker", "BSCA02"},
+                    {"uniqueId", State->UniqueId},
+                    {"request", Cmd},
+                    {"selfHeal", SelfHeal});
 
                 for (const auto& step : Cmd.GetCommand()) {
                     WrapCommand([&] {
@@ -244,6 +280,13 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
+                            MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
+                            MAP_TIMING(DefineDDiskPool, DEFINE_DDISK_POOL)
+                            MAP_TIMING(ReadDDiskPool, READ_DDISK_POOL)
+                            MAP_TIMING(DeleteDDiskPool, DELETE_DDISK_POOL)
+                            MAP_TIMING(MoveDDisk, MOVE_DDISK)
+                            MAP_TIMING(DeleteSpecificGroups, DELETE_SPECIFIC_GROUPS)
 
                             default:
                                 break;
@@ -254,30 +297,36 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                if (Success && Cmd.GetRollback()) {
-                    Success = false;
-                    Error = "transaction rollback";
-                }
-
                 if (Success && SelfHeal && !Self->SelfHealEnable) {
                     Success = false;
                     Error = "SelfHeal is disabled, transaction rollback";
                 }
 
-                const bool doLogCommand = Success && State->Changed();
-                Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
-                    Cmd.GetIgnoreDegradedGroupsChecks(), Cmd.GetIgnoreDisintegratedGroupsChecks(), txc, &Error,
-                    Response);
+                const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
+                const TValidateConfigUpdatesParameters validationParameters{
+                    .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
+                    .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
+                    .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
+                    .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                };
+                Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
+
+                if (Success && Cmd.GetRollback()) {
+                    Rollback();
+                } else if (Success) {
+                    Self->CommitConfigUpdates(*State, txc);
+                }
 
                 Finish();
-                if (doLogCommand) {
+                if (Success && hasChanges) {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
                 }
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA03, "Transaction ended",
-                    (UniqueId, State->UniqueId),
-                    (Status, Success ? "commit" : "rollback"),
-                    (Error, Error));
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction ended",
+                    {"marker", "BSCA03"},
+                    {"uniqueId", State->UniqueId},
+                    {"status", Success ? "commit" : "rollback"},
+                    {"error", Error});
 
                 if (SelfHeal) {
                     const auto counter = Success
@@ -301,18 +350,26 @@ namespace NKikimr::NBsController {
             }
 
             void LogCommand(TTransactionContext& txc, TDuration executionTime) {
+                ui64 operationLogIndex = Self->NextOperationLogIndex;
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
                 Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
                 Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
-                db.Table<Schema::OperationLog>().Key(Self->NextOperationLogIndex).Update(
+                db.Table<Schema::OperationLog>().Key(operationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
                     NIceDb::TUpdate<Schema::OperationLog::Request>(requestBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::Response>(responseBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::ExecutionTime>(executionTime));
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
+
+                YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Finished processing command",
+                    {"marker", "BSCA10"},
+                    {"request", Cmd.DebugString()},
+                    {"response", Response->DebugString()},
+                    {"executionTime", executionTime},
+                    {"operationLogIndex", operationLogIndex});
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
@@ -357,29 +414,37 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(SetPDiskReadOnly)
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
+                    HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(PopulatePDisk)
+                    HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
+                    HANDLE_COMMAND(RecommissionGroups)
+                    HANDLE_COMMAND(DefineDDiskPool)
+                    HANDLE_COMMAND(ReadDDiskPool)
+                    HANDLE_COMMAND(DeleteDDiskPool)
+                    HANDLE_COMMAND(MoveDDisk)
+                    HANDLE_COMMAND(DeleteSpecificGroups)
 
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeclareIntent:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
-                        throw TExError() << "unsupported command";
+                    default: break;
                 }
 
-                throw TExError() << "unsupported command";
+                if (IsSoleCommand(cmd)) {
+                    throw TExError() << "command must be sole";
+                } else {
+                    throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
+                }
             }
 
             void Complete(const TActorContext&) override {
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
-                    STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
-                            (NextConfigTxSeqNo, configTxSeqNo));
+                    YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction complete",
+                        {"marker", "BSCA09"},
+                        {"uniqueId", state->UniqueId},
+                        {"nextConfigTxSeqNo", configTxSeqNo});
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
+                } else {
+                    Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();
@@ -397,8 +462,10 @@ namespace NKikimr::NBsController {
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, this));
+            YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
+                {"marker", "BSCTXCC01"},
+                {"request", request});
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
         }
 
 } // NKikimr::NBsController

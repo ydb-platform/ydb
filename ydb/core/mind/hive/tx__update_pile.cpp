@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 class TTxUpdatePiles : public TTransactionBase<THive> {
@@ -14,8 +16,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_PILES; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxUpdatePiles()::Execute");
+        YDB_LOG_DEBUG("THive::TTxUpdatePiles::Execute updating bridge piles",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
+        bool promotion = false;
+        Y_ENSURE(Self->BridgeInfo);
         for (const auto& wardenPileInfo : Self->BridgeInfo->Piles) {
             auto pileId = wardenPileInfo.BridgePileId;
             auto [it, inserted] = Self->BridgePiles.try_emplace(pileId, wardenPileInfo);
@@ -24,7 +29,7 @@ public:
                 continue;
             }
             if (pileInfo.State != wardenPileInfo.State) {
-                if (wardenPileInfo.State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                if (!NBridge::PileStateTraits(wardenPileInfo.State).AllowsConnection) {
                     for (auto nodeId : pileInfo.Nodes) {
                         auto* nodeInfo = Self->FindNode(nodeId);
                         if (!nodeInfo) {
@@ -37,14 +42,27 @@ public:
                     }
                 }
             }
+            if (!pileInfo.IsPromoted && wardenPileInfo.IsBeingPromoted) {
+                promotion = true;
+            }
             pileInfo.State = wardenPileInfo.State;
             pileInfo.IsPrimary = wardenPileInfo.IsPrimary;
             pileInfo.IsPromoted = wardenPileInfo.IsBeingPromoted;
-            db.Table<Schema::BridgePile>().Key(pileId.GetRawId()).Update(
+            db.Table<Schema::BridgePile>().Key(pileId.GetLocalDb()).Update(
                 NIceDb::TUpdate<Schema::BridgePile::State>(pileInfo.State),
                 NIceDb::TUpdate<Schema::BridgePile::IsPrimary>(pileInfo.IsPrimary),
                 NIceDb::TUpdate<Schema::BridgePile::IsPromoted>(pileInfo.IsPromoted)
             );
+        }
+
+        for (auto& [pileId, pileInfo] : Self->BridgePiles) {
+            if (promotion && pileInfo.IsPrimary) {
+                pileInfo.Drain = true;
+                db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
+            }
+            if (pileInfo.Drain) {
+                Self->StartHiveDrain(pileId, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
+            }
         }
 
         for (auto* tablet : TabletsToRestart) {
@@ -57,7 +75,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxUpdatePiles()::Complete");
+        YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
+            {"logPrefix", GetLogPrefix()});
     }
 
 };

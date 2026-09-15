@@ -1,16 +1,18 @@
 #pragma once
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/testlib/basics/runtime.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
 class TReadOnlyController: public ICSController {
 private:
+    YDB_READONLY(TAtomicCounter, CleanupSchemasFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLFinishedCounter, 0);
     YDB_READONLY(TAtomicCounter, TTLStartedCounter, 0);
     YDB_READONLY(TAtomicCounter, CompactionFinishedCounter, 0);
@@ -59,9 +61,11 @@ protected:
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
         ActualizationsCount.Inc();
     }
+
     virtual void OnActualizationRefreshScheme() override {
         ActualizationRefreshSchemeCount.Inc();
     }
+
     virtual void OnActualizationRefreshTiering() override {
         ActualizationRefreshTieringCount.Inc();
     }
@@ -69,9 +73,11 @@ protected:
     virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
+
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
         TieringUpdates.Inc();
     }
+
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return EOptimizerCompactionWeightControl::Force;
     }
@@ -81,20 +87,22 @@ protected:
     }
 
 public:
-    bool WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d, const ui32 maxCount = 0) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
         ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
+                count += GetCompactionStartedCounter().Val() - compactionsStart;
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
-                ++count;
             }
-            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
+            if (maxCount && count >= maxCount) {
+                return true;
+            }
             Sleep(std::min(TDuration::Seconds(1), d));
         }
-        return count > 0;
+        return count >= std::max(1u, maxCount);
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
@@ -106,7 +114,6 @@ public:
                 countStart = GetCleaningStartedCounter().Val();
                 start = TInstant::Now();
             }
-            Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
             if (testRuntime) {
                 testRuntime->SimulateSleep(TDuration::Seconds(1));
             } else {
@@ -114,6 +121,25 @@ public:
             }
         }
         return GetCleaningStartedCounter().Val() != countStart0;
+    }
+
+    bool WaitCleaningSchemas(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+        TInstant start = TInstant::Now();
+        const ui32 countStart0 = GetCleanupSchemasFinishedCounter().Val();
+        ui32 countStart = countStart0;
+        while (Now() - start < d) {
+            if (countStart != GetCleanupSchemasFinishedCounter().Val()) {
+                countStart = GetCleanupSchemasFinishedCounter().Val();
+                start = TInstant::Now();
+            }
+            Cerr << "WAIT_CLEANING_SCHEMAS: " << GetCleanupSchemasFinishedCounter().Val() << Endl;
+            if (testRuntime) {
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        return GetCleanupSchemasFinishedCounter().Val() != countStart0;
     }
 
     void WaitTtl(const TDuration d) const {
@@ -144,19 +170,40 @@ public:
         AFL_VERIFY(false)("reason", "condition not reached");
     }
 
-    void WaitActualization(const TDuration d) const {
+    void WaitActualization(const TDuration d, const bool waitWrites = false) const {
+        const i64 ttlStartedBaseline = GetTTLStartedCounter().Val();
         TInstant start = TInstant::Now();
         const i64 startVal = NeedActualizationCount.Val();
-        i64 predVal = NeedActualizationCount.Val();
-        while (TInstant::Now() - start < d && (!startVal || NeedActualizationCount.Val())) {
-            Cerr << "waiting actualization: " << NeedActualizationCount.Val() << "/" << TInstant::Now() - start << Endl;
-            if (NeedActualizationCount.Val() != predVal) {
-                predVal = NeedActualizationCount.Val();
+        i64 predNeed = startVal;
+        i64 predStarted = ttlStartedBaseline;
+        i64 predFinished = GetTTLFinishedCounter().Val();
+        while (TInstant::Now() - start < d) {
+            const i64 need = NeedActualizationCount.Val();
+            const i64 started = GetTTLStartedCounter().Val();
+            const i64 finished = GetTTLFinishedCounter().Val();
+            if (need != predNeed || (waitWrites && (started != predStarted || finished != predFinished))) {
+                predNeed = need;
+                predStarted = started;
+                predFinished = finished;
                 start = TInstant::Now();
+            }
+            if (waitWrites) {
+                if (need == 0 && started == finished && started > ttlStartedBaseline) {
+                    return;
+                }
+            } else if (startVal && need == 0) {
+                return;
             }
             Sleep(TDuration::Seconds(1));
         }
         AFL_VERIFY(!NeedActualizationCount.Val());
+        if (waitWrites) {
+            AFL_VERIFY(GetTTLStartedCounter().Val() == GetTTLFinishedCounter().Val());
+        }
+    }
+
+    virtual void OnCleanupSchemasFinished() override {
+        CleanupSchemasFinishedCounter.Inc();
     }
 
     virtual void OnIndexSelectProcessed(const std::optional<bool> result) override {
@@ -182,7 +229,6 @@ public:
     virtual bool IsForcedGenerateInternalPathId() const override {
         return true;
     }
-
 };
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

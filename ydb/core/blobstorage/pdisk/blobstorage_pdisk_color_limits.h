@@ -100,7 +100,7 @@ struct TColorLimits {
         };
     }
 
-    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) const {
         switch (color) {
                 case NKikimrBlobStorage::TPDiskSpaceColor::GREEN:           return 0.0;
                 case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:            return Cyan.CalculateOccupancy(total);
@@ -118,7 +118,7 @@ struct TColorLimits {
         }
     }
 
-    i64 GetQuotaForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) {
+    i64 GetQuotaForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color, i64 total) const {
         switch (color) {
             case NKikimrBlobStorage::TPDiskSpaceColor::CYAN:           return Cyan.CalculateQuota(total);
             case NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW:   return LightYellow.CalculateQuota(total);
@@ -139,4 +139,3 @@ struct TColorLimits {
 
 } // NPDisk
 } // NKikimr
-

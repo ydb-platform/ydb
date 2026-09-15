@@ -73,18 +73,6 @@ NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type) {
     }
 }
 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues)
-{
-    TVector<TCell> key(keyColumnTypes.size());
-    for (ui32 i = 0; i < key.size(); ++i) {
-        auto columnValue = value.GetElement(keyColumnIndices[i]);
-        key[i] = NMiniKQL::MakeCell(keyColumnTypes[i], columnValue, typeEnv, copyValues);
-    }
-
-    return key;
-}
-
 TTableId MakeTableId(const TKqpTable& node) {
     auto nodePathId = TKikimrPathId::Parse(node.PathId());
 

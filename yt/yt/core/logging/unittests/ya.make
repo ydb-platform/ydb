@@ -13,6 +13,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 PEERDIR(
     yt/yt/core
     yt/yt/core/test_framework
+    yt/yt/library/safe_assert
     library/cpp/streams/zstd
 )
 

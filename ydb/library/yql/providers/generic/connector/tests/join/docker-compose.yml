@@ -1,5 +1,18 @@
 services:
+
+  fq-connector-go:
+    build: ./connector.d
+    container_name: fq-tests-join-fq-connector-go
+    ports:
+      - 2130
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgresql:
+        condition: service_healthy
+
   clickhouse:
+    build: ./clickhouse.d
     container_name: fq-tests-join-clickhouse
     environment:
       CLICKHOUSE_ALWAYS_RUN_INITDB_SCRIPTS: 1
@@ -7,19 +20,10 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: password
       CLICKHOUSE_USER: user
-    image: mirror.gcr.io/clickhouse/clickhouse-server:24.3.12-alpine@sha256:65e5846a0d9672714f2625502b27846563f6d01ec226304cf851aa49004ffde8
     ports:
       - 9000
       - 8123
-    volumes:
-      - ./init/clickhouse:/docker-entrypoint-initdb.d
-  fq-connector-go:
-    container_name: fq-tests-join-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.7.2-rc.4@sha256:3dd675ebdba9ff4a1933443d801ba121d11a9eec20a6da8f0fa5dddc4ba97c0f
-    ports:
-      - 2130
-    volumes:
-      - ../fq-connector-go/:/opt/ydb/cfg/
+
   postgresql:
     command:
       - postgres
@@ -37,4 +41,12 @@ services:
     image: mirror.gcr.io/library/postgres:15-bullseye@sha256:2e89ed90224245851ea2b01e0b20c4b893e69141eb36e7a1cece7fb9e19f21f0
     ports:
       - 5432
-version: "3.4"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "localhost", "-p", "5432", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 50s
+      retries: 5
+      start_period: 30s
+
+version: "2.4"
+

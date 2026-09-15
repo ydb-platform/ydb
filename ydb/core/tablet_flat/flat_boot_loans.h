@@ -53,6 +53,12 @@ namespace NBoot {
         void Flush()
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
+                size_t decompressedSize = Codec->DecompressedLength(head->Body);
+                Y_ENSURE(decompressedSize <= MaxDecompressedBlobSize,
+                    "Loan entry " << NFmt::Do(head->LargeGlobId)
+                    << " has an unexpected decompressed size of " << decompressedSize << " bytes"
+                    << ", possible data corruption");
+
                 Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body));
 
                 ++Skip, Queue.pop_front();
@@ -70,6 +76,17 @@ namespace NBoot {
             TProtoBox<NKikimrExecutorFlat::TBorrowedPart> proto(body);
 
             Logic->Result().Loans->RestoreBorrowedInfo(label, proto);
+
+            if (Logic->Result().GcLogic) {
+                auto& historyCutter = Logic->Result().GcLogic->HistoryCutter;
+                historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(proto.GetMetaId()));
+                for (const auto& x : proto.GetBorrowKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
+                for (const auto& x : proto.GetLoanKeepList()) {
+                    historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));
+                }
+            }
         }
 
     private:

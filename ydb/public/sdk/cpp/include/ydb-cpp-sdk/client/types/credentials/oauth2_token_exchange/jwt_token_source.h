@@ -36,7 +36,7 @@ struct TJwtTokenSourceParams {
     class ISigningAlgorithm {
     public:
         virtual ~ISigningAlgorithm() = default;
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         virtual std::string sign(const std::string& data, std::error_code& ec) const = 0;
 #else
         virtual std::string sign(const std::string& data) const = 0;
@@ -54,7 +54,7 @@ struct TJwtTokenSourceParams {
         {
         }
 
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         std::string sign(const std::string& data, std::error_code& ec) const override {
             return Alg.sign(data, ec);
         }

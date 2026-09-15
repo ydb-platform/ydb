@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "requests.h"
 #endif
-#undef REQUESTS_INL_H_
 
 namespace NYT::NKafka {
 

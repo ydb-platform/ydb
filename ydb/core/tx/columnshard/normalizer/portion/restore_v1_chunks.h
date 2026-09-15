@@ -35,7 +35,8 @@ public:
 public:
     TNormalizer(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(

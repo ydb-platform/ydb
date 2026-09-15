@@ -41,7 +41,8 @@ class TllTieringTestBase(object):
                 extra_feature_flags={
                     "enable_external_data_sources": True,
                     "enable_write_portions_on_insert": True,
-                    "enable_tiering_in_column_shard": True
+                    "enable_tiering_in_column_shard": True,
+                    "enable_columnshard_bool": True,
                 },
                 column_shard_config={
                     "lag_for_compaction_before_tierings_ms": 0,
@@ -52,6 +53,7 @@ class TllTieringTestBase(object):
                     "alter_object_enabled": True,
                     "periodic_wakeup_activation_period_ms": 5000,
                     "gcinterval_ms": 5000,
+                    "bulk_upsert_require_all_columns": False,
                 },
                 additional_log_configs={
                     "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
@@ -62,6 +64,13 @@ class TllTieringTestBase(object):
                     available_external_data_sources=["ObjectStorage"]
                 )
             )
+            # Explicit registry timing for predictable min-read-snapshot progression in
+            # tiering tests. Total delay is 1+1+1+10 = 13s.
+            config.yaml_config["long_tx_service_config"] = {
+                "local_snapshot_promotion_time_seconds": 1,
+                "snapshots_exchange_interval_seconds": 1,
+                "snapshots_registry_update_interval_seconds": 1,
+            }
             cls.cluster = KiKiMR(config)
             cls.cluster.start()
             node = cls.cluster.nodes[1]

@@ -258,6 +258,13 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
 
+TSelectRowVersionResult TDatabase::SelectRowVersionByKeyPrefix(
+        ui32 table, TArrayRef<const TCell> key,
+        const ITransactionObserverPtr& observer) const
+{
+    return Require(table)->SelectRowVersionByKeyPrefix(key, Env, observer);
+}
+
 TSizeEnv TDatabase::CreateSizeEnv()
 {
     return TSizeEnv(Env);
@@ -274,17 +281,17 @@ void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TR
     Require(table)->Precharge(minKey, maxKey, tags, &env, flg, items, bytes, direction, snapshot, stats);
 }
 
-bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
+TPrechargeResult TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                     TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                     EDirection direction, TRowVersion snapshot)
 {
     CheckPrechargeAllowed(table, minKey, maxKey);
 
     TSelectStats stats;
-    auto ready = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
+    auto result = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
     Change->Stats.ChargeSieved += stats.Sieved;
     Change->Stats.ChargeWeeded += stats.Weeded;
-    return ready == EReady::Data;
+    return result;
 }
 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
@@ -367,6 +374,20 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
     RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
 }
 
+void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
+{
+    Y_ENSURE(mode != ELockMode::None);
+
+    for (size_t index = 0; index < key.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
+            Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
+        }
+    }
+
+    Redo->EvLockRowTx(table, mode, key, txId);
+    RequireForUpdate(table)->LockRowTx(mode, key, txId);
+}
+
 void TDatabase::RemoveTx(ui32 table, ui64 txId)
 {
     Redo->EvRemoveTx(table, txId);
@@ -407,6 +428,26 @@ const absl::flat_hash_set<ui64>& TDatabase::GetOpenTxs(ui32 table) const
 size_t TDatabase::GetOpenTxCount(ui32 table) const
 {
     return Require(table)->GetOpenTxCount();
+}
+
+size_t TDatabase::GetTxsWithDataCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithDataCount();
+}
+
+size_t TDatabase::GetTxsWithStatusCount(ui32 table) const
+{
+    return Require(table)->GetTxsWithStatusCount();
+}
+
+size_t TDatabase::GetCommittedTxCount(ui32 table) const
+{
+    return Require(table)->GetCommittedTxCount();
+}
+
+size_t TDatabase::GetRemovedTxCount(ui32 table) const
+{
+    return Require(table)->GetRemovedTxCount();
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
@@ -567,6 +608,13 @@ TEpoch TDatabase::TxSnapTable(ui32 table)
     Y_ENSURE(Redo, "Cannot TxSnapTable outside a transaction");
     ++Change->Snapshots;
     return DatabaseImpl->FlushTable(table);
+}
+
+void TDatabase::Truncate(ui32 table)
+{
+    Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
+    ++Change->Snapshots;
+    DatabaseImpl->TruncateTable(table);
 }
 
 TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
@@ -778,6 +826,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);
+        Change->Truncated = std::move(DatabaseImpl->Truncated);
         Change->Affects = DatabaseImpl->GrabAffects();
         Change->Annex = std::move(annex);
 

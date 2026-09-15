@@ -2,11 +2,9 @@
 
 #include <Python.h>
 
-
 namespace NPython {
 
-struct TPyGilLocker
-{
+struct TPyGilLocker {
     TPyGilLocker()
         : Gil_(PyGILState_Ensure())
     {

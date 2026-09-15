@@ -23,6 +23,7 @@ This allows us to define an API that has minimal coupling to the event
 based API used by botocore.
 
 """
+
 import logging
 import random
 
@@ -57,9 +58,9 @@ def register_retry_handler(client, max_attempts=DEFAULT_MAX_ATTEMPTS):
         retry_quota=retry_quota,
     )
 
-    unique_id = 'retry-config-%s' % service_event_name
+    unique_id = f'retry-config-{service_event_name}'
     client.meta.events.register(
-        'needs-retry.%s' % service_event_name,
+        f'needs-retry.{service_event_name}',
         handler.needs_retry,
         unique_id=unique_id,
     )
@@ -263,7 +264,7 @@ class ExponentialBackoff(BaseRetryBackoff):
         This class implements truncated binary exponential backoff
         with jitter::
 
-            t_i = min(rand(0, 1) * 2 ** attempt, MAX_BACKOFF)
+            t_i = rand(0, 1) * min(2 ** attempt, MAX_BACKOFF)
 
         where ``i`` is the request attempt (0 based).
 
@@ -271,8 +272,8 @@ class ExponentialBackoff(BaseRetryBackoff):
         # The context.attempt_number is a 1-based value, but we have
         # to calculate the delay based on i based a 0-based value.  We
         # want the first delay to just be ``rand(0, 1)``.
-        return min(
-            self._random() * (self._base ** (context.attempt_number - 1)),
+        return self._random() * min(
+            (self._base ** (context.attempt_number - 1)),
             self._max_backoff,
         )
 

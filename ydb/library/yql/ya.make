@@ -1,10 +1,8 @@
 RECURSE(
     core
     dq
-    minikql
     providers
     public
-    tests
     tools
     udfs
     utils

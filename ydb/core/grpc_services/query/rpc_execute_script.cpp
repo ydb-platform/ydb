@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr::NGRpcService {
 
 namespace {
@@ -90,7 +92,7 @@ public:
         const auto& request = GetProtoRequest();
 
         if (request->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
-            issues.AddIssue("ExecuteScript must be asyncronous operation");
+            issues.AddIssue("ExecuteScript must be asynchronous operation");
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues);
         }
 
@@ -159,8 +161,9 @@ private:
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, Ydb::Operations::Operation&& result, const NYql::TIssues& issues = {}) {
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::RPC_REQUEST, "Execute script, status: "
-            << Ydb::StatusIds::StatusCode_Name(status) << (issues ? ". Issues: " : "") << issues.ToOneLineString());
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Execute script",
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"issues", issues.ToOneLineString()});
 
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (const auto& issue : issues) {

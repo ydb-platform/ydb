@@ -3,9 +3,13 @@
 #include <library/cpp/yt/error/error.h>
 #include <library/cpp/yt/error/error_helpers.h>
 
+#include <util/generic/noncopyable.h>
 #include <util/stream/str.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
+
+#include <array>
+#include <list>
 
 namespace NYT {
 namespace {
@@ -13,60 +17,6 @@ namespace {
 using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-class TAdlException
-    : public std::exception
-{
-public:
-    static int ResetCallCount()
-    {
-        return std::exchange(OverloadCallCount, 0);
-    }
-
-    const char* what() const noexcept override
-    {
-        return "Adl exception";
-    }
-
-    // Simulate overload from TAdlException::operator <<
-    template <class TLikeThis, class TArg>
-        requires std::derived_from<std::decay_t<TLikeThis>, TAdlException>
-    friend TLikeThis&& operator << (TLikeThis&& ex, const TArg& /*other*/)
-    {
-        ++OverloadCallCount;
-        return std::forward<TLikeThis>(ex);
-    }
-
-private:
-    static inline int OverloadCallCount = 0;
-};
-
-class TAdlArgument
-{
-public:
-    static int ResetCallCount()
-    {
-        return std::exchange(OverloadCallCount, 0);
-    }
-
-    // Simulate overload TAdlArgument::operator <<
-    friend TError operator << (TError&& error, const TAdlArgument& /*other*/)
-    {
-        static const TErrorAttribute Attr("attr", "attr_value");
-        ++OverloadCallCount;
-        return std::move(error) << Attr;
-    }
-
-    friend TError operator << (const TError& error, const TAdlArgument& /*other*/)
-    {
-        static const TErrorAttribute Attr("attr", "attr_value");
-        ++OverloadCallCount;
-        return error << Attr;
-    }
-
-private:
-    static inline int OverloadCallCount = 0;
-};
 
 class TWidget
 {
@@ -82,7 +32,7 @@ public:
     }
     TWidget& operator = (const TWidget&) = delete;
 
-    TWidget(TWidget&&)
+    TWidget(TWidget&&) noexcept
     {
         MoveConstructorCalls++;
     }
@@ -109,186 +59,38 @@ private:
     static inline int MoveConstructorCalls = 0;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-
-template <class TOverloadTest, bool LeftOperandHasUserDefinedOverload = false>
-void IterateTestOverEveryRightOperand(TOverloadTest& tester)
+// legacy class without move constructor
+class TCopyOnly
 {
+public:
+    explicit TCopyOnly(int val = 0)
+        : Value_(val)
+    { }
+
+    TCopyOnly(const TCopyOnly&) = default;
+    TCopyOnly(TCopyOnly&&) = delete;
+    TCopyOnly& operator=(const TCopyOnly&) = default;
+    TCopyOnly& operator=(TCopyOnly&&) = delete;
+
+    int Value() const
     {
-        TErrorAttribute attribute("attr", "attr_value");
-        const auto& attributeRef = attribute;
-        tester(attributeRef);
+        return Value_;
     }
 
-    {
-        std::vector<TErrorAttribute> attributeVector{{"attr1", "attr_value"}, {"attr2", "attr_value"}};
-        const auto& attributeVectorRef = attributeVector;
-        tester(attributeVectorRef);
-    }
+private:
+    int Value_;
+};
 
-    {
-        TError error("Error");
 
-        const auto& errorRef = error;
-        tester(errorRef);
-
-        auto errorCopy = error;
-        tester(std::move(errorCopy));
-
-        if constexpr (!LeftOperandHasUserDefinedOverload) {
-            EXPECT_TRUE(errorCopy.IsOK());
-        }
-    }
-
-    {
-        std::vector<TError> vectorError{TError("Error"), TError("Error")};
-
-        const auto& vectorErrorRef = vectorError;
-        tester(vectorErrorRef);
-
-        auto vectorErrorCopy = vectorError;
-        tester(std::move(vectorErrorCopy));
-
-        if constexpr (!LeftOperandHasUserDefinedOverload) {
-            for (const auto& errorCopy : vectorErrorCopy) {
-                EXPECT_TRUE(errorCopy.IsOK());
-            }
-        }
-    }
-
-    {
-        TError error("Error");
-
-        const auto& attributeDictionaryRef = error.Attributes();
-        tester(attributeDictionaryRef);
-    }
-
-    {
-        try {
-            THROW_ERROR TError("Test error");
-        } catch(const NYT::TErrorException& ex) {
-            const auto& exRef = ex;
-            tester(exRef);
-
-            auto exCopy = ex;
-            tester(std::move(exCopy));
-        }
-    }
-
-    {
-        TErrorOr<int> err(std::exception{});
-
-        const auto& errRef = err;
-        tester(errRef);
-
-        auto errCopy = err;
-        tester(std::move(errCopy));
-
-        if constexpr (!LeftOperandHasUserDefinedOverload) {
-            EXPECT_TRUE(errCopy.IsOK());
-        }
-    }
-
-    {
-        TAdlArgument adlArg;
-
-        const TAdlArgument& adlArgRef = adlArg;
-        tester(adlArgRef);
-
-        if constexpr (!LeftOperandHasUserDefinedOverload) {
-            EXPECT_EQ(TAdlArgument::ResetCallCount(), 1);
-        }
-    }
-}
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 void SetErrorAttribute(TError* error, const std::string& key, const T& value)
 {
-    *error <<= TErrorAttribute(key, value);
+    error->Add(key, value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TEST(TErrorTest, BitshiftOverloadsExplicitLeftOperand)
-{
-    // TError&& overload.
-    auto moveTester = [] (auto&& arg) {
-        TError error = TError("Test error");
-        TError moved = std::move(error) << std::forward<decltype(arg)>(arg);
-        EXPECT_TRUE(error.IsOK());
-        EXPECT_EQ(moved.GetMessage(), "Test error");
-    };
-    IterateTestOverEveryRightOperand(moveTester);
-
-    // const TError& overloads.
-    auto copyTester = [] (auto&& arg) {
-        TError error = TError("Test error");
-        TError copy = error << std::forward<decltype(arg)>(arg);
-        EXPECT_EQ(error.GetMessage(), copy.GetMessage());
-    };
-    IterateTestOverEveryRightOperand(copyTester);
-
-    // Test that TError pr value binds correctly and the call itself is unambiguous.
-    auto prvalueTester = [] (auto&& arg) {
-        TError error = TError("Test error") << std::forward<decltype(arg)>(arg);
-        EXPECT_EQ(error.GetMessage(), "Test error");
-    };
-    IterateTestOverEveryRightOperand(prvalueTester);
-}
-
-TEST(TErrorTest, BitshiftOverloadsImplicitLeftOperand)
-{
-    // We want to be able to write THROW_ERROR ex
-    auto throwErrorTester1 = [] (auto&& arg) {
-        try {
-            try {
-                THROW_ERROR TError("Test error");
-            } catch(const NYT::TErrorException& ex) {
-                THROW_ERROR ex << std::forward<decltype(arg)>(arg);
-            }
-        } catch(const NYT::TErrorException& ex) {
-            TError error = ex;
-            EXPECT_EQ(error.GetMessage(), "Test error");
-        }
-    };
-    IterateTestOverEveryRightOperand(throwErrorTester1);
-
-    // We also want to be able to write THROW_ERROR TError(smth) without compiler errors
-    auto throwErrorTester2 = [] (auto&& arg) {
-        try {
-            try {
-                THROW_ERROR TError("Test error");
-            } catch(const NYT::TErrorException& ex) {
-                THROW_ERROR TError(ex) << std::forward<decltype(arg)>(arg);
-            }
-        } catch(const NYT::TErrorException& ex) {
-            TError error = ex;
-            EXPECT_EQ(error.GetMessage(), "Test error");
-        }
-    };
-    IterateTestOverEveryRightOperand(throwErrorTester2);
-
-    // Left operand ADL finds the user-defined overload over NYT one.
-    // In this case AdlException should find templated function
-    // specialization with perfect match for args over conversions.
-    auto adlResolutionTester = [] (auto&& arg) {
-        TAdlException ex;
-        auto result = ex << std::forward<decltype(arg)>(arg);
-        static_assert(std::same_as<TAdlException, std::decay_t<decltype(result)>>);
-        EXPECT_EQ(TAdlException::ResetCallCount(), 1);
-    };
-    IterateTestOverEveryRightOperand<
-        decltype(adlResolutionTester),
-        /*LeftOperandHasUserDefinedOverload*/ true>(adlResolutionTester);
-
-    // Make sure no ambiguous calls.
-    auto genericErrorOrTester = [] (auto&& arg) {
-        TErrorOr<int> err(std::exception{});
-        TError error = err << std::forward<decltype(arg)>(arg);
-        EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Generic);
-    };
-    IterateTestOverEveryRightOperand(genericErrorOrTester);
-}
 
 TEST(TErrorTest, Wrap)
 {
@@ -317,9 +119,270 @@ TEST(TErrorTest, WrapRValue)
     EXPECT_EQ(wrapped.InnerErrors()[0], error);
 
     TError anotherErrorCopy = error;
-    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    auto triviallyWrapped = std::move(anotherErrorCopy).Wrap();
     EXPECT_TRUE(anotherErrorCopy.IsOK());
-    EXPECT_EQ(trviallyWrapped, error);
+    EXPECT_EQ(triviallyWrapped, error);
+}
+
+TEST(TErrorTest, WithAttributes)
+{
+    const auto base = TError("Error").With("base", 1);
+
+    auto error = base
+        .With("added", 2)
+        .With(TErrorAttribute("direct", 3));
+
+    EXPECT_EQ(base.Attributes().Get<int>("base"), 1);
+    EXPECT_FALSE(base.Attributes().Contains("added"));
+    EXPECT_EQ(error.Attributes().Get<int>("base"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("added"), 2);
+    EXPECT_EQ(error.Attributes().Get<int>("direct"), 3);
+}
+
+TEST(TErrorTest, WithAttributeRange)
+{
+    std::array attributes{
+        TErrorAttribute("first", 1),
+        TErrorAttribute("second", 2),
+    };
+
+    auto error = TError("Error").With(attributes);
+
+    EXPECT_EQ(error.Attributes().Get<int>("first"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("second"), 2);
+}
+
+TEST(TErrorTest, WithInnerErrors)
+{
+    auto innerError = TError("Inner error");
+    const auto base = TError("Outer error");
+
+    auto error = base
+        .With(innerError)
+        .With(TError("Moved inner error"));
+
+    EXPECT_TRUE(base.InnerErrors().empty());
+    ASSERT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Moved inner error");
+}
+
+TEST(TErrorTest, WithInnerErrorRange)
+{
+    std::list innerErrors{
+        TError("First inner error"),
+        TError("Second inner error"),
+    };
+
+    auto error = TError("Outer error").With(std::move(innerErrors));
+
+    ASSERT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "First inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Second inner error");
+    EXPECT_TRUE(innerErrors.front().IsOK());
+    EXPECT_TRUE(innerErrors.back().IsOK());
+}
+
+TEST(TErrorTest, WithAttributeDictionary)
+{
+    auto source = TError("Source").With("first", 1).With("second", 2);
+
+    auto error = TError("Error").With(source.Attributes());
+
+    EXPECT_EQ(error.Attributes().Get<int>("first"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("second"), 2);
+}
+
+TEST(TErrorTest, AddAttributeDictionary)
+{
+    auto source = TError("Source").With("first", 1).With("second", 2);
+
+    auto error = TError("Error");
+    error.Add(source.Attributes());
+
+    EXPECT_EQ(error.Attributes().Get<int>("first"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("second"), 2);
+}
+
+TEST(TErrorTest, WithIf)
+{
+    auto innerError = TError("Inner error");
+
+    auto attached = TError("Error")
+        .WithIf(true, "key", 1)
+        .WithIf(true, innerError);
+
+    EXPECT_EQ(attached.Attributes().Get<int>("key"), 1);
+    ASSERT_EQ(attached.InnerErrors().size(), 1u);
+    EXPECT_EQ(attached.InnerErrors()[0].GetMessage(), "Inner error");
+
+    auto skipped = TError("Error")
+        .WithIf(false, "key", 1)
+        .WithIf(false, innerError);
+
+    EXPECT_FALSE(skipped.Attributes().Contains("key"));
+    EXPECT_TRUE(skipped.InnerErrors().empty());
+}
+
+TEST(TErrorTest, WithIfLazy)
+{
+    int calls = 0;
+
+    auto attached = TError("Error")
+        .WithIf(true, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(attached.Attributes().Get<int>("key"), 1);
+
+    auto skipped = TError("Error")
+        .WithIf(false, "key", YT_LAZY((++calls, 1)));
+    EXPECT_EQ(calls, 1);
+    EXPECT_FALSE(skipped.Attributes().Contains("key"));
+}
+
+TEST(TErrorTest, WithIfLazyInnerError)
+{
+    int calls = 0;
+    auto makeInnerError = [&] {
+        ++calls;
+        return TError("Inner error");
+    };
+
+    // NB: A named error exercises the |const &| overload; the temporaries above cover |&&|.
+    const auto error = TError("Error");
+
+    auto attached = error.WithIf(true, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    ASSERT_EQ(attached.InnerErrors().size(), 1u);
+    EXPECT_EQ(attached.InnerErrors()[0].GetMessage(), "Inner error");
+
+    auto skipped = error.WithIf(false, YT_LAZY(makeInnerError()));
+    EXPECT_EQ(calls, 1);
+    EXPECT_TRUE(skipped.InnerErrors().empty());
+}
+
+TEST(TErrorTest, WithIfGuardsOKInnerError)
+{
+    TError okError;
+    auto error = TError("Outer error").WithIf(!okError.IsOK(), okError);
+
+    EXPECT_TRUE(error.InnerErrors().empty());
+}
+
+TEST(TErrorTest, AddAttributes)
+{
+    auto error = TError("Error");
+    error
+        .Add("added", 1)
+        .Add(TErrorAttribute("direct", 2));
+
+    EXPECT_EQ(error.Attributes().Get<int>("added"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("direct"), 2);
+}
+
+TEST(TErrorTest, AddAttributeRange)
+{
+    std::array attributes{
+        TErrorAttribute("first", 1),
+        TErrorAttribute("second", 2),
+    };
+
+    auto error = TError("Error");
+    error.Add(attributes);
+
+    EXPECT_EQ(error.Attributes().Get<int>("first"), 1);
+    EXPECT_EQ(error.Attributes().Get<int>("second"), 2);
+}
+
+TEST(TErrorTest, AddInnerErrors)
+{
+    auto innerError = TError("Inner error");
+    TErrorOr<int> innerErrorOr(TError("Inner error or"));
+
+    auto error = TError("Outer error");
+    error
+        .Add(innerError)
+        .Add(TError("Moved inner error"))
+        .Add(std::move(innerErrorOr));
+
+    ASSERT_EQ(error.InnerErrors().size(), 3u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Moved inner error");
+    EXPECT_EQ(error.InnerErrors()[2].GetMessage(), "Inner error or");
+}
+
+TEST(TErrorTest, AddInnerErrorRange)
+{
+    std::list innerErrors{
+        TError("First inner error"),
+        TError("Second inner error"),
+    };
+
+    auto error = TError("Outer error");
+    error.Add(std::move(innerErrors));
+
+    ASSERT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "First inner error");
+    EXPECT_EQ(error.InnerErrors()[1].GetMessage(), "Second inner error");
+    EXPECT_TRUE(innerErrors.front().IsOK());
+    EXPECT_TRUE(innerErrors.back().IsOK());
+}
+
+TEST(TErrorTest, AddOverwritesAttribute)
+{
+    auto error = TError("Error").With("key", 1);
+    error.Add("key", 2);
+
+    EXPECT_EQ(error.Attributes().Get<int>("key"), 2);
+}
+
+TEST(TErrorTest, AddDropsOKInnerError)
+{
+    auto error = TError("Outer error");
+    error
+        .Add(TError())
+        .Add(TError("Inner error"))
+        .Add(TError());
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+}
+
+TEST(TErrorTest, AddDropsOKInnerErrorRange)
+{
+    std::vector innerErrors{TError(), TError("Inner error"), TError()};
+
+    auto error = TError("Outer error");
+    error.Add(innerErrors);
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+}
+
+TEST(TErrorTest, WithDropsOKInnerError)
+{
+    auto error = TError("Outer error").With(TError());
+
+    EXPECT_TRUE(error.InnerErrors().empty());
+}
+
+TEST(TErrorTest, WithDropsOKInnerErrorRange)
+{
+    std::vector innerErrors{TError(), TError("Inner error"), TError()};
+
+    auto error = TError("Outer error").With(innerErrors);
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+}
+
+TEST(TErrorTest, WrapOKError)
+{
+    TError error;
+
+    auto wrapped = error.Wrap("Wrapped OK error");
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped OK error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 0u);
 }
 
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)
@@ -349,7 +412,7 @@ TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroExpression)
     try {
         THROW_ERROR_EXCEPTION_IF_FAILED(
             TError("Inner error")
-                << TErrorAttribute("attr", "attr_value"),
+                .With("attr", "attr_value"),
             "Outer error");
     } catch (const std::exception& ex) {
         TError outerError(ex);
@@ -358,6 +421,19 @@ TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroExpression)
         EXPECT_EQ(outerError.InnerErrors().size(), 1u);
         EXPECT_EQ(outerError.InnerErrors()[0].GetMessage(), "Inner error");
         EXPECT_EQ(outerError.InnerErrors()[0].Attributes().Get<std::string>("attr"), "attr_value");
+    }
+}
+
+TEST(TErrorTest, ThrowErrorExceptionIfMacroAttributes)
+{
+    try {
+        THROW_ERROR_EXCEPTION_IF(true, "Condition holds")
+            .With("attr", "attr_value");
+        ADD_FAILURE() << "Expected the macro to throw.";
+    } catch (const std::exception& ex) {
+        TError error(ex);
+        EXPECT_EQ(error.GetMessage(), "Condition holds");
+        EXPECT_EQ(error.Attributes().Get<std::string>("attr"), "attr_value");
     }
 }
 
@@ -416,10 +492,10 @@ TEST(TErrorTest, ExceptionCtor)
 TEST(TErrorTest, FindRecursive)
 {
     auto inner = TError("Inner")
-        << TErrorAttribute("inner_attr", 42);
+        .With("inner_attr", 42);
     auto error = TError("Error")
-        << inner
-        << TErrorAttribute("attr", 8);
+        .With(inner)
+        .With("attr", 8);
 
     auto attr = FindAttribute<int>(error, "attr");
     EXPECT_TRUE(attr);
@@ -435,8 +511,8 @@ TEST(TErrorTest, FindRecursive)
 TEST(TErrorTest, TruncateSimple)
 {
     auto error = TError("Some error")
-        << TErrorAttribute("my_attr", "Attr value")
-        << TError("Inner error");
+        .With("my_attr", "Attr value")
+        .With(TError("Inner error"));
     auto truncatedError = error.Truncate();
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
@@ -451,10 +527,10 @@ TEST(TErrorTest, TruncateSimple)
 TEST(TErrorTest, TruncateLarge)
 {
     auto error = TError("Some long long error")
-        << TError("First inner error")
-        << TError("Second inner error")
-        << TError("Third inner error")
-        << TError("Fourth inner error");
+        .With(TError("First inner error"))
+        .With(TError("Second inner error"))
+        .With(TError("Third inner error"))
+        .With(TError("Fourth inner error"));
     SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
@@ -471,8 +547,8 @@ TEST(TErrorTest, TruncateLarge)
 TEST(TErrorTest, TruncateSimpleRValue)
 {
     auto error = TError("Some error")
-        << TErrorAttribute("my_attr", "Attr value")
-        << TError("Inner error");
+        .With("my_attr", "Attr value")
+        .With(TError("Inner error"));
     auto errorCopy = error;
     auto truncatedError = std::move(errorCopy).Truncate();
     EXPECT_TRUE(errorCopy.IsOK());
@@ -490,10 +566,10 @@ TEST(TErrorTest, TruncateSimpleRValue)
 TEST(TErrorTest, TruncateLargeRValue)
 {
     auto error = TError("Some long long error")
-        << TError("First inner error")
-        << TError("Second inner error")
-        << TError("Third inner error")
-        << TError("Fourth inner error");
+        .With(TError("First inner error"))
+        .With(TError("Second inner error"))
+        .With(TError("Third inner error"))
+        .With(TError("Fourth inner error"));
     SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
@@ -513,10 +589,10 @@ TEST(TErrorTest, TruncateLargeRValue)
 TEST(TErrorTest, TruncateConsistentOverloads)
 {
     auto error = TError("Some long long error")
-        << TError("First inner error")
-        << TError("Second inner error")
-        << TError("Third inner error")
-        << TError("Fourth inner error");
+        .With(TError("First inner error"))
+        .With(TError("Second inner error"))
+        .With(TError("Third inner error"))
+        .With(TError("Fourth inner error"));
     SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
@@ -569,7 +645,7 @@ TEST(TErrorTest, TruncateWhitelistInnerErrors)
     SetErrorAttribute(&innerError, "attr1", "Some long long attr");
     SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
-    auto error = TError("Error") << innerError;
+    auto error = TError("Error").With(innerError);
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -589,7 +665,7 @@ TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
     SetErrorAttribute(&innerError, "attr1", "Some long long attr");
     SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
-    auto error = TError("Error") << innerError;
+    auto error = TError("Error").With(innerError);
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -609,12 +685,12 @@ TEST(TErrorTest, TruncateWhitelistSaveInnerError)
 {
     auto genericInner = TError("GenericInner");
     auto whitelistedInner = TError("Inner")
-        << TErrorAttribute("whitelisted_key", 42);
+        .With("whitelisted_key", 42);
 
     auto error = TError("Error")
-        << (genericInner << TErrorAttribute("foo", "bar"))
-        << whitelistedInner
-        << genericInner;
+        .With(genericInner.With("foo", "bar"))
+        .With(whitelistedInner)
+        .With(genericInner);
 
     error = std::move(error).Truncate(1, 20, {
         "whitelisted_key"
@@ -624,7 +700,7 @@ TEST(TErrorTest, TruncateWhitelistSaveInnerError)
     EXPECT_EQ(error.InnerErrors()[0], whitelistedInner);
     EXPECT_EQ(error.InnerErrors()[1], genericInner);
 
-    // TODO: error_helpers???
+    // TODO(arkady-e1ppa): error_helpers???
     EXPECT_TRUE(FindAttributeRecursive<int>(error, "whitelisted_key"));
     EXPECT_FALSE(FindAttributeRecursive<int>(error, "foo"));
 }
@@ -702,10 +778,10 @@ TEST(TErrorTest, AttributeSerialization)
         return JoinSeq("\n", lines);
     };
 
-    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "V1")), std::string(
+    EXPECT_EQ(getWeededText(TError("E1").With("A1", "V1")), std::string(
         "E1\n"
         "    A1              V1\n"));
-    EXPECT_EQ(getWeededText(TError("E1") << TErrorAttribute("A1", "L1\nL2\nL3")), std::string(
+    EXPECT_EQ(getWeededText(TError("E1").With("A1", "L1\nL2\nL3")), std::string(
         "E1\n"
         "    A1\n"
         "        L1\n"
@@ -801,7 +877,7 @@ TEST(TErrorTest, Enrichers)
 
         TError::RegisterEnricher([](TError* error) {
             if (testEnricherEnabled) {
-                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+                error->Add("test_attribute", getAttribute(*error) + "X");
             }
         });
 
@@ -825,7 +901,7 @@ TEST(TErrorTest, Enrichers)
 
         TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
             if (testFromExceptionEnricherEnabled) {
-                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+                error->Add("test_attribute", getAttribute(*error) + "X");
             }
         });
 
@@ -842,6 +918,242 @@ TEST(TErrorTest, Enrichers)
 
         testFromExceptionEnricherEnabled = false;
     }
+}
+
+TEST(TErrorTest, ValueOrCrashSimple)
+{
+    TErrorOr<int> result = 42;
+    EXPECT_EQ(result.ValueOrCrash(), 42);
+
+    result.ValueOrCrash() = 67;
+    EXPECT_EQ(result.ValueOrCrash(), 67);
+}
+
+TEST(TErrorTest, ValueOrCrashHappyPath)
+{
+    TErrorOr<TWidget> result;
+    EXPECT_EQ(result.ValueOrCrash().ResetDefaultCount(), 1);
+
+    {
+        const auto& resultRef = result;
+        auto value = resultRef.ValueOrCrash();
+        EXPECT_EQ(value.ResetCopyCount(), 1);
+    }
+
+    {
+        auto value = std::move(result).ValueOrCrash();
+        EXPECT_EQ(value.ResetMoveCount(), 1);
+    }
+}
+
+TEST(TErrorTest, ValueOrCrashDeath)
+{
+    TErrorOr<TWidget> result = TError("death");
+
+    EXPECT_DEATH({ result.ValueOrCrash(); }, "YT_VERIFY");
+
+    {
+        const auto& resultRef = result;
+        EXPECT_DEATH({ resultRef.ValueOrCrash(); }, "YT_VERIFY");
+    }
+
+    {
+        EXPECT_DEATH({ std::move(result).ValueOrCrash(); }, "YT_VERIFY");
+    }
+}
+
+TEST(TErrorOrConstructionTraitsTest, ValueTraits)
+{
+    using TMoveOnlyError = TErrorOr<TMoveOnly>;
+    static_assert(!std::is_copy_constructible_v<TMoveOnly>);
+    static_assert(std::is_move_constructible_v<TMoveOnlyError>);
+    static_assert(!std::is_copy_constructible_v<TMoveOnlyError>);
+    static_assert(std::is_move_assignable_v<TMoveOnlyError>);
+    static_assert(!std::is_copy_assignable_v<TMoveOnlyError>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromError)
+{
+    {
+        TError error1("string: copy from error");
+        TErrorOr<std::string> errorOr1(error1);
+        EXPECT_FALSE(errorOr1.IsOK());
+        EXPECT_EQ(errorOr1.GetMessage(), "string: copy from error");
+        EXPECT_FALSE(error1.IsOK());
+
+        TError error2("string: move from error");
+        TErrorOr<std::string> errorOr2(std::move(error2));
+        EXPECT_FALSE(errorOr2.IsOK());
+        EXPECT_EQ(errorOr2.GetMessage(), "string: move from error");
+        EXPECT_TRUE(error2.IsOK());
+    }
+    {
+        TError error("unique_ptr: move from error");
+        TErrorOr<std::unique_ptr<int>> errorOr(std::move(error));
+        EXPECT_FALSE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.GetMessage(), "unique_ptr: move from error");
+        EXPECT_TRUE(error.IsOK());
+
+        static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const TError&>);
+        static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, TError&&>);
+    }
+    {
+        TError error("copy_only: copy from error");
+        TErrorOr<TCopyOnly> errorOr(error);
+        EXPECT_FALSE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.GetMessage(), "copy_only: copy from error");
+        EXPECT_FALSE(error.IsOK());
+
+        static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, const TError&>);
+        static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, TError&&>);
+    }
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromValue)
+{
+    {
+        std::string str = "value copy";
+        TErrorOr<std::string> errorOr1(str);
+        EXPECT_TRUE(errorOr1.IsOK());
+        EXPECT_EQ(errorOr1.Value(), "value copy");
+        EXPECT_EQ(str, "value copy");
+
+        TErrorOr<std::string> errorOr2(std::string("value move"));
+        EXPECT_TRUE(errorOr2.IsOK());
+        EXPECT_EQ(errorOr2.Value(), "value move");
+    }
+    {
+        auto ptr = std::make_unique<int>(42);
+        TErrorOr<std::unique_ptr<int>> errorOr(std::move(ptr));
+        EXPECT_TRUE(errorOr.IsOK());
+        EXPECT_EQ(*errorOr.Value(), 42);
+        EXPECT_EQ(ptr, nullptr);
+    }
+
+    static_assert(std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, std::unique_ptr<int>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const std::unique_ptr<int>&>);
+
+    {
+        TCopyOnly obj(123);
+        TErrorOr<TCopyOnly> errorOr(obj);
+        EXPECT_TRUE(errorOr.IsOK());
+        EXPECT_EQ(errorOr.Value().Value(), 123);
+        EXPECT_EQ(obj.Value(), 123);
+    }
+
+    static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, const TCopyOnly&>);
+    static_assert(std::is_constructible_v<TErrorOr<TCopyOnly>, TCopyOnly&&>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromSameSpecialization)
+{
+    {
+        TErrorOr<std::string> source1(TError("string: error copy"));
+        TErrorOr<std::string> dest1(source1);
+        EXPECT_FALSE(dest1.IsOK());
+        EXPECT_EQ(dest1.GetMessage(), "string: error copy");
+        EXPECT_FALSE(source1.IsOK());
+
+        TErrorOr<std::string> source2(TError("string: error move"));
+        TErrorOr<std::string> dest2(std::move(source2));
+        EXPECT_FALSE(dest2.IsOK());
+        EXPECT_EQ(dest2.GetMessage(), "string: error move");
+    }
+    {
+        TErrorOr<std::string> source1(std::string("value copy"));
+        TErrorOr<std::string> dest1(source1);
+        EXPECT_TRUE(dest1.IsOK());
+        EXPECT_EQ(dest1.Value(), "value copy");
+        EXPECT_EQ(source1.Value(), "value copy");
+
+        TErrorOr<std::string> source2(std::string("value move"));
+        TErrorOr<std::string> dest2(std::move(source2));
+        EXPECT_TRUE(dest2.IsOK());
+        EXPECT_EQ(dest2.Value(), "value move");
+    }
+    {
+        TErrorOr<std::unique_ptr<int>> source(TError("unique_ptr: error"));
+        TErrorOr<std::unique_ptr<int>> dest(std::move(source));
+        EXPECT_FALSE(dest.IsOK());
+        EXPECT_EQ(dest.GetMessage(), "unique_ptr: error");
+    }
+    {
+        TErrorOr<std::unique_ptr<int>> source(std::make_unique<int>(42));
+        TErrorOr<std::unique_ptr<int>> dest(std::move(source));
+        EXPECT_TRUE(dest.IsOK());
+        EXPECT_EQ(*dest.Value(), 42);
+    }
+    {
+        TErrorOr<TCopyOnly> source(TError("copy_only: error"));
+        TErrorOr<TCopyOnly> dest(source);
+        EXPECT_FALSE(dest.IsOK());
+        EXPECT_EQ(dest.GetMessage(), "copy_only: error");
+        EXPECT_FALSE(source.IsOK());
+    }
+    {
+        TErrorOr<TCopyOnly> source(TCopyOnly(123));
+        TErrorOr<TCopyOnly> dest(source);
+        EXPECT_TRUE(dest.IsOK());
+        EXPECT_EQ(dest.Value().Value(), 123);
+        EXPECT_EQ(source.Value().Value(), 123);
+    }
+
+    static_assert(!std::is_copy_constructible_v<TErrorOr<std::unique_ptr<int>>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<std::unique_ptr<int>>>);
+    static_assert(std::is_copy_constructible_v<TErrorOr<TCopyOnly>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<TCopyOnly>>);
+    static_assert(std::is_copy_constructible_v<TErrorOr<std::string>>);
+    static_assert(std::is_move_constructible_v<TErrorOr<std::string>>);
+}
+
+TEST(TErrorOrConstructionTraitsTest, FromDifferentSpecialization)
+{
+    {
+        TErrorOr<int> sourceInt(TError("int→long: error copy"));
+        TErrorOr<long> destLong1(sourceInt);
+        EXPECT_FALSE(destLong1.IsOK());
+        EXPECT_EQ(destLong1.GetMessage(), "int→long: error copy");
+        EXPECT_FALSE(sourceInt.IsOK());
+
+        TErrorOr<int> sourceInt2(TError("int→long: error move"));
+        TErrorOr<long> destLong2(std::move(sourceInt2));
+        EXPECT_FALSE(destLong2.IsOK());
+        EXPECT_EQ(destLong2.GetMessage(), "int→long: error move");
+    }
+    {
+        TErrorOr<int> sourceInt(42);
+        TErrorOr<long> destLong1(sourceInt);
+        EXPECT_TRUE(destLong1.IsOK());
+        EXPECT_EQ(destLong1.Value(), 42L);
+        EXPECT_EQ(sourceInt.Value(), 42);
+
+        TErrorOr<int> sourceInt2(84);
+        TErrorOr<long> destLong2(std::move(sourceInt2));
+        EXPECT_TRUE(destLong2.IsOK());
+        EXPECT_EQ(destLong2.Value(), 84L);
+    }
+    {
+        TErrorOr<const char*> sourceStr(TError("cstr→string: error"));
+        TErrorOr<std::string> destStr(sourceStr);
+        EXPECT_FALSE(destStr.IsOK());
+        EXPECT_EQ(destStr.GetMessage(), "cstr→string: error");
+        EXPECT_FALSE(sourceStr.IsOK());
+    }
+    {
+        const char* cstr = "value copy";
+        TErrorOr<const char*> sourceStr(cstr);
+        TErrorOr<std::string> destStr(sourceStr);
+        EXPECT_TRUE(destStr.IsOK());
+        EXPECT_EQ(destStr.Value(), "value copy");
+        EXPECT_TRUE(sourceStr.IsOK());
+    }
+
+    static_assert(!std::is_constructible_v<TErrorOr<std::string>, const TErrorOr<int*>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::string>, TErrorOr<int*>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, const TErrorOr<int>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<std::unique_ptr<int>>, TErrorOr<int>&&>);
+    static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, const TErrorOr<std::string>&>);
+    static_assert(!std::is_constructible_v<TErrorOr<TCopyOnly>, TErrorOr<std::string>&&>);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

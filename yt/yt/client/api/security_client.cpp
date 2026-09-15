@@ -1,8 +1,23 @@
 #include "security_client.h"
+#include "private.h"
 
 namespace NYT::NApi {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const auto Logger = ApiLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer)
+{
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("user").Value(result.User)
+        .EndMap();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,22 +47,30 @@ TError TCheckPermissionResult::ToError(
                     user,
                     permission);
             }
-            error <<= TErrorAttribute("user", user);
-            error <<= TErrorAttribute("permission", permission);
+            error.Add("user", user);
+            error.Add("permission", permission);
             if (ObjectId) {
-                error <<= TErrorAttribute("denied_by", ObjectId);
+                error.Add("denied_by", ObjectId);
             }
             if (SubjectId) {
-                error <<= TErrorAttribute("denied_for", SubjectId);
+                error.Add("denied_for", SubjectId);
             }
             if (column) {
-                error <<= TErrorAttribute("column", *column);
+                error.Add("column", *column);
             }
             return error;
         }
 
-        default:
-            YT_ABORT();
+        default: {
+            auto error = TError(
+                NSecurityClient::EErrorCode::AuthorizationError,
+                "Unexpected security action %Qlv in permission check result for user %Qv",
+                Action,
+                user);
+            YT_TLOG_ALERT("Unexpected security action in permission check result")
+                .With(error);
+            return error;
+        }
     }
 }
 
@@ -73,10 +96,10 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
                     user,
                     permission);
             }
-            error <<= TErrorAttribute("user", user);
-            error <<= TErrorAttribute("permission", permission);
+            error.Add("user", user);
+            error.Add("permission", permission);
             if (SubjectId) {
-                error <<= TErrorAttribute("denied_for", SubjectId);
+                error.Add("denied_for", SubjectId);
             }
             return error;
         }
@@ -84,11 +107,6 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
         default:
             YT_ABORT();
     }
-}
-
-void TGetCurrentUserResult::Register(TRegistrar registrar)
-{
-    registrar.Parameter("user", &TThis::User);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -33,7 +33,10 @@ struct TSlruCacheConfig
     //! re-enabled again (i.e. the value of this field is ignored).
     bool EnableGhostCaches;
 
-    static TSlruCacheConfigPtr CreateWithCapacity(i64 capacity);
+    //! If set, items that cannot survive cache trimming are not admitted.
+    bool RejectOversizedItems;
+
+    static TSlruCacheConfigPtr CreateWithCapacity(i64 capacity, int shardCount = 1);
 
     REGISTER_YSON_STRUCT(TSlruCacheConfig);
 
@@ -57,6 +60,9 @@ struct TSlruCacheDynamicConfig
     //! Set to true if ghost caches are enabled. Once disabled, ghost caches cannot be
     //! re-enabled again (i.e. the value of this field is ignored).
     bool EnableGhostCaches;
+
+    //! If set, items that cannot survive cache trimming are not admitted.
+    std::optional<bool> RejectOversizedItems;
 
     REGISTER_YSON_STRUCT(TSlruCacheDynamicConfig);
 
@@ -88,6 +94,8 @@ DEFINE_REFCOUNTED_TYPE(TSlruCacheDynamicConfig)
 struct TAsyncExpiringCacheConfig
     : public virtual NYTree::TYsonStruct
 {
+    size_t ShardCount;
+
     //! Time since last finished Get() after which an entry is removed.
     TDuration ExpireAfterAccessTime;
 
@@ -98,7 +106,10 @@ struct TAsyncExpiringCacheConfig
     TDuration ExpireAfterFailedUpdateTime;
 
     //! Time before next (background) update. If nullopt - background updates are disabled.
+    // TODO(cherepashka): rename into RefreshPeriod.
     std::optional<TDuration> RefreshTime;
+    //! Time before next (background) expiration. If nullopt - background expirations are disabled.
+    std::optional<TDuration> ExpirationPeriod;
 
     //! If set to true, cache will invoke DoGetMany once instead of DoGet on every entry during an update.
     bool BatchUpdate;
@@ -124,6 +135,7 @@ struct TAsyncExpiringCacheDynamicConfig
     std::optional<TDuration> ExpireAfterSuccessfulUpdateTime;
     std::optional<TDuration> ExpireAfterFailedUpdateTime;
     std::optional<TDuration> RefreshTime;
+    std::optional<TDuration> ExpirationPeriod;
 
     std::optional<bool> BatchUpdate;
 

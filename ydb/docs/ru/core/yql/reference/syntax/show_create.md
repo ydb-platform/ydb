@@ -25,15 +25,15 @@ SHOW CREATE [TABLE|VIEW] <name>;
 - **PathType** — тип объекта: `Table` или `View`.
 - **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
-        - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
+        - [ALTER TABLE ... ALTER INDEX](alter_table/indexes.md#alter-index): для задания настроек партицирования вторичных индексов.
         {% if feature_changefeed and backend_name == "YDB" %}
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         {% endif %}
         {% if feature_serial %}
-        - [ALTER SEQUENCE](alter-sequence.md) — для восстановления состояния `Sequence` у колонок типа [Serial](../types/serial.md).
+        - [ALTER SEQUENCE](alter-sequence.md): для восстановления состояния sequence у колонок [серийного типа](../types/serial.md).
         {% endif %}
     {% if feature_view %}
-    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma.md#table-path-prefix).
     {% endif %}
 
 ## Примеры
@@ -94,9 +94,6 @@ CREATE TABLE `my_table` (
     `Value1` Utf8,
     `Value2` Int16,
     `Value3` String,
-    FAMILY `default` (COMPRESSION = 'zstd'),
-    FAMILY `Family1` (COMPRESSION = 'off'),
-    FAMILY `Family2` (COMPRESSION = 'lz4'),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
 )
 PARTITION BY HASH (`Key1`, `Key2`)
@@ -130,4 +127,3 @@ FROM
     test_table
 ;
 ```
-

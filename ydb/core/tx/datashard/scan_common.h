@@ -66,7 +66,12 @@ using TProtoColumnsCRef = const google::protobuf::RepeatedPtrField<TString>&;
 
 TColumnsTags GetAllTags(const TUserTable& tableInfo);
 
-void AddTags(TTags& tags, const TColumnsTags& allTags, TProtoColumnsCRef columns);
+template<typename TColumns>
+void AddTags(TTags& tags, const TColumnsTags& allTags, const TColumns& columns) {
+    for (const auto& colName : columns) {
+        tags.push_back(allTags.at(colName));
+    }
+}
 
 template <typename... Args>
 TTags BuildTags(const TUserTable& tableInfo, Args&&... columns) {

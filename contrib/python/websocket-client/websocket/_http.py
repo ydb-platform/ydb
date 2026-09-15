@@ -2,7 +2,7 @@
 _http.py
 websocket - WebSocket client library for Python
 
-Copyright 2024 engn33r
+Copyright 2026 engn33r
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import errno
 import os
 import socket
 from base64 import encodebytes as base64encode
+from typing import Any, Tuple
 
 from ._exceptions import (
     WebSocketAddressException,
@@ -33,22 +35,26 @@ from ._url import get_proxy_info, parse_url
 
 __all__ = ["proxy_info", "connect", "read_headers"]
 
+# Import python_socks if available, otherwise define fallback classes
 try:
-    from python_socks._errors import *
+    from python_socks._errors import ProxyConnectionError, ProxyError, ProxyTimeoutError
     from python_socks._types import ProxyType
     from python_socks.sync import Proxy
 
     HAVE_PYTHON_SOCKS = True
-except:
+except ImportError:
     HAVE_PYTHON_SOCKS = False
 
-    class ProxyError(Exception):
+    class ProxyError(Exception):  # type: ignore[no-redef]
         pass
 
-    class ProxyTimeoutError(Exception):
+    class ProxyTimeoutError(Exception):  # type: ignore[no-redef]
         pass
 
-    class ProxyConnectionError(Exception):
+    class ProxyConnectionError(Exception):  # type: ignore[no-redef]
+        pass
+
+    class ProxyType:  # type: ignore[no-redef]
         pass
 
 
@@ -77,9 +83,14 @@ class proxy_info:
             self.auth = None
             self.no_proxy = None
             self.proxy_protocol = "http"
+            self.proxy_timeout = None
 
 
-def _start_proxied_socket(url: str, options, proxy) -> tuple:
+def _start_proxied_socket(
+    url: str, options: Any, proxy: Any
+) -> Tuple[socket.socket, Tuple[str, int, str]]:
+    if proxy.proxy_host and not proxy.proxy_port:
+        raise WebSocketProxyException("Cannot use port 0 when proxy_host specified")
     if not HAVE_PYTHON_SOCKS:
         raise WebSocketException(
             "Python Socks is needed for SOCKS proxying but is not available"
@@ -122,7 +133,9 @@ def _start_proxied_socket(url: str, options, proxy) -> tuple:
     return sock, (hostname, port, resource)
 
 
-def connect(url: str, options, proxy, socket):
+def connect(
+    url: str, options: Any, proxy: Any, socket: Any
+) -> Tuple[socket.socket, Tuple[str, int, str]]:
     # Use _start_proxied_socket() only for socks4 or socks5 proxy
     # Use _tunnel() for http proxy
     # TODO: Use python-socks for http protocol also, to standardize flow
@@ -159,15 +172,20 @@ def connect(url: str, options, proxy, socket):
         raise
 
 
-def _get_addrinfo_list(hostname, port: int, is_secure: bool, proxy) -> tuple:
-    phost, pport, pauth = get_proxy_info(
-        hostname,
-        is_secure,
-        proxy.proxy_host,
-        proxy.proxy_port,
-        proxy.auth,
-        proxy.no_proxy,
-    )
+def _get_addrinfo_list(
+    hostname: str, port: int, is_secure: bool, proxy: Any
+) -> Tuple[list, bool, Any]:
+    try:
+        phost, pport, pauth = get_proxy_info(
+            hostname,
+            is_secure,
+            proxy.proxy_host,
+            proxy.proxy_port,
+            proxy.auth,
+            proxy.no_proxy,
+        )
+    except TypeError as e:
+        raise WebSocketAddressException(e)
     try:
         # when running on windows 10, getaddrinfo without socktype returns a socktype 0.
         # This generates an error exception: `_on_error: exception Socket type must be stream or datagram, not 0`
@@ -187,7 +205,7 @@ def _get_addrinfo_list(hostname, port: int, is_secure: bool, proxy) -> tuple:
                 phost, pport, 0, socket.SOCK_STREAM, socket.SOL_TCP
             )
             return addrinfo_list, True, pauth
-    except socket.gaierror as e:
+    except (socket.gaierror, TypeError) as e:
         raise WebSocketAddressException(e)
 
 
@@ -209,15 +227,12 @@ def _open_socket(addrinfo_list, sockopt, timeout):
                 sock.connect(address)
             except socket.error as error:
                 sock.close()
-                error.remote_ip = str(address[0])
-                try:
-                    eConnRefused = (
-                        errno.ECONNREFUSED,
-                        errno.WSAECONNREFUSED,
-                        errno.ENETUNREACH,
-                    )
-                except AttributeError:
-                    eConnRefused = (errno.ECONNREFUSED, errno.ENETUNREACH)
+                error.remote_ip = str(address[0])  # type: ignore[attr-defined]
+                eConnRefused = (
+                    errno.ECONNREFUSED,
+                    getattr(errno, "WSAECONNREFUSED", errno.ECONNREFUSED),
+                    errno.ENETUNREACH,
+                )
                 if error.errno not in eConnRefused:
                     raise error
                 err = error
@@ -234,7 +249,9 @@ def _open_socket(addrinfo_list, sockopt, timeout):
     return sock
 
 
-def _wrap_sni_socket(sock: socket.socket, sslopt: dict, hostname, check_hostname):
+def _wrap_sni_socket(
+    sock: socket.socket, sslopt: dict, hostname: str, check_hostname: bool
+) -> Any:
     context = sslopt.get("context", None)
     if not context:
         context = ssl.SSLContext(sslopt.get("ssl_version", ssl.PROTOCOL_TLS_CLIENT))
@@ -242,21 +259,36 @@ def _wrap_sni_socket(sock: socket.socket, sslopt: dict, hostname, check_hostname
         # For more details see also:
         # * https://docs.python.org/3.8/library/ssl.html?highlight=sslkeylogfile#context-creation
         # * https://docs.python.org/3.8/library/ssl.html?highlight=sslkeylogfile#ssl.SSLContext.keylog_filename
-        context.keylog_filename = os.environ.get("SSLKEYLOGFILE", None)
+        keylog_file = os.environ.get("SSLKEYLOGFILE")
+        if keylog_file is not None:
+            context.keylog_filename = keylog_file
 
         if sslopt.get("cert_reqs", ssl.CERT_NONE) != ssl.CERT_NONE:
             cafile = sslopt.get("ca_certs", None)
             capath = sslopt.get("ca_cert_path", None)
             if cafile or capath:
-                context.load_verify_locations(cafile=cafile, capath=capath)
+                try:
+                    context.load_verify_locations(cafile=cafile, capath=capath)
+                except (FileNotFoundError, ssl.SSLError, ValueError) as e:
+                    raise WebSocketException(f"SSL CA certificate loading failed: {e}")
             elif hasattr(context, "load_default_certs"):
-                context.load_default_certs(ssl.Purpose.SERVER_AUTH)
+                try:
+                    context.load_default_certs(ssl.Purpose.SERVER_AUTH)
+                except ssl.SSLError as e:
+                    raise WebSocketException(
+                        f"SSL default certificate loading failed: {e}"
+                    )
         if sslopt.get("certfile", None):
-            context.load_cert_chain(
-                sslopt["certfile"],
-                sslopt.get("keyfile", None),
-                sslopt.get("password", None),
-            )
+            try:
+                context.load_cert_chain(
+                    sslopt["certfile"],
+                    sslopt.get("keyfile", None),
+                    sslopt.get("password", None),
+                )
+            except (FileNotFoundError, ValueError) as e:
+                raise WebSocketException(f"SSL client certificate loading failed: {e}")
+            except ssl.SSLError as e:
+                raise WebSocketException(f"SSL client certificate loading failed: {e}")
 
         # Python 3.10 switch to PROTOCOL_TLS_CLIENT defaults to "cert_reqs = ssl.CERT_REQUIRED" and "check_hostname = True"
         # If both disabled, set check_hostname before verify_mode
@@ -267,16 +299,41 @@ def _wrap_sni_socket(sock: socket.socket, sslopt: dict, hostname, check_hostname
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         else:
-            context.check_hostname = sslopt.get("check_hostname", True)
-            context.verify_mode = sslopt.get("cert_reqs", ssl.CERT_REQUIRED)
+            check_hostname = sslopt.get("check_hostname", True)
+            cert_reqs = sslopt.get("cert_reqs", ssl.CERT_REQUIRED)
+            if check_hostname and cert_reqs == ssl.CERT_NONE:
+                raise WebSocketException(
+                    "SSL certificate verification configuration failed: "
+                    "check_hostname cannot be enabled when cert_reqs is CERT_NONE"
+                )
+            context.check_hostname = check_hostname
+            context.verify_mode = cert_reqs
 
         if "ciphers" in sslopt:
-            context.set_ciphers(sslopt["ciphers"])
+            try:
+                context.set_ciphers(sslopt["ciphers"])
+            except ssl.SSLError as e:
+                raise WebSocketException(f"SSL cipher configuration failed: {e}")
         if "cert_chain" in sslopt:
-            certfile, keyfile, password = sslopt["cert_chain"]
-            context.load_cert_chain(certfile, keyfile, password)
+            try:
+                cert_chain = sslopt["cert_chain"]
+                if not isinstance(cert_chain, (tuple, list)) or len(cert_chain) != 3:
+                    raise ValueError(
+                        "cert_chain must be a tuple/list of (certfile, keyfile, password)"
+                    )
+                certfile, keyfile, password = cert_chain
+                context.load_cert_chain(certfile, keyfile, password)
+            except ValueError:
+                raise
+            except (FileNotFoundError, ssl.SSLError) as e:
+                raise WebSocketException(
+                    f"SSL client certificate configuration failed: {e}"
+                )
         if "ecdh_curve" in sslopt:
-            context.set_ecdh_curve(sslopt["ecdh_curve"])
+            try:
+                context.set_ecdh_curve(sslopt["ecdh_curve"])
+            except ValueError as e:
+                raise WebSocketException(f"SSL ECDH curve configuration failed: {e}")
 
     return context.wrap_socket(
         sock,
@@ -286,7 +343,7 @@ def _wrap_sni_socket(sock: socket.socket, sslopt: dict, hostname, check_hostname
     )
 
 
-def _ssl_socket(sock: socket.socket, user_sslopt: dict, hostname):
+def _ssl_socket(sock: socket.socket, user_sslopt: dict, hostname: str) -> Any:
     sslopt: dict = {"cert_reqs": ssl.CERT_REQUIRED}
     sslopt.update(user_sslopt)
 
@@ -313,7 +370,7 @@ def _ssl_socket(sock: socket.socket, user_sslopt: dict, hostname):
     return sock
 
 
-def _tunnel(sock: socket.socket, host, port: int, auth) -> socket.socket:
+def _tunnel(sock: socket.socket, host: str, port: int, auth: Any) -> socket.socket:
     debug("Connecting proxy...")
     connect_header = f"CONNECT {host}:{port} HTTP/1.1\r\n"
     connect_header += f"Host: {host}:{port}\r\n"
@@ -332,7 +389,7 @@ def _tunnel(sock: socket.socket, host, port: int, auth) -> socket.socket:
 
     try:
         status, _, _ = read_headers(sock)
-    except Exception as e:
+    except (socket.error, WebSocketException) as e:
         raise WebSocketProxyException(str(e))
 
     if status != 200:
@@ -349,13 +406,21 @@ def read_headers(sock: socket.socket) -> tuple:
 
     while True:
         line = recv_line(sock)
-        line = line.decode("utf-8").strip()
+        try:
+            line = line.decode("utf-8").strip()
+        except UnicodeDecodeError as e:
+            raise WebSocketException(
+                f"Invalid header line, not valid UTF-8 at byte {e.start}: {line!r}"
+            )
         if not line:
             break
         trace(line)
         if not status:
             status_info = line.split(" ", 2)
-            status = int(status_info[1])
+            try:
+                status = int(status_info[1])
+            except (IndexError, ValueError):
+                raise WebSocketException(f"Invalid status line: {line!r}")
             if len(status_info) > 2:
                 status_message = status_info[2]
         else:
@@ -364,7 +429,11 @@ def read_headers(sock: socket.socket) -> tuple:
                 raise WebSocketException("Invalid header")
             key, value = kv
             if key.lower() == "set-cookie" and headers.get("set-cookie"):
-                headers["set-cookie"] = headers.get("set-cookie") + "; " + value.strip()
+                existing_cookie = headers.get("set-cookie")
+                if existing_cookie is not None:
+                    headers["set-cookie"] = existing_cookie + "; " + value.strip()
+                else:
+                    headers["set-cookie"] = value.strip()
             else:
                 headers[key.lower()] = value.strip()
 

@@ -18,9 +18,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     const TString GroupAlter2 = "Name: \"Isolda\""
                                   "TotalGroupCount: 8 ";
 
-    Y_UNIT_TEST_FLAG(Create, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(Create) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.Runtime->SetScheduledLimit(400);
@@ -53,9 +52,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_FLAG(CreateMultiplePqTablets, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(CreateMultiplePqTablets) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.Runtime->SetScheduledLimit(400);
@@ -83,9 +81,6 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         TPathVersion pqVer;
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren});
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
 
@@ -146,9 +141,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         }
     }
 
-    Y_UNIT_TEST_FLAG(AlterWithReboots, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(AlterWithReboots) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.Runtime->SetScheduledLimit(400);
@@ -199,9 +193,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_FLAG(CreateAlter, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(CreateAlter) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.Runtime->SetScheduledLimit(400);
@@ -252,20 +245,27 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_FLAG(CreateDrop, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(CreateDrop) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
 
-        t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 
             t.RestoreLogging();
 
             TestCreatePQGroup(runtime, t.TxId++, "/MyRoot/DirA", GroupConfig);
+            expectedDomainPaths += 1;
             auto status = TestDropPQGroup(runtime, t.TxId++, "/MyRoot/DirA", "Isolda", {ESts::StatusMultipleModifications, ESts::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId-2});
 
             if (status == ESts::StatusAccepted) {
+                expectedDomainPaths -= 1;
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/Isolda"),
                     {NLs::PathNotExist});
             } else {
@@ -274,8 +274,11 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                     NLs::PathVersionEqual(2)});
             }
 
-            TestDropPQGroup(runtime, t.TxId++, "/MyRoot/DirA", "Isolda", {ESts::StatusAccepted, ESts::StatusPathDoesNotExist});
+            status = TestDropPQGroup(runtime, t.TxId++, "/MyRoot/DirA", "Isolda", {ESts::StatusAccepted, ESts::StatusPathDoesNotExist});
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            if (status == ESts::StatusAccepted) {
+                expectedDomainPaths -= 1;
+            }
 
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2});
 
@@ -284,24 +287,34 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(7),
                                 NLs::ChildrenCount(0),
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}),
                                 NLs::PQPartitionsInsideDomain(0)});
         });
     }
 
-    Y_UNIT_TEST_FLAG(CreateDropAbort, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(CreateDropAbort) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            TLocalPathId pQGroupPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+                pQGroupPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
 
-        t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 
             t.RestoreLogging();
             ui64& txId = t.TxId;
 
             TestCreatePQGroup(runtime, txId++, "/MyRoot", GroupConfig);
-            TestForceDropUnsafe(runtime, txId++, 3);
+            expectedDomainPaths += 1;
+
+            TestForceDropUnsafe(runtime, txId++, pQGroupPathId);
+            expectedDomainPaths -= 1;
             t.TestEnv->TestWaitNotification(runtime, {txId-2, txId-1});
 
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 2});
@@ -309,8 +322,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
             TestLs(runtime, "/MyRoot/Isolda", true, NLs::PathNotExist);
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::ChildrenCount(1),
-                                NLs::PathsInsideDomain(1),
+                                NLs::ChildrenCount(2),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomainOneOf({0, 1, 2, 3}),
                                 });
         });
@@ -320,9 +333,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     //VERIFY failed:
     //ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.cpp:289
     //Handle(): requirement std::make_pair(msg->CollectGeneration, msg->CollectStep) >= barrier.MakeCollectPair() failed
-    /*Y_UNIT_TEST_FLAG(CreateAlterAlterDrop, PQConfigTransactionsAtSchemeShard) {
+    /*Y_UNIT_TEST(CreateAlterAlterDrop) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             t.Runtime->SetScheduledLimit(400);
@@ -351,9 +363,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
     }*/
 
 
-    Y_UNIT_TEST_FLAG(CreateAlterDropPqGroupWithReboots, PQConfigTransactionsAtSchemeShard) {
+    Y_UNIT_TEST(CreateAlterDropPqGroupWithReboots) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
 
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);

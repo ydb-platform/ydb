@@ -152,6 +152,16 @@ namespace NMonitoring {
     ECompression CompressionFromAcceptEncodingHeader(TStringBuf value);
 
     /**
+     * Matches fasters compression algorithm by the given "Accept-Encoding"
+     * header value. Currently fastest accepted algorithm is lz4. If lz4 is not
+     * found in header fallbacks to CompressionFromAcceptEncodingHeader
+     *
+     * @param value  value of the "Accept-Encoding" header.
+     * @return fastest accepted compression algorithm
+     */
+    ECompression FastestCompressionFromAcceptEncodingHeader(TStringBuf value);
+
+    /**
      * Matches compression algorithm by the given "Content-Encoding" header value.
      *
      * @param value  value of the "Accept-Encoding" header.

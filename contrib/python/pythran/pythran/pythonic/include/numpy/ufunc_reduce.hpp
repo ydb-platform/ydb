@@ -20,21 +20,16 @@ namespace numpy
 
     template <class Arg>
     auto reduce(Arg &&arg)
-        -> decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(
-            std::forward<Arg>(arg), 0L))
+        -> decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(std::forward<Arg>(arg), 0L))
     {
-      return numpy::reduce<operator_::functor::UFUNC_INAME>(
-          std::forward<Arg>(arg), 0L);
+      return numpy::reduce<operator_::functor::UFUNC_INAME>(std::forward<Arg>(arg), 0L);
     }
     template <class... Args>
-    auto reduce(Args &&...args) ->
-        typename std::enable_if<
-            sizeof...(Args) != 1,
-            decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(
-                std::forward<Args>(args)...))>::type
+    auto reduce(Args &&...args) -> std::enable_if_t<
+        sizeof...(Args) != 1,
+        decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(std::forward<Args>(args)...))>
     {
-      return numpy::reduce<operator_::functor::UFUNC_INAME>(
-          std::forward<Args>(args)...);
+      return numpy::reduce<operator_::functor::UFUNC_INAME>(std::forward<Args>(args)...);
     }
 
     DEFINE_FUNCTOR(pythonic::numpy::UFUNC_NAME, reduce);

@@ -14,16 +14,16 @@ diff --git a/src/python/grpcio/grpc/_cython/cygrpc.pyx b/src/python/grpcio/grpc/
 index ce98fa3..f7f369c 100644
 --- a/src/python/grpcio/grpc/_cython/cygrpc.pyx
 +++ b/src/python/grpcio/grpc/_cython/cygrpc.pyx
-@@ -56,8 +56,8 @@ cdef _initialize():
-   # We have Python callbacks called by c-core threads, this ensures the GIL
-   # is initialized.
-   PyEval_InitThreads()
+@@ -81,7 +81,8 @@ cdef _initialize():
+ # initialize gRPC
+ #
+ cdef _initialize():
 -  grpc_set_ssl_roots_override_callback(
 -          <grpc_ssl_roots_override_callback>ssl_roots_override_callback)
--
 +  import ssl
 +  grpc_dont_init_openssl()
 +  # Load Arcadia certs in ComputePemRootCerts and do not override here.
+ 
  
  _initialize()
 diff --git a/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi b/src/python/grpcio/grpc/_cython/_cygrpc/security.pyx.pxi
@@ -44,7 +44,7 @@ index e17ca6d..9cc3fd5 100644
 -    if pkg.endswith('.cygrpc'):
 -      pkg = pkg[:-len('.cygrpc')]
 -    temporary_pem_root_certs = pkgutil.get_data(pkg, '_credentials/roots.pem')
-+    temporary_pem_root_certs = ''
++    temporary_pem_root_certs = b''
      pem_root_certs[0] = <char *>gpr_malloc(len(temporary_pem_root_certs) + 1)
      memcpy(
          pem_root_certs[0], <char *>temporary_pem_root_certs,

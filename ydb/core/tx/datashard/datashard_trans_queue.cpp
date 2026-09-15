@@ -2,6 +2,8 @@
 #include "datashard_active_transaction.h"
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -11,12 +13,17 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     const ui64 txId = op->GetTxId();
     Y_ENSURE(!TxsInFly.contains(txId), "Adding duplicate txId " << txId);
     TxsInFly[txId] = op;
-    if (Y_LIKELY(!op->GetStep())) {
+    const ui64 step = op->GetStep();
+    if (Y_LIKELY(!step)) {
         ++PlanWaitingTxCount;
         const ui64 maxStep = op->GetMaxStep();
         if (maxStep != Max<ui64>()) {
             DeadlineQueue.emplace(std::make_pair(maxStep, txId));
         }
+    } else if (op->HasVolatilePrepareFlag()) {
+        // Restoring a previously planned volatile transaction
+        PlannedTxs.emplace(TStepOrder(step, txId));
+        PlannedTxsByKind[op->GetKind()].emplace(TStepOrder(step, txId));
     }
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
@@ -174,10 +181,9 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
                 TSchemaOperation* op = FindSchemaTx(txId);
                 if (!op) {
-                    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::TX_DATASHARD,
-                               "Op was not found for persisted scan tx id " << txId
-                               << " on tablet "
-                               << Self->TabletID());
+                    YDB_LOG_WARN("Op was not found for persisted scan tx",
+                        {"txId", txId},
+                        {"tabletId", Self->TabletID()});
                     continue;
                 }
                 op->ScanState.LastKey = rowset.GetValue<Schema::ScanProgress::LastKey>();
@@ -465,8 +471,10 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
         if (maxStep > outdatedStep)
             break;
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep);
+        YDB_LOG_TRACE("Cleaning up tx with maxStep at outdatedStep",
+            {"txId", txId},
+            {"maxStep", maxStep},
+            {"outdatedStep", outdatedStep});
 
         auto it = TxsInFly.find(txId);
         if (it != TxsInFly.end() && !it->second->HasVolatilePrepareFlag()) {
@@ -503,8 +511,8 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
 bool TTransQueue::CleanupVolatile(ui64 txId) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end() && it->second->HasVolatilePrepareFlag() && !it->second->GetStep()) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "Cleaning up volatile tx " << txId << " ahead of time");
+        YDB_LOG_TRACE("Cleaning up volatile tx ahead of time",
+            {"txId", txId});
 
         // We don't call RemoveTxInFly to give caller a chance to work with the operation
         // Caller must call RemoveTxInFly on the transaction
@@ -560,3 +568,7 @@ TString TTransQueue::TxInFlyToString() const
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

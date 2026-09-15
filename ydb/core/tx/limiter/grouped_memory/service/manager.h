@@ -21,6 +21,7 @@ private:
     const NActors::TActorId OwnerActorId;
     THashMap<ui64, TProcessMemory> Processes;
     std::map<TProcessMemoryUsage, TProcessMemory*> ProcessesOrdered;
+    std::set<TProcessMemoryUsage> WaitingProcesses;
     std::shared_ptr<TStageFeatures> DefaultStage;
     TIdsControl ProcessIds;
 
@@ -34,12 +35,14 @@ private:
         bool Released = false;
         TProcessMemory& Process;
         std::map<TProcessMemoryUsage, TProcessMemory*>* Processes;
+        std::set<TProcessMemoryUsage>* WaitingProcesses;
         TProcessMemoryUsage Start;
 
     public:
-        TOrderedProcessesGuard(TProcessMemory& process, std::map<TProcessMemoryUsage, TProcessMemory*>& processes)
+        TOrderedProcessesGuard(TProcessMemory& process, std::map<TProcessMemoryUsage, TProcessMemory*>& processes, std::set<TProcessMemoryUsage>& waitingProcesses)
             : Process(process)
             , Processes(&processes)
+            , WaitingProcesses(&waitingProcesses)
             , Start(Process.BuildUsageAddress()) {
             AFL_VERIFY(Processes->contains(Start));
         }
@@ -50,6 +53,10 @@ private:
             }
             AFL_VERIFY(Processes->erase(Start))("start", Start.DebugString());
             AFL_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
+            WaitingProcesses->erase(Start);
+            if (Process.HasWaitingAllocations()) {
+                WaitingProcesses->emplace(Process.BuildUsageAddress());
+            }
         }
 
         void Release() {
@@ -59,7 +66,7 @@ private:
     };
 
     TOrderedProcessesGuard BuildProcessOrderGuard(TProcessMemory& process) {
-        return TOrderedProcessesGuard(process, ProcessesOrdered);
+        return TOrderedProcessesGuard(process, ProcessesOrdered, WaitingProcesses);
     }
 
     TProcessMemory& GetProcessMemoryVerified(const ui64 internalProcessId) {
@@ -78,6 +85,8 @@ private:
             return nullptr;
         }
     }
+
+    void UpdateWaitingProcesses(TProcessMemory* process);
 
 public:
     TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
@@ -99,15 +108,18 @@ public:
     void UnregisterProcess(const ui64 externalProcessId);
 
     void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
-        const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx);
+        const std::shared_ptr<IAllocation>& allocation, const std::optional<ui32>& stageIdx);
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
-    void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
+    void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
 
-    void UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit);
+    void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
+    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);
 
     bool IsEmpty() const {
         return Processes.empty();
     }
+
+    TString DebugString() const;
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

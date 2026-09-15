@@ -77,23 +77,30 @@ class TInit : public TClientCommand {
 
 public:
     TInit()
-        : TClientCommand("init", {}, "Initialize and manage blobstorage config using yaml description")
+        : TClientCommand("init", {}, "Manage BlobStorage config using YAML description.\n\n"
+            "Takes the same YAML file that is passed to 'ydbd server --yaml-config'. "
+            "Processes only the sections 'host_configs', 'hosts', and 'storage_config_generation'. "
+            "Invokes BSController commands 'DefineHostConfig' and 'DefineBox'.\n\n"
+            "Typical usecase:\n"
+            "  1. Update 'config.yaml' used by 'ydbd server --yaml-config' also bumping 'storage_config_generation'\n"
+            "  2. Perform a rolling restart of static nodes\n"
+            "  3. Run this command to apply the changes to BSController\n")
     {}
 
     void Config(TConfig& config) override {
         TClientCommand::Config(config);
 
-        config.Opts->AddLongOption("domain", "availability domain")
+        config.Opts->AddLongOption("domain", "AvailabilityDomain passed in BSController requests, default: 1")
             .Optional()
             .RequiredArgument("NUM")
             .StoreResult(&AvailabilityDomain);
 
-        config.Opts->AddLongOption("yaml-file", "read blobstorage config from yaml file")
+        config.Opts->AddLongOption("yaml-file", "Path to the YAML configuration file")
             .Required()
-            .RequiredArgument("PATH")
+            .RequiredArgument("[config.yaml]")
             .StoreResult(&YamlFile);
 
-        config.Opts->AddLongOption('n', "dry-run", "do not apply updates")
+        config.Opts->AddLongOption('n', "dry-run", "Validate the config without applying changes")
             .Optional()
             .StoreTrue(&DryRun);
     }

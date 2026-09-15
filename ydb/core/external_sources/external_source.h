@@ -5,12 +5,9 @@
 #include <util/generic/string.h>
 
 #include <ydb/core/protos/external_sources.pb.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NExternalSource {
-
-constexpr TStringBuf YdbTopicsType = "YdbTopics";
 
 struct TExternalSourceException: public yexception {
 };
@@ -38,16 +35,28 @@ struct TAws {
 struct TServiceAccount {
     static constexpr std::string_view Method = "SERVICE_ACCOUNT";
 
-    TServiceAccount(TString serviceAccountId, TString serviceAccountIdSignature)
-        : ServiceAccountId{std::move(serviceAccountId)}
-        , ServiceAccountIdSignature{std::move(serviceAccountIdSignature)}
+    TServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature)
+        : ServiceAccountId{serviceAccountId}
+        , ServiceAccountIdSignature{serviceAccountIdSignature}
     {}
 
     TString ServiceAccountId;
     TString ServiceAccountIdSignature;
 };
 
-using TAuth = std::variant<TNone, TServiceAccount, TAws>;
+struct TIamImpersonate {
+    static constexpr std::string_view Method = "IAM";
+
+    TIamImpersonate(const TString& serviceAccountId, const TString& resourceId)
+        : ServiceAccountId{serviceAccountId}
+        , ResourceId{resourceId}
+    {}
+
+    TString ServiceAccountId;
+    TString ResourceId;
+};
+
+using TAuth = std::variant<TNone, TServiceAccount, TAws, TIamImpersonate>;
 
 std::string_view GetMethod(const TAuth& auth);
 
@@ -62,7 +71,12 @@ inline TAuth MakeServiceAccount(const TString& serviceAccountId, const TString& 
 inline TAuth MakeAws(const TString& accessKey, const TString& secretAccessKey, const TString& region) {
     return TAuth{std::in_place_type_t<TAws>{}, accessKey, secretAccessKey, region};
 }
+
+inline TAuth MakeIamImpersonate(const TString& serviceAccountId, const TString& resourceId) {
+    return TAuth{std::in_place_type_t<TIamImpersonate>{}, serviceAccountId, resourceId};
 }
+
+} // namespace NAuth
 
 using TAuth = NAuth::TAuth;
 

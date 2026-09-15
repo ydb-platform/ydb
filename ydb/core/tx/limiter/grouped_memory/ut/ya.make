@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/formats/arrow)
+UNITTEST_FOR(ydb/core/tx/limiter/grouped_memory)
 
 SIZE(SMALL)
 

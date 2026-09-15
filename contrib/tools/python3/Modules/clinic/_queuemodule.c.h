@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_critical_section.h"// Py_BEGIN_CRITICAL_SECTION()
+#include "pycore_modsupport.h"    // _PyArg_NoKeywords()
 
 PyDoc_STRVAR(simplequeue_new__doc__,
 "SimpleQueue()\n"
@@ -43,8 +44,9 @@ PyDoc_STRVAR(_queue_SimpleQueue_put__doc__,
 "\n"
 "Put the item on the queue.\n"
 "\n"
-"The optional \'block\' and \'timeout\' arguments are ignored, as this method\n"
-"never blocks.  They are provided for compatibility with the Queue class.");
+"The optional \'block\' and \'timeout\' arguments are ignored, as this\n"
+"method never blocks.  They are provided for compatibility with the\n"
+"Queue class.");
 
 #define _QUEUE_SIMPLEQUEUE_PUT_METHODDEF    \
     {"put", _PyCFunction_CAST(_queue_SimpleQueue_put), METH_FASTCALL|METH_KEYWORDS, _queue_SimpleQueue_put__doc__},
@@ -107,7 +109,9 @@ _queue_SimpleQueue_put(simplequeueobject *self, PyObject *const *args, Py_ssize_
     }
     timeout = args[2];
 skip_optional_pos:
+    Py_BEGIN_CRITICAL_SECTION(self);
     return_value = _queue_SimpleQueue_put_impl(self, item, block, timeout);
+    Py_END_CRITICAL_SECTION();
 
 exit:
     return return_value;
@@ -165,7 +169,9 @@ _queue_SimpleQueue_put_nowait(simplequeueobject *self, PyObject *const *args, Py
         goto exit;
     }
     item = args[0];
+    Py_BEGIN_CRITICAL_SECTION(self);
     return_value = _queue_SimpleQueue_put_nowait_impl(self, item);
+    Py_END_CRITICAL_SECTION();
 
 exit:
     return return_value;
@@ -177,10 +183,11 @@ PyDoc_STRVAR(_queue_SimpleQueue_get__doc__,
 "\n"
 "Remove and return an item from the queue.\n"
 "\n"
-"If optional args \'block\' is true and \'timeout\' is None (the default),\n"
-"block if necessary until an item is available. If \'timeout\' is\n"
-"a non-negative number, it blocks at most \'timeout\' seconds and raises\n"
-"the Empty exception if no item was available within that time.\n"
+"If optional args \'block\' is true and \'timeout\' is None (the\n"
+"default), block if necessary until an item is available.  If\n"
+"\'timeout\' is a non-negative number, it blocks at most \'timeout\'\n"
+"seconds and raises the Empty exception if no item was available\n"
+"within that time.\n"
 "Otherwise (\'block\' is false), return an item if one is immediately\n"
 "available, else raise the Empty exception (\'timeout\' is ignored\n"
 "in that case).");
@@ -244,7 +251,9 @@ _queue_SimpleQueue_get(simplequeueobject *self, PyTypeObject *cls, PyObject *con
     }
     timeout_obj = args[1];
 skip_optional_pos:
+    Py_BEGIN_CRITICAL_SECTION(self);
     return_value = _queue_SimpleQueue_get_impl(self, cls, block, timeout_obj);
+    Py_END_CRITICAL_SECTION();
 
 exit:
     return return_value;
@@ -269,11 +278,18 @@ _queue_SimpleQueue_get_nowait_impl(simplequeueobject *self,
 static PyObject *
 _queue_SimpleQueue_get_nowait(simplequeueobject *self, PyTypeObject *cls, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
 {
+    PyObject *return_value = NULL;
+
     if (nargs || (kwnames && PyTuple_GET_SIZE(kwnames))) {
         PyErr_SetString(PyExc_TypeError, "get_nowait() takes no arguments");
-        return NULL;
+        goto exit;
     }
-    return _queue_SimpleQueue_get_nowait_impl(self, cls);
+    Py_BEGIN_CRITICAL_SECTION(self);
+    return_value = _queue_SimpleQueue_get_nowait_impl(self, cls);
+    Py_END_CRITICAL_SECTION();
+
+exit:
+    return return_value;
 }
 
 PyDoc_STRVAR(_queue_SimpleQueue_empty__doc__,
@@ -294,7 +310,9 @@ _queue_SimpleQueue_empty(simplequeueobject *self, PyObject *Py_UNUSED(ignored))
     PyObject *return_value = NULL;
     int _return_value;
 
+    Py_BEGIN_CRITICAL_SECTION(self);
     _return_value = _queue_SimpleQueue_empty_impl(self);
+    Py_END_CRITICAL_SECTION();
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
     }
@@ -322,7 +340,9 @@ _queue_SimpleQueue_qsize(simplequeueobject *self, PyObject *Py_UNUSED(ignored))
     PyObject *return_value = NULL;
     Py_ssize_t _return_value;
 
+    Py_BEGIN_CRITICAL_SECTION(self);
     _return_value = _queue_SimpleQueue_qsize_impl(self);
+    Py_END_CRITICAL_SECTION();
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
     }
@@ -331,4 +351,4 @@ _queue_SimpleQueue_qsize(simplequeueobject *self, PyObject *Py_UNUSED(ignored))
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=78816f171ecc4422 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=25c2af38811bc536 input=a9049054013a1b77]*/

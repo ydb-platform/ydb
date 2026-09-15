@@ -31,11 +31,22 @@ ENDIF()
 END()
 
 IF (NOT USE_STL_SYSTEM)
+    IF (MSVC AND NOT CLANG_CL)
+        RECURSE(
+            libcxxmsvc
+        )
+    ELSEIF (NVCC_STD_VER == "17" OR CUDA11)
+        RECURSE(
+            libcxxcuda11
+        )
+    ELSE()
+        RECURSE(
+            libcxx
+        )
+    ENDIF()
+
     RECURSE(
-        libcxx
         libcxxabi
-        libcxxcuda11
-        libcxxmsvc
         libcxxrt
         openmp
     )

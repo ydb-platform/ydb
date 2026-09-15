@@ -46,7 +46,6 @@ namespace NKikimr {
         app->StreamingConfig.SetEnableOutputStreams(true);
         app->PQConfig.MergeFrom(PQConfig);
         app->PQConfig.SetACLRetryTimeoutSec(1);
-        app->PQConfig.SetBalancerMetadataRetryTimeoutSec(1);
         app->PQConfig.SetClustersUpdateTimeoutSec(1);
         app->PQConfig.SetCheckACL(true);
         if (NetDataSourceUrl) {
@@ -60,6 +59,7 @@ namespace NKikimr {
         app->HiveConfig = HiveConfig;
         app->DataShardConfig = DataShardConfig;
         app->ColumnShardConfig = ColumnShardConfig;
+        app->SmallBlobsQuotaConfig = SmallBlobsQuotaConfig;
         app->SchemeShardConfig = SchemeShardConfig;
         app->MeteringConfig = MeteringConfig;
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
@@ -79,7 +79,7 @@ namespace NKikimr {
                         NKikimrProto::TKeyConfig();
         };
 
-        return { app, Mine.Release(), keyGenerator, std::move(Icb) };
+        return { app, Mine.Release(), keyGenerator, std::move(Icb), std::move(Dcb) };
     }
 
     void TAppPrepare::AddDomain(TDomainsInfo::TDomain* domain)
@@ -213,6 +213,13 @@ namespace NKikimr {
     {
         for (ui32 i = 0; i < numNodes; ++i) {
             Icb.emplace_back(new TControlBoard);
+        }
+    }
+
+    void TAppPrepare::InitDcb(ui32 numNodes)
+    {
+        for (ui32 i = 0; i < numNodes; ++i) {
+            Dcb.emplace_back(new TDynamicControlBoard);
         }
     }
 }

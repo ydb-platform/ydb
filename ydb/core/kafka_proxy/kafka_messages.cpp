@@ -19,6 +19,8 @@ const std::unordered_map<EApiKey, TString> EApiKeyNames = {
     {EApiKey::HEARTBEAT, "HEARTBEAT"},
     {EApiKey::LEAVE_GROUP, "LEAVE_GROUP"},
     {EApiKey::SYNC_GROUP, "SYNC_GROUP"},
+    {EApiKey::DESCRIBE_GROUPS, "DESCRIBE_GROUPS"},
+    {EApiKey::LIST_GROUPS, "LIST_GROUPS"},
     {EApiKey::SASL_HANDSHAKE, "SASL_HANDSHAKE"},
     {EApiKey::API_VERSIONS, "API_VERSIONS"},
     {EApiKey::CREATE_TOPICS, "CREATE_TOPICS"},
@@ -58,6 +60,10 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TLeaveGroupRequestData>();
         case SYNC_GROUP:
             return std::make_unique<TSyncGroupRequestData>();
+        case DESCRIBE_GROUPS:
+            return std::make_unique<TDescribeGroupsRequestData>();
+        case LIST_GROUPS:
+            return std::make_unique<TListGroupsRequestData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeRequestData>();
         case API_VERSIONS:
@@ -111,6 +117,10 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TLeaveGroupResponseData>();
         case SYNC_GROUP:
             return std::make_unique<TSyncGroupResponseData>();
+        case DESCRIBE_GROUPS:
+            return std::make_unique<TDescribeGroupsResponseData>();
+        case LIST_GROUPS:
+            return std::make_unique<TListGroupsResponseData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeResponseData>();
         case API_VERSIONS:
@@ -204,6 +214,18 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case SYNC_GROUP:
             if (_version >= 4) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case DESCRIBE_GROUPS:
+            if (_version >= 5) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case LIST_GROUPS:
+            if (_version >= 3) {
                 return 2;
             } else {
                 return 1;
@@ -350,6 +372,18 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             } else {
                 return 0;
             }
+        case DESCRIBE_GROUPS:
+            if (_version >= 5) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case LIST_GROUPS:
+            if (_version >= 3) {
+                return 1;
+            } else {
+                return 0;
+            }
         case SASL_HANDSHAKE:
             return 0;
         case API_VERSIONS:
@@ -451,13 +485,13 @@ void TRequestHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version)
     NPrivate::Read<ClientIdMeta>(_readable, _version, ClientId);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -510,13 +544,13 @@ void TResponseHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version
     NPrivate::Read<CorrelationIdMeta>(_readable, _version, CorrelationId);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -570,13 +604,13 @@ void TProduceRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version
     NPrivate::Read<TopicDataMeta>(_readable, _version, TopicData);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -630,13 +664,13 @@ void TProduceRequestData::TTopicProduceData::Read(TKafkaReadable& _readable, TKa
     NPrivate::Read<PartitionDataMeta>(_readable, _version, PartitionData);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -686,13 +720,13 @@ void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Read(TKafkaR
     NPrivate::Read<RecordsMeta>(_readable, _version, Records);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -742,13 +776,13 @@ void TProduceResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _versio
     NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -798,13 +832,13 @@ void TProduceResponseData::TTopicProduceResponse::Read(TKafkaReadable& _readable
     NPrivate::Read<PartitionResponsesMeta>(_readable, _version, PartitionResponses);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -869,13 +903,13 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Rea
     NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -937,13 +971,13 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBa
     NPrivate::Read<BatchIndexErrorMessageMeta>(_readable, _version, BatchIndexErrorMessage);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1018,16 +1052,16 @@ void TFetchRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     NPrivate::Read<RackIdMeta>(_readable, _version, RackId);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case ClusterIdMeta::Tag:
-                    NPrivate::ReadTag<ClusterIdMeta>(_readable, _version, ClusterId);
+                    NPrivate::ReadTag<ClusterIdMeta>(_readable, _version, _size, ClusterId);
                     break;
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1099,13 +1133,13 @@ void TFetchRequestData::TFetchTopic::Read(TKafkaReadable& _readable, TKafkaVersi
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1171,13 +1205,13 @@ void TFetchRequestData::TFetchTopic::TFetchPartition::Read(TKafkaReadable& _read
     NPrivate::Read<PartitionMaxBytesMeta>(_readable, _version, PartitionMaxBytes);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1238,13 +1272,13 @@ void TFetchRequestData::TForgottenTopic::Read(TKafkaReadable& _readable, TKafkaV
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1302,13 +1336,13 @@ void TFetchResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version)
     NPrivate::Read<ResponsesMeta>(_readable, _version, Responses);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1365,13 +1399,13 @@ void TFetchResponseData::TFetchableTopicResponse::Read(TKafkaReadable& _readable
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1442,22 +1476,22 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::Read(TKafkaRea
     NPrivate::Read<RecordsMeta>(_readable, _version, Records);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case DivergingEpochMeta::Tag:
-                    NPrivate::ReadTag<DivergingEpochMeta>(_readable, _version, DivergingEpoch);
+                    NPrivate::ReadTag<DivergingEpochMeta>(_readable, _version, _size, DivergingEpoch);
                     break;
                 case CurrentLeaderMeta::Tag:
-                    NPrivate::ReadTag<CurrentLeaderMeta>(_readable, _version, CurrentLeader);
+                    NPrivate::ReadTag<CurrentLeaderMeta>(_readable, _version, _size, CurrentLeader);
                     break;
                 case SnapshotIdMeta::Tag:
-                    NPrivate::ReadTag<SnapshotIdMeta>(_readable, _version, SnapshotId);
+                    NPrivate::ReadTag<SnapshotIdMeta>(_readable, _version, _size, SnapshotId);
                     break;
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1530,13 +1564,13 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffse
     NPrivate::Read<EndOffsetMeta>(_readable, _version, EndOffset);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1588,13 +1622,13 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEp
     NPrivate::Read<LeaderEpochMeta>(_readable, _version, LeaderEpoch);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1646,13 +1680,13 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::R
     NPrivate::Read<EpochMeta>(_readable, _version, Epoch);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1704,13 +1738,13 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransa
     NPrivate::Read<FirstOffsetMeta>(_readable, _version, FirstOffset);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1763,13 +1797,13 @@ void TListOffsetsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1821,13 +1855,13 @@ void TListOffsetsRequestData::TListOffsetsTopic::Read(TKafkaReadable& _readable,
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1885,13 +1919,13 @@ void TListOffsetsRequestData::TListOffsetsTopic::TListOffsetsPartition::Read(TKa
     NPrivate::Read<MaxNumOffsetsMeta>(_readable, _version, MaxNumOffsets);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -1945,13 +1979,13 @@ void TListOffsetsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2001,13 +2035,13 @@ void TListOffsetsResponseData::TListOffsetsTopicResponse::Read(TKafkaReadable& _
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2069,13 +2103,13 @@ void TListOffsetsResponseData::TListOffsetsTopicResponse::TListOffsetsPartitionR
     NPrivate::Read<LeaderEpochMeta>(_readable, _version, LeaderEpoch);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2139,13 +2173,13 @@ void TMetadataRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _versio
     NPrivate::Read<IncludeTopicAuthorizedOperationsMeta>(_readable, _version, IncludeTopicAuthorizedOperations);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2201,13 +2235,13 @@ void TMetadataRequestData::TMetadataRequestTopic::Read(TKafkaReadable& _readable
     NPrivate::Read<NameMeta>(_readable, _version, Name);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2267,13 +2301,13 @@ void TMetadataResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _versi
     NPrivate::Read<ClusterAuthorizedOperationsMeta>(_readable, _version, ClusterAuthorizedOperations);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2339,13 +2373,13 @@ void TMetadataResponseData::TMetadataResponseBroker::Read(TKafkaReadable& _reada
     NPrivate::Read<RackMeta>(_readable, _version, Rack);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2411,13 +2445,13 @@ void TMetadataResponseData::TMetadataResponseTopic::Read(TKafkaReadable& _readab
     NPrivate::Read<TopicAuthorizedOperationsMeta>(_readable, _version, TopicAuthorizedOperations);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2486,13 +2520,13 @@ void TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::
     NPrivate::Read<OfflineReplicasMeta>(_readable, _version, OfflineReplicas);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2564,13 +2598,13 @@ void TOffsetCommitRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2628,13 +2662,13 @@ void TOffsetCommitRequestData::TOffsetCommitRequestTopic::Read(TKafkaReadable& _
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2695,13 +2729,13 @@ void TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPa
     NPrivate::Read<CommittedMetadataMeta>(_readable, _version, CommittedMetadata);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2757,13 +2791,13 @@ void TOffsetCommitResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _v
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2813,13 +2847,13 @@ void TOffsetCommitResponseData::TOffsetCommitResponseTopic::Read(TKafkaReadable&
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2871,13 +2905,13 @@ void TOffsetCommitResponseData::TOffsetCommitResponseTopic::TOffsetCommitRespons
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2931,13 +2965,13 @@ void TOffsetFetchRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<RequireStableMeta>(_readable, _version, RequireStable);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -2991,13 +3025,13 @@ void TOffsetFetchRequestData::TOffsetFetchRequestTopic::Read(TKafkaReadable& _re
     NPrivate::Read<PartitionIndexesMeta>(_readable, _version, PartitionIndexes);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3047,13 +3081,13 @@ void TOffsetFetchRequestData::TOffsetFetchRequestGroup::Read(TKafkaReadable& _re
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3103,13 +3137,13 @@ void TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopic
     NPrivate::Read<PartitionIndexesMeta>(_readable, _version, PartitionIndexes);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3163,13 +3197,13 @@ void TOffsetFetchResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3223,13 +3257,13 @@ void TOffsetFetchResponseData::TOffsetFetchResponseTopic::Read(TKafkaReadable& _
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3290,13 +3324,13 @@ void TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePa
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3355,13 +3389,13 @@ void TOffsetFetchResponseData::TOffsetFetchResponseGroup::Read(TKafkaReadable& _
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3413,13 +3447,13 @@ void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTo
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3480,13 +3514,13 @@ void TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTo
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3545,13 +3579,13 @@ void TFindCoordinatorRequestData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<CoordinatorKeysMeta>(_readable, _version, CoordinatorKeys);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3618,13 +3652,13 @@ void TFindCoordinatorResponseData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<CoordinatorsMeta>(_readable, _version, Coordinators);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3698,13 +3732,13 @@ void TFindCoordinatorResponseData::TCoordinator::Read(TKafkaReadable& _readable,
     NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3780,13 +3814,13 @@ void TJoinGroupRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _versi
     NPrivate::Read<ReasonMeta>(_readable, _version, Reason);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3848,13 +3882,13 @@ void TJoinGroupRequestData::TJoinGroupRequestProtocol::Read(TKafkaReadable& _rea
     NPrivate::Read<MetadataMeta>(_readable, _version, Metadata);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3925,13 +3959,13 @@ void TJoinGroupResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _vers
     NPrivate::Read<MembersMeta>(_readable, _version, Members);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -3998,13 +4032,13 @@ void TJoinGroupResponseData::TJoinGroupResponseMember::Read(TKafkaReadable& _rea
     NPrivate::Read<MetadataMeta>(_readable, _version, Metadata);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4064,13 +4098,13 @@ void THeartbeatRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _versi
     NPrivate::Read<GroupInstanceIdMeta>(_readable, _version, GroupInstanceId);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4126,13 +4160,13 @@ void THeartbeatResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _vers
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4185,13 +4219,13 @@ void TLeaveGroupRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _vers
     NPrivate::Read<MembersMeta>(_readable, _version, Members);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4248,13 +4282,13 @@ void TLeaveGroupRequestData::TMemberIdentity::Read(TKafkaReadable& _readable, TK
     NPrivate::Read<ReasonMeta>(_readable, _version, Reason);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4309,13 +4343,13 @@ void TLeaveGroupResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<MembersMeta>(_readable, _version, Members);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4372,13 +4406,13 @@ void TLeaveGroupResponseData::TMemberResponse::Read(TKafkaReadable& _readable, T
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4445,13 +4479,13 @@ void TSyncGroupRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _versi
     NPrivate::Read<AssignmentsMeta>(_readable, _version, Assignments);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4511,13 +4545,13 @@ void TSyncGroupRequestData::TSyncGroupRequestAssignment::Read(TKafkaReadable& _r
     NPrivate::Read<AssignmentMeta>(_readable, _version, Assignment);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4576,13 +4610,13 @@ void TSyncGroupResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _vers
     NPrivate::Read<AssignmentMeta>(_readable, _version, Assignment);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4622,6 +4656,448 @@ i32 TSyncGroupResponseData::Size(TKafkaVersion _version) const {
 
 
 //
+// TDescribeGroupsRequestData
+//
+const TDescribeGroupsRequestData::IncludeAuthorizedOperationsMeta::Type TDescribeGroupsRequestData::IncludeAuthorizedOperationsMeta::Default = false;
+
+TDescribeGroupsRequestData::TDescribeGroupsRequestData()
+        : IncludeAuthorizedOperations(IncludeAuthorizedOperationsMeta::Default)
+{}
+
+void TDescribeGroupsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsRequestData";
+    }
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+    NPrivate::Read<IncludeAuthorizedOperationsMeta>(_readable, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+    NPrivate::Write<IncludeAuthorizedOperationsMeta>(_collector, _writable, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+    NPrivate::Size<IncludeAuthorizedOperationsMeta>(_collector, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData
+//
+const TDescribeGroupsResponseData::ThrottleTimeMsMeta::Type TDescribeGroupsResponseData::ThrottleTimeMsMeta::Default = 0;
+
+TDescribeGroupsResponseData::TDescribeGroupsResponseData()
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData::TDescribedGroup
+//
+const TDescribeGroupsResponseData::TDescribedGroup::ErrorCodeMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ErrorCodeMeta::Default = 0;
+const TDescribeGroupsResponseData::TDescribedGroup::GroupIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::GroupIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::GroupStateMeta::Type TDescribeGroupsResponseData::TDescribedGroup::GroupStateMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::ProtocolTypeMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ProtocolTypeMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::ProtocolDataMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ProtocolDataMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::AuthorizedOperationsMeta::Type TDescribeGroupsResponseData::TDescribedGroup::AuthorizedOperationsMeta::Default = -2147483648;
+
+TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroup()
+        : ErrorCode(ErrorCodeMeta::Default)
+        , GroupId(GroupIdMeta::Default)
+        , GroupState(GroupStateMeta::Default)
+        , ProtocolType(ProtocolTypeMeta::Default)
+        , ProtocolData(ProtocolDataMeta::Default)
+        , AuthorizedOperations(AuthorizedOperationsMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::TDescribedGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup";
+    }
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<GroupStateMeta>(_readable, _version, GroupState);
+    NPrivate::Read<ProtocolTypeMeta>(_readable, _version, ProtocolType);
+    NPrivate::Read<ProtocolDataMeta>(_readable, _version, ProtocolData);
+    NPrivate::Read<MembersMeta>(_readable, _version, Members);
+    NPrivate::Read<AuthorizedOperationsMeta>(_readable, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::TDescribedGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<GroupStateMeta>(_collector, _writable, _version, GroupState);
+    NPrivate::Write<ProtocolTypeMeta>(_collector, _writable, _version, ProtocolType);
+    NPrivate::Write<ProtocolDataMeta>(_collector, _writable, _version, ProtocolData);
+    NPrivate::Write<MembersMeta>(_collector, _writable, _version, Members);
+    NPrivate::Write<AuthorizedOperationsMeta>(_collector, _writable, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::TDescribedGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<GroupStateMeta>(_collector, _version, GroupState);
+    NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
+    NPrivate::Size<ProtocolDataMeta>(_collector, _version, ProtocolData);
+    NPrivate::Size<MembersMeta>(_collector, _version, Members);
+    NPrivate::Size<AuthorizedOperationsMeta>(_collector, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember
+//
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::MemberIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::MemberIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::GroupInstanceIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::GroupInstanceIdMeta::Default = std::nullopt;
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientHostMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientHostMeta::Default = {""};
+
+TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::TDescribedGroupMember()
+        : MemberId(MemberIdMeta::Default)
+        , GroupInstanceId(GroupInstanceIdMeta::Default)
+        , ClientId(ClientIdMeta::Default)
+        , ClientHost(ClientHostMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember";
+    }
+    NPrivate::Read<MemberIdMeta>(_readable, _version, MemberId);
+    NPrivate::Read<GroupInstanceIdMeta>(_readable, _version, GroupInstanceId);
+    NPrivate::Read<ClientIdMeta>(_readable, _version, ClientId);
+    NPrivate::Read<ClientHostMeta>(_readable, _version, ClientHost);
+    NPrivate::Read<MemberMetadataMeta>(_readable, _version, MemberMetadata);
+    NPrivate::Read<MemberAssignmentMeta>(_readable, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<MemberIdMeta>(_collector, _writable, _version, MemberId);
+    NPrivate::Write<GroupInstanceIdMeta>(_collector, _writable, _version, GroupInstanceId);
+    NPrivate::Write<ClientIdMeta>(_collector, _writable, _version, ClientId);
+    NPrivate::Write<ClientHostMeta>(_collector, _writable, _version, ClientHost);
+    NPrivate::Write<MemberMetadataMeta>(_collector, _writable, _version, MemberMetadata);
+    NPrivate::Write<MemberAssignmentMeta>(_collector, _writable, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<MemberIdMeta>(_collector, _version, MemberId);
+    NPrivate::Size<GroupInstanceIdMeta>(_collector, _version, GroupInstanceId);
+    NPrivate::Size<ClientIdMeta>(_collector, _version, ClientId);
+    NPrivate::Size<ClientHostMeta>(_collector, _version, ClientHost);
+    NPrivate::Size<MemberMetadataMeta>(_collector, _version, MemberMetadata);
+    NPrivate::Size<MemberAssignmentMeta>(_collector, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsRequestData
+//
+
+TListGroupsRequestData::TListGroupsRequestData()
+{}
+
+void TListGroupsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsRequestData";
+    }
+    NPrivate::Read<StatesFilterMeta>(_readable, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<StatesFilterMeta>(_collector, _writable, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<StatesFilterMeta>(_collector, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsResponseData
+//
+const TListGroupsResponseData::ThrottleTimeMsMeta::Type TListGroupsResponseData::ThrottleTimeMsMeta::Default = 0;
+const TListGroupsResponseData::ErrorCodeMeta::Type TListGroupsResponseData::ErrorCodeMeta::Default = 0;
+
+TListGroupsResponseData::TListGroupsResponseData()
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TListGroupsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsResponseData::TListedGroup
+//
+const TListGroupsResponseData::TListedGroup::GroupIdMeta::Type TListGroupsResponseData::TListedGroup::GroupIdMeta::Default = {""};
+const TListGroupsResponseData::TListedGroup::ProtocolTypeMeta::Type TListGroupsResponseData::TListedGroup::ProtocolTypeMeta::Default = {""};
+const TListGroupsResponseData::TListedGroup::GroupStateMeta::Type TListGroupsResponseData::TListedGroup::GroupStateMeta::Default = {""};
+
+TListGroupsResponseData::TListedGroup::TListedGroup()
+        : GroupId(GroupIdMeta::Default)
+        , ProtocolType(ProtocolTypeMeta::Default)
+        , GroupState(GroupStateMeta::Default)
+{}
+
+void TListGroupsResponseData::TListedGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsResponseData::TListedGroup";
+    }
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<ProtocolTypeMeta>(_readable, _version, ProtocolType);
+    NPrivate::Read<GroupStateMeta>(_readable, _version, GroupState);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsResponseData::TListedGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsResponseData::TListedGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<ProtocolTypeMeta>(_collector, _writable, _version, ProtocolType);
+    NPrivate::Write<GroupStateMeta>(_collector, _writable, _version, GroupState);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsResponseData::TListedGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
+    NPrivate::Size<GroupStateMeta>(_collector, _version, GroupState);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
 // TSaslHandshakeRequestData
 //
 const TSaslHandshakeRequestData::MechanismMeta::Type TSaslHandshakeRequestData::MechanismMeta::Default = {""};
@@ -4637,13 +5113,13 @@ void TSaslHandshakeRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _v
     NPrivate::Read<MechanismMeta>(_readable, _version, Mechanism);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4691,13 +5167,13 @@ void TSaslHandshakeResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _
     NPrivate::Read<MechanismsMeta>(_readable, _version, Mechanisms);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4749,13 +5225,13 @@ void TApiVersionsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<ClientSoftwareVersionMeta>(_readable, _version, ClientSoftwareVersion);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4816,25 +5292,25 @@ void TApiVersionsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<ZkMigrationReadyMeta>(_readable, _version, ZkMigrationReady);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case SupportedFeaturesMeta::Tag:
-                    NPrivate::ReadTag<SupportedFeaturesMeta>(_readable, _version, SupportedFeatures);
+                    NPrivate::ReadTag<SupportedFeaturesMeta>(_readable, _version, _size, SupportedFeatures);
                     break;
                 case FinalizedFeaturesEpochMeta::Tag:
-                    NPrivate::ReadTag<FinalizedFeaturesEpochMeta>(_readable, _version, FinalizedFeaturesEpoch);
+                    NPrivate::ReadTag<FinalizedFeaturesEpochMeta>(_readable, _version, _size, FinalizedFeaturesEpoch);
                     break;
                 case FinalizedFeaturesMeta::Tag:
-                    NPrivate::ReadTag<FinalizedFeaturesMeta>(_readable, _version, FinalizedFeatures);
+                    NPrivate::ReadTag<FinalizedFeaturesMeta>(_readable, _version, _size, FinalizedFeatures);
                     break;
                 case ZkMigrationReadyMeta::Tag:
-                    NPrivate::ReadTag<ZkMigrationReadyMeta>(_readable, _version, ZkMigrationReady);
+                    NPrivate::ReadTag<ZkMigrationReadyMeta>(_readable, _version, _size, ZkMigrationReady);
                     break;
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4903,13 +5379,13 @@ void TApiVersionsResponseData::TApiVersion::Read(TKafkaReadable& _readable, TKaf
     NPrivate::Read<MaxVersionMeta>(_readable, _version, MaxVersion);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -4966,13 +5442,13 @@ void TApiVersionsResponseData::TSupportedFeatureKey::Read(TKafkaReadable& _reada
     NPrivate::Read<MaxVersionMeta>(_readable, _version, MaxVersion);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5029,13 +5505,13 @@ void TApiVersionsResponseData::TFinalizedFeatureKey::Read(TKafkaReadable& _reada
     NPrivate::Read<MinVersionLevelMeta>(_readable, _version, MinVersionLevel);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5090,13 +5566,13 @@ void TCreateTopicsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<ValidateOnlyMeta>(_readable, _version, ValidateOnly);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5155,13 +5631,13 @@ void TCreateTopicsRequestData::TCreatableTopic::Read(TKafkaReadable& _readable, 
     NPrivate::Read<ConfigsMeta>(_readable, _version, Configs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5217,13 +5693,13 @@ void TCreateTopicsRequestData::TCreatableTopic::TCreatableReplicaAssignment::Rea
     NPrivate::Read<BrokerIdsMeta>(_readable, _version, BrokerIds);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5275,13 +5751,13 @@ void TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig::Read(TKa
     NPrivate::Read<ValueMeta>(_readable, _version, Value);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5331,13 +5807,13 @@ void TCreateTopicsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _v
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5405,16 +5881,16 @@ void TCreateTopicsResponseData::TCreatableTopicResult::Read(TKafkaReadable& _rea
     NPrivate::Read<ConfigsMeta>(_readable, _version, Configs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case TopicConfigErrorCodeMeta::Tag:
-                    NPrivate::ReadTag<TopicConfigErrorCodeMeta>(_readable, _version, TopicConfigErrorCode);
+                    NPrivate::ReadTag<TopicConfigErrorCodeMeta>(_readable, _version, _size, TopicConfigErrorCode);
                     break;
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5488,13 +5964,13 @@ void TCreateTopicsResponseData::TCreatableTopicResult::TCreatableTopicConfigs::R
     NPrivate::Read<IsSensitiveMeta>(_readable, _version, IsSensitive);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5558,13 +6034,13 @@ void TInitProducerIdRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5626,13 +6102,13 @@ void TInitProducerIdResponseData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5692,13 +6168,13 @@ void TAddPartitionsToTxnRequestData::Read(TKafkaReadable& _readable, TKafkaVersi
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5752,13 +6228,13 @@ void TAddPartitionsToTxnRequestData::TAddPartitionsToTxnTopic::Read(TKafkaReadab
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5808,13 +6284,13 @@ void TAddPartitionsToTxnResponseData::Read(TKafkaReadable& _readable, TKafkaVers
     NPrivate::Read<ResultsMeta>(_readable, _version, Results);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5864,13 +6340,13 @@ void TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::Read(TKafk
     NPrivate::Read<ResultsMeta>(_readable, _version, Results);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5922,13 +6398,13 @@ void TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::TAddPartit
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -5986,13 +6462,13 @@ void TAddOffsetsToTxnRequestData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6048,13 +6524,13 @@ void TAddOffsetsToTxnResponseData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6112,13 +6588,13 @@ void TEndTxnRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version)
     NPrivate::Read<CommittedMeta>(_readable, _version, Committed);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6174,13 +6650,13 @@ void TEndTxnResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6248,13 +6724,13 @@ void TTxnOffsetCommitRequestData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6316,13 +6792,13 @@ void TTxnOffsetCommitRequestData::TTxnOffsetCommitRequestTopic::Read(TKafkaReada
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6380,13 +6856,13 @@ void TTxnOffsetCommitRequestData::TTxnOffsetCommitRequestTopic::TTxnOffsetCommit
     NPrivate::Read<CommittedMetadataMeta>(_readable, _version, CommittedMetadata);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6440,13 +6916,13 @@ void TTxnOffsetCommitResponseData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6496,13 +6972,13 @@ void TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::Read(TKafkaRea
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6554,13 +7030,13 @@ void TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetComm
     NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6613,13 +7089,13 @@ void TDescribeConfigsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<IncludeDocumentationMeta>(_readable, _version, IncludeDocumentation);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6674,13 +7150,13 @@ void TDescribeConfigsRequestData::TDescribeConfigsResource::Read(TKafkaReadable&
     NPrivate::Read<ConfigurationKeysMeta>(_readable, _version, ConfigurationKeys);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6732,13 +7208,13 @@ void TDescribeConfigsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<ResultsMeta>(_readable, _version, Results);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6797,13 +7273,13 @@ void TDescribeConfigsResponseData::TDescribeConfigsResult::Read(TKafkaReadable& 
     NPrivate::Read<ConfigsMeta>(_readable, _version, Configs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6880,13 +7356,13 @@ void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResou
     NPrivate::Read<DocumentationMeta>(_readable, _version, Documentation);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -6955,13 +7431,13 @@ void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResou
     NPrivate::Read<SourceMeta>(_readable, _version, Source);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7013,13 +7489,13 @@ void TAlterConfigsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<ValidateOnlyMeta>(_readable, _version, ValidateOnly);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7072,13 +7548,13 @@ void TAlterConfigsRequestData::TAlterConfigsResource::Read(TKafkaReadable& _read
     NPrivate::Read<ConfigsMeta>(_readable, _version, Configs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7132,13 +7608,13 @@ void TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig::Read(TKa
     NPrivate::Read<ValueMeta>(_readable, _version, Value);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7188,13 +7664,13 @@ void TAlterConfigsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _v
     NPrivate::Read<ResponsesMeta>(_readable, _version, Responses);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7252,13 +7728,13 @@ void TAlterConfigsResponseData::TAlterConfigsResourceResponse::Read(TKafkaReadab
     NPrivate::Read<ResourceNameMeta>(_readable, _version, ResourceName);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7309,13 +7785,13 @@ void TSaslAuthenticateRequestData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<AuthBytesMeta>(_readable, _version, AuthBytes);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7369,13 +7845,13 @@ void TSaslAuthenticateResponseData::Read(TKafkaReadable& _readable, TKafkaVersio
     NPrivate::Read<SessionLifetimeMsMeta>(_readable, _version, SessionLifetimeMs);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7432,13 +7908,13 @@ void TCreatePartitionsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<ValidateOnlyMeta>(_readable, _version, ValidateOnly);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7493,13 +7969,13 @@ void TCreatePartitionsRequestData::TCreatePartitionsTopic::Read(TKafkaReadable& 
     NPrivate::Read<AssignmentsMeta>(_readable, _version, Assignments);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7548,13 +8024,13 @@ void TCreatePartitionsRequestData::TCreatePartitionsTopic::TCreatePartitionsAssi
     NPrivate::Read<BrokerIdsMeta>(_readable, _version, BrokerIds);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7602,13 +8078,13 @@ void TCreatePartitionsResponseData::Read(TKafkaReadable& _readable, TKafkaVersio
     NPrivate::Read<ResultsMeta>(_readable, _version, Results);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }
@@ -7663,13 +8139,13 @@ void TCreatePartitionsResponseData::TCreatePartitionsTopicResult::Read(TKafkaRea
     NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        ui32 _numTaggedFields = NPrivate::ReadTaggedFieldsCount(_readable);
         for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
             ui32 _tag = _readable.readUnsignedVarint<ui32>();
             ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
-                    _readable.skip(_size); // skip unknown tag
+                    NPrivate::SkipTaggedField(_readable, _size); // skip unknown tag
                     break;
             }
         }

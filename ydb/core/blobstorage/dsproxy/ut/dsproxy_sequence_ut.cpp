@@ -163,12 +163,9 @@ struct TVDiskState {
         VDiskId = VDiskIDFromVDiskID(vput->Record.GetVDiskID());
         LastCookie = handle->Cookie;
         InnerCookie = vput->Record.GetCookie();
-        Data = vput->Record.GetBuffer();
-        if (!vput->Record.HasBuffer()) {
-            const TRope& rope = vput->GetPayload(0);
-            Data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
-        }
+        const TRope& rope = vput->GetBuffer();
+        Data = TString::Uninitialized(rope.GetSize());
+        rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
         MsgId = vput->Record.GetMsgQoS().GetMsgId().GetMsgId();
         SequenceId = vput->Record.GetMsgQoS().GetMsgId().GetSequenceId();
         IsValid = true;
@@ -182,12 +179,9 @@ struct TVDiskState {
         VDiskId = VDiskIDFromVDiskID(vput->Record.GetVDiskID());
         LastCookie = handle->Cookie;
         InnerCookie = item.GetCookie();
-        Data = item.GetBuffer();
-        if (!item.HasBuffer()) {
-            const TRope& rope = vput->GetPayload(itemIdx);
-            Data = TString::Uninitialized(rope.GetSize());
-            rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
-        }
+        const TRope& rope = vput->GetPayload(itemIdx);
+        Data = TString::Uninitialized(rope.GetSize());
+        rope.Begin().ExtractPlainDataAndAdvance(Data.Detach(), Data.size());
         MsgId = vput->Record.GetMsgQoS().GetMsgId().GetMsgId();
         SequenceId = vput->Record.GetMsgQoS().GetMsgId().GetSequenceId();
         IsValid = true;
@@ -566,11 +560,23 @@ Y_UNIT_TEST(TestGivenBlock42MultiPut2ItemsStatuses) {
 
 enum {
     Begin = EventSpaceBegin(TEvents::ES_USERSPACE),
-    EvRequestEnd
+    EvRequestEnd,
+    EvGenerationRaceProbeResult
 };
 
 struct TEvRequestEnd : TEventLocal<TEvRequestEnd, EvRequestEnd> {
     TEvRequestEnd() = default;
+};
+
+struct TEvGenerationRaceProbeResult : TEventLocal<TEvGenerationRaceProbeResult, EvGenerationRaceProbeResult> {
+    TString Name;
+    bool Processed = false;
+    bool HasEvent = false;
+    bool HasRecordStatus = false;
+    NKikimrProto::EReplyStatus RecordStatus = NKikimrProto::UNKNOWN;
+    bool HasItemStatus = false;
+    NKikimrProto::EReplyStatus ItemStatus = NKikimrProto::UNKNOWN;
+    bool Replied = false;
 };
 
 struct TDyingDecorator : public TTestDecorator {
@@ -590,6 +596,242 @@ struct TDyingDecorator : public TTestDecorator {
         }
     }
 };
+
+struct TGenerationRaceProbeParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGet> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_GET,
+        .Name = "DSProxy.GenerationRaceProbe",
+        .Activity = NKikimrServices::TActivity::BS_PROXY_GET_ACTOR,
+    };
+    ui32 ExpectedResults = 0;
+};
+
+class TGenerationRaceProbeActor : public TBlobStorageGroupRequestActor {
+    const TActorId EdgeActor;
+    const ui32 ExpectedResults;
+    ui32 Results = 0;
+
+public:
+    explicit TGenerationRaceProbeActor(TGenerationRaceProbeParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , EdgeActor(params.Common.Source)
+        , ExpectedResults(params.ExpectedResults)
+    {
+        LogCtx.SuppressLog = true;
+    }
+
+    void Bootstrap() override {
+        Become(&TGenerationRaceProbeActor::StateWork);
+    }
+
+    void ReplyAndDie(NKikimrProto::EReplyStatus status) override {
+        Replied = true;
+        ReplyStatus = status;
+    }
+
+    std::unique_ptr<IEventBase> RestartQuery(ui32) override {
+        return std::make_unique<TEvBlobStorage::TEvGet>(
+            TLogoBlobID(1, 1, 1, 0, 1, 0), 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+    }
+
+    ERequestType GetRequestType() const override {
+        return ERequestType::Get;
+    }
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const override {
+        return Mon->ActiveGet;
+    }
+
+    bool Replied = false;
+    NKikimrProto::EReplyStatus ReplyStatus = NKikimrProto::UNKNOWN;
+
+private:
+    static const char *EventName(ui32 type) {
+        switch (type) {
+#define CHECK(T) case TEvBlobStorage::T::EventType: return #T;
+            CHECK(TEvVPutResult);
+            CHECK(TEvVMultiPutResult);
+            CHECK(TEvVGetResult);
+            CHECK(TEvVBlockResult);
+            CHECK(TEvVGetBlockResult);
+            CHECK(TEvVCollectGarbageResult);
+            CHECK(TEvVGetBarrierResult);
+            CHECK(TEvVStatusResult);
+            CHECK(TEvVAssimilateResult);
+#undef CHECK
+            default:
+                return "unexpected event";
+        }
+    }
+
+    static void FillRecordStatus(TEvGenerationRaceProbeResult& result, TAutoPtr<IEventHandle>& ev) {
+        if (!ev) {
+            return;
+        }
+
+        result.HasEvent = true;
+        switch (ev->GetTypeRewrite()) {
+#define CHECK(T) \
+            case TEvBlobStorage::T::EventType: \
+                result.HasRecordStatus = true; \
+                result.RecordStatus = ev->Get<TEvBlobStorage::T>()->Record.GetStatus(); \
+                break;
+            CHECK(TEvVPutResult);
+            CHECK(TEvVBlockResult);
+            CHECK(TEvVGetBlockResult);
+            CHECK(TEvVCollectGarbageResult);
+            CHECK(TEvVGetBarrierResult);
+            CHECK(TEvVStatusResult);
+            CHECK(TEvVAssimilateResult);
+#undef CHECK
+            case TEvBlobStorage::TEvVMultiPutResult::EventType: {
+                auto *event = ev->Get<TEvBlobStorage::TEvVMultiPutResult>();
+                result.HasRecordStatus = true;
+                result.RecordStatus = event->Record.GetStatus();
+                result.HasItemStatus = event->Record.ItemsSize() > 0;
+                if (result.HasItemStatus) {
+                    result.ItemStatus = event->Record.GetItems(0).GetStatus();
+                }
+                break;
+            }
+            case TEvBlobStorage::TEvVGetResult::EventType: {
+                auto *event = ev->Get<TEvBlobStorage::TEvVGetResult>();
+                result.HasRecordStatus = true;
+                result.RecordStatus = event->Record.GetStatus();
+                result.HasItemStatus = event->Record.ResultSize() > 0;
+                if (result.HasItemStatus) {
+                    result.ItemStatus = event->Record.GetResult(0).GetStatus();
+                }
+                break;
+            }
+        }
+    }
+
+    void SendProbeResult(TAutoPtr<IEventHandle>& ev, bool processed, ui64 cookie, const char *name) {
+        auto result = std::make_unique<TEvGenerationRaceProbeResult>();
+        result->Name = name;
+        result->Processed = processed;
+        result->Replied = Replied;
+        FillRecordStatus(*result, ev);
+
+        Send(EdgeActor, result.release(), 0, cookie);
+
+        if (++Results == ExpectedResults) {
+            PassAway();
+        }
+    }
+
+    STATEFN(StateWork) {
+        const ui64 cookie = ev->Cookie;
+        const char *name = EventName(ev->GetTypeRewrite());
+        const bool processed = ProcessEvent(ev);
+        SendProbeResult(ev, processed, cookie, name);
+    }
+};
+
+template <typename TEvent>
+std::unique_ptr<TEvent> MakeOldGenerationRaceResult(const TVDiskID& vdiskId) {
+    auto event = std::make_unique<TEvent>();
+    event->Record.SetStatus(NKikimrProto::RACE);
+    VDiskIDFromVDiskID(vdiskId, event->Record.MutableVDiskID());
+    return event;
+}
+
+template <typename TEvent, typename TVerify>
+void CheckOldGenerationRaceResult(TTestBasicRuntime& runtime, const TActorId& actorId, const TActorId& edgeActor,
+        const char *name, std::unique_ptr<TEvent> event, TVerify verify) {
+    runtime.Send(new IEventHandle(actorId, edgeActor, event.release()));
+
+    TAutoPtr<IEventHandle> handle;
+    auto *result = runtime.GrabEdgeEventRethrow<TEvGenerationRaceProbeResult>(handle);
+
+    UNIT_ASSERT_VALUES_EQUAL_C(TString(name), result->Name, name);
+    UNIT_ASSERT_C(!result->Processed, name);
+    UNIT_ASSERT_C(result->HasEvent, name);
+    UNIT_ASSERT_C(result->HasRecordStatus, name);
+    UNIT_ASSERT_VALUES_EQUAL_C(NKikimrProto::ERROR, result->RecordStatus, name);
+    UNIT_ASSERT_C(!result->Replied, name);
+    verify(*result);
+}
+
+template <typename TEvent>
+void CheckOldGenerationRaceResult(TTestBasicRuntime& runtime, const TActorId& actorId, const TActorId& edgeActor,
+        const char *name, std::unique_ptr<TEvent> event) {
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, name, std::move(event),
+        [](const TEvGenerationRaceProbeResult&) {});
+}
+
+Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes) {
+    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
+    TTestBasicRuntime runtime(1, false);
+    Setup(runtime, type);
+    DSProxyEnv.SetGroupGeneration(2);
+
+    auto request = std::make_unique<TEvBlobStorage::TEvGet>(
+        TLogoBlobID(1, 1, 1, 0, 1, 0), 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+
+    const TActorId edgeActor = runtime.AllocateEdgeActor(0);
+    TGenerationRaceProbeParameters params{
+        .Common = {
+            .GroupInfo = DSProxyEnv.Info,
+            .GroupQueues = DSProxyEnv.GroupQueues,
+            .Mon = DSProxyEnv.Mon,
+            .Source = edgeActor,
+            .Cookie = 0,
+            .Now = TMonotonic::Now(),
+            .StoragePoolCounters = DSProxyEnv.StoragePoolCounters,
+            .RestartCounter = 0,
+            .Event = request.get(),
+            .DoSendDeathNote = false,
+        },
+        .ExpectedResults = 9,
+    };
+
+    const TActorId actorId = runtime.Register(new TGenerationRaceProbeActor(params));
+    {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+    }
+    const TVDiskID oldVDiskId(DSProxyEnv.Info->GroupID, 1, 0, 0, 0);
+
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVPutResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVPutResult>(oldVDiskId));
+
+    {
+        auto event = MakeOldGenerationRaceResult<TEvBlobStorage::TEvVMultiPutResult>(oldVDiskId);
+        event->Record.AddItems()->SetStatus(NKikimrProto::RACE);
+        CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVMultiPutResult", std::move(event),
+            [](const TEvGenerationRaceProbeResult& result) {
+                UNIT_ASSERT(result.HasItemStatus);
+                UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::ERROR, result.ItemStatus);
+            });
+    }
+
+    {
+        auto event = MakeOldGenerationRaceResult<TEvBlobStorage::TEvVGetResult>(oldVDiskId);
+        event->Record.AddResult()->SetStatus(NKikimrProto::RACE);
+        CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVGetResult", std::move(event),
+            [](const TEvGenerationRaceProbeResult& result) {
+                UNIT_ASSERT(result.HasItemStatus);
+                UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::ERROR, result.ItemStatus);
+            });
+    }
+
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVBlockResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVBlockResult>(oldVDiskId));
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVGetBlockResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVGetBlockResult>(oldVDiskId));
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVCollectGarbageResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVCollectGarbageResult>(oldVDiskId));
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVGetBarrierResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVGetBarrierResult>(oldVDiskId));
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVStatusResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVStatusResult>(oldVDiskId));
+    CheckOldGenerationRaceResult(runtime, actorId, edgeActor, "TEvVAssimilateResult",
+        MakeOldGenerationRaceResult<TEvBlobStorage::TEvVAssimilateResult>(oldVDiskId));
+}
 
 Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
     return; // KIKIMR-9016
@@ -884,117 +1126,6 @@ Y_UNIT_TEST(TestProtobufSizeWithMultiGet) {
 
     auto blobPacks = {TBlobPack{223, 300'000}, TBlobPack{1, 186'333}, TBlobPack{223, 300'000}, TBlobPack{1, 186'334}};
     MakeTestProtobufSizeWithMultiGet(blobPacks, {224, 223, 1});
-}
-
-Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
-    TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
-    Setup(runtime, type);
-
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
-    TActorId sender = runtime.AllocateEdgeActor(0);
-
-    TString data;
-    data.resize(1209816, 'x');
-    TLogoBlobID logoblobid(0x10010000001000Bull, 5, 58949, 1, 1209816, 10);
-
-    TVector<TVDiskState> subgroup;
-    PrepareBlobSubgroup(logoblobid, data, subgroup, runtime, type);
-
-    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
-        NKikimrBlobStorage::EGetHandleClass::FastRead)));
-    for (ui32 i = 0; i < 8; ++i) {
-        TAutoPtr<IEventHandle> handle;
-        auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
-        UNIT_ASSERT(vget);
-        for (size_t idx = 0; idx < subgroup.size(); ++idx) {
-            if (subgroup[idx].ActorId == handle->Recipient) {
-                subgroup[idx].SetCookiesAndSenderFrom(handle.Get(), vget);
-            }
-        }
-    }
-
-    SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
-    SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
-    SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
-    SendVGetResult(6, NKikimrProto::OK, 6, subgroup, runtime);
-    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
-    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
-    SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
-
-    TAutoPtr<IEventHandle> handle;
-    auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
-    UNIT_ASSERT(getResult);
-    UNIT_ASSERT(getResult->Status == NKikimrProto::OK);
-    UNIT_ASSERT(getResult->ResponseSz == 1);
-    UNIT_ASSERT(getResult->Responses[0].Status == NKikimrProto::OK);
-}
-
-Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
-    // Arrange
-    TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
-    Setup(runtime, type);
-
-    TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
-    TActorId sender = runtime.AllocateEdgeActor(0);
-
-    TString data;
-    data.resize(1209816, 'x');
-    TVector<TLogoBlobID> logoblobids;
-    TVector<ui32> offsets;
-    TVector<ui32> sizes;
-
-    logoblobids.push_back(TLogoBlobID(0x10010000001000Bull, 5, 58949, 1, 1209816, 10));
-    offsets.push_back(0);
-    sizes.push_back(100);
-
-    logoblobids.push_back(TLogoBlobID(0x10010000001000Bull, 5, 58949, 1, 1209816, 10));
-    offsets.push_back(1179648);
-    sizes.push_back(100);
-
-    TVector<TVector<TVDiskState>> blobSubgroups;
-    blobSubgroups.resize(logoblobids.size());
-    TMap<TActorId, TGetRequest> lastRequest;
-
-    for (ui32 i = 0; i < logoblobids.size(); ++i) {
-        PrepareBlobSubgroup(logoblobids[i], data, blobSubgroups[i], runtime, type);
-    }
-
-    // Act
-    TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[2]);
-    for (ui32 i = 0; i < logoblobids.size(); ++i) {
-        auto &q = queries[i];
-        q.Id = logoblobids[i];
-        q.Shift = offsets[i];
-        q.Size = sizes[i];
-    }
-    runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(
-        queries, (ui32)logoblobids.size(), TInstant::Max(),
-        NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)));
-
-    for (ui32 i = 0; i < 8; ++i) {
-        TAutoPtr<IEventHandle> handle;
-        auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
-        UNIT_ASSERT(vget);
-        lastRequest[handle->Recipient].SetFrom(handle.Get(), vget);
-    }
-    runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
-
-    for (ui32 vDiskIdx = 0; vDiskIdx < 8; ++vDiskIdx) {
-        SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime);
-    }
-    TAutoPtr<IEventHandle> handle;
-    auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
-    // Assert
-    UNIT_ASSERT(getResult);
-    UNIT_ASSERT(getResult->Status == NKikimrProto::OK);
-    UNIT_ASSERT(getResult->ResponseSz == 2);
-    for (ui32 idx = 0; idx < 2; ++idx) {
-        UNIT_ASSERT_C(getResult->Responses[idx].Status == NKikimrProto::OK, "Status# " <<
-            NKikimrProto::EReplyStatus_Name(getResult->Responses[idx].Status) << " idx# " << idx);
-    }
 }
 
 Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {

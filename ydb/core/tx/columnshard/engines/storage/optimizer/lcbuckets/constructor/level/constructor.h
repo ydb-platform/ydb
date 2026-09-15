@@ -56,17 +56,20 @@ public:
         }
         return DoDeserializeFromProto(proto);
     }
+
     void SerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const {
         if (DefaultSelectorName != "default") {
             proto.SetDefaultSelectorName(DefaultSelectorName);
         }
         return DoSerializeToProto(proto);
     }
+
     NKikimrSchemeOp::TCompactionLevelConstructorContainer SerializeToProto() const {
         NKikimrSchemeOp::TCompactionLevelConstructorContainer result;
         SerializeToProto(result);
         return result;
     }
+
     virtual TString GetClassName() const = 0;
 };
 

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ydb_workload.h"
 #include <library/cpp/threading/future/async_semaphore.h>
 
@@ -41,7 +43,6 @@ private:
     };
     class TFileWriter;
     class TDbWriter;
-    NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     void ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept;
 

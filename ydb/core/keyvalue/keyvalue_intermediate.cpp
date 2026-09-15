@@ -63,7 +63,8 @@ TRope TIntermediate::TRead::BuildRope() {
 
 TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
         TRequestType::EType requestType, NWilson::TTraceId traceId)
-    : Cookie(0)
+    : PostponedQueuesLeft(0)
+    , Cookie(0)
     , Generation(0)
     , Deadline(TInstant::Max())
     , HasCookie(false)

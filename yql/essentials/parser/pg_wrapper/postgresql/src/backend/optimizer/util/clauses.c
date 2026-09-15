@@ -250,13 +250,10 @@ find_window_functions_walker(Node *node, WindowFuncLists *lists)
 		if (wfunc->winref > lists->maxWinRef)
 			elog(ERROR, "WindowFunc contains out-of-range winref %u",
 				 wfunc->winref);
-		/* eliminate duplicates, so that we avoid repeated computation */
-		if (!list_member(lists->windowFuncs[wfunc->winref], wfunc))
-		{
-			lists->windowFuncs[wfunc->winref] =
-				lappend(lists->windowFuncs[wfunc->winref], wfunc);
-			lists->numWindowFuncs++;
-		}
+
+		lists->windowFuncs[wfunc->winref] =
+			lappend(lists->windowFuncs[wfunc->winref], wfunc);
+		lists->numWindowFuncs++;
 
 		/*
 		 * We assume that the parser checked that there are no window
@@ -1093,6 +1090,8 @@ contain_nonstrict_functions_walker(Node *node, void *context)
 	if (IsA(node, NullTest))
 		return true;
 	if (IsA(node, BooleanTest))
+		return true;
+	if (IsA(node, JsonConstructorExpr))
 		return true;
 
 	/* Check other function-containing nodes */
@@ -2309,7 +2308,7 @@ convert_saop_to_hashed_saop_walker(Node *node, void *context)
 						/* Looks good. Fill in the hash functions */
 						saop->hashfuncid = lefthashfunc;
 					}
-					return true;
+					return false;
 				}
 			}
 			else				/* !saop->useOr */
@@ -2347,7 +2346,7 @@ convert_saop_to_hashed_saop_walker(Node *node, void *context)
 						 */
 						saop->negfuncid = get_opcode(negator);
 					}
-					return true;
+					return false;
 				}
 			}
 		}
@@ -2897,13 +2896,25 @@ eval_const_expressions_mutator(Node *node,
 		case T_JsonValueExpr:
 			{
 				JsonValueExpr *jve = (JsonValueExpr *) node;
-				Node	   *formatted;
+				Node	   *raw_expr = (Node *) jve->raw_expr;
+				Node	   *formatted_expr = (Node *) jve->formatted_expr;
 
-				formatted = eval_const_expressions_mutator((Node *) jve->formatted_expr,
-														   context);
-				if (formatted && IsA(formatted, Const))
-					return formatted;
-				break;
+				/*
+				 * If we can fold formatted_expr to a constant, we can elide
+				 * the JsonValueExpr altogether.  Otherwise we must process
+				 * raw_expr too.  But JsonFormat is a flat node and requires
+				 * no simplification, only copying.
+				 */
+				formatted_expr = eval_const_expressions_mutator(formatted_expr,
+																context);
+				if (formatted_expr && IsA(formatted_expr, Const))
+					return formatted_expr;
+
+				raw_expr = eval_const_expressions_mutator(raw_expr, context);
+
+				return (Node *) makeJsonValueExpr((Expr *) raw_expr,
+												  (Expr *) formatted_expr,
+												  copyObject(jve->format));
 			}
 
 		case T_SubPlan:

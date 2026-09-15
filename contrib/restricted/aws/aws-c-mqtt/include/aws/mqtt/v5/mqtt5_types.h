@@ -10,6 +10,7 @@
 
 #include <aws/common/array_list.h>
 #include <aws/common/byte_buf.h>
+#include <aws/common/ref_count.h>
 
 AWS_PUSH_SANE_WARNING_LEVEL
 
@@ -137,6 +138,17 @@ enum aws_mqtt5_puback_reason_code {
     AWS_MQTT5_PARC_PACKET_IDENTIFIER_IN_USE = 145,
     AWS_MQTT5_PARC_QUOTA_EXCEEDED = 151,
     AWS_MQTT5_PARC_PAYLOAD_FORMAT_INVALID = 153,
+};
+
+/**
+ * Result for manual PUBACK operations.
+ *
+ */
+enum aws_mqtt5_manual_publish_acknowledgement_result {
+    AWS_MQTT5_MPAR_SUCCESS = 0,
+    AWS_MQTT5_MPAR_PUBACK_CANCELLED = 1,
+    AWS_MQTT5_MPAR_PUBACK_INVALID = 2,
+    AWS_MQTT5_MPAR_CRT_FAILURE = 3,
 };
 
 /**
@@ -441,6 +453,19 @@ struct aws_mqtt5_packet_puback_view {
 
     size_t user_property_count;
     const struct aws_mqtt5_user_property *user_properties;
+};
+
+/**
+ * This is used to track which PUBLISH packets a user has taken manual publish acknowledgement control from.
+ */
+struct aws_mqtt5_manual_pub_ack_entry {
+    struct aws_allocator *allocator;
+    struct aws_ref_count ref_count;
+
+    /* control id for internal tracking */
+    uint64_t pub_ack_control_id;
+    /* packet_id of controlled publish */
+    uint16_t packet_id;
 };
 
 /**

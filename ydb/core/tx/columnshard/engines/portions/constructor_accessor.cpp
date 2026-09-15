@@ -2,37 +2,34 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NOlap {
 
 void TPortionAccessorConstructor::ChunksValidation() const {
     AFL_VERIFY(Records.size());
     CheckChunksOrder(Records);
     CheckChunksOrder(Indexes);
-    if (BlobIdxs.size()) {
-        AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
-                                                           "indexes", Indexes.size());
+    std::set<ui32> blobIdxs;
+    for (auto&& i : Records) {
+        TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    for (auto&& i : Indexes) {
+        if (i.HasBlobRange()) {
+            TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
+            blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+        }
+    }
+    if (GetBlobIdsCount()) {
+        AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
+        AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
     } else {
-        std::set<ui32> blobIdxs;
-        for (auto&& i : Records) {
-            TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-        }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobRange()) {
-                TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
-                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            }
-        }
-        if (GetBlobIdsCount()) {
-            AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
-            AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
-        } else {
-            AFL_VERIFY(blobIdxs.empty());
-        }
+        AFL_VERIFY(blobIdxs.empty());
     }
 }
 
-TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNormalization) {
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;
 
@@ -42,6 +39,7 @@ TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNor
     PortionInfo->MetaConstructor.ColumnBlobBytes = GetColumnBlobBytes();
     PortionInfo->MetaConstructor.IndexRawBytes = GetIndexRawBytes();
     PortionInfo->MetaConstructor.IndexBlobBytes = GetIndexBlobBytes();
+    PortionInfo->MetaConstructor.NumSlices = CalcSliceBorderOffsets().size() + 1;
 
     PortionInfo->MetaConstructor.RecordsCount = CalcRecordsCount();
 
@@ -50,7 +48,8 @@ TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNor
     if (needChunksNormalization) {
         ReorderChunks();
     }
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", PortionInfo->GetPortionIdVerified());
+    YDB_LOG_CREATE_CONTEXT(
+        {"portionId", PortionInfo->GetPortionIdVerified()});
     if (BlobIdxs.size()) {
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
@@ -99,7 +98,7 @@ TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNor
         }
     }
     ChunksValidation();
-    return TPortionDataAccessor(result, ExtractBlobIds(), std::move(Records), std::move(Indexes), false);
+    return std::make_shared<TPortionDataAccessor>(result, ExtractBlobIds(), std::move(Records), std::move(Indexes), false);
 }
 
 void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo) {
@@ -107,8 +106,8 @@ void TPortionAccessorConstructor::AddBuildInfo(TColumnChunkLoadContextV2::TBuild
     BlobIds = buildInfo.DetachBlobIds();
     for (auto&& rec : buildInfo.DetachRecords()) {
         AFL_VERIFY(rec.GetBlobRange().GetBlobIdxVerified() < GetBlobIdsCount());
-        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))(
-            "blobs", JoinSeq(",", GetBlobIds()))("range", rec.GetBlobRange().ToString());
+        AFL_VERIFY(rec.GetBlobRange().CheckBlob(GetBlobId(rec.GetBlobRange().GetBlobIdxVerified())))("blobs", JoinSeq(",", GetBlobIds()))(
+            "range", rec.GetBlobRange().ToString());
         Records.push_back(std::move(rec));
     }
 }
@@ -122,8 +121,8 @@ void TPortionAccessorConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext
     }
 }
 
-TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(const TPortionInfo::TConstPtr& portion,
-    TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
+std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::BuildForLoading(
+    const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
@@ -144,8 +143,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(const TPortion
     }
     std::vector<TIndexChunk> indexChunks;
     {
-
-        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) ->bool {
+        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) -> bool {
             return l.GetAddress() < r.GetAddress();
         };
         bool needSort = false;
@@ -160,7 +158,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(const TPortion
             std::sort(indexChunks.begin(), indexChunks.end(), pred);
         }
     }
-    return TPortionDataAccessor(portion, records.DetachBlobIds(), std::move(recordChunks), std::move(indexChunks), true);
+    return std::make_shared<TPortionDataAccessor>(portion, records.DetachBlobIds(), std::move(recordChunks), std::move(indexChunks), true);
 }
 
 }   // namespace NKikimr::NOlap

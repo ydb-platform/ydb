@@ -17,6 +17,9 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <span>
+#include <unordered_set>
+
 namespace NKikimr::NViewer {
 
 using namespace NKikimr;
@@ -47,7 +50,9 @@ protected:
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
+    std::optional<bool> StrictDatabaseOnlyRequest; // lazily calculated by IsStrictDatabaseOnlyRequest()
     bool UseCache = false;
+    bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
     TString Error;
     i32 MaxRequestsInFlight = 200;
@@ -244,6 +249,9 @@ protected:
             response.Span.Attribute("target_node_id", nodeId);
         }
         SendRequest(whiteboardServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+        if (flags & IEventHandle::FlagSubscribeOnSession) {
+            SubscriptionNodeIds.push_back(nodeId);
+        }
         return response;
     }
 
@@ -278,7 +286,7 @@ protected:
 
     static bool IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
     static TString GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
-    
+
     static bool IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
     static TString GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev);
 
@@ -322,9 +330,10 @@ protected:
 
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(TPathId pathId, ui64 cookie = 0);
+    [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithoutToken(TPathId pathId, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {}, ui64 cookie = 0);
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigateWithToken(
-        const TString& path, bool showPrivate, ui32 access, ui64 cookie = 0);
+        const TString& path, ui32 access, ui64 cookie = 0);
 
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {});
@@ -333,11 +342,27 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
+    // Returns real database nodes only when the database endpoints lookup has succeeded,
+    // otherwise it returns 0 - a sentinel for the current node.
+    std::vector<TNodeId> GetDatabaseNodes();
+    bool IsDatabaseRequest() const;
+    bool AreDatabaseNodesKnown() const;
+
+    // Such a user is allowed to see the information about its own database only
+    bool IsStrictDatabaseOnlyRequest();
+    TString GetUserSID() const;
+
+    // Denies the request unless every given node belongs to the requested database. If the database
+    // nodes are unknown, the request is denied too. Returns true if "Access Denied" response has been already sent.
+    bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);
+
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
     void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
+    bool RequireAdminIfForce(bool& force, TStringBuf forceParamName = "force");
+    void ApplyForceMode(TEvBlobStorage::TEvControllerConfigRequest& request);
 
     template<typename TJson>
     void Proto2Json(const NProtoBuf::Message& proto, TJson& json) {
@@ -375,22 +400,25 @@ protected:
     TString GetHTTPBADREQUEST(TString contentType = {}, TString response = {});
     TString GetHTTPNOTFOUND(TString contentType = {}, TString response = {});
     TString GetHTTPINTERNALERROR(TString contentType = {}, TString response = {});
-    TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
+    TString GETHTTPACCESSDENIED(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(i32 requests = 1);
     void CacheRequestDone();
     void CancelAllRequests();
+    void Cancelled();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     STATEFN(StateResolveDatabase);
     STATEFN(StateResolveResource);
+    STATEFN(StateWork);
     void RedirectToDatabase(const TString& database);
-    bool NeedToRedirect();
+    bool NeedToRedirect(bool checkDatabaseAuth = true);
     void HandleTimeout();
     void PassAway() override;
 };

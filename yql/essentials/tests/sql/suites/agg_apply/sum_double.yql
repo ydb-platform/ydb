@@ -1,0 +1,5 @@
+pragma EmitAggApply;
+
+SELECT
+    sum(key)
+FROM (values (1.51),(null),(3.49)) as a(key)

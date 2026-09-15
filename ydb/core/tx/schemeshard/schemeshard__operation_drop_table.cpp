@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -37,9 +38,10 @@ void DropPath(NIceDb::TNiceDb& db,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     const auto isBackupTable = context.SS->IsBackupTable(path->PathId);
+    const EPathCategory pathCategory = isBackupTable ? EPathCategory::Backup : EPathCategory::Regular;
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside(context.SS, 1, isBackupTable);
+    domainInfo->DecPathsInside(context.SS, 1, pathCategory);
 
     auto parentDir = path.Parent();
     DecAliveChildrenDirect(operationId, parentDir.Base(), context, isBackupTable);
@@ -534,7 +536,8 @@ public:
                         .IsInsideTableIndexPath();
                     // Not build index impl tables can be dropped only as part of drop index
                     // build index impl tables dropped multiple times during index construction
-                    if (!NTableIndex::IsBuildImplTable(name)) {
+                    // Internal operations (e.g. rebuild index) are allowed to drop impl tables
+                    if (!NTableIndex::IsBuildImplTable(name) && !Transaction.GetInternal()) {
                         checks
                             .IsUnderDeleting()
                             .IsUnderTheSameOperation(OperationId.GetTxId());
@@ -582,8 +585,8 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
-        for (auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
+        for (const auto* shard : table->GetPartitions()) {
+            auto shardIdx = shard->ShardIdx;
             context.MemChanges.GrabShard(context.SS, shardIdx);
             context.DbChanges.PersistShard(shardIdx);
 
@@ -632,6 +635,14 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx) {
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TDropTable>(id, state);
+}
+
+bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    Y_UNUSED(context);
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+
+    result.push_back(CreateDropTable(NextPartId(id, result), tx));
+    return true;
 }
 
 }

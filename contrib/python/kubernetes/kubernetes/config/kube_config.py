@@ -22,16 +22,12 @@ import os
 import platform
 import subprocess
 import tempfile
-import time
 from collections import namedtuple
 
-import google.auth
-import google.auth.transport.requests
 import oauthlib.oauth2
 import urllib3
 import yaml
 from requests_oauthlib import OAuth2Session
-from six import PY3
 
 from kubernetes.client import ApiClient, Configuration
 from kubernetes.config.exec_provider import ExecProvider
@@ -40,9 +36,13 @@ from .config_exception import ConfigException
 from .dateutil import UTC, format_rfc3339, parse_rfc3339
 
 try:
-    import adal
+    import google.auth
+    import google.auth.transport.requests
+    google_auth_available = True
 except ImportError:
-    pass
+    google_auth_available = False
+
+
 
 EXPIRY_SKEW_PREVENTION_DELAY = datetime.timedelta(minutes=5)
 KUBE_CONFIG_DEFAULT_LOCATION = os.environ.get('KUBECONFIG', '~/.kube/config')
@@ -60,13 +60,13 @@ def _cleanup_temp_files():
     _temp_files = {}
 
 
-def _create_temp_file_with_content(content, temp_file_path=None):
+def _create_temp_file_with_content(content, temp_file_path=None, force_recreate=False):
     if len(_temp_files) == 0:
         atexit.register(_cleanup_temp_files)
     # Because we may change context several times, try to remember files we
     # created and reuse them at a small memory cost.
     content_key = str(content)
-    if content_key in _temp_files:
+    if not force_recreate and content_key in _temp_files:
         return _temp_files[content_key]
     if temp_file_path and not os.path.isdir(temp_file_path):
         os.makedirs(name=temp_file_path)
@@ -83,7 +83,7 @@ def _is_expired(expiry):
             datetime.datetime.now(tz=UTC))
 
 
-class FileOrData(object):
+class FileOrData:
     """Utility class to read content of obj[%data_key_name] or file's
      content of obj[%file_key_name] and represent it as file or data.
      Note that the data is preferred. The obj[%file_key_name] will be used iff
@@ -115,16 +115,10 @@ class FileOrData(object):
         decoded obj[%data_key_name] content otherwise obj[%file_key_name]."""
         use_data_if_no_file = not self._file and self._data
         if use_data_if_no_file:
-            if self._base64_file_content:
-                if isinstance(self._data, str):
-                    content = self._data.encode()
-                else:
-                    content = self._data
-                self._file = _create_temp_file_with_content(
-                    base64.standard_b64decode(content), self._temp_file_path)
-            else:
-                self._file = _create_temp_file_with_content(
-                    self._data, self._temp_file_path)
+            self._write_file()
+
+            if self._file and not os.path.isfile(self._file):
+                self._write_file(force_rewrite=True)
         if self._file and not os.path.isfile(self._file):
             raise ConfigException("File does not exist: %s" % self._file)
         return self._file
@@ -142,8 +136,20 @@ class FileOrData(object):
                     self._data = f.read()
         return self._data
 
+    def _write_file(self, force_rewrite=False):
+        if self._base64_file_content:
+            if isinstance(self._data, str):
+                content = self._data.encode()
+            else:
+                content = self._data
+            self._file = _create_temp_file_with_content(
+                base64.standard_b64decode(content), self._temp_file_path, force_recreate=force_rewrite)
+        else:
+            self._file = _create_temp_file_with_content(
+                self._data, self._temp_file_path, force_recreate=force_rewrite)
 
-class CommandTokenSource(object):
+
+class CommandTokenSource:
     def __init__(self, cmd, args, tokenKey, expiryKey):
         self._cmd = cmd
         self._args = args
@@ -183,7 +189,7 @@ class CommandTokenSource(object):
             expiry=parse_rfc3339(data['credential']['token_expiry']))
 
 
-class KubeConfigLoader(object):
+class KubeConfigLoader:
 
     def __init__(self, config_dict, active_context=None,
                  get_google_credentials=None,
@@ -239,15 +245,19 @@ class KubeConfigLoader(object):
                 'config' in self._user['auth-provider'] and
                     'cmd-path' in self._user['auth-provider']['config']):
                 return _refresh_credentials_with_cmd_path()
-
-            credentials, project_id = google.auth.default(scopes=[
-                'https://www.googleapis.com/auth/cloud-platform',
-                'https://www.googleapis.com/auth/userinfo.email'
-            ])
-            request = google.auth.transport.requests.Request()
-            credentials.refresh(request)
-            return credentials
-
+            
+            # Make the Google auth block optional.
+            if google_auth_available:
+                credentials, project_id = google.auth.default(scopes=[
+                    'https://www.googleapis.com/auth/cloud-platform',
+                    'https://www.googleapis.com/auth/userinfo.email'
+                ])
+                request = google.auth.transport.requests.Request()
+                credentials.refresh(request)
+                return credentials
+            else:
+                return None
+            
         if get_google_credentials:
             self._get_google_credentials = get_google_credentials
         else:
@@ -301,55 +311,10 @@ class KubeConfigLoader(object):
             return
         if provider['name'] == 'gcp':
             return self._load_gcp_token(provider)
-        if provider['name'] == 'azure':
-            return self._load_azure_token(provider)
         if provider['name'] == 'oidc':
             return self._load_oid_token(provider)
 
-    def _azure_is_expired(self, provider):
-        expires_on = provider['config']['expires-on']
-        if expires_on.isdigit():
-            return int(expires_on) < time.time()
-        else:
-            exp_time = time.strptime(expires_on, '%Y-%m-%d %H:%M:%S.%f')
-            return exp_time < time.gmtime()
 
-    def _load_azure_token(self, provider):
-        if 'config' not in provider:
-            return
-        if 'access-token' not in provider['config']:
-            return
-        if 'expires-on' in provider['config']:
-            if self._azure_is_expired(provider):
-                self._refresh_azure_token(provider['config'])
-        self.token = 'Bearer %s' % provider['config']['access-token']
-        return self.token
-
-    def _refresh_azure_token(self, config):
-        if 'adal' not in globals():
-            raise ImportError('refresh token error, adal library not imported')
-
-        tenant = config['tenant-id']
-        authority = 'https://login.microsoftonline.com/{}'.format(tenant)
-        context = adal.AuthenticationContext(
-            authority, validate_authority=True, api_version='1.0'
-        )
-        refresh_token = config['refresh-token']
-        client_id = config['client-id']
-        apiserver_id = '00000002-0000-0000-c000-000000000000'
-        try:
-            apiserver_id = config['apiserver-id']
-        except ConfigException:
-            # We've already set a default above
-            pass
-        token_response = context.acquire_token_with_refresh_token(
-            refresh_token, client_id, apiserver_id)
-
-        provider = self._user['auth-provider']['config']
-        provider.value['access-token'] = token_response['accessToken']
-        provider.value['expires-on'] = token_response['expiresOn']
-        if self._config_persister:
-            self._config_persister()
 
     def _load_gcp_token(self, provider):
         if (('config' not in provider) or
@@ -396,14 +361,9 @@ class KubeConfigLoader(object):
             # https://tools.ietf.org/html/rfc7515#appendix-C
             return
 
-        if PY3:
-            jwt_attributes = json.loads(
-                base64.urlsafe_b64decode(parts[1] + padding).decode('utf-8')
-            )
-        else:
-            jwt_attributes = json.loads(
-                base64.b64decode(parts[1] + padding)
-            )
+        jwt_attributes = json.loads(
+            base64.urlsafe_b64decode(parts[1] + padding).decode('utf-8')
+        )
 
         expire = jwt_attributes.get('exp')
 
@@ -425,14 +385,9 @@ class KubeConfigLoader(object):
         if 'idp-certificate-authority-data' in provider['config']:
             ca_cert = tempfile.NamedTemporaryFile(delete=True)
 
-            if PY3:
-                cert = base64.b64decode(
-                    provider['config']['idp-certificate-authority-data']
-                ).decode('utf-8')
-            else:
-                cert = base64.b64decode(
-                    provider['config']['idp-certificate-authority-data'] + "=="
-                )
+            cert = base64.b64decode(
+                provider['config']['idp-certificate-authority-data']
+            ).decode('utf-8')
 
             with open(ca_cert.name, 'w') as fh:
                 fh.write(cert)
@@ -572,7 +527,7 @@ class KubeConfigLoader(object):
 
     def _set_config(self, client_configuration):
         if 'token' in self.__dict__:
-            client_configuration.api_key['authorization'] = self.token
+            client_configuration.api_key['BearerToken'] = self.token
 
             def _refresh_api_key(client_configuration):
                 if ('expiry' in self.__dict__ and _is_expired(self.expiry)):
@@ -598,7 +553,7 @@ class KubeConfigLoader(object):
         return self._current_context.value
 
 
-class ConfigNode(object):
+class ConfigNode:
     """Remembers each config key's path and construct a relevant exception
     message in case of missing keys. The assumption is all access keys are
     present in a well-formed kube-config."""

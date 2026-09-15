@@ -463,7 +463,7 @@ static int test_buf_select_short(const char *filename, int nonvec)
 	}
 
 	exp_len = 0;
-	for (i = 0; i < BUFFERS; i++) {
+	for (i = 0; i < 2 * BUFFERS; i++) {
 		sqe = io_uring_get_sqe(&ring);
 		io_uring_prep_provide_buffers(sqe, vecs[i].iov_base,
 						vecs[i].iov_len / 2, 1, 1, i);
@@ -472,12 +472,12 @@ static int test_buf_select_short(const char *filename, int nonvec)
 	}
 
 	ret = io_uring_submit(&ring);
-	if (ret != BUFFERS) {
+	if (ret != BUFFERS * 2) {
 		fprintf(stderr, "submit: %d\n", ret);
 		return -1;
 	}
 
-	for (i = 0; i < BUFFERS; i++) {
+	for (i = 0; i < BUFFERS * 2; i++) {
 		ret = io_uring_wait_cqe(&ring, &cqe);
 		if (cqe->res < 0) {
 			fprintf(stderr, "cqe->res=%d\n", cqe->res);
@@ -936,7 +936,7 @@ int main(int argc, char *argv[])
 
 	signal(SIGXFSZ, SIG_IGN);
 
-	vecs = t_create_buffers(BUFFERS, BS);
+	vecs = t_create_buffers(2 * BUFFERS, BS);
 
 	/* if we don't have nonvec read, skip testing that */
 	nr = has_nonvec_read() ? 64 : 32;

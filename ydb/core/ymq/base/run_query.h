@@ -14,7 +14,6 @@ namespace NKikimr::NSQS {
         std::optional<NYdb::TParams> params,
         bool readonly,
         TDuration sendAfter,
-        const TString& database,
         const TActorContext& ctx
     );
 

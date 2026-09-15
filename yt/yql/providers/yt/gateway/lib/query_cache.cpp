@@ -29,28 +29,96 @@ namespace {
         return e.ContainsErrorCode(NClusterErrorCodes::NYTree::ResolveError) ||
             e.ContainsErrorCode(NClusterErrorCodes::NCypressClient::ConcurrentTransactionLockConflict);
     }
+
+    EQueryCacheMode InitCacheMode(EQueryCacheMode mode, const TString& hash, bool refreshOnly = false) {
+        if (hash.empty()) {
+            return EQueryCacheMode::Disable;
+        }
+        if (refreshOnly) {
+            switch (mode) {
+                case EQueryCacheMode::Normal:
+                    return EQueryCacheMode::Refresh;
+                case EQueryCacheMode::Readonly:
+                    return EQueryCacheMode::Disable;
+                default:
+                    return mode;
+            }
+        }
+        return mode;
+    }
+
+    TMaybe<IOperationPtr> GetBlockingOperation(IClientPtr client, ITransactionPtr lockTx, TString cachedPath) {
+        auto lockInfoPath = cachedPath + ".lock";
+
+        auto pos = lockInfoPath.rfind("/");
+        auto dir = lockInfoPath.substr(0, pos);
+        auto childKey = lockInfoPath.substr(pos + 1);
+
+        TMaybe<TString> transactionId;
+        try {
+            auto lockInfo = lockTx->Get(dir + "/@locks");
+            for (auto lock : lockInfo.AsList()) {
+                if (lock["child_key"] == childKey && lock["mode"] == "shared" && lock["state"] == "acquired") {
+                    YQL_ENSURE(!transactionId);
+                    transactionId = lock["transaction_id"].AsString();
+                }
+            }
+        } catch (const std::exception& e) {
+            YQL_CLOG(DEBUG, ProviderYt) << "Cannot access cache folder: " << CurrentExceptionMessage();
+            return {};
+        }
+
+        if (!transactionId) {
+            return {};
+        }
+        YQL_CLOG(DEBUG, ProviderYt) << "Lock is held by transaction " << *transactionId;
+
+        TTransactionId txId = GetGuid(*transactionId);
+        if (txId == lockTx->GetId()) {
+            return {};
+        }
+
+        try {
+            auto tx = client->AttachTransaction(txId);
+
+            auto lockInfo = tx->Get(lockInfoPath);
+            auto waitingOperationId = lockInfo["operationId"].AsString();
+
+            YQL_CLOG(DEBUG, ProviderYt) << "Lock is held by operation " << waitingOperationId;
+            return client->AttachOperation(GetGuid(waitingOperationId));
+        }
+        catch (const std::exception& e) {
+            YQL_CLOG(DEBUG, ProviderYt) << "cannot access progress link file or transaction: " << CurrentExceptionMessage();
+            return {};
+        }
+    }
 }
 
 TFsQueryCacheItem::TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir,
     const TString& hash, const TString& outputTablePath)
-    : TQueryCacheItemBase<TFsQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable))
+    : TQueryCacheItemBase<TFsQueryCacheItem>(InitCacheMode(config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable), hash))
     , OutputTablePaths(1, outputTablePath)
     , CachedPaths(1, TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(hash) + ".tmp"))
 {
 }
 
 TFsQueryCacheItem::TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir,
-    const TString& hash, const TVector<TString>& outputTablePaths)
-    : TQueryCacheItemBase<TFsQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable))
+    const TString& hash, const TVector<TString>& outputTablePaths, const TMaybe<TString>& singleOutputHash)
+    : TQueryCacheItemBase<TFsQueryCacheItem>(InitCacheMode(config.QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable), hash, singleOutputHash.Defined()))
     , OutputTablePaths(outputTablePaths)
 {
-    for (size_t i = 0; i < outputTablePaths.size(); ++i) {
-        auto outputHash = (THashBuilder() << hash << i).Finish();
-        CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(outputHash) + ".tmp"));
+    if (singleOutputHash) {
+        YQL_ENSURE(outputTablePaths.size() == 1);
+        CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(*singleOutputHash) + ".tmp"));
+    } else {
+        for (size_t i = 0; i < outputTablePaths.size(); ++i) {
+            auto outputHash = (THashBuilder() << hash << i).Finish();
+            CachedPaths.push_back(TFsPath(tmpDir) / "query_cache" / cluster / (HexEncode(outputHash) + ".tmp"));
+        }
     }
 }
 
-NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& /*queue*/) {
+NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& /*queue*/) {
     for (auto cachePath: CachedPaths) {
         Cerr << "Check path: " << cachePath << "\n";
         if (!cachePath.Exists()) {
@@ -102,11 +170,12 @@ void TFsQueryCacheItem::StoreImpl() {
 }
 
 TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCache::TEntry::TPtr& entry, const TString& hash,
+    const TMaybe<TString>& singleOutputHash,
     const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs,
     const TString& userName, const TString& tmpFolder, const NYT::TNode& mergeSpec,
     const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
     const std::pair<TString, TString>& logCtx)
-    : TQueryCacheItemBase<TYtQueryCacheItem>(hash.empty() ? EQueryCacheMode::Disable : mode)
+    : TQueryCacheItemBase<TYtQueryCacheItem>(InitCacheMode(mode, hash, singleOutputHash.Defined()))
     , Entry(entry)
     , DstTables(dstTables)
     , DstSpecs(dstSpecs)
@@ -117,15 +186,32 @@ TYtQueryCacheItem::TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCac
     , LogCtx(logCtx)
     , MergeSpec(mergeSpec)
     , TableAttrs(tableAttrs)
+    , FailOnRace(Mode == EQueryCacheMode::Refresh && mode == EQueryCacheMode::Refresh)
 {
     if (!hash.empty()) {
-        for (size_t i = 0; i < dstTables.size(); ++i) {
-            auto outputHash = (THashBuilder() << hash << i).Finish();
-            auto path = MakeCachedPath(outputHash);
+        if (singleOutputHash) {
+            YQL_ENSURE(dstTables.size() == 1);
+            auto path = MakeCachedPath(*singleOutputHash);
             CachedPaths.push_back(path);
-            SortedCachedPaths[path] = i;
+            SortedCachedPaths[path] = 0;
+        } else {
+            for (size_t i = 0; i < dstTables.size(); ++i) {
+                auto outputHash = (THashBuilder() << hash << i).Finish();
+                auto path = MakeCachedPath(outputHash);
+                CachedPaths.push_back(path);
+                SortedCachedPaths[path] = i;
+            }
         }
     }
+}
+
+void TYtQueryCacheItem::SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
+    const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter
+) {
+    Tracker_ = tracker;
+    PublicId_ = publicId;
+    ProgressWriter_ = progressWriter;
+    StatWriter_ = statWriter;
 }
 
 TString TYtQueryCacheItem::GetCachePath(const TString& userName, const TString& tmpFolder) {
@@ -148,7 +234,7 @@ TString TYtQueryCacheItem::MakeCachedPath(const TString& hash) {
     return TString::Join(CachePath, "/", hex.substr(0, 2), "/", hex.substr(2, 2), "/", hex);
 }
 
-NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& queue) {
+NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& queue) {
     if (Entry->CacheTxId) {
         return NThreading::MakeFuture<bool>(false);
     }
@@ -164,8 +250,10 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr&
             LockTx = Entry->Tx->StartTransaction(TStartTransactionOptions().Attributes(Entry->TransactionSpec));
         }
         for (const auto& sortedEntry : SortedCachedPaths) {
-            TString cachedPath = CachedPaths[sortedEntry.second];
-            futureLock = futureLock.Apply([cachedPath, lockTx = LockTx, logCtx = LogCtx](const auto& f) {
+            futureLock = futureLock.Apply([
+                cachedPath = CachedPaths[sortedEntry.second], logCtx = LogCtx, lockTx = LockTx, tracker = Tracker_,
+                progressWriter = ProgressWriter_, statWriter = StatWriter_, publicId = PublicId_, entry = Entry
+            ] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 if (f.HasException()) {
                     return f;
@@ -176,8 +264,19 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr&
                 YQL_CLOG(INFO, ProviderYt) << "Wait for " << cachedPath;
                 for (ui32 retriesLeft = 10; retriesLeft != 0; --retriesLeft) {
                     try {
-                        return lockTx->Lock(dir, NYT::ELockMode::LM_SHARED, NYT::TLockOptions()
+                        auto lockFuture = lockTx->Lock(dir, NYT::ELockMode::LM_SHARED, NYT::TLockOptions()
                             .Waitable(true).ChildKey(childKey))->GetAcquiredFuture();
+                        if (tracker) {
+                            while (!lockFuture.Wait(TDuration::Seconds(2))) {
+                                if (auto operation = GetBlockingOperation(entry->Client, lockTx, cachedPath)) {
+                                    tracker->MakeOperationWaiter(*operation.Get(), publicId, entry->Server,
+                                        entry->Cluster, progressWriter, statWriter,
+                                        [] (TOperationId) {}, true);
+                                    return lockFuture;
+                                }
+                            }
+                        }
+                        return lockFuture;
                     } catch (const TErrorResponse& e) {
                         if (!IsRace(e.GetError())) {
                             throw;
@@ -194,7 +293,7 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr&
     return futureLock.Apply([queue, cachedPaths = CachedPaths, dstTables = DstTables, entry = Entry,
                              useExpirationTimeout = UseExpirationTimeout, logCtx = LogCtx](const auto& f) {
         f.GetValue();
-        return queue->Async([=]() {
+        return TAsyncQueue::Async(queue, [=]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             bool hit = true;
             try {
@@ -266,7 +365,7 @@ void TYtQueryCacheItem::StoreImpl() {
             nestedWriteTx->Abort();
         }
 
-        if (!IsRace(e) || Mode == EQueryCacheMode::Refresh) {
+        if (!IsRace(e) || FailOnRace) {
             throw;
         }
     };
@@ -373,6 +472,23 @@ void TYtQueryCacheItem::SetTableAttrs(const NYT::TNode& spec, const TString& cac
                     throw;
                 }
             }
+        }
+    }
+}
+
+void TYtQueryCacheItem::SetOperationId(NYT::TOperationId operationId) {
+    if (!LockTx || !Tracker_) {
+        return;
+    }
+    for (auto &[cachedPath, _] : SortedCachedPaths) {
+        try {
+            auto lockFile = cachedPath + ".lock";
+            LockTx->Create(lockFile, ENodeType::NT_DOCUMENT);
+            LockTx->Set(lockFile, TNode::CreateMap({{"operationId", operationId.AsGuidString()}}));
+            YQL_CLOG(DEBUG, ProviderYt) << "Progress link file was created at: " << lockFile;
+        }
+        catch (const TErrorResponse& e) {
+            YQL_CLOG(ERROR, ProviderYt) << "Cannot create progress link file: " << CurrentExceptionMessage();
         }
     }
 }

@@ -7,7 +7,8 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TStorageCounters::TStorageCounters(const TString& storageId)
-    : TBase("BlobStorages") {
+    : TBase("BlobStorages")
+{
     DeepSubGroup("StorageId", storageId);
     Consumers.resize((ui32)EConsumer::COUNT);
     for (auto&& i : GetEnumAllValues<EConsumer>()) {
@@ -24,7 +25,8 @@ std::shared_ptr<TConsumerCounters> TStorageCounters::GetConsumerCounter(const EC
 }
 
 TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCounters& parent)
-    : TBase(parent) {
+    : TBase(parent)
+{
     DeepSubGroup("Consumer", consumerId);
     ReadCounters = std::make_shared<TReadCounters>(*this);
     WriteCounters = std::make_shared<TWriteCounters>(*this);

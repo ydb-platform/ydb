@@ -1,16 +1,11 @@
 #include "udf_value_builder.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-IDateBuilder::IDateBuilder()
-{}
+IDateBuilder::IDateBuilder() = default;
 
-IPgBuilder::IPgBuilder()
-{}
+IPgBuilder::IPgBuilder() = default;
 
-IValueBuilder::IValueBuilder()
-{}
+IValueBuilder::IValueBuilder() = default;
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

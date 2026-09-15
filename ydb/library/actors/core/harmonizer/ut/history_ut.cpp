@@ -180,6 +180,36 @@ Y_UNIT_TEST_SUITE(ValueHistoryTests) {
         UNIT_ASSERT_DOUBLES_EQUAL(history.GetAvgPartForLastSeconds(4), 1.0, 1e-6);
     }
 
+    Y_UNIT_TEST(TestThirtySecondWindowWithIncompleteData) {
+        TValueHistory<32> history;
+        ui64 baseTs = 1'000'000;
+
+        history.Register(baseTs, 0.0);
+        for (size_t second = 1; second <= 27; ++second) {
+            history.Register(baseTs + second * secondInTs, second);
+        }
+
+        UNIT_ASSERT_DOUBLES_EQUAL(history.GetAvgPartForLastSeconds<true>(30), 0.9, 1e-6);
+    }
+
+    Y_UNIT_TEST(TestThirtySecondWindowWrapsThirtyTwoSecondBuffer) {
+        TValueHistory<32> history;
+        ui64 baseTs = 1'000'000;
+        double accumulated = 0.0;
+
+        history.Register(baseTs, accumulated);
+        for (size_t second = 1; second <= 40; ++second) {
+            accumulated += second <= 10 ? 1.0 : 2.0;
+            history.Register(baseTs + second * secondInTs, accumulated);
+        }
+
+        UNIT_ASSERT_DOUBLES_EQUAL(history.GetAvgPartForLastSeconds<true>(30), 2.0, 1e-6);
+
+        accumulated += 4.0;
+        history.Register(baseTs + 41 * secondInTs, accumulated);
+        UNIT_ASSERT_DOUBLES_EQUAL(history.GetAvgPartForLastSeconds<true>(30), (29.0 * 2.0 + 4.0) / 30.0, 1e-6);
+    }
+
     Y_UNIT_TEST(TestGetMaxForLastSeconds) {
         TValueHistory<4> history;
         ui64 baseTs = 1000000;

@@ -1,0 +1,2348 @@
+#include "read_balancer__balancing.h"
+#include "read_balancer_log.h"
+
+#include <ydb/core/persqueue/public/utils.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/containers/absl/btree_set.h>
+
+#include <util/system/yassert.h>
+
+#include <algorithm>
+#include <array>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
+
+namespace NKikimr::NPQ::NBalancing {
+
+namespace {
+
+const char* FamilyStatusName(TPartitionFamily::EStatus status) {
+    switch (status) {
+        case TPartitionFamily::EStatus::Active: return "Active";
+        case TPartitionFamily::EStatus::Releasing: return "Releasing";
+        case TPartitionFamily::EStatus::Free: return "Free";
+    }
+    return "Unknown";
+}
+
+}
+
+struct LowLoadSessionComparator {
+    bool operator()(const TSession* lhs, const TSession* rhs) const;
+};
+
+using TLowLoadOrderedSessions = absl::btree_set<TSession*, LowLoadSessionComparator>;
+
+
+
+//
+// TPartition
+//
+
+bool TPartition::IsInactive() const {
+    return Commited || (ReadingFinished && (StartedReadingFromEndOffset || ScaleAwareSDK));
+}
+
+bool TPartition::NeedReleaseChildren() const {
+     return !(Commited || (ReadingFinished && !ScaleAwareSDK));
+}
+
+bool TPartition::BalanceToOtherPipe() const {
+    return !Commited && ReadingFinished && !ScaleAwareSDK;
+}
+
+bool TPartition::StartReading() {
+    return std::exchange(ReadingFinished, false);
+}
+
+bool TPartition::StopReading() {
+    ++Cookie;
+    const bool hadFinish = std::exchange(ReadingFinished, false);
+    return hadFinish && NeedReleaseChildren();
+}
+
+bool TPartition::SetCommittedState(ui32 generation, ui64 cookie) {
+    if (PartitionGeneration < generation || (PartitionGeneration == generation && PartitionCookie < cookie)) {
+        Iteration = 0;
+        PartitionGeneration = generation;
+        PartitionCookie = cookie;
+
+        return !std::exchange(Commited, true);
+    }
+
+    return false;
+}
+
+bool TPartition::SetFinishedState(bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+    bool previousStatus = IsInactive();
+
+    ScaleAwareSDK = scaleAwareSDK;
+    StartedReadingFromEndOffset = startedReadingFromEndOffset;
+    ReadingFinished = true;
+    ++Cookie;
+
+    bool currentStatus = IsInactive();
+    if (currentStatus) {
+        Iteration = 0;
+    } else {
+        ++Iteration;
+    }
+    return currentStatus && !previousStatus;
+}
+
+bool TPartition::Reset() {
+    bool result = IsInactive();
+
+    ScaleAwareSDK = false;
+    StartedReadingFromEndOffset = false;
+    ReadingFinished = false;
+    Commited = false;
+    ++Cookie;
+
+    return result;
+};
+
+
+//
+// TPartitionFamily
+//
+
+TPartitionFamily::TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions)
+    : TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
+    , Consumer(consumerInfo)
+    , Id(id)
+    , Status(EStatus::Free)
+    , TargetStatus(ETargetStatus::Free)
+    , RootPartitions(partitions)
+    , Partitions(std::move(partitions))
+    , Session(nullptr)
+    , MergeTo(0)
+{
+    ClassifyPartitions();
+    UpdatePartitionMapping(Partitions);
+    UpdateSpecialSessions();
+}
+
+bool TPartitionFamily::IsActive() const {
+    return Status == EStatus::Active;
+}
+
+bool TPartitionFamily::IsFree() const {
+    return Status == EStatus::Free;
+}
+
+bool TPartitionFamily::IsReleasing() const {
+    return Status == EStatus::Releasing;
+}
+
+bool TPartitionFamily::IsCommon() const {
+    return SpecialSessions.empty();
+}
+
+bool TPartitionFamily::IsLonely() const {
+    return Partitions.size() == 1;
+}
+
+bool TPartitionFamily::HasSpecialSession() const {
+    return Session && Session->WithGroups();
+}
+
+bool TPartitionFamily::HasActivePartitions() const {
+    return ActivePartitionCount;
+}
+
+const TString& TPartitionFamily::Topic() const {
+    return Consumer.Topic();
+}
+
+const TString& TPartitionFamily::TopicPath() const {
+    return Consumer.TopicPath();
+}
+
+ui32 TPartitionFamily::TabletGeneration() const {
+    return Consumer.TabletGeneration();
+}
+
+const TPartitionInfo* TPartitionFamily::GetPartitionInfo(ui32 partitionId) const {
+    return Consumer.GetPartitionInfo(partitionId);
+}
+bool TPartitionFamily::IsReadable(ui32 partitionId) const {
+    return Consumer.IsReadable(partitionId);
+}
+
+ui32 TPartitionFamily::NextStep() {
+    return Consumer.NextStep();
+}
+
+TStructuredMessage TPartitionFamily::LogPrefix() const {
+    if (Session) {
+        return YDB_LOG_CREATE_MESSAGE(
+            Consumer.LogPrefix(),
+            {"familyId", Id},
+            {"status", FamilyStatusName(Status)},
+            {"partitions", Partitions},
+            {"session", Session->SessionName},
+            {"sender", Session->Sender});
+    }
+    return YDB_LOG_CREATE_MESSAGE(
+        Consumer.LogPrefix(),
+        {"familyId", Id},
+        {"status", FamilyStatusName(Status)},
+        {"partitions", Partitions});
+}
+
+
+void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetStatus) {
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Releasing a family that is not active, family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Session, "Releasing a family without a session, family %lu", Id);
+    if (Status != EStatus::Active) {
+        LOG_C("Releasing the family that isn't active");
+        return;
+    }
+
+    if (!Session) {
+        LOG_C("Releasing the family that does not have a session");
+        return;
+    }
+
+    LOG_I("Release partitions. Target status", {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())},
+        {"targetStatus", targetStatus});
+
+    Status = EStatus::Releasing;
+    TargetStatus = targetStatus;
+
+    Session->ActivePartitionCount -= ActivePartitionCount;
+    Session->InactivePartitionCount -= InactivePartitionCount;
+    Session->ReleasingPartitionCount += LockedPartitions.size();
+
+    --Session->ActiveFamilyCount;
+    ++Session->ReleasingFamilyCount;
+
+    for (auto partitionId : LockedPartitions) {
+        ctx.Send(Session->Sender, MakeEvReleasePartition(partitionId).release());
+    }
+}
+
+bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
+    if (!Session || Session->Pipe != sender) {
+        LOG_D("Try unlock the partition from other sender", {"partitionId", partitionId});
+        return false;
+    }
+
+    if (Status != EStatus::Releasing) {
+        LOG_C("Try unlock partition but family status is", {"partitionId", partitionId});
+        return false;
+    }
+
+    if (!LockedPartitions.erase(partitionId)) {
+        LOG_C("Try unlock partition but partition isn't locked. Locked partitions are", {"partitionId", partitionId},
+            {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())});
+        return false;
+    }
+
+    --Session->ReleasingPartitionCount;
+
+    if (!LockedPartitions.empty()) {
+        LOG_D("Partition was unlocked, but wait", {"partitionId", partitionId},
+            {"lockedPartitions", JoinRange(", ", LockedPartitions.begin(), LockedPartitions.end())});
+        return false;
+    }
+
+    --Session->ReleasingFamilyCount;
+
+    Reset(ctx);
+
+    return true;
+}
+
+bool TPartitionFamily::Reset(const TActorContext& ctx) {
+    return Reset(TargetStatus, ctx);
+}
+
+bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ctx) {
+    if (Session) {
+        Session->Families.erase(this->Id);
+        Session = nullptr;
+    }
+
+    TargetStatus = ETargetStatus::Free;
+
+    switch (targetStatus) {
+        case ETargetStatus::Destroy:
+            Destroy(ctx);
+            return false;
+
+        case ETargetStatus::Free:
+            LOG_T("Is free");
+
+            Status = EStatus::Free;
+            AfterRelease();
+            AssertInvariants();
+
+            return true;
+
+        case ETargetStatus::Merge:
+            Status = EStatus::Free;
+            AfterRelease();
+
+            auto it = Consumer.Families.find(MergeTo);
+            if (it == Consumer.Families.end()) {
+                LOG_D("Has been released for merge but target family is not exists");
+                return true;
+            }
+            auto* targetFamily = it->second.get();
+            if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
+                // MergeFamilies destroys rhs (`this`) when the merge is applied.
+                // Returning true here used to re-insert a dangling pointer into
+                // UnreadableFamilies from UnregisterReadingSession.
+                auto [_, merged] = Consumer.MergeFamilies(targetFamily, this, ctx);
+                return !merged;
+            }
+            WantedPartitions.clear();
+            return true;
+    }
+}
+
+void TPartitionFamily::Destroy(const TActorContext&) {
+    LOG_D("Destroyed");
+
+    if (Session) {
+        Session->Families.erase(Id);
+    }
+
+    for (auto partitionId : Partitions) {
+        Consumer.PartitionMapping.erase(partitionId);
+    }
+    Consumer.UnreadableFamilies.erase(Id);
+    Consumer.FamiliesRequireBalancing.erase(Id);
+    Consumer.Families.erase(Id);
+}
+
+void TPartitionFamily::AfterRelease() {
+    Consumer.UnreadableFamilies[Id] = this;
+    Consumer.FamiliesRequireBalancing.erase(Id);
+
+    for (auto partitionId : Partitions) {
+        Consumer.PartitionMapping.erase(partitionId);
+    }
+
+    Partitions.clear();
+    Partitions.insert(Partitions.end(), RootPartitions.begin(), RootPartitions.end());
+
+    LockedPartitions.clear();
+
+    ClassifyPartitions();
+    UpdatePartitionMapping(Partitions);
+    // After reducing the number of partitions in the family, the list of reading sessions that can read this family may expand.
+    UpdateSpecialSessions();
+
+    for (auto partitionId : Partitions) {
+        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId) || IsLonely(),
+            "AfterRelease restored unreadable partition %u, family %zu", partitionId, Id);
+    }
+}
+
+void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(IsFree(), "StartReading requires a free family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Consumer.Sessions.contains(session.Pipe),
+        "StartReading session is not registered, family %lu", Id);
+    if (Status != EStatus::Free) {
+        LOG_C("Try start reading but the family status is");
+        return;
+    }
+
+    LOG_T("Start reading");
+
+    Y_DEBUG_ABORT_UNLESS(IsCommon() || IsLonely(),
+        "StartReading special-session family %zu has %zu partitions", Id, Partitions.size());
+
+    const bool specialLonely = session.WithGroups() && IsLonely();
+    if (!specialLonely) {
+        for (auto partitionId : Partitions) {
+            if (!IsReadable(partitionId)) {
+                LOG_D("Skip start reading because the family has an unreadable partition", {"partitionId", partitionId});
+                return;
+            }
+        }
+    }
+
+    Status = EStatus::Active;
+
+    Session = &session;
+    Session->Families.try_emplace(this->Id, this);
+
+    Session->ActivePartitionCount += ActivePartitionCount;
+    Session->InactivePartitionCount += InactivePartitionCount;
+
+    ++Session->ActiveFamilyCount;
+
+    LastPipe = Session->Pipe;
+
+    for (auto partitionId : Partitions) {
+        LockPartition(partitionId, ctx);
+    }
+
+    LockedPartitions.insert(Partitions.begin(), Partitions.end());
+    AssertInvariants();
+}
+
+void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
+    LOG_D("Attaching partitions", {"attachedPartitions", JoinRange(", ", partitions.begin(), partitions.end())});
+
+    absl::flat_hash_set<ui32> existedPartitions;
+    existedPartitions.insert(Partitions.begin(), Partitions.end());
+
+    std::vector<ui32> newPartitions;
+    newPartitions.reserve(partitions.size());
+    for (auto partitionId : partitions) {
+        if (existedPartitions.contains(partitionId)) {
+            continue;
+        }
+
+        newPartitions.push_back(partitionId);
+        existedPartitions.insert(partitionId);
+    }
+
+    Y_DEBUG_ABORT_UNLESS(newPartitions.empty() || !HasSpecialSession(),
+        "Cannot attach partitions to a special session family %zu", Id);
+
+    for (auto partitionId : newPartitions) {
+        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+            "Cannot attach unreadable partition %u to family %lu", partitionId, Id);
+    }
+
+    if (IsActive()) {
+        Y_DEBUG_ABORT_UNLESS(Session,
+            "Attaching partitions to an active family without a session, family %zu", Id);
+        if (!Session) {
+            LOG_C("Attaching partitions to an active family without a session");
+            return;
+        }
+        if (!Session->AllPartitionsReadable(newPartitions)) {
+            WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
+            UpdateSpecialSessions();
+            Release(ctx);
+            return;
+        }
+
+        auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
+        ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
+
+        Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
+        UpdatePartitionMapping(newPartitions);
+        {
+            absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
+            for (auto partitionId : newPartitions) {
+                if (seen.insert(partitionId).second) {
+                    RootPartitions.push_back(partitionId);
+                }
+            }
+        }
+
+        for (auto partitionId : newPartitions) {
+            LockPartition(partitionId, ctx);
+            WantedPartitions.erase(partitionId);
+        }
+        LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
+    } else if (IsReleasing()) {
+        // The family is waiting for unlocks: remember the partitions so AfterRelease
+        // restores them, and move PartitionMapping now. Destroying the donor family
+        // without remapping leaves dangling pointers ("Use of destroyed hash table").
+        absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
+        for (auto partitionId : newPartitions) {
+            if (seen.insert(partitionId).second) {
+                RootPartitions.push_back(partitionId);
+            }
+            WantedPartitions.insert(partitionId);
+        }
+        UpdatePartitionMapping(newPartitions);
+    }
+
+    UpdateSpecialSessions();
+    AssertInvariants();
+}
+
+void TPartitionFamily::ActivatePartition(ui32 partitionId) {
+    LOG_D("Activating partition", {"partitionId", partitionId});
+
+    ChangePartitionCounters(1, -1);
+}
+
+void TPartitionFamily::InactivatePartition(ui32 partitionId) {
+    LOG_D("Inactivating partition", {"partitionId", partitionId});
+
+    ChangePartitionCounters(-1, 1);
+}
+
+void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+    Y_DEBUG_ABORT_UNLESS((ssize_t)ActivePartitionCount + active >= 0,
+        "ActivePartitionCount underflow: %zu, active: %ld, family %zu", ActivePartitionCount, (long)active, Id);
+    Y_DEBUG_ABORT_UNLESS((ssize_t)InactivePartitionCount + inactive >= 0,
+        "InactivePartitionCount underflow: %zu, inactive: %ld, family %zu", InactivePartitionCount, (long)inactive, Id);
+
+    ActivePartitionCount += active;
+    InactivePartitionCount += inactive;
+
+    if (IsActive() && Session) {
+        Session->ActivePartitionCount += active;
+        Session->InactivePartitionCount += inactive;
+    }
+ }
+
+void TPartitionFamily::Merge(TPartitionFamily* other) {
+    LOG_D("Merge family with", {"debug", other->DebugStr()});
+
+    Y_DEBUG_ABORT_UNLESS(!HasSpecialSession(),
+        "Cannot merge into a special-session family %zu", Id);
+
+    AFL_ENSURE(this != other)
+        ("this_id", Id)("other_id", other->Id)
+        ("this_partitions", Partitions.size())("other_partitions", other->Partitions.size());
+
+    Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
+    UpdatePartitionMapping(other->Partitions);
+    other->Partitions.clear();
+
+    RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
+    other->RootPartitions.clear();
+
+    for (auto partitionId : Partitions) {
+        other->WantedPartitions.erase(partitionId);
+    }
+    WantedPartitions.insert(other->WantedPartitions.begin(), other->WantedPartitions.end());
+    other->WantedPartitions.clear();
+
+    LockedPartitions.insert(other->LockedPartitions.begin(), other->LockedPartitions.end());
+    other->LockedPartitions.clear();
+
+    ChangePartitionCounters(other->ActivePartitionCount, other->InactivePartitionCount);
+    other->ChangePartitionCounters(-other->ActivePartitionCount, -other->InactivePartitionCount);
+
+    UpdateSpecialSessions();
+
+    if (other->IsActive() && other->Session) {
+        --other->Session->ActiveFamilyCount;
+    }
+    AssertInvariants();
+}
+
+TString TPartitionFamily::DebugStr() const {
+    TStringBuilder sb;
+    sb << "family=" << Id << " (Status=" << Status
+            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end()) << "]";
+    if (!WantedPartitions.empty()) {
+        sb << ", WantedPartitions=[" << JoinRange(", ", WantedPartitions.begin(), WantedPartitions.end()) << "]";
+    }
+    if (!SpecialSessions.empty()) {
+        sb << ", SpecialSessions=" << SpecialSessions.size();
+    }
+    if (Session) {
+        sb << ", Session=" << Session->DebugStr();
+    }
+    sb << ")";
+
+    return sb;
+}
+
+void TPartitionFamily::AssertInvariants() const {
+#ifndef NDEBUG
+    auto familyIt = Consumer.Families.find(Id);
+    Y_DEBUG_ABORT_UNLESS(familyIt != Consumer.Families.end() && familyIt->second.get() == this,
+        "family %zu is not registered in the consumer", Id);
+
+    Y_DEBUG_ABORT_UNLESS(!Partitions.empty(),
+        "empty family %zu", Id);
+    Y_DEBUG_ABORT_UNLESS(IsCommon() || IsLonely(),
+        "special-session family %zu has %zu partitions", Id, Partitions.size());
+    if (Session && Session->WithGroups()) {
+        Y_DEBUG_ABORT_UNLESS(IsLonely(),
+            "special session family %zu has %zu partitions", Id, Partitions.size());
+    }
+
+    absl::flat_hash_set<ui32> uniquePartitions;
+    uniquePartitions.reserve(Partitions.size());
+    for (auto partitionId : Partitions) {
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.insert(partitionId).second,
+            "duplicate partition %u in family %zu", partitionId, Id);
+        auto mit = Consumer.PartitionMapping.find(partitionId);
+        Y_DEBUG_ABORT_UNLESS(mit != Consumer.PartitionMapping.end() && mit->second == this,
+            "partition mapping mismatch for %u, family %zu", partitionId, Id);
+    }
+
+    absl::flat_hash_set<ui32> uniqueRoots;
+    uniqueRoots.reserve(RootPartitions.size());
+    for (auto partitionId : RootPartitions) {
+        Y_DEBUG_ABORT_UNLESS(uniqueRoots.insert(partitionId).second,
+            "duplicate root partition %u in family %zu", partitionId, Id);
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId) || WantedPartitions.contains(partitionId),
+            "root partition %u is not in family %zu", partitionId, Id);
+    }
+
+    for (auto partitionId : LockedPartitions) {
+        Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId),
+            "locked partition %u is not in family %zu", partitionId, Id);
+    }
+
+    if (IsFree()) {
+        Y_DEBUG_ABORT_UNLESS(!Session, "free family %zu has a session", Id);
+        Y_DEBUG_ABORT_UNLESS(LockedPartitions.empty(), "free family %zu has locked partitions", Id);
+        auto uit = Consumer.UnreadableFamilies.find(Id);
+        Y_DEBUG_ABORT_UNLESS(uit != Consumer.UnreadableFamilies.end() && uit->second == this,
+            "free family %zu is not in UnreadableFamilies", Id);
+    } else {
+        Y_DEBUG_ABORT_UNLESS(Session, "family %zu has no session", Id);
+        if (Session) {
+            auto sit = Consumer.Sessions.find(Session->Pipe);
+            Y_DEBUG_ABORT_UNLESS(sit != Consumer.Sessions.end() && sit->second == Session,
+                "family %zu session is not registered", Id);
+            auto fit = Session->Families.find(Id);
+            Y_DEBUG_ABORT_UNLESS(fit != Session->Families.end() && fit->second == this,
+                "family %zu is not owned by its session", Id);
+        }
+    }
+#endif
+}
+
+TPartition* TPartitionFamily::GetPartition(ui32 partitionId) {
+    return Consumer.GetPartition(partitionId);
+}
+
+bool TPartitionFamily::PossibleForBalance(TSession* session) {
+    if (!session) {
+        return false;
+    }
+    if (!IsLonely()) {
+        return true;
+    }
+
+    auto partitionId = Partitions.front();
+    auto* partition = GetPartition(partitionId);
+    if (!partition) {
+        return true;
+    }
+
+    if (!partition->BalanceToOtherPipe()) {
+        return true;
+    }
+
+    return session->Pipe != LastPipe;
+}
+
+template<typename TCollection>
+bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
+    if (partitionsIds.empty()) {
+        return true;
+    }
+
+    if (HasSpecialSession()) {
+        return false;
+    }
+
+    if (Consumer.WithCommonSessions) {
+        return true;
+    }
+
+    return AnyOf(SpecialSessions, [&](const auto& s) {
+        return s.second->AllPartitionsReadable(partitionsIds);
+    });
+}
+
+template bool TPartitionFamily::CanAttach(const absl::flat_hash_set<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::array<ui32, 1>& partitionsIds);
+
+void TPartitionFamily::ClassifyPartitions() {
+    auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
+    ChangePartitionCounters(activePartitionCount - ActivePartitionCount, inactivePartitionCount - InactivePartitionCount);
+}
+
+template<typename TPartitions>
+std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const TPartitions& partitions) {
+    size_t activePartitionCount = 0;
+    size_t inactivePartitionCount = 0;
+
+    for (auto partitionId : partitions) {
+        auto* partition = GetPartition(partitionId);
+        // Unreadable partitions (lonely explicit-partition families may lock them
+        // before parents are processed) count as active so session load includes them.
+        if (IsReadable(partitionId) && partition && partition->IsInactive()) {
+            ++inactivePartitionCount;
+        } else {
+            ++activePartitionCount;
+        }
+    }
+
+    return {activePartitionCount, inactivePartitionCount};
+}
+
+template
+std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const absl::btree_set<ui32>& partitions);
+
+template
+std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const std::vector<ui32>& partitions);
+
+void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partitions) {
+    for (auto partitionId: partitions) {
+        Consumer.PartitionMapping[partitionId] = this;
+    }
+}
+
+void TPartitionFamily::UpdateSpecialSessions() {
+    bool hasChanges = false;
+
+    if (!IsLonely()) {
+        if (!SpecialSessions.empty()) {
+            SpecialSessions.clear();
+            hasChanges = true;
+        }
+    } else {
+        std::vector<TActorId> stale;
+        for (const auto& [pipe, session] : SpecialSessions) {
+            if (session->WithGroups()
+                    && session->AllPartitionsReadable(Partitions)
+                    && session->AllPartitionsReadable(WantedPartitions)) {
+                continue;
+            }
+            stale.push_back(pipe);
+        }
+        for (const auto& pipe : stale) {
+            SpecialSessions.erase(pipe);
+            hasChanges = true;
+        }
+        for (auto& [_, session] : Consumer.Sessions) {
+            if (session->WithGroups() && session->AllPartitionsReadable(Partitions) && session->AllPartitionsReadable(WantedPartitions)) {
+                auto [_, inserted] = SpecialSessions.try_emplace(session->Pipe, session);
+                if (inserted) {
+                    hasChanges = true;
+                }
+            }
+        }
+    }
+
+    if (hasChanges) {
+        Consumer.FamiliesRequireBalancing[Id] = this;
+    }
+}
+
+void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(Session, "Lock partition %u without a session, family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Lock partition %u from a non-active family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId) || (Session && Session->WithGroups() && IsLonely()),
+        "Lock unreadable partition %u, family %lu", partitionId, Id);
+    if (!Session) {
+        LOG_C("Lock partition without a session", {"partitionId", partitionId});
+        return;
+    }
+
+    auto step = NextStep();
+
+    LOG_I("Lock partition for generation step", {"partitionId", partitionId},
+        {"debug", Session->DebugStr()},
+        {"tabletGeneration", TabletGeneration()},
+        {"step", step});
+
+    ctx.Send(Session->Sender, MakeEvLockPartition(partitionId, step).release());
+}
+
+std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvReleasePartition(ui32 partitionId) const {
+    auto res = std::make_unique<TEvPersQueue::TEvReleasePartition>();
+    auto& r = res->Record;
+
+    r.SetSession(Session->SessionName);
+    r.SetTopic(Topic());
+    r.SetPath(TopicPath());
+    r.SetGeneration(TabletGeneration());
+    r.SetClientId(Session->ClientId);
+    r.SetGroup(partitionId + 1);
+    ActorIdToProto(Session->Pipe, r.MutablePipeClient());
+
+    return res;
+}
+
+std::unique_ptr<TEvPersQueue::TEvLockPartition> TPartitionFamily::MakeEvLockPartition(ui32 partitionId, ui32 step) const {
+    auto res = std::make_unique<TEvPersQueue::TEvLockPartition>();
+    auto& r = res->Record;
+
+    r.SetSession(Session->SessionName);
+    r.SetPartition(partitionId);
+    r.SetTopic(Topic());
+    r.SetPath(TopicPath());
+    r.SetGeneration(TabletGeneration());
+    r.SetStep(step);
+    r.SetClientId(Session->ClientId);
+    ActorIdToProto(Session->Pipe, res->Record.MutablePipeClient());
+
+    auto* partitionInfo = GetPartitionInfo(partitionId);
+    if (partitionInfo) {
+        r.SetTabletId(partitionInfo->TabletId);
+    }
+
+    return res;
+}
+
+
+//
+// TConsumer
+//
+
+TConsumer::TConsumer(TBalancer& balancer, const TString& consumerName)
+    : TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
+    , Balancer(balancer)
+    , ConsumerName(consumerName)
+    , NextFamilyId(0)
+    , WithCommonSessions(false)
+    , BalanceScheduled(false)
+{
+}
+
+const TString& TConsumer::Topic() const {
+    return Balancer.Topic();
+}
+
+const TString& TConsumer::TopicPath() const {
+    return Balancer.TopicPath();
+}
+
+ui32 TConsumer::TabletGeneration() const {
+    return Balancer.TabletGeneration();
+}
+
+const TPartitionInfo* TConsumer::GetPartitionInfo(ui32 partitionId) const {
+    return Balancer.GetPartitionInfo(partitionId);
+}
+
+TPartition* TConsumer::GetPartition(ui32 partitionId) {
+    auto it = Partitions.find(partitionId);
+    if (it == Partitions.end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const TPartitionGraph& TConsumer::GetPartitionGraph() const {
+    return Balancer.GetPartitionGraph();
+}
+
+ui32 TConsumer::NextStep() {
+    return Balancer.NextStep();
+}
+
+void TConsumer::RegisterPartition(ui32 partitionId, const TActorContext& ctx) {
+    auto [_, inserted] = Partitions.try_emplace(partitionId, TPartition());
+    if (inserted && IsReadable(partitionId)) {
+        LOG_D("Register readable partition", {"partitionId", partitionId});
+
+        CreateFamily({partitionId}, ctx);
+    }
+}
+
+void TConsumer::UnregisterPartition(ui32 partitionId, const TActorContext& ctx) {
+    BreakUpFamily(partitionId, true, ctx);
+}
+
+void  TConsumer::InitPartitions(const TActorContext& ctx) {
+    for (auto& [partitionId,_] : Balancer.GetPartitionsInfo()) {
+        RegisterPartition(partitionId, ctx);
+    }
+}
+
+TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, const TActorContext& ctx) {
+    return CreateFamily(std::move(partitions), TPartitionFamily::EStatus::Free, ctx);
+}
+
+TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext&) {
+    Y_DEBUG_ABORT_UNLESS(!partitions.empty(), "Cannot create an empty family, consumer %s", ConsumerName.data());
+    auto id = ++NextFamilyId;
+    auto [it, _] = Families.emplace(id, std::make_unique<TPartitionFamily>(*this, id, std::move(partitions)));
+    auto* family = it->second.get();
+
+    family->Status = status;
+    if (status == TPartitionFamily::EStatus::Free) {
+        UnreadableFamilies[id] = family;
+        family->AssertInvariants();
+    }
+
+    LOG_D("Family created", {"family", family->DebugStr()});
+
+    return family;
+}
+
+absl::flat_hash_set<ui32> Intercept(const absl::flat_hash_set<ui32>& values, const std::vector<ui32>& members) {
+    absl::flat_hash_set<ui32> result;
+    result.reserve(members.size());
+    for (auto m : members) {
+        if (values.contains(m)) {
+            result.insert(m);
+        }
+    }
+    return result;
+}
+
+bool IsRoot(const TPartitionGraph::Node* node, const absl::flat_hash_set<ui32>& partitions) {
+    if (!node) {
+        return false;
+    }
+    if (node->IsRoot()) {
+        return true;
+    }
+    for (auto* p : node->DirectParents) {
+        if (p && partitions.contains(p->Id)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TConsumer::BreakUpFamily(ui32 partitionId, bool destroy, const TActorContext& ctx) {
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        return false;
+    }
+
+    return BreakUpFamily(family, partitionId, destroy, ctx);
+}
+
+bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx) {
+    std::vector<TPartitionFamily*> newFamilies;
+
+    if (!family->IsLonely()) {
+        LOG_D("Break up", {"family", family->DebugStr()},
+            {"partition", partitionId});
+
+        absl::flat_hash_set<ui32> partitions;
+        partitions.insert(family->Partitions.begin(), family->Partitions.end());
+
+        if (IsRoot(GetPartitionGraph().GetPartition(partitionId), partitions)) {
+            partitions.erase(partitionId);
+
+            absl::flat_hash_set<ui32> processedPartitions;
+            // There are partitions that are contained in two families at once
+            bool familiesIntersect = false;
+
+            for (auto id : family->Partitions) {
+                if (id == partitionId) {
+                    continue;
+                }
+
+                if (!IsRoot(GetPartitionGraph().GetPartition(id), partitions)) {
+                    continue;
+                }
+
+                std::vector<ui32> members;
+                GetPartitionGraph().Travers(id, [&](auto childId) {
+                    if (partitions.contains(childId)) {
+                        auto [_, i] = processedPartitions.insert(childId);
+                        if (i) {
+                            members.push_back(childId);
+                        } else {
+                            familiesIntersect = true;
+                        }
+
+                        return true;
+                    }
+                    return false;
+                });
+
+                bool locked = family->Session && (family->LockedPartitions.contains(id) ||
+                        std::any_of(members.begin(), members.end(), [family](auto id) { return family->LockedPartitions.contains(id); }));
+                auto* f = CreateFamily({id}, locked ? family->Status : TPartitionFamily::EStatus::Free, ctx);
+                f->TargetStatus = family->TargetStatus;
+                f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
+                if (!f->IsLonely()) {
+                    f->SpecialSessions.clear();
+                }
+                f->LastPipe = family->LastPipe;
+                f->RootPartitions.assign(f->Partitions.begin(), f->Partitions.end());
+                f->UpdatePartitionMapping(f->Partitions);
+                f->ClassifyPartitions();
+                if (locked) {
+                    f->LockedPartitions = Intercept(family->LockedPartitions, f->Partitions);
+
+                    f->Session = family->Session;
+                    f->Session->Families.try_emplace(f->Id, f);
+                    f->Session->ActivePartitionCount += f->ActivePartitionCount;
+                    f->Session->InactivePartitionCount += f->InactivePartitionCount;
+                    if (f->IsActive()) {
+                        ++f->Session->ActiveFamilyCount;
+                    } else if (f->IsReleasing()) {
+                        ++f->Session->ReleasingFamilyCount;
+                    }
+                }
+
+                newFamilies.push_back(f);
+            }
+
+            family->Partitions.clear();
+            family->Partitions.push_back(partitionId);
+            family->RootPartitions = {partitionId};
+
+            auto locked = family->LockedPartitions.contains(partitionId);
+            family->LockedPartitions.clear();
+            if (locked) {
+                family->LockedPartitions.insert(partitionId);
+            }
+
+            family->ClassifyPartitions();
+
+            if (familiesIntersect) {
+                for (auto* f : newFamilies) {
+                    if (f->IsActive()) {
+                        f->Release(ctx);
+                    }
+                }
+            }
+        } else {
+            LOG_D("Can't break up because is not root of family", {"family", family->DebugStr()},
+                {"partition", partitionId});
+        }
+    }
+
+    family->WantedPartitions.clear();
+
+    if (destroy) {
+        DestroyFamily(family, ctx);
+    } else {
+        family->UpdateSpecialSessions();
+        family->AssertInvariants();
+    }
+    for (auto* f : newFamilies) {
+        if (Families.contains(f->Id)) {
+            f->AssertInvariants();
+        }
+    }
+
+    return !newFamilies.empty();
+}
+
+std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(lhs && rhs, "MergeFamilies with a null family");
+    if (lhs->HasSpecialSession() && rhs->HasSpecialSession()) {
+        return {lhs, false};
+    }
+    if (lhs->HasSpecialSession()) {
+        std::swap(lhs, rhs);
+    }
+    Y_DEBUG_ABORT_UNLESS(!lhs->HasSpecialSession(),
+        "Cannot merge into a special-session family %zu", lhs->Id);
+    AFL_ENSURE(lhs != rhs)
+        ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
+        ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
+
+    auto srcHasUnreadable = [&](TPartitionFamily* family) {
+        return AnyOf(family->Partitions, [&](ui32 id) { return !IsReadable(id); });
+    };
+
+    if (lhs->IsFree() && rhs->IsFree() ||
+        lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||
+        lhs->IsReleasing() && rhs->IsReleasing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
+
+        if (srcHasUnreadable(rhs)) {
+            return {lhs, false};
+        }
+        lhs->Merge(rhs);
+        rhs->Destroy(ctx);
+
+        return {lhs, true};
+    }
+
+    if (lhs->IsFree() && (rhs->IsActive() || rhs->IsReleasing())) {
+        if (rhs->HasSpecialSession()) {
+            if (rhs->IsActive()) {
+                rhs->Release(ctx, TPartitionFamily::ETargetStatus::Merge);
+            } else if (rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
+                rhs->TargetStatus = TPartitionFamily::ETargetStatus::Merge;
+            }
+            rhs->MergeTo = lhs->Id;
+            return {lhs, false};
+        }
+        std::swap(lhs, rhs);
+    }
+    if (lhs->IsActive() && rhs->IsFree()) {
+        if (srcHasUnreadable(rhs)) {
+            return {lhs, false};
+        }
+        lhs->AttachePartitions(rhs->Partitions, ctx);
+        if (lhs->IsActive()) {
+            rhs->Partitions.clear();
+            rhs->Destroy(ctx);
+            return {lhs, true};
+        }
+        // AttachePartitions released lhs without taking the partitions; keep rhs so
+        // PartitionMapping still points at a live family.
+        return {lhs, false};
+    }
+    if (lhs->IsReleasing() && rhs->IsFree()) {
+        if (srcHasUnreadable(rhs)) {
+            return {lhs, false};
+        }
+        lhs->AttachePartitions(rhs->Partitions, ctx);
+        lhs->WantedPartitions.insert(rhs->WantedPartitions.begin(), rhs->WantedPartitions.end());
+        rhs->Partitions.clear();
+        rhs->WantedPartitions.clear();
+        rhs->Destroy(ctx);
+        return {lhs, true};
+    }
+
+    if (lhs->IsActive() && rhs->IsActive()) { // lhs->Session != rhs->Session
+        rhs->Release(ctx);
+    }
+    if (lhs->IsReleasing() && rhs->IsActive() && !rhs->HasSpecialSession()) {
+        std::swap(rhs, lhs);
+    }
+    if (lhs->IsReleasing() && rhs->IsActive() && rhs->HasSpecialSession()) {
+        rhs->Release(ctx, TPartitionFamily::ETargetStatus::Merge);
+        rhs->MergeTo = lhs->Id;
+        return {lhs, false};
+    }
+    if (lhs->IsActive() && rhs->IsReleasing() && rhs->TargetStatus == TPartitionFamily::ETargetStatus::Free) {
+        rhs->TargetStatus = TPartitionFamily::ETargetStatus::Merge;
+        rhs->MergeTo = lhs->Id;
+
+        return {lhs, false};
+    }
+
+    // In this case, one of the families is either already being merged or is being destroyed. In any case, they cannot be merged.
+
+    return {lhs, false};
+}
+
+void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
+    switch(family->Status) {
+        case TPartitionFamily::EStatus::Active:
+            family->Release(ctx, TPartitionFamily::ETargetStatus::Destroy);
+            break;
+        case TPartitionFamily::EStatus::Releasing:
+            family->TargetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            break;
+        case TPartitionFamily::EStatus::Free:
+            family->Reset(TPartitionFamily::ETargetStatus::Destroy, ctx);
+            break;
+    }
+}
+
+TPartitionFamily* TConsumer::FindFamily(ui32 partitionId) {
+    auto it = PartitionMapping.find(partitionId);
+    if (it == PartitionMapping.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& ctx) {
+    LOG_I("Register reading session", {"debug", session->DebugStr()});
+
+    Sessions[session->Pipe] = session;
+
+    if (session->WithGroups()) {
+        for (auto& [_, family] : Families) {
+            if (family->IsLonely()
+                    && session->AllPartitionsReadable(family->Partitions)
+                    && session->AllPartitionsReadable(family->WantedPartitions)) {
+                family->SpecialSessions[session->Pipe] = session;
+                FamiliesRequireBalancing[family->Id] = family.get();
+            }
+        }
+
+        for (auto& partitionId : session->Partitions) {
+            if (!FindFamily(partitionId)) {
+                CreateFamily({partitionId}, ctx);
+            }
+        }
+    } else {
+        OrderedSessions.reset();
+        WithCommonSessions = true;
+    }
+}
+
+
+std::vector<TPartitionFamily*> Snapshot(const absl::flat_hash_map<size_t, std::unique_ptr<TPartitionFamily>>& families) {
+    std::vector<TPartitionFamily*> result;
+    result.reserve(families.size());
+
+    for (auto& [_, family] : families) {
+        result.push_back(family.get());
+    }
+
+    return result;
+}
+
+bool PartitionHasChildren(const TPartitionGraph& graph, ui32 partitionId) {
+    const auto* node = graph.GetPartition(partitionId);
+    return node && !node->DirectChildren.empty();
+}
+
+void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
+    auto pipe = session->Pipe;
+    Sessions.erase(session->Pipe);
+    if (!session->WithGroups()) {
+        OrderedSessions.reset();
+        WithCommonSessions = AnyOf(Sessions, [](const auto s) {
+            return !s.second->WithGroups();
+        });
+    }
+
+    std::vector<ui32> parentsToReleaseChildren;
+    for (auto* family : Snapshot(Families)) {
+        if (session != family->Session) {
+            continue;
+        }
+        for (auto partitionId : family->Partitions) {
+            auto* partition = GetPartition(partitionId);
+            if (!partition) {
+                continue;
+            }
+            if (partition->StopReading()) {
+                LOG_D("Finish was reset because the reading session disconnected", {"partitionId", partitionId},
+                    {"session", session->SessionName});
+                parentsToReleaseChildren.push_back(partitionId);
+            }
+        }
+    }
+
+    for (auto partitionId : parentsToReleaseChildren) {
+        GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
+            auto* childFamily = FindFamily(childId);
+            if (!childFamily || childFamily->Session == session) {
+                return true;
+            }
+            DestroyFamily(childFamily, ctx);
+            return true;
+        });
+    }
+
+    for (auto* family : Snapshot(Families)) {
+        family->SpecialSessions.erase(pipe);
+
+        if (session == family->Session) {
+            std::vector<ui32> roots;
+            roots.reserve(family->RootPartitions.size());
+            roots.insert(roots.end(), family->RootPartitions.begin(), family->RootPartitions.end());
+
+            TPartitionFamily::ETargetStatus targetStatus = family->TargetStatus;
+            if (AnyOf(roots, [&](ui32 rootId) { return !IsReadable(rootId); }) ||
+                    !family->CanAttach(family->WantedPartitions)) {
+                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            }
+
+            if (family->Reset(targetStatus, ctx)) {
+                auto live = Families.find(family->Id);
+                if (live != Families.end() && live->second.get() == family) {
+                    UnreadableFamilies[family->Id] = family;
+                    FamiliesRequireBalancing.erase(family->Id);
+                }
+            } else {
+                for (auto& r : roots) {
+                    if (IsReadable(r) && !FindFamily(r)) {
+                        CreateFamily({r}, ctx);
+                    }
+                }
+            }
+        }
+    }
+}
+
+bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        LOG_C("Unlocking the partition from unknown family", {"partitionId", partitionId});
+        return false;
+    }
+
+    return family->Unlock(sender, partitionId, ctx);
+}
+
+bool TConsumer::IsReadable(ui32 partitionId) {
+    if (!ScalingSupport()) {
+        return true;
+    }
+
+    auto* node = GetPartitionGraph().GetPartition(partitionId);
+    if (!node) {
+        return false;
+    }
+
+    if (Partitions.empty()) {
+        return node->DirectParents.empty();
+    }
+
+    for(auto* parent : node->AllParents) {
+        if (!IsInactive(parent->Id)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TConsumer::IsInactive(ui32 partitionId) {
+    auto* partition = GetPartition(partitionId);
+    if (partition) {
+        return partition->IsInactive();
+    }
+    return false;
+}
+
+bool TConsumer::ScalingSupport() const {
+    return Balancer.ScalingSupport();
+}
+
+TStructuredMessage TConsumer::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        Balancer.LogPrefix(),
+        {"consumer", ConsumerName});
+}
+
+bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie) {
+    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
+        "Commit of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
+    return Partitions[partitionId].SetCommittedState(generation, cookie);
+}
+
+bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx) {
+    if (!ScalingSupport()) {
+        return false;
+    }
+
+    auto& partition = Partitions[partitionId];
+
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        return false;
+    }
+    if (!wasInactive) {
+        family->InactivatePartition(partitionId);
+    }
+
+    if (!family->IsLonely() && partition.Commited) {
+        if (BreakUpFamily(family, partitionId, false, ctx)) {
+            return true;
+        }
+    }
+
+    std::vector<ui32> newPartitions;
+    GetPartitionGraph().Travers(partitionId, [&](ui32 id) {
+        if (!IsReadable(id)) {
+            return false;
+        }
+
+        newPartitions.push_back(id);
+        return true;
+    });
+
+    if (partition.NeedReleaseChildren()) {
+        LOG_D("Attache partitions", {"newPartitions", JoinRange(", ", newPartitions.begin(), newPartitions.end())},
+            {"family", family->DebugStr()});
+        for (auto id : newPartitions) {
+            std::array<ui32, 1> partitionIds{id};
+            if (family->CanAttach(partitionIds)) {
+                auto* node = GetPartitionGraph().GetPartition(id);
+                if (!node) {
+                    continue;
+                }
+                bool allParentsMerged = true;
+                if (node->DirectParents.size() > 1) {
+                    // The partition was obtained as a result of the merge.
+                    for (auto* c : node->DirectParents) {
+                        if (!c) {
+                            allParentsMerged = false;
+                            continue;
+                        }
+                        auto* other = FindFamily(c->Id);
+                        if (!other) {
+                            allParentsMerged = false;
+                            continue;
+                        }
+
+                        if (other != family) {
+                            auto* mergeLeft = family;
+                            auto* mergeRight = other;
+                            auto [f, v] = MergeFamilies(family, other, ctx);
+                            family = f;
+                            // MergeFamilies may swap lhs/rhs. After a swap `other` can
+                            // alias the merge target, so check both original pointers.
+                            // Inspect them only if the merge was deferred (v == false).
+                            const bool joiningCommon = !v && (
+                                (mergeRight->TargetStatus == TPartitionFamily::ETargetStatus::Merge
+                                    && mergeRight->MergeTo == family->Id)
+                                || (mergeLeft->TargetStatus == TPartitionFamily::ETargetStatus::Merge
+                                    && mergeLeft->MergeTo == family->Id));
+                            allParentsMerged = allParentsMerged && (v || joiningCommon);
+                        }
+                    }
+                }
+
+                if (allParentsMerged) {
+                    auto* other = FindFamily(id);
+                    if (other && other != family) {
+                        if (other->HasSpecialSession()) {
+                            continue;
+                        }
+                        auto [f, _] = MergeFamilies(family, other, ctx);
+                        family = f;
+                    } else {
+                        family->AttachePartitions({id}, ctx);
+                    }
+                }
+            } else {
+                LOG_D("Can't attache partition", {"id", id},
+                    {"family", family->DebugStr()});
+                TPartitionFamily* commonParent = nullptr;
+                if (family->HasSpecialSession()) {
+                    auto* node = GetPartitionGraph().GetPartition(id);
+                    if (node && node->DirectParents.size() > 1) {
+                        for (auto* c : node->DirectParents) {
+                            if (!c) {
+                                continue;
+                            }
+                            auto* other = FindFamily(c->Id);
+                            if (other && other != family && !other->HasSpecialSession()) {
+                                commonParent = other;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (commonParent) {
+                    auto [f, v] = MergeFamilies(commonParent, family, ctx);
+                    family = f;
+                    if (v) {
+                        family->AttachePartitions({id}, ctx);
+                    } else if (!FindFamily(id)) {
+                        CreateFamily({id}, ctx);
+                    }
+                } else if (!FindFamily(id)) {
+                    CreateFamily({id}, ctx);
+                }
+            }
+        }
+    } else {
+        for (auto p : newPartitions) {
+            auto* f = FindFamily(p);
+            if (!f) {
+                CreateFamily({p}, ctx);
+            }
+        }
+    }
+
+    return !newPartitions.empty();
+}
+
+void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
+    if (!GetPartitionInfo(partitionId)) {
+        LOG_N("Reading of the partition was started by but partition has been deleted", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
+
+    auto* partition = GetPartition(partitionId);
+    if (!partition) {
+        LOG_N("Reading of the partition was started by but partition does not exist", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
+
+    auto wasInactive = partition->IsInactive();
+    if (partition->StartReading()) {
+        LOG_D("Reading of the partition was started by We stop reading from child partitions", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+
+        auto* family = FindFamily(partitionId);
+        if (!family) {
+            return;
+        }
+
+        if (!family->IsLonely()) {
+            BreakUpFamily(family, partitionId, false, ctx);
+            return;
+        }
+
+        if (wasInactive) {
+            family->ActivatePartition(partitionId);
+        }
+
+        // We releasing all children's partitions because we don't start reading the partition from EndOffset
+        GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
+            auto* partition = GetPartition(partitionId);
+            auto* f = FindFamily(partitionId);
+
+            if (f) {
+                if (partition && partition->Reset()) {
+                    f->ActivatePartition(partitionId);
+                }
+                DestroyFamily(f, ctx);
+            }
+
+            return true;
+        });
+        if (Families.contains(family->Id)) {
+            family->AssertInvariants();
+        }
+    }
+}
+
+TString GetSdkDebugString0(bool scaleAwareSDK) {
+    return scaleAwareSDK ? "ScaleAwareSDK" : "old SDK";
+}
+
+void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
+
+    if (!IsReadable(partitionId)) {
+        LOG_D("Reading of the partition was finished by but the partition isn't readable", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
+
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        LOG_D("Reading of the partition was finished by but the partition hasn't family", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
+
+    if (!family->Session) {
+        LOG_D("Reading of the partition was finished by but the partition hasn't reading session", {"partitionId", partitionId},
+            {"consumerName", ConsumerName});
+        return;
+    }
+
+    auto& partition = Partitions[partitionId];
+
+    Y_DEBUG_ABORT_UNLESS(PartitionHasChildren(GetPartitionGraph(), partitionId),
+        "Finish of a leaf partition %u, consumer %s", partitionId, ConsumerName.data());
+
+    const bool wasInactive = partition.IsInactive();
+    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
+        LOG_D("Reading of the partition was finished by", {"partitionId", partitionId},
+            {"firstMessage", r.GetStartedReadingFromEndOffset()},
+            {"scaleAwareSdk", GetSdkDebugString0(r.GetScaleAwareSDK())});
+
+        if (ProccessReadingFinished(partitionId, wasInactive, ctx)) {
+            ScheduleBalance(ctx);
+        }
+    } else if (!partition.IsInactive()) {
+        auto delay = std::min<size_t>(1ul << partition.Iteration, Balancer.GetLifetimeSeconds()); // TODO use split/merge time
+
+        LOG_D("Reading of the partition was finished by Scheduled release of the partition for re-reading. seconds", {"partitionId", partitionId},
+            {"delay", delay},
+            {"firstMessage", r.GetStartedReadingFromEndOffset()},
+            {"scaleAwareSdk", GetSdkDebugString0(r.GetScaleAwareSDK())});
+
+        ctx.Schedule(TDuration::Seconds(delay), new TEvPQ::TEvWakeupReleasePartition(ConsumerName, partitionId, partition.Cookie));
+    }
+}
+
+void TConsumer::ScheduleBalance(const TActorContext& ctx) {
+    if (BalanceScheduled) {
+        LOG_T("Rebalancing already was scheduled");
+        return;
+    }
+
+    BalanceScheduled = true;
+
+    LOG_D("Rebalancing was scheduled");
+
+    ctx.Send(Balancer.TopicActor.SelfId(), new TEvPQ::TEvBalanceConsumer(ConsumerName));
+}
+
+template<typename TSessions, typename TPredicate>
+TLowLoadOrderedSessions OrderSessions(const TSessions& values, TPredicate predicate) {
+    TLowLoadOrderedSessions result;
+    for (auto& [_, v] : values) {
+        if (predicate(v)) {
+            result.insert(v);
+        }
+    }
+
+    return result;
+}
+
+template<typename TSessions>
+TLowLoadOrderedSessions OrderSessions(const TSessions& values) {
+    return OrderSessions(values, [](const TSession*) { return true; });
+}
+
+TString DebugStr(const absl::flat_hash_map<size_t, TPartitionFamily*>& values) {
+    TStringBuilder sb;
+    for (auto& [id, family] : values) {
+        sb << id << " (" << JoinRange(", ", family->Partitions.begin(), family->Partitions.end()) << "), ";
+    }
+    return sb;
+}
+
+std::vector<TPartitionFamily*> OrderFamilies(
+    const absl::flat_hash_map<size_t, TPartitionFamily*>& values
+) {
+    std::vector<TPartitionFamily*> result;
+    result.reserve(values.size());
+    for (auto& [_, v] : values) {
+        result.push_back(v);
+    }
+    std::sort(result.begin(), result.end(), TPartitionFamilyComparator{});
+    return result;
+}
+
+template<typename TFamilies, typename TPredicate>
+size_t GetStatistics(const TFamilies& values, TPredicate predicate) {
+    size_t count = 0;
+
+    for (auto& [_, family] : values) {
+        if (predicate(family.get())) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+void TConsumer::Balance(const TActorContext& ctx) {
+    LOG_D("Balancing", {"sessions", Sessions.size()},
+        {"families", Families.size()},
+        {"unreadableFamilies", UnreadableFamilies.size()},
+        {"unreadableFamiliesDebug", DebugStr(UnreadableFamilies)},
+        {"requireBalancing", FamiliesRequireBalancing.size()},
+        {"familiesRequireBalancingDebug", DebugStr(FamiliesRequireBalancing)});
+
+    if (Sessions.empty()) {
+        return;
+    }
+
+    auto startTime = TAppData::TimeProvider->Now();
+
+    // We try to balance the partitions by sessions that clearly want to read them, even if the distribution is not uniform.
+    for (auto* family : Snapshot(Families)) {
+        auto it = Families.find(family->Id);
+        if (it == Families.end() || it->second.get() != family) {
+            continue;
+        }
+        if (family->Status != TPartitionFamily::EStatus::Active || family->IsCommon()) {
+            continue;
+        }
+        if (!family->Session || !family->SpecialSessions.contains(family->Session->Pipe)) {
+            LOG_D("Rebalance because exists the special session for it", {"family", family->DebugStr()});
+            family->Release(ctx);
+        }
+    }
+
+    TLowLoadOrderedSessions commonSessions = OrderSessions(Sessions, [](auto* session) {
+        return !session->WithGroups();
+    });
+
+    // Balance unredable families.
+    if (!UnreadableFamilies.empty()) {
+        auto families = OrderFamilies(UnreadableFamilies);
+        for (auto it = families.rbegin(); it != families.rend(); ++it) {
+            auto* family = *it;
+
+            const bool hasUnreadable = AnyOf(family->Partitions, [&](ui32 id) { return !IsReadable(id); });
+            if (hasUnreadable && (family->IsCommon() || !family->IsLonely())) {
+                LOG_D("Skip balancing because the family has an unreadable partition", {"family", family->DebugStr()});
+                continue;
+            }
+
+            TLowLoadOrderedSessions specialSessions;
+            auto& sessions = (family->IsCommon()) ? commonSessions : (specialSessions = OrderSessions(family->SpecialSessions));
+
+            auto sit = sessions.begin();
+            for (;sit != sessions.end() && sessions.size() > 1 && !family->PossibleForBalance(*sit); ++sit) {
+                // Skip unpossible session. If there is only one session, then we always balance in it.
+            }
+
+            if (sit == sessions.end()) {
+                LOG_D("Balancing of the failed because there are no suitable reading sessions", {"family", family->DebugStr()});
+
+                continue;
+            }
+
+            auto* session = *sit;
+
+            // Reorder sessions
+            sessions.erase(sit);
+
+            LOG_D("Balancing", {"family", family->DebugStr()},
+                {"debug", session->DebugStr()});
+            family->StartReading(*session, ctx);
+
+            // Reorder sessions
+            sessions.insert(session);
+
+            if (family->IsActive()) {
+                UnreadableFamilies.erase(family->Id);
+            }
+        }
+    }
+
+    // Rebalancing reading sessions with a large number of readable partitions.
+    if (!commonSessions.empty()) {
+        auto familyCount = GetStatistics(Families, [](auto* family) {
+            return family->IsCommon();
+        });
+
+        auto desiredFamilyCount = familyCount / commonSessions.size();
+        auto allowPlusOne = familyCount % commonSessions.size();
+
+        LOG_D("Start rebalancing", {"familyCount", familyCount},
+            {"sessionCount", commonSessions.size()},
+            {"desiredFamilyCount", desiredFamilyCount},
+            {"allowPlusOne", allowPlusOne});
+
+        if (!OrderedSessions) {
+            OrderedSessions.emplace();
+            OrderedSessions->insert(commonSessions.begin(), commonSessions.end());
+        }
+        for (auto it = OrderedSessions->begin(); it != OrderedSessions->end(); ++it) {
+            auto* session = *it;
+            auto targerFamilyCount = desiredFamilyCount + (allowPlusOne ? 1 : 0);
+            auto families = OrderFamilies(session->Families);
+            for (auto fit = families.rbegin(); fit != families.rend() && session->ActiveFamilyCount > targerFamilyCount; ++fit) {
+                auto* f = *fit;
+                if (f->IsActive()) {
+                    f->Release(ctx);
+                }
+            }
+
+            if (allowPlusOne) {
+                --allowPlusOne;
+            }
+        }
+    }
+
+    // Rebalancing special sessions
+    if (!FamiliesRequireBalancing.empty()) {
+        for (auto* family : OrderFamilies(FamiliesRequireBalancing)) {
+            auto it = FamiliesRequireBalancing.find(family->Id);
+            if (it == FamiliesRequireBalancing.end() || it->second != family) {
+                continue;
+            }
+            auto fit = Families.find(family->Id);
+            if (fit == Families.end() || fit->second.get() != family) {
+                FamiliesRequireBalancing.erase(family->Id);
+                continue;
+            }
+
+            if (!family->IsActive() || !family->Session) {
+                LOG_D("Skip balancing because it is not active", {"family", family->DebugStr()});
+
+                FamiliesRequireBalancing.erase(family->Id);
+                continue;
+            }
+
+            if (!family->SpecialSessions.contains(family->Session->Pipe)) {
+                family->Release(ctx);
+                FamiliesRequireBalancing.erase(family->Id);
+                continue;
+            }
+
+            if (family->Session->ActiveFamilyCount == 1) {
+                LOG_D("Skip balancing because it is considered a session that does not read anything else", {"family", family->DebugStr()});
+
+                FamiliesRequireBalancing.erase(family->Id);
+                continue;
+            }
+
+            if (family->SpecialSessions.size() <= 1) {
+                LOG_D("Skip balancing because there are no other suitable reading sessions", {"family", family->DebugStr()});
+
+                FamiliesRequireBalancing.erase(family->Id);
+                continue;
+            }
+
+            bool hasGoodestSession = false;
+            size_t targetPartitionCount = family->Session->ActiveFamilyCount - 1;
+            for (auto [_, s] : family->SpecialSessions) {
+                if (s == family->Session) {
+                    continue;
+                }
+                if (s->ActivePartitionCount < targetPartitionCount) {
+                    hasGoodestSession = true;
+                    break;
+                }
+            }
+
+            if (hasGoodestSession) {
+                family->Release(ctx);
+                FamiliesRequireBalancing.erase(family->Id);
+            } else {
+                LOG_D("Skip balancing because it is already being read by the best session", {"family", family->DebugStr()});
+            }
+        }
+    }
+
+    auto duration = TAppData::TimeProvider->Now() - startTime;
+    LOG_D("Balancing", {"duration", duration});
+}
+
+void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {
+    auto* family = FindFamily(partitionId);
+    if (!family) {
+        return;
+    }
+
+    family->Release(ctx);
+}
+
+
+//
+// TSession
+//
+
+TSession::TSession(const TActorId& pipe)
+            : Pipe(pipe)
+            , ServerActors(0)
+            , ActivePartitionCount(0)
+            , InactivePartitionCount(0)
+            , ReleasingPartitionCount(0)
+            , ActiveFamilyCount(0)
+            , ReleasingFamilyCount(0)
+            , Order(RandomNumber<size_t>()) {
+}
+
+bool TSession::WithGroups() const { return !Partitions.empty(); }
+
+template<typename TCollection>
+bool TSession::AllPartitionsReadable(const TCollection& partitions) const {
+    if (WithGroups()) {
+        for (auto p : partitions) {
+            if (!Partitions.contains(p)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+template bool TSession::AllPartitionsReadable(const std::vector<ui32>& partitions) const;
+template bool TSession::AllPartitionsReadable(const absl::flat_hash_set<ui32>& partitions) const;
+
+TString TSession::DebugStr() const {
+    return TStringBuilder() << "ReadingSession \"" << SessionName << "\" (Sender=" << Sender << ", Pipe=" << Pipe
+            << ", Partitions=[" << JoinRange(", ", Partitions.begin(), Partitions.end())
+            << "], ActiveFamilyCount=" << ActiveFamilyCount << ")";
+}
+
+
+//
+// TBalancer
+//
+
+TBalancer::TBalancer(TPersQueueReadBalancer& topicActor)
+    : TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
+    , TopicActor(topicActor)
+    , Step(0) {
+}
+
+const TString& TBalancer::Topic() const {
+    return TopicActor.Topic;
+}
+
+const TString& TBalancer::TopicPath() const {
+    return TopicActor.Path;
+}
+
+ui32 TBalancer::TabletGeneration() const {
+    return TopicActor.Generation;
+}
+
+const TPartitionInfo* TBalancer::GetPartitionInfo(ui32 partitionId) const {
+    auto it = GetPartitionsInfo().find(partitionId);
+    if (it == GetPartitionsInfo().end()) {
+        return nullptr;
+    }
+    return &it->second;
+}
+
+const absl::flat_hash_map<ui32, TPartitionInfo>& TBalancer::GetPartitionsInfo() const {
+    return TopicActor.PartitionsInfo;
+}
+
+const TPartitionGraph& TBalancer::GetPartitionGraph() const {
+    return TopicActor.PartitionGraph;
+}
+
+bool TBalancer::ScalingSupport() const {
+    return SplitMergeEnabled(TopicActor.TabletConfig);
+}
+
+i32 TBalancer::GetLifetimeSeconds() const {
+    return TopicActor.TabletConfig.GetPartitionConfig().GetLifetimeSeconds();
+}
+
+TConsumer* TBalancer::GetConsumer(const TString& consumerName) {
+    auto it = Consumers.find(consumerName);
+    if (it == Consumers.end()) {
+        return nullptr;
+    }
+    return it->second.get();
+}
+
+const absl::flat_hash_map<TString, std::unique_ptr<TConsumer>>& TBalancer::GetConsumers() const {
+    return Consumers;
+}
+
+const absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>& TBalancer::GetSessions() const {
+    return Sessions;
+}
+
+
+void TBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx) {
+    LOG_D("Updating configuration. Deleted partitions Added partitions", {"deletedPartitions", JoinRange(", ", deletedPartitions.begin(), deletedPartitions.end())},
+        {"addedPartitions", JoinRange(", ", addedPartitions.begin(), addedPartitions.end())});
+
+    for (auto partitionId : deletedPartitions) {
+        for (auto& [_, consumer] : Consumers) {
+            consumer->UnregisterPartition(partitionId, ctx);
+        }
+    }
+
+    for (auto& partitionId : addedPartitions) {
+        for (auto& [_, balancingConsumer] : Consumers) {
+            balancingConsumer->RegisterPartition(partitionId, ctx);
+        }
+    }
+
+    for (auto& [_, consumer] : Consumers) {
+        consumer->ScheduleBalance(ctx);
+    }
+}
+
+bool TBalancer::SetCommittedState(const TString& consumerName, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx) {
+    auto* consumer = GetConsumer(consumerName);
+    if (!consumer) {
+        return false;
+    }
+
+    if (!consumer->IsReadable(partitionId)) {
+        LOG_D("The offset of the partition was commited by but the partition isn't readable", {"partitionId", partitionId},
+            {"consumerName", consumerName});
+        return false;
+    }
+
+    auto wasInactive = consumer->IsInactive(partitionId);
+    if (consumer->SetCommittedState(partitionId, generation, cookie)) {
+        LOG_D("The offset of the partition was commited by", {"partitionId", partitionId},
+            {"consumerName", consumerName});
+
+        if (consumer->ProccessReadingFinished(partitionId, wasInactive, ctx)) {
+            consumer->ScheduleBalance(ctx);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+void TBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+
+    SetCommittedState(r.GetConsumer(), r.GetPartitionId(), r.GetGeneration(), r.GetCookie(), ctx);
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+    auto partitionId = r.GetPartitionId();
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        LOG_D("Received TEvReadingPartitionStartedRequest from unknown pipe", {"pipeClient", pipeClient});
+        return;
+    }
+
+    auto consumer = GetConsumer(r.GetConsumer());
+    if (!consumer) {
+        LOG_D("Received TEvReadingPartitionStartedRequest from unknown consumer", {"consumer", r.GetConsumer()});
+        return;
+    }
+
+    consumer->StartReading(partitionId, ctx);
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& r = ev->Get()->Record;
+    auto pipeClient = ActorIdFromProto(r.GetPipeClient());
+
+    if (pipeClient && !Sessions.contains(pipeClient)) {
+        LOG_D("Received TEvReadingPartitionFinishedRequest from unknown pipe", {"pipeClient", pipeClient});
+        return;
+    }
+
+    auto consumer = GetConsumer(r.GetConsumer());
+    if (!consumer) {
+        LOG_D("Received TEvReadingPartitionFinishedRequest from unknown consumer", {"consumer", r.GetConsumer()});
+        return;
+    }
+
+    consumer->FinishReading(ev, ctx);
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx) {
+    const auto& r = ev->Get()->Record;
+    const TString& consumerName = r.GetClientId();
+    auto partitionId = r.GetPartition();
+    TActorId sender = ActorIdFromProto(r.GetPipeClient());
+
+    auto* partitionInfo = GetPartitionInfo(partitionId);
+    if (!partitionInfo) {
+        LOG_C("Client pipe got deleted partition", {"clientId", r.GetClientId()},
+            {"sender", sender},
+            {"r", r});
+        return;
+    }
+
+    LOG_I("Client released partition from pipe session partition", {"clientId", r.GetClientId()},
+        {"sender", sender},
+        {"session", r.GetSession()},
+        {"partitionId", partitionId});
+
+    auto* consumer = GetConsumer(consumerName);
+    if (!consumer) {
+        LOG_C("Client pipe is not connected and got release partitions request for session", {"clientId", r.GetClientId()},
+            {"sender", sender},
+            {"session", r.GetSession()});
+        return;
+    }
+
+    if (consumer->Unlock(sender, partitionId, ctx)) {
+        consumer->ScheduleBalance(ctx);
+    }
+}
+
+void TBalancer::Handle(TEvPQ::TEvWakeupReleasePartition::TPtr &ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+    auto* consumer = GetConsumer(msg->Consumer);
+    if (!consumer) {
+        return;
+    }
+
+    auto* partition = consumer->GetPartition(msg->PartitionId);
+    if (!partition || partition->Cookie != msg->Cookie) {
+        return;
+    }
+
+    if (partition->Commited) {
+        LOG_D("Skip releasing partition of consumer by reading finished timeout because offset is commited", {"partitionId", msg->PartitionId},
+            {"consumer", msg->Consumer});
+        return;
+    }
+
+    LOG_I("Releasing partition of consumer by reading finished timeout", {"partitionId", msg->PartitionId},
+        {"consumer", msg->Consumer});
+
+    consumer->Release(msg->PartitionId, ctx);
+}
+
+void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
+    const TActorId& sender = ev->Get()->ClientId;
+
+    auto it = Sessions.find(sender);
+    if (it == Sessions.end()) {
+        auto [i, _] = Sessions.emplace(sender, std::make_unique<TSession>(sender));
+        it = i;
+    }
+    auto& session = it->second;
+    ++session->ServerActors;
+
+    LOG_I("Pipe connected; active server", {"sender", sender},
+        {"actors", session->ServerActors});
+}
+
+void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    LOG_D("Pipe disconnected", {"clientId", ev->Get()->ClientId});
+    Subscriptions.erase(ev->Get()->ClientId);
+
+    auto it = Sessions.find(ev->Get()->ClientId);
+
+    if (it == Sessions.end()) {
+        LOG_D("Pipe disconnected but there aren't sessions exists", {"clientId", ev->Get()->ClientId});
+        return;
+    }
+
+    LOG_I("Pipe disconnected; active server", {"clientId", ev->Get()->ClientId},
+        {"actors", (it != Sessions.end() ? it->second->ServerActors : -1)});
+
+    auto& session = it->second;
+    if (--(session->ServerActors) > 0) {
+        return;
+    }
+
+    if (!session->SessionName.empty()) {
+        LOG_N("Pipe client disconnected session", {"eventClientId", ev->Get()->ClientId},
+            {"sessionClientId", session->ClientId},
+            {"sessionName", session->SessionName});
+
+        auto* consumer = GetConsumer(session->ClientId);
+        if (consumer) {
+            consumer->UnregisterReadingSession(session.get(), ctx);
+
+            if (consumer->Sessions.empty()) {
+                Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
+                Consumers.erase(consumer->ConsumerName);
+            } else {
+                consumer->ScheduleBalance(ctx);
+            }
+        }
+
+        Sessions.erase(it);
+    } else {
+        LOG_I("Pipe disconnected no session", {"clientId", ev->Get()->ClientId});
+
+        Sessions.erase(it);
+    }
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx) {
+    const auto& r = ev->Get()->Record;
+    auto& consumerName = r.GetClientId();
+
+    TActorId pipe = ActorIdFromProto(r.GetPipeClient());
+    LOG_N("Consumer register session for pipe session", {"consumerName", consumerName},
+        {"pipe", pipe},
+        {"session", r.GetSession()});
+
+    if (consumerName.empty()) {
+        LOG_C("Ignored the session registration with empty consumer name");
+        return;
+    }
+
+    if (r.GetSession().empty()) {
+        LOG_C("Ignored the session registration with empty session name");
+        return;
+    }
+
+    if (!pipe) {
+        LOG_C("Ignored the session registration with empty Pipe");
+        return;
+    }
+
+    auto jt = Sessions.find(pipe);
+    if (jt == Sessions.end()) {
+        LOG_C("Client pipe is not connected and got register session request for session", {"consumerName", consumerName},
+            {"pipe", pipe},
+            {"session", r.GetSession()});
+        return;
+    }
+
+    auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
+    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
+    std::vector<ui32> partitions;
+    partitions.reserve(r.GroupsSize());
+    for (auto& group : r.GetGroups()) {
+        auto partitionId = group - 1;
+        if (group == 0 || !GetPartitionInfo(partitionId)) {
+            auto response = std::make_unique<TEvPersQueue::TEvError>();
+            response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+            response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic());
+            ctx.Send(ev->Sender, std::move(response));
+            return;
+        }
+        partitions.push_back(partitionId);
+    }
+
+    auto* session = jt->second.get();
+    session->ClientId = r.GetClientId();
+    session->SessionName = r.GetSession();
+    session->Sender = ev->Sender;
+    session->Partitions.insert(partitions.begin(), partitions.end());
+    session->ClientNode = r.HasClientNode() ? r.GetClientNode() : "none";
+    session->ProxyNodeId = ev->Sender.NodeId();
+    session->CreateTimestamp = TAppData::TimeProvider->Now();
+
+    auto it = Consumers.find(consumerName);
+    if (it == Consumers.end()) {
+        auto [i, _] = Consumers.emplace(consumerName, std::make_unique<TConsumer>(*this, consumerName));
+        i->second->InitPartitions(ctx);
+        it = i;
+
+        Notify(consumerName, NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING, ctx);
+    }
+
+    auto* consumer = it->second.get();
+    consumer->RegisterReadingSession(session, ctx);
+    consumer->ScheduleBalance(ctx);
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TActorContext& ctx) {
+    const auto& r = ev->Get()->Record;
+
+    absl::flat_hash_set<ui32> partitionsRequested;
+    partitionsRequested.insert(r.GetPartitions().begin(), r.GetPartitions().end());
+
+    auto response = std::make_unique<TEvPersQueue::TEvReadSessionsInfoResponse>();
+    response->Record.SetTabletId(TopicActor.TabletID());
+
+    auto consumer = GetConsumer(r.GetClientId());
+    if (consumer) {
+        for (auto& [partitionId, _] : GetPartitionsInfo()) {
+            if (!partitionsRequested.empty() && !partitionsRequested.contains(partitionId)) {
+                continue;
+            }
+
+            auto pi = response->Record.AddPartitionInfo();
+            pi->SetPartition(partitionId);
+
+            auto* family = consumer->FindFamily(partitionId);
+            if (family && family->Session && family->LockedPartitions.contains(partitionId)) {
+                auto* session = family->Session;
+
+                pi->SetClientNode(session->ClientNode);
+                pi->SetProxyNodeId(session->ProxyNodeId);
+                pi->SetSession(session->SessionName);
+                pi->SetTimestamp(session->CreateTimestamp.Seconds());
+                pi->SetTimestampMs(session->CreateTimestamp.MilliSeconds());
+            } else {
+                pi->SetClientNode("");
+                pi->SetProxyNodeId(0);
+                pi->SetSession("");
+                pi->SetTimestamp(0);
+                pi->SetTimestampMs(0);
+            }
+        }
+
+        for (auto& [_, session] : consumer->Sessions) {
+            auto si = response->Record.AddReadSessions();
+            si->SetSession(session->SessionName);
+
+            ActorIdToProto(session->Sender, si->MutableSessionActor());
+        }
+    }
+    ctx.Send(ev->Sender, response.release());
+}
+
+void TBalancer::Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx) {
+    auto* consumer = GetConsumer(ev->Get()->ConsumerName);
+    if (consumer) {
+        consumer->BalanceScheduled = false;
+        consumer->Balance(ctx);
+    }
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+    const auto& record = ev->Get()->Record;
+    for (const auto& partResult : record.GetPartResult()) {
+        for (const auto& consumerResult : partResult.GetConsumerResult()) {
+            PendingUpdates[partResult.GetPartition()].push_back(TData{partResult.GetGeneration(), partResult.GetCookie(), consumerResult.GetConsumer(), consumerResult.GetReadingFinished()});
+        }
+    }
+}
+
+void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
+    LOG_D("ProcessPendingStats. PendingUpdates size", {"pendingUpdatesSize", PendingUpdates.size()});
+
+    GetPartitionGraph().Travers([&](ui32 id) {
+        for (auto& d : PendingUpdates[id]) {
+            if (d.Commited) {
+                SetCommittedState(d.Consumer, id, d.Generation, d.Cookie, ctx);
+            }
+        }
+        return true;
+    });
+
+    PendingUpdates.clear();
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe", {"ev", record.ShortDebugString()});
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto status = Consumers.contains(record.GetConsumer()) ?
+        NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING : NKikimrPQ::TEvBalancingSubscribeNotify::FREE;
+    Notify(sender, record.GetConsumer(), status, ctx);
+
+    Subscriptions[ev->Sender].emplace_back(std::move(sender), std::move(*record.MutableConsumer()));
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
+    auto& record = ev->Get()->Record;
+    LOG_D("Handle TEvPersQueue::TEvBalancingUnsubscribe", {"ev", record.ShortDebugString()});
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto& consumer = record.GetConsumer();
+
+    auto it = Subscriptions.find(ev->Sender);
+    if (it == Subscriptions.end()) {
+        return;
+    }
+
+    std::vector<TSubscription>& subscriptions = it->second;
+    std::vector<TSubscription> actualSubscriptions;
+    actualSubscriptions.reserve(subscriptions.size());
+
+    for (auto& [existsSender, existsConsumer] : subscriptions) {
+        if (sender == existsSender && consumer == existsConsumer) {
+            continue;
+        }
+
+        actualSubscriptions.emplace_back(std::move(existsSender), std::move(existsConsumer));
+    }
+
+    subscriptions = std::move(actualSubscriptions);
+}
+
+void TBalancer::Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    for (auto& [_, subscriptions] : Subscriptions) {
+        for (auto& subscription : subscriptions) {
+            if (subscription.Consumer == consumer) {
+                Notify(subscription.Sender, consumer, status, ctx);
+            }
+        }
+    }
+}
+
+void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
+}
+
+TStructuredMessage TBalancer::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"tabletId", TopicActor.TabletID()},
+        {"topic", Topic()});
+}
+
+ui32 TBalancer::NextStep() {
+    return ++Step;
+}
+
+
+bool TPartitionFamilyComparator::operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const {
+    if (lhs->ActivePartitionCount != rhs->ActivePartitionCount) {
+        return lhs->ActivePartitionCount < rhs->ActivePartitionCount;
+    }
+    if (lhs->InactivePartitionCount != rhs->InactivePartitionCount) {
+        return lhs->InactivePartitionCount < rhs->InactivePartitionCount;
+    }
+    return lhs->Id < rhs->Id;
+}
+
+bool SessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
+    }
+    return lhs->SessionName < rhs->SessionName;
+}
+
+
+bool LowLoadSessionComparator::operator()(const TSession* lhs, const TSession* rhs) const {
+    if (lhs->ActiveFamilyCount != rhs->ActiveFamilyCount) {
+        return lhs->ActiveFamilyCount < rhs->ActiveFamilyCount;
+    }
+    if (lhs->Partitions.size() != rhs->Partitions.size()) {
+        return lhs->Partitions.size() < rhs->Partitions.size();
+    }
+    if (lhs->Order != rhs->Order) {
+        return lhs->Order < rhs->Order;
+    }
+    return lhs->SessionName < rhs->SessionName;
+}
+
+}

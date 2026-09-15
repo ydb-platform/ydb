@@ -3,9 +3,9 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,6 +15,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     bool PackModificationFlag = false;
     THashMap<TInternalPathId, const TGranuleMeta*> PackModifiedGranules;
+    std::map<ui64, TPositiveControlInteger> SchemaVersionsControl;
 
     static inline TAtomicCounter SumMetadataMemoryPortionsSize = 0;
 
@@ -34,7 +35,14 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
+    }
+
+    bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
+        AFL_VERIFY(fromVersion <= version);
+        auto it = SchemaVersionsControl.lower_bound(fromVersion);
+        return (it != SchemaVersionsControl.end() && it->first <= version);
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
@@ -47,7 +55,8 @@ public:
 
     public:
         TModificationGuard(TGranulesStat& storage)
-            : Owner(storage) {
+            : Owner(storage)
+        {
             Owner.StartModificationImpl();
         }
 
@@ -80,6 +89,11 @@ public:
     }
 
     void OnRemovePortion(const TPortionInfo& portion) {
+        auto it = SchemaVersionsControl.find(portion.GetSchemaVersionVerified());
+        AFL_VERIFY(it != SchemaVersionsControl.end());
+        if (it->second.Dec() == 0) {
+            SchemaVersionsControl.erase(it);
+        }
         MetadataMemoryPortionsSize -= portion.GetMetadataMemorySize();
         AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
         const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemorySize());
@@ -87,9 +101,31 @@ public:
     }
 
     void OnAddPortion(const TPortionInfo& portion) {
+        SchemaVersionsControl[portion.GetSchemaVersionVerified()].Inc();
         MetadataMemoryPortionsSize += portion.GetMetadataMemorySize();
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
+    }
+};
+
+class TGranuleOrdered {
+private:
+    NStorageOptimizer::TOptimizationPriority Priority;
+    YDB_READONLY_DEF(std::shared_ptr<TGranuleMeta>, Granule);
+
+public:
+    const NStorageOptimizer::TOptimizationPriority& GetPriority() const {
+        return Priority;
+    }
+
+    TGranuleOrdered(const NStorageOptimizer::TOptimizationPriority& priority, const std::shared_ptr<TGranuleMeta>& meta)
+        : Priority(priority)
+        , Granule(meta)
+    {
+    }
+
+    bool operator<(const TGranuleOrdered& item) const {
+        return Priority < item.Priority;
     }
 };
 
@@ -100,10 +136,16 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
+    std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings> OptimizerRuntimeSettings =
+        NStorageOptimizer::TOptimizerRuntimeSettings::MakeDefault();
 
 public:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
+    }
+
+    const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& GetOptimizerRuntimeSettings() const {
+        return OptimizerRuntimeSettings;
     }
 
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {
@@ -124,7 +166,8 @@ public:
         : Counters(counters)
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        , Stats(std::make_shared<TGranulesStat>(Counters))
+    {
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(StoragesManager);
     }
@@ -168,7 +211,6 @@ public:
         }
     }
 
-
     std::shared_ptr<TPortionInfo> GetPortionOptional(const TInternalPathId pathId, const ui64 portionId) const {
         auto it = Tables.find(pathId);
         if (it == Tables.end()) {
@@ -199,10 +241,11 @@ public:
         return Counters;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
-        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), const std::optional<ui64> waitingPriority = std::nullopt,
-        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
+    /**
+    Returns granules for compaction in descending order of priority
+    */
+    std::vector<TGranuleOrdered> GetGranulesForCompaction(const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(),
+        const std::optional<ui64> waitingPriority = std::nullopt) const;
 };
 
 }   // namespace NKikimr::NOlap

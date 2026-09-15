@@ -1,17 +1,19 @@
 #pragma once
-#include "write.h"
+
+#include "export_counters.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
-#include <ydb/core/tx/columnshard/export/events/events.h>
-#include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
 #include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -26,74 +28,58 @@ private:
     };
 
     using TBase = NBackground::TSessionActor;
-    std::shared_ptr<IBlobsStorageOperator> BlobsOperator;
     std::optional<TActorId> ScanActorId;
 
     EStage Stage = EStage::Initialization;
-    std::shared_ptr<arrow::RecordBatch> CurrentData;
-    TString CurrentDataBlob;
     std::shared_ptr<NExport::TSession> ExportSession;
-    static inline const ui64 FreeSpace = ((ui64)8) << 20;
-    void SwitchStage(const EStage from, const EStage to) {
-        AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
-        Stage = to;
-    }
+    TActorId Exporter;
+    static inline const ui64 FreeSpace = ((ui64)128) << 20;
+    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
+    static constexpr TDuration WarningInterval = TDuration::Seconds(60);
+    static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
+
+    TExportCounters Counters;
+    TInstant ReadStartTime;
+    TInstant WriteStartTime;
+    TInstant SaveCursorStartTime;
+    TInstant StageStartTime;
+
+    void SwitchStage(const EStage from, const EStage to);
+
+    void AbortExport(const TString& errorMessage);
+    void KillExporter();
+    void AbortScanIfKnown(const TString& reason);
+
+    void ScheduleTimeoutCheck();
+    void HandleWakeup();
+
+    static TString StageToString(EStage stage);
+
+    void PassAway() override;
 
 protected:
-    void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        SwitchStage(EStage::Initialization, EStage::WaitData);
-        AFL_VERIFY(!ScanActorId);
-        auto& msg = ev->Get()->Record;
-        ScanActorId = ActorIdFromProto(msg.GetScanActorId());
-        TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
-    }
+    void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
     virtual void OnSessionStateSaved() override;
 
-    virtual void OnTxCompleted(const ui64 /*txId*/) override {
-        Session->FinishActor();
-    }
+    virtual void OnTxCompleted(const ui64 /*txId*/) override;
 
-    virtual void OnSessionProgressSaved() override {
-        SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
-        if (ExportSession->GetCursor().IsFinished()) {
-            ExportSession->Finish();
-            SaveSessionState();
-        } else {
-            AFL_VERIFY(ScanActorId);
-            TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
-        }
-    }
-
-    void HandleExecute(NEvents::TEvExportWritingFinished::TPtr& /*ev*/) {
-        SwitchStage(EStage::WaitWriting, EStage::WaitSaveCursor);
-        AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
-        SaveSessionProgress();
-    }
-
-    void HandleExecute(NEvents::TEvExportWritingFailed::TPtr& ev);
+    virtual void OnSessionProgressSaved() override;
 
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
 
-    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/) {
-        AFL_VERIFY(false);
-    }
+    void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/);
 
-    virtual void OnBootstrap(const TActorContext& /*ctx*/) override {
-        auto evStart = ExportSession->GetTask().GetSelector()->BuildRequestInitiator(ExportSession->GetCursor());
-        evStart->Record.SetGeneration((ui64)TabletId);
-        evStart->Record.SetCSScanPolicy("PLAIN");
-        Send(TabletActorId, evStart.release());
-        Become(&TActor::StateFunc);
-    }
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/);
+
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
+
+    virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
+
+    std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const;
 
 public:
-    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
-        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
-        : TBase(bgSession, adapter)
-        , BlobsOperator(blobsOperator) {
-        ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();
-    }
+    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter);
 
     STATEFN(StateFunc) {
         try {
@@ -101,13 +87,27 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
-                hFunc(NEvents::TEvExportWritingFinished, HandleExecute);
-                hFunc(NEvents::TEvExportWritingFailed, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
+                cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);
             }
         } catch (...) {
             AFL_VERIFY(false);
+        }
+    }
+
+    STATEFN(StateError) {
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_BACKGROUND,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NBackground::TEvLocalTransactionCompleted, Handle);
+            hFunc(NBackground::TEvSessionControl, Handle);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
+            default:
+                break;
         }
     }
 };

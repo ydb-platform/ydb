@@ -22,7 +22,7 @@ inline TStringBuf operator +=(TStringBuf& l, TStringBuf r) {
     return l = l + r;
 }
 
-static bool is_not_number(TStringBuf v) {
+inline bool is_not_number(TStringBuf v) {
     return v.empty() || std::find_if_not(v.begin(), v.end(), [](unsigned char c) { return std::isdigit(c); }) != v.end();
 }
 
@@ -35,6 +35,7 @@ template <> TStringBuf THttpRequest::GetName<&THttpRequest::ContentType>() { ret
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::ContentLength>() { return "Content-Length"; }
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::TransferEncoding>() { return "Transfer-Encoding"; }
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::AcceptEncoding>() { return "Accept-Encoding"; }
+template <> TStringBuf THttpRequest::GetName<&THttpRequest::ContentEncoding>() { return "Content-Encoding"; }
 
 const TMap<TStringBuf, TStringBuf THttpRequest::*, TLessNoCase> THttpRequest::HeadersLocation = {
     { THttpRequest::GetName<&THttpRequest::Host>(), &THttpRequest::Host },
@@ -44,6 +45,7 @@ const TMap<TStringBuf, TStringBuf THttpRequest::*, TLessNoCase> THttpRequest::He
     { THttpRequest::GetName<&THttpRequest::ContentLength>(), &THttpRequest::ContentLength },
     { THttpRequest::GetName<&THttpRequest::TransferEncoding>(), &THttpRequest::TransferEncoding },
     { THttpRequest::GetName<&THttpRequest::AcceptEncoding>(), &THttpRequest::AcceptEncoding },
+    { THttpRequest::GetName<&THttpRequest::ContentEncoding>(), &THttpRequest::ContentEncoding },
 };
 
 template <> TStringBuf THttpResponse::GetName<&THttpResponse::Connection>() { return "Connection"; }
@@ -59,7 +61,7 @@ const TMap<TStringBuf, TStringBuf THttpResponse::*, TLessNoCase> THttpResponse::
     { THttpResponse::GetName<&THttpResponse::ContentLength>(), &THttpResponse::ContentLength },
     { THttpResponse::GetName<&THttpResponse::TransferEncoding>(), &THttpResponse::TransferEncoding },
     { THttpResponse::GetName<&THttpResponse::LastModified>(), &THttpResponse::LastModified },
-    { THttpResponse::GetName<&THttpResponse::ContentEncoding>(), &THttpResponse::ContentEncoding }
+    { THttpResponse::GetName<&THttpResponse::ContentEncoding>(), &THttpResponse::ContentEncoding },
 };
 
 void THttpRequest::Clear() {
@@ -96,126 +98,69 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
             LastSuccessStage = Stage;
         }
         switch (Stage) {
-            case EParseStage::Method: {
+            case EParseStage::Method:
                 if (ProcessData(Method, data, ' ', MaxMethodSize)) {
+                    if (!IsValidMethod(Method)) {
+                        Method = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::URL;
                 }
                 break;
-            }
-            case EParseStage::URL: {
+            case EParseStage::URL:
                 if (ProcessData(URL, data, ' ', MaxURLSize)) {
+                    if (!IsValidURL(URL)) {
+                        URL = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Protocol;
                 }
                 break;
-            }
-            case EParseStage::Protocol: {
+            case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
-            }
-            case EParseStage::Version: {
+            case EParseStage::Version:
                 if (ProcessData(Version, data, "\r\n", MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = data;
                 }
                 break;
-            }
-            case EParseStage::Header: {
-                if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
-                    if (Header.empty()) {
-                        if (HasBody() && (ContentLength.empty() || ContentLength != "0")) {
-                            Stage = EParseStage::Body;
-                        } else if (TotalSize.has_value() && !data.empty()) {
-                            Stage = EParseStage::Body;
-                        } else {
-                            Stage = EParseStage::Done;
-                        }
-                    } else if (!ProcessHeader(Header)) {
-                        Stage = EParseStage::Error;
-                        break;
-                    }
-                    Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
-                }
-                if (Stage != EParseStage::Body) {
-                    break;
-                }
-                return TSocketBuffer::Advance(len - data.size());
-            }
-            case EParseStage::Body: {
-                if (TEqNoCase()(TransferEncoding, "chunked")) {
-                    Stage = EParseStage::ChunkLength;
-                } else if (!ContentLength.empty()) {
-                    if (is_not_number(ContentLength)) {
-                        // Invalid content length
-                        Stage = EParseStage::Error;
-                    } else if (ProcessData(Content, data, FromStringWithDefault(ContentLength, 0))) {
-                        Body = Content;
-                        Stage = EParseStage::Done;
-                    }
-                } else if (TotalSize.has_value()) {
-                    if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
-                        Body = Content;
-                        Stage = EParseStage::Done;
-                    }
-                } else {
-                    // Invalid body encoding
-                    Stage = EParseStage::Error;
+            case EParseStage::Header:
+                ProcessHeader(data);
+                if (HasCompletedHeaders()) {
+                    return TSocketBuffer::Advance(len - data.size());
                 }
                 break;
-            }
-            case EParseStage::ChunkLength: {
-                if (ProcessData(Line, data, "\r\n", MaxChunkLengthSize)) {
-                    if (!Line.empty()) {
-                        ChunkLength = ParseHex(Line);
-                        if (ChunkLength <= MaxChunkSize) {
-                            ContentSize = Content.size() + ChunkLength;
-                            if (ContentSize <= MaxChunkContentSize) {
-                                Stage = EParseStage::ChunkData;
-                                Line.Clear();
-                            } else {
-                                // Invalid chunk content length
-                                Stage = EParseStage::Error;
-                            }
-                        } else {
-                            // Invalid chunk length
-                            Stage = EParseStage::Error;
-                        }
-                    } else {
-                        // Invalid body encoding
-                        Stage = EParseStage::Error;
-                    }
+            case EParseStage::Body:
+                ProcessBody(data);
+                break;
+            case EParseStage::ChunkLength:
+                ProcessChunkLength(data);
+                break;
+            case EParseStage::ChunkData:
+                ProcessChunkData(data);
+                if (HasNewStreamingDataChunk()) {
+                    return TSocketBuffer::Advance(len - data.size());
                 }
                 break;
-            }
-            case EParseStage::ChunkData: {
-                if (!IsError()) {
-                    if (ProcessData(Content, data, ContentSize)) {
-                        if (ProcessData(Line, data, 2)) {
-                            if (Line == "\r\n") {
-                                if (ChunkLength == 0) {
-                                    Body = Content;
-                                    Stage = EParseStage::Done;
-                                } else {
-                                    Stage = EParseStage::ChunkLength;
-                                }
-                                Line.Clear();
-                            } else {
-                                // Invalid body encoding
-                                Stage = EParseStage::Error;
-                            }
-                            return TSocketBuffer::Advance(len - data.size());
-                        }
-                    }
-                }
-                break;
-            }
-
             case EParseStage::Done:
-            case EParseStage::Error: {
-                data.Clear();
+            case EParseStage::Error:
+                data = {};
                 break;
-            }
             default:
                 Y_ABORT("Invalid processing sequence");
                 break;
@@ -261,134 +206,68 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
             LastSuccessStage = Stage;
         }
         switch (Stage) {
-            case EParseStage::Protocol: {
+            case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
-            }
-            case EParseStage::Version: {
+            case EParseStage::Version:
                 if (ProcessData(Version, data, ' ', MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Status;
                 }
                 break;
-            }
-            case EParseStage::Status: {
+            case EParseStage::Status:
                 if (ProcessData(Status, data, ' ', MaxStatusSize)) {
+                    if (!IsValidStatus(Status)) {
+                        Status = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Message;
                 }
                 break;
-            }
-            case EParseStage::Message: {
+            case EParseStage::Message:
                 if (ProcessData(Message, data, "\r\n", MaxMessageSize)) {
+                    if (!IsValidMessage(Message)) {
+                        Message = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = TStringBuf(data.data(), size_t(0));
                 }
                 break;
-            }
-            case EParseStage::Header: {
-                if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
-                    if (Header.empty()) {
-                        if (HasBody() && (ContentLength.empty() || ContentLength != "0")) {
-                            Stage = EParseStage::Body;
-                        } else if (TotalSize.has_value() && !data.empty()) {
-                            Stage = EParseStage::Body;
-                        } else {
-                            Stage = EParseStage::Done;
-                        }
-                    } else if (!ProcessHeader(Header)) {
-                        Stage = EParseStage::Error;
-                        break;
-                    }
-                    Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
-                }
-                if (Stage != EParseStage::Body) {
-                    break;
-                }
-                return TSocketBuffer::Advance(len - data.size());
-            }
-            case EParseStage::Body: {
-                if (TEqNoCase()(TransferEncoding, "chunked")) {
-                    Stage = EParseStage::ChunkLength;
-                } else if (!ContentLength.empty()) {
-                    if (is_not_number(ContentLength)) {
-                        // Invalid content length
-                        Stage = EParseStage::Error;
-                    } else if (ProcessData(Body, data, FromStringWithDefault(ContentLength, 0))) {
-                        Stage = EParseStage::Done;
-                        if (Body && ContentEncoding == "deflate") {
-                            Content = DecompressDeflate(Body);
-                            Body = Content;
-                        }
-                    }
-                } else if (TotalSize.has_value()) {
-                    if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
-                        Body = Content;
-                        Stage = EParseStage::Done;
-                        if (Body && ContentEncoding == "deflate") {
-                            Content = DecompressDeflate(Body);
-                            Body = Content;
-                        }
-                    }
-                } else {
-                    // Invalid body encoding
-                    Stage = EParseStage::Error;
+            case EParseStage::Header:
+                ProcessHeader(data);
+                if (HasCompletedHeaders()) {
+                    return TSocketBuffer::Advance(len - data.size());
                 }
                 break;
-            }
-            case EParseStage::ChunkLength: {
-                if (ProcessData(Line, data, "\r\n", MaxChunkLengthSize)) {
-                    if (!Line.empty()) {
-                        ChunkLength = ParseHex(Line);
-                        if (ChunkLength <= MaxChunkSize) {
-                            ContentSize = Content.size() + ChunkLength;
-                            if (ContentSize <= MaxChunkContentSize) {
-                                Stage = EParseStage::ChunkData;
-                                Line.Clear();
-                            } else {
-                                // Invalid chunk content length
-                                Stage = EParseStage::Error;
-                            }
-                        } else {
-                            // Invalid chunk length
-                            Stage = EParseStage::Error;
-                        }
-                    } else {
-                        // Invalid body encoding
-                        Stage = EParseStage::Error;
-                    }
+            case EParseStage::Body:
+                ProcessBody(data);
+                break;
+            case EParseStage::ChunkLength:
+                ProcessChunkLength(data);
+                break;
+            case EParseStage::ChunkData:
+                ProcessChunkData(data);
+                if (HasNewStreamingDataChunk()) {
+                    return TSocketBuffer::Advance(len - data.size());
                 }
                 break;
-            }
-            case EParseStage::ChunkData: {
-                if (!IsError()) {
-                    if (ProcessData(Content, data, ContentSize)) {
-                        if (ProcessData(Line, data, 2)) {
-                            if (Line == "\r\n") {
-                                if (ChunkLength == 0) {
-                                    Body = Content;
-                                    Stage = EParseStage::Done;
-                                    if (Body && ContentEncoding == "deflate") {
-                                        Content = DecompressDeflate(Body);
-                                        Body = Content;
-                                    }
-                                } else {
-                                    Stage = EParseStage::ChunkLength;
-                                }
-                                Line.Clear();
-                            } else {
-                                // Invalid body encoding
-                                Stage = EParseStage::Error;
-                            }
-                            return TSocketBuffer::Advance(len - data.size());
-                        }
-                    }
-                }
-                break;
-            }
             case EParseStage::Done:
             case EParseStage::Error:
-                data.Clear();
+                data = {};
                 break;
             default:
                 // Invalid processing sequence
@@ -396,7 +275,8 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
                 break;
         }
     }
-    return TSocketBuffer::Advance(len - data.size());
+    auto advanced = TSocketBuffer::Advance(len - data.size());
+    return advanced;
 }
 
 template <>
@@ -418,22 +298,29 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
-    if (parser.IsDone() && parser.HasBody()) {
-        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
-            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
+        if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    if (parser.IsDone() && parser.HasBody()) {
         headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+        headers.Erase("Content-Length"); // we will need new length after compression
         response->Set(headers);
+        if (compress) {
+            response->EnableCompression();
+        }
         response->SetBody(parser.Body);
     } else if (parser.HasHeaders()) {
         response->Set(headers);
         if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
+        }
+        if (compress) {
+            response->EnableCompression();
         }
         if (parser.HasCompletedHeaders()) {
             response->FinishHeader(); // for partial responses (data follows later)
@@ -480,9 +367,63 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseTemporaryRedirect(T
     return response;
 }
 
+THttpIncomingRequest::THttpIncomingRequest()
+    : Endpoint(std::make_shared<THttpEndpointInfo>())
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+    : Endpoint(std::move(endpoint))
+    , Address(address)
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address, const TString& mTlsClientCertificate)
+    : Endpoint(std::move(endpoint))
+    , Address(address)
+    , MTlsClientCertificate(mTlsClientCertificate)
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(TStringBuf content, std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+    : THttpParser(content)
+    , Endpoint(std::move(endpoint))
+    , Address(address)
+{}
+
+void THttpIncomingRequest::Clear() {
+    THttpRequestParser::Clear();
+    MTlsClientCertificate.clear();
+}
+
+bool THttpIncomingRequest::IsConnectionClose() const {
+    if (Connection.empty()) {
+        return Version == "1.0";
+    } else {
+        return TEqNoCase()(Connection, "close");
+    }
+}
+
+TStringBuf THttpIncomingRequest::GetConnection() const {
+    if (!Connection.empty()) {
+        if (TEqNoCase()(Connection, "keep-alive")) {
+            return "keep-alive";
+        }
+        if (TEqNoCase()(Connection, "close")) {
+            return "close";
+        }
+    }
+    return Version == "1.0" ? "close" : "keep-alive";
+}
+
 THttpIncomingResponse::THttpIncomingResponse(THttpOutgoingRequestPtr request)
     : Request(request)
 {}
+
+THttpOutgoingRequestPtr THttpIncomingResponse::GetRequest() const {
+    return Request;
+}
+
+bool THttpIncomingResponse::IsConnectionClose() const {
+    return Request->IsConnectionClose() || TEqNoCase()(Connection, "close");
+}
 
 THttpOutgoingResponsePtr THttpIncomingRequest::ConstructResponse(TStringBuf status, TStringBuf message) {
     TStringBuf version = Version;
@@ -572,8 +513,86 @@ THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateIncompleteDataChunk() {
     return new THttpOutgoingDataChunk(this);
 }
 
-THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
-    THttpIncomingRequestPtr request = new THttpIncomingRequest(*this);
+bool THttpOutgoingResponse::IsConnectionClose() const {
+    if (!Connection.empty()) {
+        return TEqNoCase()(Connection, "close");
+    } else {
+        return Request->IsConnectionClose();
+    }
+}
+
+bool THttpOutgoingResponse::IsNeedBody() const {
+    return GetRequest()->Method != "HEAD" && Status != "204" && Status != "202";
+}
+
+bool THttpOutgoingResponse::EnableCompression() {
+    TStringBuf acceptEncoding = Request->AcceptEncoding;
+    std::vector<TStringBuf> encodings;
+    TStringBuf encoding;
+    while (acceptEncoding.NextTok(',', encoding)) {
+        encoding = Trim(encoding, ' ');
+        if (Count(ALLOWED_CONTENT_ENCODINGS, encoding) != 0) {
+            encodings.push_back(encoding);
+        }
+    }
+    if (!encodings.empty()) {
+        SetContentEncoding(encodings.front());
+        return true;
+    }
+    return false;
+}
+
+void THttpOutgoingResponse::SetBody(TStringBuf body) {
+    if (CompressContext) {
+        TString compressedBody = CompressContext.Compress(body, true);
+        THttpRenderer<THttpResponse>::SetBody(compressedBody); // set compressed body into stream
+        Body = Content = body; // replace local copy with uncompressed content
+    } else {
+        THttpRenderer<THttpResponse>::SetBody(body);
+    }
+}
+
+void THttpOutgoingResponse::SetBody(const TString& body) {
+    if (CompressContext) {
+        TString compressedBody = CompressContext.Compress(body, true);
+        THttpRenderer<THttpResponse>::SetBody(compressedBody); // set compressed body into stream
+        Body = Content = body; // replace local copy with uncompressed content
+    } else {
+        THttpRenderer<THttpResponse>::SetBody(body);
+    }
+}
+
+THttpIncomingRequestPtr THttpOutgoingResponse::GetRequest() const {
+    return Request;
+}
+
+THttpIncomingRequestPtr THttpIncomingRequest::Duplicate(const THeaders& extraHeaders) const {
+    THttpIncomingRequestPtr request = new THttpIncomingRequest(Endpoint, Address);
+    request->Append(Method.Data(), Method.Size());
+    request->Append(' ');
+    request->Append(URL.Data(), URL.Size());
+    request->Append(' ');
+    request->Append(Protocol.Data(), Protocol.Size());
+    request->Append('/');
+    request->Append(Version.Data(), Version.Size());
+    request->Append('\r');
+    request->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    request->Append(renderedHeaders.data(), renderedHeaders.size());
+    request->Append('\r');
+    request->Append('\n');
+    if (Body) {
+        request->Append(Body.Data(), Body.Size());
+    }
     request->Reparse();
     request->Timer.Reset();
     return request;
@@ -582,15 +601,18 @@ THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
 THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const {
     TStringBuf newScheme;
     TStringBuf newHost;
-    TStringBuf emptyUri; // it supposed to be be empty
-    if (!CrackURL(baseUrl, newScheme, newHost, emptyUri)) {
+    TStringBuf newUrl;
+    if (!CrackURL(baseUrl, newScheme, newHost, newUrl)) {
         // TODO(xenoxeno)
         Y_ABORT("Invalid URL specified");
     }
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
+    if (!newUrl) {
+        newUrl = URL;
+    }
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, newUrl, Protocol, Version);
     THeadersBuilder newHeaders(Headers);
     newHeaders.Erase("Accept-Encoding");
-    newHeaders.Set("Host", newHost);
+    newHeaders.Erase("Host"); // host being set by THttpOutgoingRequest constructor
     request->Set(newHeaders);
     if (Body) {
         request->SetBody(Body);
@@ -599,38 +621,88 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     return request;
 }
 
-THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request) {
-    THttpIncomingResponsePtr response = new THttpIncomingResponse(*this);
+THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request, const THeaders& extraHeaders) {
+    THttpIncomingResponsePtr response = new THttpIncomingResponse(request);
+    response->Append(Protocol.Data(), Protocol.Size());
+    response->Append('/');
+    response->Append(Version.Data(), Version.Size());
+    response->Append(' ');
+    response->Append(Status.Data(), Status.Size());
+    response->Append(' ');
+    response->Append(Message.Data(), Message.Size());
+    response->Append('\r');
+    response->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    headers.Erase("Content-Encoding"); // body is already decompressed during parsing
+    if (ContentLength || ContentEncoding || TransferEncoding) {
+        headers.Set("Content-Length", ToString(Body.Size())); // update to match actual (decompressed) body size
+    }
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            if (TEqNoCase()(key, "Set-Cookie")) {
+                headers.Add(key, value);
+            } else {
+                headers.Set(key, value);
+            }
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    response->Append(renderedHeaders.data(), renderedHeaders.size());
+    response->Append('\r');
+    response->Append('\n');
+    if (Body) {
+        response->Append(Body.Data(), Body.Size());
+    }
     response->Reparse();
-    response->Request = request;
     return response;
 }
 
-THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
+THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request, const THeaders& extraHeaders) {
     THeadersBuilder headers(Headers);
     if (!headers.Has("X-Worker-Name")) {
         if (!request->Endpoint->WorkerName.empty()) {
             headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
         }
     }
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            if (TEqNoCase()(key, "Set-Cookie")) {
+                headers.Add(key, value);
+            } else {
+                headers.Set(key, value);
+            }
+        } else {
+            headers.Erase(key);
+        }
+    }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
     response->InitResponse(Protocol, Version, Status, Message);
-    if (Body) {
-        if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
-            if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
+        if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+    if (Body) {
+        headers.Erase("Content-Length"); // we will need new length after compression
         response->Set(headers);
+        if (compress) {
+            response->EnableCompression();
+        }
         response->SetBody(Body);
     } else {
         response->Set(headers);
         if (!response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0");
         }
+        response->FinishHeader();
+        response->FinishBody();
     }
     return response;
 }
@@ -655,13 +727,24 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
     }
 }
 
+THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr request) {
+    THttpIncomingResponsePtr response = new THttpIncomingResponse(request);
+    response->Assign(Data(), Size());
+    response->Reparse();
+    return response;
+}
+
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
-    if (data) {
-        SetData(data);
+    if (Response->CompressContext && !data.empty()) {
+        SetData(Response->CompressContext.Compress(data, false));
     } else {
-        SetEndOfData();
+        if (!data.empty()) {
+            SetData(data);
+        } else {
+            SetEndOfData();
+        }
     }
 }
 
@@ -669,10 +752,27 @@ THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response
     : Response(std::move(response))
 {}
 
+void THttpOutgoingDataChunk::SetEndOfData() {
+    if (Response->CompressContext) {
+        TString trailing = Response->CompressContext.Compress({}, true);
+        if (trailing) {
+            AddData(trailing);
+        }
+    }
+    AddData({});
+}
+
+THttpOutgoingResponsePtr THttpOutgoingDataChunk::GetResponse() const {
+    return Response;
+}
+
+THttpIncomingRequestPtr THttpOutgoingDataChunk::GetRequest() const {
+    return Response->GetRequest();
+}
+
 THttpOutgoingResponsePtr THttpIncomingResponse::Reverse(THttpIncomingRequestPtr request) {
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
-    response->Assign(Data(), Size());
-    response->Reparse();
+    response->Assign(AsStringBuf());
     return response;
 }
 
@@ -703,8 +803,7 @@ THttpOutgoingRequest::THttpOutgoingRequest(TStringBuf method, TStringBuf url, TS
 
 THttpOutgoingRequestPtr THttpOutgoingRequest::CreateRequestString(const TString& data) {
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
-    request->Assign(data.data(), data.size());
-    request->Reparse();
+    request->Assign(data);
     return request;
 }
 
@@ -744,10 +843,38 @@ THttpOutgoingRequestPtr THttpOutgoingRequest::CreateHttpRequest(TStringBuf metho
     return request;
 }
 
-THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate() {
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(*this);
+THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate(const THeaders& extraHeaders) {
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
+    request->Secure = Secure;
+    request->InitRequest(Method, URL, Protocol, Version);
+    THeadersBuilder headers(Headers);
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    request->Set(headers);
+    if (Body) {
+        request->SetBody(Body);
+    }
+    return request;
+}
+
+THttpIncomingRequestPtr THttpOutgoingRequest::Reverse() {
+    THttpIncomingRequestPtr request = new THttpIncomingRequest();
+    request->Assign(Data(), Size());
     request->Reparse();
     return request;
+}
+
+bool THttpOutgoingRequest::IsConnectionClose() const {
+    return TEqNoCase()(Connection, "close");
+}
+
+TString THttpOutgoingRequest::GetDestination() {
+    return Secure ? (TStringBuilder() << "https://" << Host) : (TStringBuilder() << "http://" << Host);
 }
 
 THttpOutgoingResponse::THttpOutgoingResponse(THttpIncomingRequestPtr request)
@@ -774,7 +901,7 @@ TUrlParameters::TUrlParameters(TStringBuf url) {
     }
 }
 
-TString TUrlParameters::operator [](TStringBuf name) const {
+const TString TUrlParameters::operator [](TStringBuf name) const {
     TString value(Get(name));
     CGIUnescape(value);
     return value;
@@ -807,6 +934,15 @@ TString TUrlParameters::Render() const {
     return parameters;
 }
 
+TUrlParametersBuilder::TUrlParametersBuilder()
+    : TUrlParameters(TStringBuf())
+{}
+
+void TUrlParametersBuilder::Set(TStringBuf name, TStringBuf data) {
+    Data.emplace_back(name, data);
+    Parameters[Data.back().first] = Data.back().second;
+}
+
 TCookies::TCookies(TStringBuf cookie) {
     for (TStringBuf param = cookie.NextTok(';'); !param.empty(); param = cookie.NextTok(';')) {
         param.SkipPrefix(" ");
@@ -815,7 +951,7 @@ TCookies::TCookies(TStringBuf cookie) {
     }
 }
 
-TStringBuf TCookies::operator [](TStringBuf name) const {
+const TStringBuf TCookies::operator [](TStringBuf name) const {
     return Get(name);
 }
 
@@ -863,7 +999,7 @@ size_t THeaders::Parse(TStringBuf headers) {
     for (TStringBuf param = headers.NextTok("\r\n"); !param.empty(); param = headers.NextTok("\r\n")) {
         TStringBuf name = param.NextTok(":");
         param.SkipPrefix(" ");
-        Headers[name] = param;
+        Headers.insert({name, param});
     }
     return headers.begin() - start;
 }
@@ -925,7 +1061,17 @@ THeadersBuilder::THeadersBuilder(std::initializer_list<std::pair<TString, TStrin
 
 void THeadersBuilder::Set(TStringBuf name, TStringBuf data) {
     Data.emplace_back(name, data);
-    Headers[Data.back().first] = Data.back().second;
+    auto it = Headers.find(Data.back().first);
+    if (it != Headers.end()) {
+        it->second = Data.back().second; // update existing header
+    } else {
+        Headers.insert({Data.back().first, Data.back().second}); // add new header
+    }
+}
+
+void THeadersBuilder::Add(TStringBuf name, TStringBuf data) {
+    Data.emplace_back(name, data);
+    Headers.insert({Data.back().first, Data.back().second}); // add new header
 }
 
 void THeadersBuilder::Erase(TStringBuf name) {

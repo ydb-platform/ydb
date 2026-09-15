@@ -21,7 +21,7 @@ namespace boost { namespace property_tree { namespace info_parser
 {
 
     /**
-     * Read INFO from a the given stream and translate it to a property tree.
+     * Read INFO from the given stream and translate it to a property tree.
      * @note Replaces the existing contents. Strong exception guarantee.
      * @throw info_parser_error If the stream cannot be read, doesn't contain
      *                          valid INFO, or a conversion fails.
@@ -35,7 +35,7 @@ namespace boost { namespace property_tree { namespace info_parser
     }
 
     /**
-     * Read INFO from a the given stream and translate it to a property tree.
+     * Read INFO from the given stream and translate it to a property tree.
      * @note Replaces the existing contents. Strong exception guarantee.
      * @param default_ptree If parsing fails, pt is set to a copy of this tree.
      */
@@ -51,7 +51,7 @@ namespace boost { namespace property_tree { namespace info_parser
     }
 
     /**
-     * Read INFO from a the given file and translate it to a property tree. The
+     * Read INFO from the given file and translate it to a property tree. The
      * tree's key type must be a string type, i.e. it must have a nested
      * value_type typedef that is a valid parameter for basic_ifstream.
      * @note Replaces the existing contents. Strong exception guarantee.
@@ -75,7 +75,7 @@ namespace boost { namespace property_tree { namespace info_parser
     }
 
     /**
-     * Read INFO from a the given file and translate it to a property tree. The
+     * Read INFO from the given file and translate it to a property tree. The
      * tree's key type must be a string type, i.e. it must have a nested
      * value_type typedef that is a valid parameter for basic_ifstream.
      * @note Replaces the existing contents. Strong exception guarantee.

@@ -58,3 +58,9 @@ class TestExternalM1(ExternalSuiteBase):
 class TestExternalB1(ExternalSuiteBase):
     external_folder: str = 'b1'
     iterations: int = 5
+
+
+class TestExternalMf1(ExternalSuiteBase):
+    external_folder: str = 'mf1'
+    # queries read already existing tables, nothing is imported into mf1/
+    verify_data: bool = False

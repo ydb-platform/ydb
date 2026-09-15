@@ -1,0 +1,2 @@
+/* kikimr can not - range not supported */
+select count(*) as count from plato.like(``, "_np%");

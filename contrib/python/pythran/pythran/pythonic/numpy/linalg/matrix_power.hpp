@@ -43,8 +43,7 @@ namespace numpy
     } // namespace details
 
     template <class E>
-    auto matrix_power(E const &expr,
-                      long n) -> decltype(numpy::functor::array{}(expr))
+    auto matrix_power(E const &expr, long n) -> decltype(numpy::functor::array{}(expr))
     {
       if (n == 0)
         return numpy::functor::identity{}(expr.template shape<0>(),

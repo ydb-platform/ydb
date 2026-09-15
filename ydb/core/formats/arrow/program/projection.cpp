@@ -6,9 +6,9 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TProjectionProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    context.GetResources()->RemainOnly(TColumnChainInfo::ExtractColumnIds(GetInput()), true);
+    context.MutableResources().RemainOnly(TColumnChainInfo::ExtractColumnIds(GetInput()), true);
     if (context.GetLimit()) {
-        context.GetResources()->CutFilter(context.GetResources()->GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
+        context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
     }
     return EExecutionResult::Success;
 }

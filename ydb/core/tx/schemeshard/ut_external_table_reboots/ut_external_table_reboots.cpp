@@ -294,14 +294,13 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
+            TestCreateExternalTableOrReplace(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "ExternalTable"
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
                 Columns { Name: "RowId" Type: "Uint64"}
-                ReplaceIfExists: true
-            )");
+            )", {NKikimrScheme::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");

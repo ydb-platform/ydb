@@ -1,16 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <mutex>
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
-#include <ydb/library/yql/providers/s3/events/events.h>
-
 #include <ydb/library/actors/core/actorsystem.h>
-
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/s3/events/events.h>
 
 namespace NYql::NDq {
 
@@ -47,8 +45,7 @@ struct TSourceContext {
         , HttpInflightSize(httpInflightSize)
         , HttpDataRps(httpDataRps)
         , DeferredQueueSize(deferredQueueSize)
-    {
-    }
+    {}
 
     ~TSourceContext();
 
@@ -58,7 +55,7 @@ struct TSourceContext {
 
     double Ratio() const {
         auto downloadedBytes = DownloadedBytes.load();
-        return downloadedBytes ? static_cast<double>(downloadedBytes) / DownloadedBytes.load() : 1.0;
+        return downloadedBytes ? std::max(1.0, static_cast<double>(DecodedBytes.load()) / downloadedBytes) : 1.0;
     }
 
     ui64 FairShare() {
@@ -93,6 +90,7 @@ struct TSourceContext {
     NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
+
 private:
     std::atomic_uint64_t Value;
     std::mutex Mutex;

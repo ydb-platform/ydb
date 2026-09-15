@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/logging/log_manager.h>
 
+#include <yt/yt/core/misc/backtrace.h>
 #include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/proc.h>
 
@@ -16,17 +17,9 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
-#include <library/cpp/yt/backtrace/backtrace.h>
-
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <library/cpp/yt/misc/tls.h>
-
-#ifdef _unix_
-#include <library/cpp/yt/backtrace/cursors/libunwind/libunwind_cursor.h>
-#else
-#include <library/cpp/yt/backtrace/cursors/dummy/dummy_cursor.h>
-#endif
 
 #include <util/system/defaults.h>
 
@@ -54,44 +47,42 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void WriteToStderr(const char* buffer, int length)
+void WriteToStderr(TStringBuf str)
 {
     // Ignore errors.
 #ifdef _win_
-    HandleEintr(::write, 2, buffer, length);
+    HandleEintr(::write, 2, str.data(), str.size());
 #else
-    HandleEintr(write, 2, buffer, length);
+    HandleEintr(write, 2, str.data(), str.size());
 #endif
 }
 
-void WriteToStderr(TStringBuf buffer)
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+constinit std::atomic<TCrashHandlerWriter> CrashHandlerWriterValue = &WriteToStderr;
+
+} // anonymous namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetCrashHandlerWriter(TCrashHandlerWriter writer)
 {
-    WriteToStderr(buffer.begin(), buffer.length());
+    CrashHandlerWriterValue.store(writer);
 }
 
-void WriteToStderr(const char* buffer)
+void WriteCrashHandlerOutput(TStringBuf str)
 {
-    WriteToStderr(buffer, ::strlen(buffer));
+    auto writer = CrashHandlerWriterValue.load();
+    writer(str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
 
-Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
-{
-#ifdef _unix_
-    NBacktrace::TLibunwindCursor cursor;
-#else
-    NBacktrace::TDummyCursor cursor;
-#endif
-    return NBacktrace::GetBacktrace(
-        &cursor,
-        TMutableRange(*buffer),
-        /*framesToSkip*/ 2);
-}
-
-using NYT::WriteToStderr;
+using NYT::WriteCrashHandlerOutput;
 
 #ifdef _unix_
 
@@ -115,9 +106,9 @@ void* GetPC(void* uc)
 
 using TFormatter = TRawFormatter<1024>;
 
-void WriteToStderr(const TBaseFormatter& formatter)
+void WriteCrashHandlerOutput(const TBaseFormatter& formatter)
 {
-    WriteToStderr(formatter.GetData(), formatter.GetBytesWritten());
+    WriteCrashHandlerOutput(TStringBuf(formatter.GetData(), formatter.GetBytesWritten()));
 }
 
 //! Dumps time information.
@@ -135,7 +126,7 @@ void DumpTimeInfo()
     formatter.AppendString(" (Unix time); Try \"date -d @");
     formatter.AppendNumber(timeSinceEpoch, 10);
     formatter.AppendString("\" if you are using GNU date\n");
-    WriteToStderr(formatter);
+    WriteCrashHandlerOutput(formatter);
 }
 
 //! Dumps codicils.
@@ -143,18 +134,18 @@ void DumpCodicils()
 {
     auto builders = GetCodicilBuilders();
     if (!builders.empty()) {
-        WriteToStderr("*** Begin codicils\n");
+        WriteCrashHandlerOutput("*** Begin codicils\n");
         TCodicilFormatter formatter;
         for (const auto& builder : builders) {
             formatter.Reset();
             builder(&formatter);
-            WriteToStderr(formatter);
+            WriteCrashHandlerOutput(formatter);
             if (formatter.GetBytesRemaining() == 0) {
-                WriteToStderr(" (truncated)");
+                WriteCrashHandlerOutput(" (truncated)");
             }
-            WriteToStderr("\n");
+            WriteCrashHandlerOutput("\n");
         }
-        WriteToStderr("*** End codicils\n");
+        WriteCrashHandlerOutput("*** End codicils\n");
     }
 }
 
@@ -386,7 +377,7 @@ void DumpSignalInfo(siginfo_t* si)
 #endif
     formatter.AppendChar('\n');
 
-    WriteToStderr(formatter);
+    WriteCrashHandlerOutput(formatter);
 }
 
 void DumpSigcontext(void* uc)
@@ -444,7 +435,7 @@ void DumpSigcontext(void* uc)
     formatRegister("CSGSFS", REG_CSGSFS);
     formatter.AppendChar('\n');
 
-    WriteToStderr(formatter);
+    WriteCrashHandlerOutput(formatter);
 #else
     Y_UNUSED(uc);
 #endif
@@ -452,7 +443,7 @@ void DumpSigcontext(void* uc)
 
 void CrashTimeoutHandler(int /*signal*/)
 {
-    WriteToStderr("*** Crash signal handler timed out\n");
+    WriteCrashHandlerOutput("*** Crash signal handler timed out\n");
 
     YT_BUILTIN_TRAP();
 }
@@ -461,12 +452,12 @@ void DumpUndumpableBlocksInfo()
 {
     auto cutInfo = CutUndumpableRegionsFromCoredump();
 
-    {
+    if (cutInfo.MarkedSize > 0) {
         TFormatter formatter;
         formatter.AppendString("*** Marked memory regions of total size ");
         formatter.AppendNumber(cutInfo.MarkedSize / 1_MB);
         formatter.AppendString(" MB as undumpable\n");
-        WriteToStderr(formatter);
+        WriteCrashHandlerOutput(formatter);
     }
 
     for (const auto& record : cutInfo.FailedToMarkMemory) {
@@ -480,7 +471,7 @@ void DumpUndumpableBlocksInfo()
         formatter.AppendString(" MB with error code ");
         formatter.AppendNumber(record.ErrorCode);
         formatter.AppendString("\n");
-        WriteToStderr(formatter);
+        WriteCrashHandlerOutput(formatter);
     }
 }
 
@@ -495,6 +486,7 @@ Y_WEAK void MaybeThrowSafeAssertionException(TStringBuf /*message*/)
 void AssertTrapImpl(
     TStringBuf trapType,
     TStringBuf expr,
+    TStringBuf description,
     TStringBuf file,
     int line,
     TStringBuf function)
@@ -504,6 +496,14 @@ void AssertTrapImpl(
     formatter.AppendString(trapType);
     formatter.AppendString("(");
     formatter.AppendString(expr);
+    if (!description.empty()) {
+        if (!expr.empty()) {
+            formatter.AppendString(", ");
+        }
+        formatter.AppendChar('"');
+        FormatString(&formatter, description, "Q");
+        formatter.AppendChar('"');
+    }
     formatter.AppendString(") at ");
     formatter.AppendString(file);
     formatter.AppendString(":");
@@ -516,7 +516,7 @@ void AssertTrapImpl(
 
     MaybeThrowSafeAssertionException(formatter.GetBuffer());
 
-    WriteToStderr(formatter.GetBuffer());
+    WriteCrashHandlerOutput(formatter.GetBuffer());
 
     // This (hopefully) invokes CrashSignalHandler.
     YT_BUILTIN_TRAP();
@@ -545,16 +545,16 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpSigcontext(uc);
 
-    // The easiest way to choose proper overload...
-    DumpStackTrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
+    // NB: Constructing std::function from this lambda must not lead to allocations.
+    DumpBacktrace([] (TStringBuf str) { WriteCrashHandlerOutput(str); }, NDetail::GetPC(uc));
 
     NDetail::DumpUndumpableBlocksInfo();
 
-    WriteToStderr("*** Waiting for logger to shut down\n");
+    WriteCrashHandlerOutput("*** Waiting for logger to shut down\n");
 
     NLogging::TLogManager::Get()->Shutdown();
 
-    WriteToStderr("*** Terminating\n");
+    WriteCrashHandlerOutput("*** Terminating\n");
 }
 
 #else

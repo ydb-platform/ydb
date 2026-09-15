@@ -475,6 +475,65 @@ cleanup:
 	return ret;
 }
 
+static int test_recvmsg_validate(void)
+{
+	struct io_uring_recvmsg_out *o;
+	unsigned char buf[64];
+	struct msghdr msgh;
+	unsigned int len;
+
+	memset(buf, 0, sizeof(buf));
+	memset(&msgh, 0, sizeof(msgh));
+	o = (struct io_uring_recvmsg_out *)buf;
+
+	msgh.msg_namelen = 4;
+	msgh.msg_controllen = 8;
+	if (!io_uring_recvmsg_validate(buf, 64, &msgh))
+		return -1;
+
+	/* exact fit */
+	if (!io_uring_recvmsg_validate(buf, 28, &msgh))
+		return -1;
+
+	/* one byte short */
+	if (io_uring_recvmsg_validate(buf, 27, &msgh))
+		return -1;
+
+	/* negative buf_len */
+	if (io_uring_recvmsg_validate(buf, -1, &msgh))
+		return -1;
+
+	/* buf smaller than header alone */
+	msgh.msg_namelen = 0;
+	msgh.msg_controllen = 0;
+	if (io_uring_recvmsg_validate(buf, 15, &msgh))
+		return -1;
+
+	/* controllen overflow must be rejected */
+	msgh.msg_controllen = (socklen_t)(~(socklen_t)0 - sizeof(struct io_uring_recvmsg_out));
+	msgh.msg_namelen = 4;
+	if (io_uring_recvmsg_validate(buf, 64, &msgh))
+		return -1;
+
+	msgh.msg_namelen = 4;
+	msgh.msg_controllen = 8;
+	len = io_uring_recvmsg_payload_length(o, 64, &msgh);
+	if (len != 36)
+		return -1;
+
+	/* negative buf_len */
+	if (io_uring_recvmsg_payload_length(o, -1, &msgh) != 0)
+		return -1;
+
+	/* name+ctrl > buf_len must return 0, not wrap around */
+	msgh.msg_namelen = 40;
+	msgh.msg_controllen = 30;
+	if (io_uring_recvmsg_payload_length(o, 64, &msgh) != 0)
+		return -1;
+
+	return 0;
+}
+
 static int test_enobuf(void)
 {
 	struct io_uring ring;
@@ -564,6 +623,12 @@ int main(int argc, char *argv[])
 		return T_EXIT_SKIP;
 
 	has_defer = t_probe_defer_taskrun();
+
+	ret = test_recvmsg_validate();
+	if (ret) {
+		fprintf(stderr, "test_recvmsg_validate() failed: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
 
 	for (loop = 0; loop < 16; loop++) {
 		struct args a = {

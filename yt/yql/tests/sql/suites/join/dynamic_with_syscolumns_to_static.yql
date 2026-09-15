@@ -1,0 +1,5 @@
+use plato;
+PRAGMA yt.ConvertDynamicTablesToStatic = "all";
+
+select TableName()
+from Input;

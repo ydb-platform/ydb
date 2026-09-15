@@ -1,5 +1,6 @@
 #include "predicate_collector.h"
 
+#include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
@@ -20,6 +21,15 @@ namespace {
 
 bool IsSupportedPredicate(const TCoCompare& predicate) {
     return !predicate.Ref().Content().starts_with("Aggr");
+}
+
+bool CheckSameColumn(const TExprBase &left, const TExprBase &right) {
+    if (auto leftMember = left.Maybe<TCoMember>()) {
+        if (auto rightMember = right.Maybe<TCoMember>()) {
+            return (leftMember.Cast().Name() == rightMember.Cast().Name());
+        }
+    }
+    return false;
 }
 
 bool IsSupportedDataType(const TCoDataCtor& node, bool allowOlapApply) {
@@ -79,9 +89,24 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
-bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+bool HasExternalArgs(const TExprBase& expr, const TPushdownOptions& options) {
+    if (!options.ExternalArgs) {
+        return false;
+    }
+    return !!FindNode(expr.Ptr(), [&options](const TExprNode::TPtr& node) { return options.IsExternalArg(*node); });
+}
+
+bool IsGoodTypeForUnaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    return (NUdf::EDataTypeFeatures::NumericType & features)
+    return ((NUdf::EDataTypeFeatures::NumericType) & features)
+        || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
+            NUdf::EDataTypeFeatures::DateType |
+            NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
+}
+
+bool IsGoodTypeForBinaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TimeIntervalType) & features)
         || (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
             NUdf::EDataTypeFeatures::DateType |
             NUdf::EDataTypeFeatures::TimeIntervalType) & features) && !(NUdf::EDataTypeFeatures::TzDateType & features));
@@ -110,6 +135,7 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
 
         "String.Contains",
         "String._yql_AsciiContainsIgnoreCase",
+        "OlapKernels._yql_AsciiContainsIgnoreCase",
         "String.StartsWith",
         "String._yql_AsciiStartsWithIgnoreCase",
         "String.EndsWith",
@@ -118,13 +144,17 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     return substringMatchUdfs.contains(name);
 }
 
-[[maybe_unused]]
-bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushdownSubstring) {
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, bool allowOlapApply) {
+    Y_UNUSED(ifPresent);
+    return allowOlapApply;
+}
+
+bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& pushdownOptions) {
     if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
     }
 
-    if (FindNode(expr.Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable({"Ensure", "Unwrap"}); })) {
+    if (FindNode(expr.Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable({"Ensure", "Unwrap"}); })) {
         return false;
     }
 
@@ -132,14 +162,10 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
         return node->IsCallable({"Apply", "NamedApply"}) && (node->Head().IsCallable("Udf") || (node->Head().IsCallable("AssumeStrict") && node->Head().Head().IsCallable("Udf") ));
     });
 
-    if (applies.empty()) {
-        return false;
-    }
-
     for (const auto& apply : applies) {
         const auto& udf = SkipCallables(apply->Head(), {"AssumeStrict"});
         const auto& udfName = udf.Head();
-        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2.") || CanPushdownStringUdf(udf, pushdownSubstring))) {
+        if (!(udfName.Content().starts_with("Json2.") || udfName.Content().starts_with("Re2.") || CanPushdownStringUdf(udf, pushdownOptions.PushdownSubstring))) {
             return false;
         }
 
@@ -147,23 +173,32 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
             return false;
         }
 
-        // Pushdonw only SQL LIKE or ILIKE.
+        // By default push down only SQL LIKE or ILIKE (Re2 pattern built from Re2.PatternFromLike).
+        // When OptEnableOlapPushdownRegexp is enabled, also allow plain REGEXP (Re2.Match / Re2.Grep)
+        // with a constant/parameter pattern to be pushed down to the column shard.
         constexpr auto like = "Re2.PatternFromLike"sv;
-        if (udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+        if (udfName.Content().starts_with("Re2.") &&
+            !udfName.IsAtom({like, "Re2.Options"}) &&
+            !(pushdownOptions.PushdownRegexp && (udfName.IsAtom("Re2.Match") || udfName.IsAtom("Re2.Grep"))) &&
             !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
             return false;
         }
     }
 
-    return true;
+    if (auto maybeIfPresent = expr.Maybe<TCoIfPresent>(); applies.empty() && maybeIfPresent.IsValid()) {
+        auto ifPresent = maybeIfPresent.Cast();
+        // Special case, when we cannot push a todict.
+        const auto hasToDict = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoToDict>(node); };
+        return !FindNode(ifPresent.PresentHandler().Ptr(), hasToDict);
+    }
+
+    // External arguments (e.g. `KqpOlapJsonValue`) replace UDF applies (e.g. `Json2.SqlValue*`) computed by the column shard,
+    // so the tree is still worth being pushed as `KqpOlapApply` even if it has no other UDF applies.
+    return !applies.empty() || HasExternalArgs(expr, pushdownOptions);
 }
 
-bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
-
-    Y_UNUSED(ifPresent);
-    Y_UNUSED(lambdaArg);
-
-    return allowOlapApply;
+bool CanBePushedAsBlockKernel(const TExprBase &node) {
+    return !node.Maybe<TCoSize>();
 }
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {
@@ -186,25 +221,38 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return IsSupportedDataType(maybeData.Cast(), options.AllowOlapApply);
     } else if (const auto maybeMember = node.Maybe<TCoMember>()) {
         return IsMemberColumn(maybeMember.Cast(), lambdaArg);
+    } else if (options.IsExternalArg(node.Ref())) {
+        return true;
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
-        const auto jsonOp = maybeJsonValue.Cast();
-        return jsonOp.Json().Maybe<TCoMember>() && jsonOp.JsonPath().Maybe<TCoUtf8>();
+        return CanBePushedAsOlapJsonValue(maybeJsonValue.Cast(), lambdaArg);
     } else if (node.Maybe<TCoNull>() || node.Maybe<TCoParameter>() || node.Maybe<TCoJust>()) {
         return true;
     }
 
     if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
-        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
+        if (!options.AllowOlapApply && !CanBePushedAsBlockKernel(node)) {
+            return false;
+        }
+
+        return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) &&
+               IsGoodTypeForUnaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
     } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
-        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options)
-            && IsGoodTypeForArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) && !op.Cast().Maybe<TCoAggrAdd>();
+        // FIXME: CS should be able to handle bin arithmetic op with the same column.
+        if (!options.AllowOlapApply && CheckSameColumn(op.Cast().Left(), op.Cast().Right())) {
+            return false;
+        }
+
+        return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, options) &&
+               CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, options) &&
+               IsGoodTypeForBinaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply) &&
+               !op.Cast().Maybe<TCoAggrAdd>();
     }
 
     if (options.AllowOlapApply) {
         if (const auto maybeIfPresent = node.Maybe<TCoIfPresent>()) {
-            return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
+            return IfPresentCanBePushed(maybeIfPresent.Cast(), options.AllowOlapApply);
         }
-        return AbstractTreeCanBePushed(node, lambdaArg, options.PushdownSubstring);
+        return AbstractTreeCanBePushed(node, options);
     }
 
     return false;
@@ -247,15 +295,17 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
     return false;
 }
 
-bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TPushdownOptions& options) {
-
-    const auto* inputType = input.Ref().GetTypeAnn();
+bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                                          const TPushdownOptions& options) {
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:
             inputType = inputType->Cast<TFlowExprType>()->GetItemType();
             break;
         case ETypeAnnotationKind::Stream:
             inputType = inputType->Cast<TStreamExprType>()->GetItemType();
+            break;
+        case ETypeAnnotationKind::Optional:
+            inputType = inputType->Cast<TOptionalExprType>()->GetItemType();
             break;
         case ETypeAnnotationKind::Struct:
             break;
@@ -268,6 +318,10 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
 
     if (inputType->GetKind() != ETypeAnnotationKind::Struct) {
         // We do not know how process input that is not a sequence of elements
+        return false;
+    }
+    // FIXME: CS should be able to handle bin cmp op with the same column.
+    if (!options.AllowOlapApply && CheckSameColumn(compare.Left(), compare.Right())) {
         return false;
     }
 
@@ -285,7 +339,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         }
     }
 
-    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+    if (options.PushdownSubstring) {
         if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
             const auto& right = compare.Right().Ref();
             YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));
@@ -300,8 +354,8 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     return true;
 }
 
-bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
-    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, lambdaBody, options);
+bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType, const TPushdownOptions& options) {
+    return IsSupportedPredicate(compare) && CheckComparisonParametersForPushdown(compare, lambdaArg, inputType, options);
 }
 
 bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TPushdownOptions& options) {
@@ -359,20 +413,20 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
-bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType, const TPushdownOptions& options) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
 
     const auto predicate = coalesce.Predicate();
     if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, options);
+        return CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options);
     } else if (const auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
         return SafeCastCanBePushed(maybeFlatmap.Cast(), lambdaArg, options);
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         return JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
     } else if (const auto maybeIfPresent = predicate.Maybe<TCoIfPresent>()) {
-        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
+        return IfPresentCanBePushed(maybeIfPresent.Cast(), options.AllowOlapApply);
     }
 
     return false;
@@ -382,20 +436,20 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                               const TPushdownOptions& options) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
     predicateTree.CanBePushedApply = true;
 
-    for (const auto& childNodePtr: opNode.Children()) {
+    for (const auto& childNodePtr : opNode.Children()) {
         TOLAPPredicateNode child;
         child.ExprNode = childNodePtr;
         if (const auto maybeCtor = TMaybeNode<TCoDataCtor>(child.ExprNode)) {
             child.CanBePushed = IsSupportedDataType(maybeCtor.Cast(), false);
             child.CanBePushedApply = IsSupportedDataType(maybeCtor.Cast(), true);
-        }
-        else {
-            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, lambdaBody, options);
+        } else {
+            CollectPredicates(TExprBase(child.ExprNode), child, lambdaArg, inputType, options);
         }
         predicateTree.Children.emplace_back(child);
         predicateTree.CanBePushed &= child.CanBePushed;
@@ -405,15 +459,48 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
 
 } // namespace
 
-void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue, const TExprNode* lambdaArg) {
+    // Currently we support only simple columns of the row and constant paths in pushdown.
+    if (!IsMemberColumn(jsonValue.Json(), lambdaArg) || !jsonValue.JsonPath().Maybe<TCoUtf8>()) {
+        return false;
+    }
+
+    // `KqpOlapJsonValue` kernel matches `JsonValue` semantics only without RETURNING (lenient `SqlValueConvertToUtf8`).
+    // With an explicit RETURNING type `JsonValue` is stricter (e.g. `SqlValueUtf8` returns NULL for a JSON number even for
+    // RETURNING Utf8, `SqlValueNumber` + cast is used for numeric types) and date types are not supported by the kernel at all.
+    // Such JSON_VALUE is computed by `KqpOlapApply` (or by KQP) over the whole JSON column via `Json2` UDFs.
+    if (jsonValue.ReturningType()) {
+        return false;
+    }
+
+    // `KqpOlapJsonValue` returns NULL both on empty result and on error (default modes of JSON_VALUE).
+    const auto isDefaultNull = [](const TCoAtom& mode, const TExprBase& value) {
+        return mode.Value() == ToString(EJsonValueHandlerMode::DefaultValue) && value.Maybe<TCoNull>();
+    };
+    if (!isDefaultNull(jsonValue.OnEmptyMode(), jsonValue.OnEmpty()) || !isDefaultNull(jsonValue.OnErrorMode(), jsonValue.OnError())) {
+        return false;
+    }
+
+    // PASSING variables are not supported by `KqpOlapJsonValue`. Before the common optimizer they are `JsonVariables`
+    // (always typed as `Dict<Utf8, Resource<'JsonNode'>>` even when empty), after it `AsDict` (typed as `EmptyDict` when empty).
+    const auto& variables = jsonValue.Variables().Ref();
+    if (variables.IsCallable({"JsonVariables", "AsDict"})) {
+        return variables.ChildrenSize() == 0;
+    }
+    const auto variablesType = variables.GetTypeAnn();
+    return variablesType && variablesType->GetKind() == ETypeAnnotationKind::EmptyDict;
+}
+
+void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
+                       const TPushdownOptions& options) {
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
-        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, options);
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(false));
+        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(true));
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(false));
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(true));
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;
@@ -424,10 +511,10 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
 
     if (options.AllowOlapApply && !predicateTree.CanBePushedApply){
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, {true, options.PushdownSubstring});    
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options.WithAllowOlapApply(true));
         }
         if (!predicateTree.CanBePushedApply) {
-            predicateTree.CanBePushedApply =  AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
+            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, options);
         }
     }
 }

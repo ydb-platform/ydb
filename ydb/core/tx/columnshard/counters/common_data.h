@@ -1,7 +1,6 @@
 #pragma once
-#include <ydb/library/signals/owner.h>
-
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -20,6 +19,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SkipEraseBytes;
     std::shared_ptr<TValueAggregationClient> DataSize;
     std::shared_ptr<TValueAggregationClient> ChunksCount;
+
 public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
@@ -52,12 +52,11 @@ public:
         SkipEraseCount->Add(1);
         SkipEraseBytes->Add(size);
     }
-
 };
 
 class TLoadTimeSignals: public TCommonCountersOwner {
 public:
-    class TLoadTimer : public TNonCopyable {
+    class TLoadTimer: public TNonCopyable {
     private:
         const TLoadTimeSignals& Signals;
         TInstant Start;
@@ -81,6 +80,7 @@ public:
     private:
         TRWMutex Mutex;
         THashMap<TString, TLoadTimeSignals> Signals;
+
         TLoadTimeSignals GetSignalImpl(const TString& name) {
             TReadGuard rg(Mutex);
             auto it = Signals.find(name);
@@ -109,7 +109,8 @@ private:
 
     TLoadTimeSignals(const TString& type)
         : TBase("Startup")
-        , Type(type) {
+        , Type(type)
+    {
         LoadingTimeCounter = TBase::GetValue("Startup/" + type + "/LoadingTime");
         FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "/FailedLoadingTime");
         LoadingFailCounter = TBase::GetValue("Startup/" + type + "/LoadingFailCount");
@@ -148,8 +149,9 @@ public:
         , SchemaPresetLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPreset"))
         , TableVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("TableVersionss"))
         , SchemaPresetVersionsLoadTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("SchemaPresetVersions"))
-        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge")) {
+        , PrechargeTimeCounters(NColumnShard::TLoadTimeSignals::TSignalsRegistry::GetSignal("Precharge"))
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

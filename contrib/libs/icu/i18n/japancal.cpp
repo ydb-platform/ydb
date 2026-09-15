@@ -98,7 +98,7 @@ static void U_CALLCONV initializeEras(UErrorCode &status) {
     if (U_FAILURE(status)) {
         return;
     }
-    gCurrentEra = gJapaneseEraRules->getCurrentEraIndex();
+    gCurrentEra = gJapaneseEraRules->getCurrentEraCode();
 }
 
 static void init(UErrorCode &status) {
@@ -115,7 +115,6 @@ JapaneseCalendar::JapaneseCalendar(const Locale& aLocale, UErrorCode& success)
 :   GregorianCalendar(aLocale, success)
 {
     init(success);
-    setTimeInMillis(getNow(), success); // Call this again now that the vtable is set up properly.
 }
 
 JapaneseCalendar::~JapaneseCalendar()
@@ -128,12 +127,6 @@ JapaneseCalendar::JapaneseCalendar(const JapaneseCalendar& source)
     UErrorCode status = U_ZERO_ERROR;
     init(status);
     U_ASSERT(U_SUCCESS(status));
-}
-
-JapaneseCalendar& JapaneseCalendar::operator= ( const JapaneseCalendar& right)
-{
-    GregorianCalendar::operator=(right);
-    return *this;
 }
 
 JapaneseCalendar* JapaneseCalendar::clone() const
@@ -229,9 +222,9 @@ void JapaneseCalendar::handleComputeFields(int32_t julianDay, UErrorCode& status
     //Calendar::timeToFields(theTime, quick, status);
     GregorianCalendar::handleComputeFields(julianDay, status);
     int32_t year = internalGet(UCAL_EXTENDED_YEAR); // Gregorian year
-    int32_t eraIdx = gJapaneseEraRules->getEraIndex(year, internalGetMonth(status) + 1, internalGet(UCAL_DAY_OF_MONTH), status);
+    int32_t eraCode = gJapaneseEraRules->getEraCode(year, internalGetMonth(status) + 1, internalGet(UCAL_DAY_OF_MONTH), status);
 
-    int32_t startYear = gJapaneseEraRules->getStartYear(eraIdx, status) - 1;
+    int32_t startYear = gJapaneseEraRules->getStartYear(eraCode, status) - 1;
     if (U_FAILURE(status)) {
         return;
     }
@@ -239,7 +232,7 @@ void JapaneseCalendar::handleComputeFields(int32_t julianDay, UErrorCode& status
         status = U_ILLEGAL_ARGUMENT_ERROR;
         return;
     }
-    internalSet(UCAL_ERA, eraIdx);
+    internalSet(UCAL_ERA, eraCode);
     internalSet(UCAL_YEAR, year);
 }
 
@@ -268,7 +261,7 @@ int32_t JapaneseCalendar::handleGetLimit(UCalendarDateFields field, ELimitType l
         if (limitType == UCAL_LIMIT_MINIMUM || limitType == UCAL_LIMIT_GREATEST_MINIMUM) {
             return 0;
         }
-        return gJapaneseEraRules->getNumberOfEras() - 1; // max known era, not gCurrentEra
+        return gJapaneseEraRules->getMaxEraCode(); // max known era, not gCurrentEra
     case UCAL_YEAR:
         {
             switch (limitType) {
@@ -302,7 +295,7 @@ int32_t JapaneseCalendar::getActualMaximum(UCalendarDateFields field, UErrorCode
     if (U_FAILURE(status)) {
         return 0; // error case... any value
     }
-    if (era == gJapaneseEraRules->getNumberOfEras() - 1) { // max known era, not gCurrentEra
+    if (era == gJapaneseEraRules->getMaxEraCode()) { // max known era, not gCurrentEra
         // TODO: Investigate what value should be used here - revisit after 4.0.
         return handleGetLimit(UCAL_YEAR, UCAL_LIMIT_MAXIMUM);
     }

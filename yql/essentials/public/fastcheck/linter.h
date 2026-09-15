@@ -2,12 +2,13 @@
 
 #include <yql/essentials/ast/yql_errors.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 enum class ESyntax {
     SExpr,
@@ -44,7 +45,10 @@ struct TChecksRequest {
     TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
+    const IUdfMeta* UdfMeta = nullptr;
     TMaybe<TVector<TCheckFilter>> Filters;
+    TString IssueReportTarget;
+    bool SuppressPrerequisiteIssues = false;
 };
 
 struct TCheckResponse {
@@ -61,5 +65,4 @@ TVector<TCheckFilter> ParseChecks(const TString& checks);
 TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());
 TChecksResponse RunChecks(const TChecksRequest& request);
 
-}
-}
+} // namespace NYql::NFastCheck

@@ -1,4 +1,8 @@
 #pragma once
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/core_ydb_impl.h>
+#include <ydb/mvp/core/merger.h>
+
 #include <util/generic/hash_set.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
@@ -14,9 +18,6 @@
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/mvp/core/core_ydb.h>
-#include <ydb/mvp/core/core_ydb_impl.h>
-#include <ydb/mvp/core/merger.h>
 
 namespace NMVP {
 

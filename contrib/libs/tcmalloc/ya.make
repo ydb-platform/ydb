@@ -20,7 +20,7 @@ SRCS(
 INCLUDE(common.inc)
 
 CFLAGS(
-    -DTCMALLOC_256K_PAGES
+    -DTCMALLOC_INTERNAL_256K_PAGES
 )
 
 END()
@@ -29,6 +29,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k

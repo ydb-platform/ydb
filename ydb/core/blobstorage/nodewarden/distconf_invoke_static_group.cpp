@@ -1,15 +1,77 @@
 #include "distconf_invoke.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd) {
-        if (!RunCommonChecks()) {
-            return;
+    TDistributedConfigKeeper::TAllocateStaticGroupParams
+    TDistributedConfigKeeper::BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
+                                                             const NKikimrBlobStorage::TBaseConfig *baseConfig,
+                                                             const NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TReassignGroupDisk& command,
+                                                             const NKikimrBlobStorage::TGroupInfo& group,
+                                                             const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet,
+                                                             TStaticGroupReassignments *reassignments) {
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(command.GetVDiskId());
+        THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
+        NBsController::TGroupMapper::TForbiddenPDisks forbiddenPDisks;
+
+        for (const auto& vdisk : serviceSet.GetVDisks()) {
+            const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                continue;
+            }
+            if (currentVDiskId == vdiskId) {
+                NBsController::TPDiskId pdiskId;
+                if (command.HasPDiskId()) {
+                    const auto& target = command.GetPDiskId();
+                    pdiskId = {target.GetNodeId(), target.GetPDiskId()};
+                }
+                replacedDisks.emplace(vdiskId, pdiskId);
+            } else {
+                Y_DEBUG_ABORT_UNLESS(vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY || vdisk.HasDonorMode());
+                const auto& location = vdisk.GetVDiskLocation();
+                forbiddenPDisks.emplace(location.GetNodeID(), location.GetPDiskID());
+            }
         }
+
+        const TBridgePileId bridgePileId = TBridgePileId::FromProto(&group,
+                                                                    &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+        const std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
+                                                           ? std::make_optional(TGroupId::FromProto(&group,
+                                                                                                   &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId))
+                                                           : std::nullopt;
+
+        return {
+            .Config = config,
+            .GroupId = vdiskId.GroupID,
+            .GroupGeneration = vdiskId.GroupGeneration + 1,
+            .GroupType = TBlobStorageGroupType(static_cast<TBlobStorageGroupType::EErasureSpecies>(group.GetErasureSpecies())),
+            .ReplacedDisks = std::move(replacedDisks),
+            .ForbiddenPDisks = std::move(forbiddenPDisks),
+            .BaseConfig = baseConfig,
+            .ConvertToDonor = command.GetConvertToDonor(),
+            .IgnoreVSlotQuotaCheck = command.GetIgnoreVSlotQuotaCheck(),
+            .AllowUnusableDisks = command.GetAllowUnusableDisks(),
+            .SettleOnlyOnOperationalDisks = command.GetSettleOnlyOnOperationalDisks(),
+            .IsSelfHealReasonDecommit = command.GetIsSelfHealReasonDecommit(),
+            .PreferLessOccupiedRack = command.GetPreferLessOccupiedRack(),
+            .WithAttentionToReplication = command.GetWithAttentionToReplication(),
+            .UseSelfHealLocalPolicy = command.GetUseSelfHealLocalPolicy(),
+            .TryToRelocateBrokenDisksLocallyFirst = command.GetTryToRelocateBrokenDisksLocallyFirst(),
+            .BridgePileId = bridgePileId,
+            .BridgeProxyGroupId = bridgeProxyGroupId,
+            .ApplySelfHealNodeAllowList = command.GetFromSelfHeal(),
+            .Reassignments = reassignments,
+        };
+    }
+
+    void TInvokeRequestHandlerActor::ReassignGroupDisk(const TQuery::TReassignGroupDisk& cmd) {
+        RunCommonChecks();
+
         if (cmd.GetFromSelfHeal() && !Self->StorageConfig->GetSelfManagementConfig().GetAutomaticStaticGroupManagement()) {
-            return FinishWithError(TResult::ERROR, "operation forbidden: automatic static group management disabled");
+            throw TExError() << "Operation forbidden: automatic static group management disabled";
         }
 
         bool found = false;
@@ -17,10 +79,15 @@ namespace NKikimr::NStorage {
         for (const auto& group : Self->StorageConfig->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
                 if (group.GetGroupGeneration() != vdiskId.GroupGeneration) {
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "group generation mismatch"
+                    throw TExError() << "Group generation mismatch"
                         << " GroupId# " << group.GetGroupID()
                         << " Generation# " << group.GetGroupGeneration()
-                        << " VDiskId# " << vdiskId);
+                        << " VDiskId# " << vdiskId;
+                }
+                if (vdiskId.FailRealm >= group.RingsSize() || vdiskId.FailDomain >= group.GetRings(vdiskId.FailRealm).FailDomainsSize()
+                    || vdiskId.VDisk >= group.GetRings(vdiskId.FailRealm)
+                            .GetFailDomains(vdiskId.FailDomain).VDiskLocationsSize()) {
+                    throw TExError() << "VDiskId# " << vdiskId << " not found in group";
                 }
                 found = true;
                 if (!cmd.GetIgnoreGroupFailModelChecks()) {
@@ -30,7 +97,7 @@ namespace NKikimr::NStorage {
             }
         }
         if (!found) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "GroupId# " << vdiskId.GroupID << " not found");
+            throw TExError() << "GroupId# " << vdiskId.GroupID << " not found";
         }
 
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
@@ -40,33 +107,72 @@ namespace NKikimr::NStorage {
         TStringStream err;
         GroupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
         if (!GroupInfo) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to parse group info: " << err.Str());
+            throw TExError() << "Failed to parse group info: " << err.Str();
         }
         SuccessfulVDisks.emplace(&GroupInfo->GetTopology());
 
+        TVector<ui32> nodesToConnect;
         for (ui32 i = 0, num = GroupInfo->GetTotalVDisksNum(); i < num; ++i) {
             const TVDiskID vdiskId = GroupInfo->GetVDiskId(i);
             const TActorId actorId = GroupInfo->GetActorId(i);
-            const ui32 flags = IEventHandle::FlagTrackDelivery |
-                (actorId.NodeId() == SelfId().NodeId() ? 0 : IEventHandle::FlagSubscribeOnSession);
-            STLOG(PRI_DEBUG, BS_NODE, NWDC73, "sending TEvVStatus", (SelfId, SelfId()), (VDiskId, vdiskId),
-                (ActorId, actorId));
-            Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), flags);
-            if (actorId.NodeId() != SelfId().NodeId()) {
-                NodeToVDisk.emplace(actorId.NodeId(), vdiskId);
+            const ui32 nodeId = actorId.NodeId();
+            if (nodeId == SelfId().NodeId()) {
+                SendVStatusQuery(actorId, vdiskId);
+            } else {
+                NodeToVDisk.emplace(nodeId, vdiskId);
+                const auto [it, inserted] = Subscriptions.try_emplace(nodeId);
+                if (it->second) {
+                    SendVStatusQuery(actorId, vdiskId, it->second);
+                } else {
+                    VStatusQueriesAwaitingConnection[nodeId].emplace_back(actorId, vdiskId);
+                }
+                if (inserted) {
+                    nodesToConnect.push_back(nodeId);
+                }
             }
             ActorToVDisk.emplace(actorId, vdiskId);
             PendingVDiskIds.emplace(vdiskId);
+        }
+
+        for (const ui32 nodeId : nodesToConnect) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvConnectNode);
+        }
+    }
+
+    void TInvokeRequestHandlerActor::SendVStatusQuery(TActorId actorId, TVDiskID vdiskId, TActorId sessionId) {
+        YDB_LOG_DEBUG("Sending TEvVStatus",
+            {"marker", "NWDC73"},
+            {"selfId", SelfId()},
+            {"VDiskId", vdiskId},
+            {"actorId", actorId});
+
+        auto ev = std::make_unique<IEventHandle>(actorId, SelfId(), new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery);
+        if (sessionId) {
+            ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+        }
+        TActivationContext::Send(ev.release());
+    }
+
+    void TInvokeRequestHandlerActor::SendPendingVStatusQueries(ui32 nodeId, TActorId sessionId) {
+        if (const auto it = VStatusQueriesAwaitingConnection.find(nodeId); it != VStatusQueriesAwaitingConnection.end()) {
+            auto queries = std::move(it->second);
+            VStatusQueriesAwaitingConnection.erase(it);
+            for (const auto& [actorId, vdiskId] : queries) {
+                SendVStatusQuery(actorId, vdiskId, sessionId);
+            }
         }
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvVStatusResult::TPtr ev) {
         const auto& record = ev->Get()->Record;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
-        STLOG(PRI_DEBUG, BS_NODE, NWDC74, "TEvVStatusResult", (SelfId, SelfId()), (Record, record), (VDiskId, vdiskId));
+        YDB_LOG_DEBUG("TEvVStatusResult",
+            {"marker", "NWDC74"},
+            {"selfId", SelfId()},
+            {"record", record},
+            {"VDiskId", vdiskId});
         if (!PendingVDiskIds.erase(vdiskId)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "TEvVStatusResult VDiskID# " << vdiskId
-                << " is unexpected");
+            throw TExError() << "TEvVStatusResult VDiskID# " << vdiskId << " is unexpected";
         }
         if (record.GetJoinedGroup() && record.GetReplicated()) {
             *SuccessfulVDisks |= {&GroupInfo->GetTopology(), vdiskId};
@@ -82,7 +188,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::OnVStatusError(TVDiskID vdiskId) {
-        PendingVDiskIds.erase(vdiskId);
+        if (!PendingVDiskIds.erase(vdiskId)) {
+            return;
+        }
         CheckReassignGroupDisk();
     }
 
@@ -98,130 +206,94 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::ReassignGroupDiskExecute() {
-        const auto& record = Event->Get()->Record;
-        const auto& cmd = record.GetReassignGroupDisk();
+        RunCommonChecks();
 
-        if (!RunCommonChecks()) {
-            return;
-        } else if (!Self->SelfManagementEnabled) {
-            return FinishWithError(TResult::ERROR, "self-management is not enabled");
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management is not enabled";
         }
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC75, "ReassignGroupDiskExecute", (SelfId, SelfId()));
+        auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+        Y_ABORT_UNLESS(op);
+        const auto& record = op->Command;
+        const auto& cmd = record.GetReassignGroupDisk();
 
-        const auto& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
+        YDB_LOG_DEBUG("ReassignGroupDiskExecute",
+            {"marker", "NWDC75"},
+            {"selfId", SelfId()});
 
-        ui64 maxSlotSize = 0;
+        const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
 
         if (SuccessfulVDisks) {
-            const auto& checker = GroupInfo->GetQuorumChecker();
-
-            auto check = [&](auto failedVDisks, const char *base) {
-                bool wasDegraded = checker.IsDegraded(failedVDisks) && checker.CheckFailModelForGroup(failedVDisks);
-                failedVDisks |= {&GroupInfo->GetTopology(), vdiskId};
-
-                if (!checker.CheckFailModelForGroup(failedVDisks)) {
-                    FinishWithError(TResult::ERROR, TStringBuilder()
-                        << "ReassignGroupDisk would render group inoperable (" << base << ')');
-                } else if (!cmd.GetIgnoreDegradedGroupsChecks() && !wasDegraded && checker.IsDegraded(failedVDisks)) {
-                    FinishWithError(TResult::ERROR, TStringBuilder()
-                        << "ReassignGroupDisk would drive group into degraded state (" << base << ')');
-                } else {
-                    return true;
-                }
-
-                return false;
-            };
-
-            if (!check(~SuccessfulVDisks.value(), "polling")) {
-                return;
-            }
-
-            // scan failed disks according to BS_CONTROLLER's data
             TBlobStorageGroupInfo::TGroupVDisks failedVDisks(&GroupInfo->GetTopology());
             for (const auto& vslot : BaseConfig->GetVSlot()) {
                 if (vslot.GetGroupId() != vdiskId.GroupID.GetRawId() || vslot.GetGroupGeneration() != vdiskId.GroupGeneration) {
                     continue;
                 }
                 if (!vslot.GetReady()) {
-                    auto groupId = TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId);
-                    const TVDiskID vdiskId(groupId, vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                    const auto groupId = TGroupId::FromProto(&vslot, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId);
+                    const TVDiskID failedVDiskId(groupId, vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
                         vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
-                    failedVDisks |= {&GroupInfo->GetTopology(), vdiskId};
-                }
-                if (vslot.HasVDiskMetrics()) {
-                    const auto& m = vslot.GetVDiskMetrics();
-                    if (m.HasAllocatedSize()) {
-                        maxSlotSize = Max(maxSlotSize, m.GetAllocatedSize());
-                    }
+                    failedVDisks |= {&GroupInfo->GetTopology(), failedVDiskId};
                 }
             }
+            const auto& checker = GroupInfo->GetQuorumChecker();
 
-            if (!check(failedVDisks, "BS_CONTROLLER state")) {
-                return;
-            }
+            auto check = [&](auto failed, const char *base) {
+                const bool wasDegraded = checker.IsDegraded(failed) && checker.CheckFailModelForGroup(failed);
+                failed |= {&GroupInfo->GetTopology(), vdiskId};
+
+                if (!checker.CheckFailModelForGroup(failed)) {
+                    throw TExError() << "ReassignGroupDisk would render group inoperable (" << base << ')';
+                } else if (!cmd.GetIgnoreDegradedGroupsChecks() && !wasDegraded && checker.IsDegraded(failed)) {
+                    throw TExError() << "ReassignGroupDisk would drive group into degraded state (" << base << ')';
+                }
+            };
+
+            check(~SuccessfulVDisks.value(), "polling");
+            check(failedVDisks, "BS_CONTROLLER state");
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (!config.HasBlobStorageConfig()) {
-            return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            throw TExError() << "No BlobStorageConfig defined";
         }
         const auto& bsConfig = config.GetBlobStorageConfig();
 
         if (!bsConfig.HasServiceSet()) {
-            return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            throw TExError() << "No ServiceSet defined";
         }
         const auto& ss = bsConfig.GetServiceSet();
 
-        const auto& smConfig = config.GetSelfManagementConfig();
-
-        THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks;
-        NBsController::TGroupMapper::TForbiddenPDisks forbid;
-        for (const auto& vdisk : ss.GetVDisks()) {
-            const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
-                continue;
-            }
-            if (currentVDiskId == vdiskId) {
-                NBsController::TPDiskId pdiskId;
-                if (cmd.HasPDiskId()) {
-                    const auto& target = cmd.GetPDiskId();
-                    pdiskId = {target.GetNodeId(), target.GetPDiskId()};
-                }
-                replacedDisks.emplace(vdiskId, pdiskId);
-            } else {
-                Y_DEBUG_ABORT_UNLESS(vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY ||
-                    vdisk.HasDonorMode());
-                const auto& loc = vdisk.GetVDiskLocation();
-                forbid.emplace(loc.GetNodeID(), loc.GetPDiskID());
-            }
-        }
-
         for (const auto& group : ss.GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
+                TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
                 try {
-                    Self->AllocateStaticGroup(&config, vdiskId.GroupID, vdiskId.GroupGeneration + 1,
-                        TBlobStorageGroupType((TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies()),
-                        smConfig.GetGeometry(), smConfig.GetPDiskFilter(),
-                        smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
-                        replacedDisks, forbid, maxSlotSize,
-                        &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
-                        cmd.GetIsSelfHealReasonDecommit(), std::nullopt);
+                    Self->AllocateStaticGroup(BuildStaticGroupReassignParams(&config, &BaseConfig.value(), cmd, group, ss,
+                                                                             &reassignments));
                 } catch (const TExConfigError& ex) {
-                    STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
-                        (Config, config),
-                        (BaseConfig, *BaseConfig),
-                        (Error, ex.what()));
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to allocate group: " << ex.what());
+                    YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
+                        {"marker", "NWDC76"},
+                        {"selfId", SelfId()},
+                        {"config", config},
+                        {"baseConfig", *BaseConfig},
+                        {"error", ex.what()});
+                    throw TExError() << "Failed to allocate group: " << ex.what();
                 }
 
-                config.SetGeneration(config.GetGeneration() + 1);
+                const auto it = reassignments.find(vdiskId);
+                if (it == reassignments.end() || !it->second.SourceSlotId || !it->second.TargetSlotId) {
+                    throw TExError() << "Failed to obtain reassigned VSlotIds";
+                }
+                auto& result = ReassignGroupDiskResult.emplace();
+                result.MutableSourceSlotId()->CopyFrom(*it->second.SourceSlotId);
+                result.MutableTargetSlotId()->CopyFrom(*it->second.TargetSlotId);
+
                 return StartProposition(&config);
             }
         }
 
-        return FinishWithError(TResult::ERROR, TStringBuilder() << "group not found");
+        throw TExError() << "Group not found";
     }
 
     void TInvokeRequestHandlerActor::StaticVDiskSlain(const TQuery::TStaticVDiskSlain& cmd) {
@@ -233,24 +305,21 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleDropDonorAndSlain(TVDiskID vdiskId, const NKikimrBlobStorage::TVSlotId& vslotId, bool isDropDonor) {
-        if (!RunCommonChecks()) {
-            return;
-        }
+        RunCommonChecks();
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         if (!config.HasBlobStorageConfig()) {
-            return FinishWithError(TResult::ERROR, "no BlobStorageConfig defined");
+            throw TExError() << "No BlobStorageConfig defined";
         }
         auto *bsConfig = config.MutableBlobStorageConfig();
 
         if (!bsConfig->HasServiceSet()) {
-            return FinishWithError(TResult::ERROR, "no ServiceSet defined");
+            throw TExError() << "No ServiceSet defined";
         }
         auto *ss = bsConfig->MutableServiceSet();
 
         bool changes = false;
-        ui32 pdiskUsageCount = 0;
 
         ui32 actualGroupGeneration = 0;
         for (const auto& group : ss->GetGroups()) {
@@ -264,12 +333,15 @@ namespace NKikimr::NStorage {
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
                 const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!currentVDiskId.SameExceptGeneration(vdiskId) ||
-                        vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                    continue;
+                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                    continue; // definitely incorrect group or position in group
+                }
+                if (isDropDonor && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                    continue; // dropping donor and this entity is already destroyed
                 }
 
                 if (isDropDonor && !vdisk.HasDonorMode()) {
+                    // this is the active disk and we want to drop its donor
                     Y_ABORT_UNLESS(currentVDiskId.GroupGeneration == actualGroupGeneration);
                     auto *m = ss->MutableVDisks(i);
                     if (vdiskId.GroupGeneration) { // drop specific donor
@@ -291,23 +363,22 @@ namespace NKikimr::NStorage {
                 }
 
                 const auto& loc = vdisk.GetVDiskLocation();
-                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId()) {
-                    continue;
-                }
-                ++pdiskUsageCount;
-
-                if (loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
-                    continue;
+                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
+                        loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                    continue; // doesn't match our pdisk
                 }
 
+                // this must be the obsolete disk (donor has generation from the past, destroyed disks too)
                 Y_ABORT_UNLESS(currentVDiskId.GroupGeneration < actualGroupGeneration);
 
                 if (!isDropDonor) {
-                    --pdiskUsageCount;
+                    // destroying slot on this disk
                     ss->MutableVDisks()->DeleteSubrange(i--, 1);
                     changes = true;
-                } else if (vdisk.HasDonorMode()) {
-                    if (currentVDiskId == vdiskId || vdiskId.GroupGeneration == 0) {
+                } else {
+                    Y_ABORT_UNLESS(vdisk.HasDonorMode()); // we have already checked this case by now
+                    if (vdiskId.GroupGeneration == 0 || vdiskId.GroupGeneration == currentVDiskId.GroupGeneration) {
+                        // sign up this entity for destruction
                         auto *m = ss->MutableVDisks(i);
                         m->ClearDonorMode();
                         m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
@@ -317,22 +388,31 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (!isDropDonor && !pdiskUsageCount) {
+        bool unusedPDisk = true;
+        for (const auto& vdisk : ss->GetVDisks()) {
+            if (vdisk.HasVDiskLocation()) {
+                const auto& loc = vdisk.GetVDiskLocation();
+                if (loc.GetNodeID() == vslotId.GetNodeId() && loc.GetPDiskID() == vslotId.GetPDiskId()) {
+                    unusedPDisk = false;
+                    break;
+                }
+            }
+        }
+        if (unusedPDisk) {
             for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                 if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                         pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
+                    Y_ABORT_UNLESS(changes);
                     ss->MutablePDisks()->DeleteSubrange(i, 1);
-                    changes = true;
                     break;
                 }
             }
         }
 
         if (!changes) {
-            return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            return Finish(TResult::OK, std::nullopt);
         }
 
-        config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }
 

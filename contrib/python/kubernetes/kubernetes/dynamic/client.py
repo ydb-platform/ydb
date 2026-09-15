@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import six
 import json
 
 from kubernetes import watch
@@ -57,19 +56,15 @@ def meta_request(func):
             raise api_exception(e)
         if serialize_response:
             try:
-                if six.PY2:
-                    return serializer(self, json.loads(resp.data))
                 return serializer(self, json.loads(resp.data.decode('utf8')))
             except ValueError:
-                if six.PY2:
-                    return resp.data
                 return resp.data.decode('utf8')
         return resp
 
     return inner
 
 
-class DynamicClient(object):
+class DynamicClient:
     """ A kubernetes client that dynamically discovers and interacts with
         the kubernetes API
     """
@@ -163,7 +158,7 @@ class DynamicClient(object):
 
         return self.request('patch', path, body=body, force_conflicts=force_conflicts, **kwargs)
 
-    def watch(self, resource, namespace=None, name=None, label_selector=None, field_selector=None, resource_version=None, timeout=None, watcher=None):
+    def watch(self, resource, namespace=None, name=None, label_selector=None, field_selector=None, resource_version=None, timeout=None, watcher=None, allow_watch_bookmarks=None):
         """
         Stream events for a resource from the Kubernetes API
 
@@ -176,6 +171,7 @@ class DynamicClient(object):
                                  a resource_version greater than this value will be returned
         :param timeout: The amount of time in seconds to wait before terminating the stream
         :param watcher: The Watcher object that will be used to stream the resource
+        :param allow_watch_bookmarks: Ask the API server to send BOOKMARK events
 
         :return: Event object with these keys:
                    'type': The type of event such as "ADDED", "DELETED", etc.
@@ -206,7 +202,8 @@ class DynamicClient(object):
             label_selector=label_selector,
             resource_version=resource_version,
             serialize=False,
-            timeout_seconds=timeout
+            timeout_seconds=timeout,
+            allow_watch_bookmarks=allow_watch_bookmarks,
         ):
             event['object'] = ResourceInstance(resource, event['object'])
             yield event
@@ -248,13 +245,15 @@ class DynamicClient(object):
             query_params.append(('fieldManager', params['field_manager']))
         if params.get('force_conflicts') is not None:
             query_params.append(('force', params['force_conflicts']))
+        if params.get('allow_watch_bookmarks') is not None:
+            query_params.append(('allowWatchBookmarks', params['allow_watch_bookmarks']))
 
         header_params = params.get('header_params', {})
         form_params = []
         local_var_files = {}
 
         # Checking Accept header.
-        new_header_params = dict((key.lower(), value) for key, value in header_params.items())
+        new_header_params = {key.lower(): value for key, value in header_params.items()}
         if not 'accept' in new_header_params:
             header_params['Accept'] = self.client.select_header_accept([
                 'application/json',

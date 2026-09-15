@@ -3,6 +3,8 @@
 
 #include "unicode/utypes.h"
 
+#if !UCONFIG_NO_NORMALIZATION
+
 #if !UCONFIG_NO_FORMATTING
 
 #if !UCONFIG_NO_MF2
@@ -15,6 +17,8 @@
 U_NAMESPACE_BEGIN
 
 namespace message2 {
+
+namespace data_model {
 
 // Implementation
 
@@ -691,9 +695,9 @@ Matcher::Matcher(const Matcher& other) {
     numSelectors = other.numSelectors;
     numVariants = other.numVariants;
     UErrorCode localErrorCode = U_ZERO_ERROR;
-    selectors.adoptInstead(copyArray<Expression>(other.selectors.getAlias(),
-                                                 numSelectors,
-                                                 localErrorCode));
+    selectors.adoptInstead(copyArray<VariableName>(other.selectors.getAlias(),
+                                                   numSelectors,
+                                                   localErrorCode));
     variants.adoptInstead(copyArray<Variant>(other.variants.getAlias(),
                                              numVariants,
                                              localErrorCode));
@@ -702,7 +706,7 @@ Matcher::Matcher(const Matcher& other) {
     }
 }
 
-Matcher::Matcher(Expression* ss, int32_t ns, Variant* vs, int32_t nv)
+Matcher::Matcher(VariableName* ss, int32_t ns, Variant* vs, int32_t nv)
     : selectors(ss), numSelectors(ns), variants(vs), numVariants(nv) {}
 
 Matcher::~Matcher() {}
@@ -724,7 +728,7 @@ const Binding* MFDataModel::getLocalVariablesInternal() const {
     return bindings.getAlias();
 }
 
-const Expression* MFDataModel::getSelectorsInternal() const {
+const VariableName* MFDataModel::getSelectorsInternal() const {
     U_ASSERT(!bogus);
     U_ASSERT(!hasPattern());
     return std::get_if<Matcher>(&body)->selectors.getAlias();
@@ -786,15 +790,13 @@ MFDataModel::Builder& MFDataModel::Builder::addBinding(Binding&& b, UErrorCode& 
     return *this;
 }
 
-/*
-  selector must be non-null
-*/
-MFDataModel::Builder& MFDataModel::Builder::addSelector(Expression&& selector, UErrorCode& status) noexcept {
+MFDataModel::Builder& MFDataModel::Builder::addSelector(VariableName&& selector,
+                                                        UErrorCode& status) {
     THIS_ON_ERROR(status);
 
     buildSelectorsMessage(status);
     U_ASSERT(selectors != nullptr);
-    selectors->adoptElement(create<Expression>(std::move(selector), status), status);
+    selectors->adoptElement(create<VariableName>(std::move(selector), status), status);
 
     return *this;
 }
@@ -830,17 +832,17 @@ MFDataModel::MFDataModel(const MFDataModel& other) : body(Pattern()) {
     if (other.hasPattern()) {
         body = *std::get_if<Pattern>(&other.body);
     } else {
-        const Expression* otherSelectors = other.getSelectorsInternal();
+        const VariableName* otherSelectors = other.getSelectorsInternal();
         const Variant* otherVariants = other.getVariantsInternal();
         int32_t numSelectors = other.numSelectors();
         int32_t numVariants = other.numVariants();
-        Expression* copiedSelectors = copyArray(otherSelectors, numSelectors, localErrorCode);
-        Variant* copiedVariants = copyArray(otherVariants, numVariants, localErrorCode);
+        LocalArray<VariableName> copiedSelectors(copyArray(otherSelectors, numSelectors, localErrorCode), localErrorCode);
+        LocalArray<Variant> copiedVariants(copyArray(otherVariants, numVariants, localErrorCode), localErrorCode);
         if (U_FAILURE(localErrorCode)) {
             bogus = true;
             return;
         }
-        body = Matcher(copiedSelectors, numSelectors, copiedVariants, numVariants);
+        body = Matcher(copiedSelectors.orphan(), numSelectors, copiedVariants.orphan(), numVariants);
     }
 
     bindingsLen = other.bindingsLen;
@@ -863,7 +865,9 @@ MFDataModel::MFDataModel(const MFDataModel::Builder& builder, UErrorCode& errorC
         int32_t numVariants = builder.variants->size();
         int32_t numSelectors = builder.selectors->size();
         LocalArray<Variant> variants(copyVectorToArray<Variant>(*builder.variants, errorCode), errorCode);
-        LocalArray<Expression> selectors(copyVectorToArray<Expression>(*builder.selectors, errorCode), errorCode);
+        LocalArray<VariableName> selectors(copyVectorToArray<VariableName>(*builder.selectors,
+                                                                           errorCode),
+                                           errorCode);
         if (U_FAILURE(errorCode)) {
             bogus = true;
             return;
@@ -911,6 +915,8 @@ MFDataModel::Builder::~Builder() {
         delete bindings;
     }
 }
+
+} // namespace data_model
 } // namespace message2
 
 U_NAMESPACE_END
@@ -918,3 +924,5 @@ U_NAMESPACE_END
 #endif /* #if !UCONFIG_NO_MF2 */
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
+
+#endif /* #if !UCONFIG_NO_NORMALIZATION */

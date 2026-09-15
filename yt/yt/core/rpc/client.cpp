@@ -1,4 +1,5 @@
 #include "client.h"
+
 #include "private.h"
 #include "dispatcher.h"
 #include "message.h"
@@ -92,6 +93,8 @@ TClientRequest::TClientRequest(const TClientRequest& other)
     , MultiplexingBand_(other.MultiplexingBand_)
     , ClientAttachmentsStreamingParameters_(other.ClientAttachmentsStreamingParameters_)
     , ServerAttachmentsStreamingParameters_(other.ServerAttachmentsStreamingParameters_)
+    , RequestAttachmentsDptParameters_(other.RequestAttachmentsDptParameters_)
+    , ResponseAttachmentsDptParameters_(other.ResponseAttachmentsDptParameters_)
     , User_(other.User_)
     , UserTag_(other.UserTag_)
 { }
@@ -158,6 +161,11 @@ bool TClientRequest::IsAttachmentCompressionEnabled() const
     return attachmentCodecId != NCompression::ECodec::None;
 }
 
+bool TClientRequest::HasAttachments() const
+{
+    return !Attachments_.empty();
+}
+
 NCompression::ECodec TClientRequest::GetEffectiveAttachmentCompressionCodec() const
 {
     return EnableLegacyRpcCodecs_ ? NCompression::ECodec::None : RequestCodec_;
@@ -181,6 +189,26 @@ const TStreamingParameters& TClientRequest::ServerAttachmentsStreamingParameters
 TStreamingParameters& TClientRequest::ServerAttachmentsStreamingParameters()
 {
     return ServerAttachmentsStreamingParameters_;
+}
+
+const TDirectPlacementTransferParameters& TClientRequest::RequestAttachmentsDptParameters() const
+{
+    return RequestAttachmentsDptParameters_;
+}
+
+TDirectPlacementTransferParameters& TClientRequest::RequestAttachmentsDptParameters()
+{
+    return RequestAttachmentsDptParameters_;
+}
+
+const TDirectPlacementTransferParameters& TClientRequest::ResponseAttachmentsDptParameters() const
+{
+    return ResponseAttachmentsDptParameters_;
+}
+
+TDirectPlacementTransferParameters& TClientRequest::ResponseAttachmentsDptParameters()
+{
+    return ResponseAttachmentsDptParameters_;
 }
 
 NConcurrency::IAsyncZeroCopyOutputStreamPtr TClientRequest::GetRequestAttachmentsStream() const
@@ -219,11 +247,6 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
-const std::string& TClientRequest::GetRequestInfo() const
-{
-    return RequestInfo_;
-}
-
 void TClientRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);
@@ -241,6 +264,7 @@ const std::string& TClientRequest::GetUser() const
 
 void TClientRequest::SetUser(const std::string& user)
 {
+    YT_VERIFY(!user.empty());
     User_ = user;
 }
 
@@ -302,7 +326,7 @@ EMultiplexingBand TClientRequest::GetMultiplexingBand() const
 void TClientRequest::SetMultiplexingBand(EMultiplexingBand band)
 {
     MultiplexingBand_ = band;
-    Header_.set_tos_level(TTcpDispatcher::Get()->GetTosLevelForBand(band));
+    Header_.set_tos_level(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band));
 }
 
 int TClientRequest::GetMultiplexingParallelism() const
@@ -330,7 +354,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
     if (traceContext) {
         auto* tracingExt = Header().MutableExtension(NRpc::NProto::TRequestHeader::tracing_ext);
         ToProto(tracingExt, traceContext, SendBaggage_ && TDispatcher::Get()->ShouldSendTracingBaggage());
-        if (traceContext->IsSampled()) {
+        if (traceContext->IsRecorded()) {
             TraceRequest(traceContext);
         }
     }
@@ -340,21 +364,25 @@ TClientContextPtr TClientRequest::CreateClientContext()
         Header().set_user_agent(GetRpcUserAgent());
     }
 
+    auto requestId = GetRequestId();
+
     if (StreamingEnabled_) {
         RequestAttachmentsStream_ = New<TAttachmentsOutputStream>(
+            requestId,
             RequestCodec_,
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             BIND(&TClientRequest::OnPullRequestAttachmentsStream, MakeWeak(this)),
             ClientAttachmentsStreamingParameters_.WindowSize,
             ClientAttachmentsStreamingParameters_.WriteTimeout);
         ResponseAttachmentsStream_ = New<TAttachmentsInputStream>(
+            requestId,
             BIND(&TClientRequest::OnResponseAttachmentsStreamRead, MakeWeak(this)),
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             ClientAttachmentsStreamingParameters_.ReadTimeout);
     }
 
     return New<TClientContext>(
-        GetRequestId(),
+        requestId,
         std::move(traceContext),
         GetService(),
         GetMethod(),
@@ -365,9 +393,14 @@ TClientContextPtr TClientRequest::CreateClientContext()
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
-void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+NLogging::TLoggingTagListBuilder TClientRequest::Annotate()
 {
-    RequestInfo_ = std::move(requestInfo);
+    return NLogging::TLoggingTagListBuilder(&LoggingTags_);
+}
+
+const NLogging::TLoggingTagList& TClientRequest::GetLoggingTags() const
+{
+    return LoggingTags_;
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()
@@ -380,17 +413,17 @@ void TClientRequest::OnPullRequestAttachmentsStream()
     auto control = RequestControl_.Lock();
     if (!control) {
         RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+            .With("request_id", GetRequestId()));
         return;
     }
 
-    YT_LOG_DEBUG("Request streaming attachments pulled (RequestId: %v, SequenceNumber: %v, Sizes: %v, Closed: %v)",
-        GetRequestId(),
-        payload->SequenceNumber,
-        MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
+    YT_TLOG_DEBUG("Request streaming attachments pulled")
+        .With("RequestId", GetRequestId())
+        .With("SequenceNumber", payload->SequenceNumber)
+        .With("Sizes", MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
             builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-        }),
-        !payload->Attachments.back());
+        }))
+        .With("Closed", !payload->Attachments.back());
 
     control->SendStreamingPayload(*payload).Subscribe(
         BIND(&TClientRequest::OnRequestStreamingPayloadAcked, MakeStrong(this), payload->SequenceNumber));
@@ -399,13 +432,14 @@ void TClientRequest::OnPullRequestAttachmentsStream()
 void TClientRequest::OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error)
 {
     if (error.IsOK()) {
-        YT_LOG_DEBUG("Request streaming payload delivery acknowledged (RequestId: %v, SequenceNumber: %v)",
-            GetRequestId(),
-            sequenceNumber);
+        YT_TLOG_DEBUG("Request streaming payload delivery acknowledged")
+            .With("RequestId", GetRequestId())
+            .With("SequenceNumber", sequenceNumber);
     } else {
-        YT_LOG_DEBUG(error, "Response streaming payload delivery failed (RequestId: %v, SequenceNumber: %v)",
-            GetRequestId(),
-            sequenceNumber);
+        YT_TLOG_DEBUG("Response streaming payload delivery failed")
+            .With("RequestId", GetRequestId())
+            .With("SequenceNumber", sequenceNumber)
+            .With(error);
         RequestAttachmentsStream_->Abort(error);
     }
 }
@@ -416,14 +450,14 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 
     auto control = RequestControl_.Lock();
     if (!control) {
-        RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+        ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
+            .With("request_id", GetRequestId()));
         return;
     }
 
-    YT_LOG_DEBUG("Response streaming attachments read (RequestId: %v, ReadPosition: %v)",
-        GetRequestId(),
-        feedback.ReadPosition);
+    YT_TLOG_DEBUG("Response streaming attachments read")
+        .With("RequestId", GetRequestId())
+        .With("ReadPosition", feedback.ReadPosition);
 
     control->SendStreamingFeedback(feedback).Subscribe(
         BIND(&TClientRequest::OnResponseStreamingFeedbackAcked, MakeStrong(this), feedback));
@@ -432,12 +466,13 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 void TClientRequest::OnResponseStreamingFeedbackAcked(const TStreamingFeedback& feedback, const TError& error)
 {
     if (error.IsOK()) {
-        YT_LOG_DEBUG("Response streaming feedback delivery acknowledged (RequestId: %v, ReadPosition: %v)",
-            GetRequestId(),
-            feedback.ReadPosition);
+        YT_TLOG_DEBUG("Response streaming feedback delivery acknowledged")
+            .With("RequestId", GetRequestId())
+            .With("ReadPosition", feedback.ReadPosition);
     } else {
-        YT_LOG_DEBUG(error, "Response streaming feedback delivery failed (RequestId: %v)",
-            GetRequestId());
+        YT_TLOG_DEBUG("Response streaming feedback delivery failed")
+            .With("RequestId", GetRequestId())
+            .With(error);
         ResponseAttachmentsStream_->Abort(error);
     }
 }
@@ -473,7 +508,14 @@ void TClientRequest::PrepareHeader()
         ToProto(Header_.mutable_server_attachments_streaming_parameters(), ServerAttachmentsStreamingParameters_);
     }
 
-    if (!User_.empty() && User_ != RootUserName) {
+    if (RequestAttachmentsDptParameters_.Enabled) {
+        ToProto(Header_.mutable_request_attachments_dpt_parameters(), RequestAttachmentsDptParameters_);
+    }
+    if (ResponseAttachmentsDptParameters_.Enabled) {
+        ToProto(Header_.mutable_response_attachments_dpt_parameters(), ResponseAttachmentsDptParameters_);
+    }
+
+    if (User_ != RootUserName) {
         Header_.set_user(User_);
     }
 
@@ -523,6 +565,11 @@ const std::string& TClientResponse::GetAddress() const
     return Address_;
 }
 
+NProto::TResponseHeader& TClientResponse::Header()
+{
+    return Header_;
+}
+
 const NProto::TResponseHeader& TClientResponse::Header() const
 {
     return Header_;
@@ -540,7 +587,31 @@ size_t TClientResponse::GetTotalSize() const
     return ResponseMessage_.ByteSize();
 }
 
-void TClientResponse::HandleError(TError error)
+const std::vector<TSharedRef>& TClientResponse::Attachments() const
+{
+    if (!Attachments_) {
+        // Not yet available. When the attachments are delivered via direct placement
+        // transfer, the client must drive the transfer to completion first (see
+        // #TryGetResponseAttachmentsTransfer); otherwise they are simply empty.
+        YT_VERIFY(!ResponseAttachmentsTransfer_);
+        Attachments_.emplace();
+    }
+    return *Attachments_;
+}
+
+std::vector<TSharedRef>& TClientResponse::Attachments()
+{
+    return const_cast<std::vector<TSharedRef>&>(std::as_const(*this).Attachments());
+}
+
+IDirectPlacementTransferPtr TClientResponse::TryGetResponseAttachmentsTransfer()
+{
+    // The stored transfer is the RPC-layer wrapper installed in #Deserialize, so
+    // this is safe to call any number of times. Running it must happen exactly once.
+    return ResponseAttachmentsTransfer_;
+}
+
+void TClientResponse::HandleError(TError error, const std::string& address)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -554,19 +625,21 @@ void TClientResponse::HandleError(TError error)
         ClientContext_->GetFeatureIdFormatter());
 
     GetInvoker()->Invoke(
-        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error), address));
 }
 
-void TClientResponse::DoHandleError(TError error)
+void TClientResponse::DoHandleError(TError error, const std::string& address)
 {
     NProfiling::TWallTimer timer;
+
+    Address_ = address;
 
     Finish(error);
 
     if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
-        YT_LOG_DEBUG("Handling light request error took too long (RequestId: %v, Duration: %v)",
-            ClientContext_->GetRequestId(),
-            timer.GetElapsedTime());
+        YT_TLOG_DEBUG("Handling light request error took too long")
+            .With("RequestId", ClientContext_->GetRequestId())
+            .With("Duration", timer.GetElapsedTime());
     }
 }
 
@@ -594,6 +667,9 @@ void TClientResponse::Finish(const TError& error)
 void TClientResponse::TraceResponse()
 {
     if (const auto& traceContext = ClientContext_->GetTraceContext()) {
+        if (!Address_.empty() && traceContext->IsRecorded()) {
+            traceContext->AddTag(EndpointAddressAnnotation, Address_);
+        }
         traceContext->Finish();
     }
 }
@@ -605,7 +681,9 @@ const IInvokerPtr& TClientResponse::GetInvoker()
         : TDispatcher::Get()->GetLightInvoker();
 }
 
-TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noexcept
+TFuture<void> TClientResponse::Deserialize(
+    TSharedRefArray responseMessage,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) noexcept
 {
     YT_ASSERT(responseMessage);
     YT_ASSERT(!ResponseMessage_);
@@ -641,20 +719,41 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
             "Error deserializing response body"));
     }
 
+    if (attachmentsTransfer) {
+        // The response attachments are delivered via direct placement transfer
+        // (used only without attachment compression): expose them lazily. They
+        // become available once the client drives the transfer to completion (see
+        // #TryGetResponseAttachmentsTransfer). A weak ref avoids a cycle.
+        auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
+        ResponseAttachmentsTransfer_ = CreateChainedDirectPlacementTransfer(
+            std::move(attachmentsTransfer),
+            BIND([weakThis = MakeWeak(this), memoryUsageTracker] (std::vector<TSharedRef>&& attachments) {
+                auto this_ = weakThis.Lock();
+                if (!this_) {
+                    return;
+                }
+                for (auto& attachment : attachments) {
+                    attachment = TrackMemory(memoryUsageTracker, attachment);
+                }
+                this_->Attachments_ = std::move(attachments);
+            }));
+        return OKFuture;
+    }
+
     auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
     auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
 
     if (attachmentCodecId == NCompression::ECodec::None) {
         Attachments_ = compressedAttachments.ToVector();
-        return VoidFuture;
+        return OKFuture;
     } else {
         return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
-            .ApplyUnique(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
-                Attachments_ = std::move(decompressedAttachments);
+            .AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
                 auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
-                for (auto& attachment : Attachments_) {
+                for (auto& attachment : decompressedAttachments) {
                     attachment = TrackMemory(memoryUsageTracker, attachment);
                 }
+                Attachments_ = std::move(decompressedAttachments);
             }));
     }
 }
@@ -666,7 +765,10 @@ void TClientResponse::HandleAcknowledgement()
     State_.compare_exchange_strong(expected, EState::Ack);
 }
 
-void TClientResponse::HandleResponse(TSharedRefArray message, const std::string& address)
+void TClientResponse::HandleResponse(
+    TSharedRefArray message,
+    const std::string& address,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer)
 {
     auto prevState = State_.exchange(EState::Done);
     YT_ASSERT(prevState == EState::Sent || prevState == EState::Ack);
@@ -674,23 +776,27 @@ void TClientResponse::HandleResponse(TSharedRefArray message, const std::string&
     GetInvoker()->Invoke(BIND(&TClientResponse::DoHandleResponse,
         MakeStrong(this),
         Passed(std::move(message)),
-        address));
+        address,
+        Passed(std::move(attachmentsTransfer))));
 }
 
-void TClientResponse::DoHandleResponse(TSharedRefArray message, const std::string& address)
+void TClientResponse::DoHandleResponse(
+    TSharedRefArray message,
+    const std::string& address,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer)
 {
     NProfiling::TWallTimer timer;
 
     Address_ = address;
 
-    Deserialize(std::move(message))
+    Deserialize(std::move(message), std::move(attachmentsTransfer))
         .Subscribe(BIND([timer, this, this_ = MakeStrong(this)] (const TError& error) {
             Finish(error);
 
             if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
-                YT_LOG_DEBUG("Handling light response took too long (RequestId: %v, Duration: %v)",
-                    ClientContext_->GetRequestId(),
-                    timer.GetElapsedTime());
+                YT_TLOG_DEBUG("Handling light response took too long")
+                    .With("RequestId", ClientContext_->GetRequestId())
+                    .With("Duration", timer.GetElapsedTime());
             }
         }));
 }
@@ -699,8 +805,8 @@ void TClientResponse::HandleStreamingPayload(const TStreamingPayload& payload)
 {
     const auto& stream = ClientContext_->GetResponseAttachmentsStream();
     if (!stream) {
-        YT_LOG_DEBUG("Received streaming attachments payload for request with disabled streaming; ignored (RequestId: %v)",
-            ClientContext_->GetRequestId());
+        YT_TLOG_DEBUG("Received streaming attachments payload for request with disabled streaming; ignored")
+            .With("RequestId", ClientContext_->GetRequestId());
         return;
     }
 
@@ -711,8 +817,8 @@ void TClientResponse::HandleStreamingFeedback(const TStreamingFeedback& feedback
 {
     const auto& stream = ClientContext_->GetRequestAttachmentsStream();
     if (!stream) {
-        YT_LOG_DEBUG("Received streaming attachments feedback for request with disabled streaming; ignored (RequestId: %v)",
-            ClientContext_->GetRequestId());
+        YT_TLOG_DEBUG("Received streaming attachments feedback for request with disabled streaming; ignored")
+            .With("RequestId", ClientContext_->GetRequestId());
         return;
     }
 

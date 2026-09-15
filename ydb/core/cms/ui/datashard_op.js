@@ -101,7 +101,7 @@ class Operation {
             for (var rs of info.InputData.InputRS) {
                 var trHtml = `
                     <tr class="ds-info">
-                      <td class="ds-info"><a href="app?TabletID=${rs.From}">${rs.From}</td>
+                      <td class="ds-info"><a href="${makeTabletDevUiUrl(`TabletID=${rs.From}`)}">${rs.From}</td>
                       <td class="ds-info">${rs.Received} received</td>
                     </tr>
                 `;
@@ -481,7 +481,7 @@ class Operation {
         $('#ds-op-sink-prepared').html(timeToString(info.WallClockPrepared));
         $('#ds-op-sink-planned').html(timeToString(info.WallClockPlanned));
         $('#ds-op-sink-timeout').html(this._durationToString(info.ExecTimeoutPeriod));
-        $('#ds-op-sink-coordinator').html(`<a href="../tablets?TabletID=${info.SelectedCoordinator}">${info.SelectedCoordinator}</a>`);
+        $('#ds-op-sink-coordinator').html(`<a href="${makeMonUrl(`/tablets?TabletID=${info.SelectedCoordinator}`)}">${info.SelectedCoordinator}</a>`);
         $('#ds-op-sink-source').html(info.RequestSource);
         $('#ds-op-sink-request-version').html(info.RequestVersion);
         $('#ds-op-sink-response-version').html(info.ResponseVersion);
@@ -527,7 +527,7 @@ class Operation {
 
         var res = '';
         for (var shard of shards) {
-            res += `<a href="app?TabletID=${shard.Id}#page=ds-op&op=${this.id}">${shard.Id}</a><br>`;
+            res += `<a href="${makeTabletDevUiUrl(`TabletID=${shard.Id}`)}#page=ds-op&op=${this.id}">${shard.Id}</a><br>`;
         }
 
         return res;
@@ -539,7 +539,7 @@ class Operation {
 
         var res = '';
         for (var quota of quotas) {
-            res += `<a href="app?TabletID=${quota.ShardId}#page=ds-op&op=${this.id}">${quota.ShardId} (${quota.Quota})</a><br>`;
+            res += `<a href="${makeTabletDevUiUrl(`TabletID=${quota.ShardId}`)}#page=ds-op&op=${this.id}">${quota.ShardId} (${quota.Quota})</a><br>`;
         }
 
         return res;
@@ -589,8 +589,8 @@ class Operation {
 
         this.loadingSinkState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablesinkstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablesinkstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onSinkStateLoaded(data); })
             .fail(function(data) { _this._onSinkStateFailed(data); });
@@ -653,8 +653,8 @@ class Operation {
 
         this.loadingScanState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablescanstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablescanstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onScanStateLoaded(data); })
             .fail(function(data) { _this._onScanStateFailed(data); });
@@ -717,8 +717,8 @@ class Operation {
 
         this.loadingStreamState = true;
         var _this = this;
-        var url = '../cms/api/datashard/json/getreadtablestreamstate?tabletid=' + TabletId
-            + '&opid=' + this.id;
+        var url = makeMonUrl('/cms/api/datashard/json/getreadtablestreamstate?tabletid=' + TabletId
+            + '&opid=' + this.id);
         $.get(url)
             .done(function(data) { _this._onStreamStateLoaded(data); })
             .fail(function(data) { _this._onStreamStateFailed(data); });
@@ -835,8 +835,8 @@ function loadOperation(id) {
         return;
 
     OperationState.loading = true;
-    var url = '../cms/api/datashard/json/getoperation?tabletid=' + TabletId
-        + '&opid=' + OperationState.id;
+    var url = makeMonUrl('/cms/api/datashard/json/getoperation?tabletid=' + TabletId
+        + '&opid=' + OperationState.id);
     $.get(url)
         .done(function(data) { onOperationLoaded(id, data);})
         .fail(function(data) { onOperationFailed(id, data);});

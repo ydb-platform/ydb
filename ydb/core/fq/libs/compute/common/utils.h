@@ -2,11 +2,11 @@
 
 #include <memory>
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
@@ -29,7 +29,9 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
                                                         tableSettings);
 }
 
-TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr, TString* timeline = nullptr);
+// timelineError receives the reason when the timeline could not be built; the
+// statistics are still returned, and *timeline is left empty in that case.
+TString GetV1StatFromV2Plan(const TString& plan, double* cpuUsage = nullptr, TString* timeline = nullptr, TString* timelineError = nullptr);
 TString GetV1StatFromV2PlanV2(const TString& plan);
 TString GetPrettyStatistics(const TString& statistics);
 THashMap<TString, i64> AggregateStats(TStringBuf plan);
@@ -56,7 +58,7 @@ struct IPlanStatProcessor {
     virtual NYdb::NQuery::EStatsMode GetStatsMode() = 0;
     virtual TString ConvertPlan(const TString& plan) = 0;
     virtual TString GetPlanVisualization(const TString& plan) = 0;
-    virtual TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline) = 0;
+    virtual TString GetQueryStat(const TString& plan, double& cpuUsage, TString* timeline, TString* timelineError) = 0;
     virtual TPublicStat GetPublicStat(const TString& stat) = 0;
     virtual THashMap<TString, i64> GetFlatStat(TStringBuf plan) = 0;
 };
@@ -78,7 +80,7 @@ public:
     double CpuUsage = 0.0;
     TPublicStat PublicStat;
 private:
-    const TCompressor Compressor;
+    const NKikimr::NKqp::TCompressor Compressor;
     std::unique_ptr<IPlanStatProcessor> Processor;
     bool ShowQueryTimeline = false;
     ui64 MaxQueryTimelineSize = 0;

@@ -20,7 +20,7 @@ TEST(TStreamLogManagerTest, Simple)
         TStringOutput output(str);
         auto logManager = CreateStreamLogManager(&output);
         TLogger Logger(logManager.get(), "Test");
-        YT_LOG_INFO("Hello world");
+        YT_TLOG_INFO("Hello world");
     }
 
     TVector<TStringBuf> tokens;

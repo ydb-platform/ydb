@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_hullstorageratio.h"
+#include "fresh_space_tracker.h"
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
@@ -121,6 +122,7 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////
     struct THullCtx : public TThrRefBase {
         TVDiskContextPtr VCtx;
+        const TIntrusivePtr<TVDiskConfig> VCfg;
         const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
         const ui32 CompWorthReadSize;
@@ -130,15 +132,13 @@ namespace NKikimr {
         const bool BarrierValidation;
         const ui32 HullSstSizeInChunksFresh;
         const ui32 HullSstSizeInChunksLevel;
-        const double HullCompFreeSpaceThreshold;
-        const ui32 FreshCompMaxInFlightWrites;
-        const ui32 FreshCompMaxInFlightReads;
-        const ui32 HullCompMaxInFlightWrites;
-        const ui32 HullCompMaxInFlightReads;
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
-        const bool AddHeader;
+        const std::shared_ptr<TFreshSpaceTracker> FreshSpaceTracker;
+
+        ui32 HullCompLevel0MaxSstsAtOnce;
+        ui32 HullCompSortedPartsNum;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
@@ -146,6 +146,7 @@ namespace NKikimr {
 
         THullCtx(
                 TVDiskContextPtr vctx,
+                const TIntrusivePtr<TVDiskConfig> vcfg,
                 ui32 chunkSize,
                 ui32 compWorthReadSize,
                 bool freshCompaction,
@@ -154,15 +155,13 @@ namespace NKikimr {
                 bool barrierValidation,
                 ui32 hullSstSizeInChunksFresh,
                 ui32 hullSstSizeInChunksLevel,
-                double hullCompFreeSpaceThreshold,
-                ui32 freshCompMaxInFlightWrites,
-                ui32 freshCompMaxInFlightReads,
-                ui32 hullCompMaxInFlightWrites,
-                ui32 hullCompMaxInFlightReads,
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,
-                bool addHeader);
+                ui32 hullCompLevel0MaxSstsAtOnce,
+                ui32 hullCompSortedPartsNum,
+                bool enableFreshSpaceProjection = false
+        );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
     };
@@ -175,12 +174,16 @@ namespace NKikimr {
     struct TPutRecoveryLogRecOpt {
         TLogoBlobID Id;
         TString Data;
+        bool IssueKeepFlag;
 
-        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
+        static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope,
+            bool issueKeepFlag);
         // Will serialize inplace if container has enough headroom and right (single) underlying type
-        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRope &&rope,
+            bool issueKeepFlag);
         // Will serialize inplace if container has enough headroom
-        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRcBuf &&data);
+        static TRcBuf SerializeZeroCopy(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, TRcBuf &&data,
+            bool issueKeepFlag);
         bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
         bool ParseFromArray(const TBlobStorageGroupType &gtype, const char* data, size_t size);
         TString ToString() const;
@@ -194,4 +197,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

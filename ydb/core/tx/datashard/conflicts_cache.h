@@ -1,8 +1,8 @@
 #pragma once
 #include "datashard_active_transaction.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <variant>
 #include <vector>
 
@@ -50,6 +50,7 @@ public:
     void AddUncommittedWrite(TConstArrayRef<TCell> key, ui64 txId, NTable::TDatabase& db);
     void RemoveUncommittedWrites(TConstArrayRef<TCell> key, NTable::TDatabase& db);
     void RemoveUncommittedWrites(ui64 txId, NTable::TDatabase& db);
+    void RemoveAllUncommittedWrites(NTable::TDatabase& db);
 
     bool RegisterDistributedWrite(ui64 txId, const TOwnedCellVec& key, NTable::TDatabase& db);
     void UnregisterDistributedWrites(ui64 txId);

@@ -280,7 +280,7 @@ class Axes(_AxesBase):
 
         Parameters
         ----------
-        handles : sequence of (`.Artist` or tuple of `.Artist`), optional
+        handles : list of (`.Artist` or tuple of `.Artist`), optional
             A list of Artists (lines, patches) to be added to the legend.
             Use this together with *labels*, if you need full control on what
             is shown in the legend and the automatic mechanism described above
@@ -632,7 +632,10 @@ class Axes(_AxesBase):
         """
         Add text to the Axes.
 
-        Add the text *s* to the Axes at location *x*, *y* in data coordinates.
+        Add the text *s* to the Axes at location *x*, *y* in data coordinates,
+        with a default ``horizontalalignment`` on the ``left`` and
+        ``verticalalignment`` at the ``baseline``. See
+        :doc:`/gallery/text_labels_and_annotations/text_alignment`.
 
         Parameters
         ----------
@@ -893,7 +896,7 @@ class Axes(_AxesBase):
 
         Returns
         -------
-        `.Line2D`
+        `.AxLine`
 
         Other Parameters
         ----------------
@@ -2391,7 +2394,8 @@ class Axes(_AxesBase):
         # checking and processing will be left to the errorbar method.
         xerr = kwargs.pop('xerr', None)
         yerr = kwargs.pop('yerr', None)
-        error_kw = kwargs.pop('error_kw', {})
+        error_kw = kwargs.pop('error_kw', None)
+        error_kw = {} if error_kw is None else error_kw.copy()
         ezorder = error_kw.pop('zorder', None)
         if ezorder is None:
             ezorder = kwargs.get('zorder', None)
@@ -2547,9 +2551,8 @@ class Axes(_AxesBase):
 
             error_kw.setdefault("label", '_nolegend_')
 
-            errorbar = self.errorbar(ex, ey,
-                                     yerr=yerr, xerr=xerr,
-                                     fmt='none', **error_kw)
+            errorbar = self.errorbar(ex, ey, yerr=yerr, xerr=xerr, fmt='none',
+                                     **error_kw)
         else:
             errorbar = None
 
@@ -5084,10 +5087,10 @@ default: :rc:`scatter.edgecolors`
             )
 
         # Set normalizer if bins is 'log'
-        if bins == 'log':
+        if cbook._str_equal(bins, 'log'):
             if norm is not None:
                 _api.warn_external("Only one of 'bins' and 'norm' arguments "
-                                   f"can be supplied, ignoring bins={bins}")
+                                   f"can be supplied, ignoring {bins=}")
             else:
                 norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
                 vmin = vmax = None
@@ -5849,7 +5852,7 @@ default: :rc:`scatter.edgecolors`
                 def _interp_grid(X):
                     # helper for below
                     if np.shape(X)[1] > 1:
-                        dX = np.diff(X, axis=1)/2.
+                        dX = np.diff(X, axis=1) * 0.5
                         if not (np.all(dX >= 0) or np.all(dX <= 0)):
                             _api.warn_external(
                                 f"The input coordinates to {funcname} are "

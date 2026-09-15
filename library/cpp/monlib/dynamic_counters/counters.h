@@ -328,9 +328,12 @@ namespace NMonitoring {
 
         void RemoveCounter(const TString &value);
         bool RemoveNamedCounter(const TString& name, const TString &value);
+        void RemoveHistogram(const TString &value);
+        bool RemoveNamedHistogram(const TString& name, const TString &value);
         void RemoveSubgroupChain(const std::vector<std::pair<TString, TString>>& chain);
 
         TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);
+        TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name) const;
         TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
         bool RemoveSubgroup(const TString& name, const TString& value);
         void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup);

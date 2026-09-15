@@ -28,7 +28,7 @@ class TestExample:
                 endpoint=self.cluster.nodes[1].endpoint,
             )
         )
-        self.driver.wait()
+        self.driver.wait(timeout=60)
 
         yield
 

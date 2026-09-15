@@ -2,6 +2,8 @@
 
 CSS = """
 .distributed-editor>.tabs{flex-wrap:wrap}
+.distributed-editor .field{min-width:0}
+.distributed-editor .field>select{width:100%;min-width:0;max-width:100%}
 .distributed-editor .field>label:has([data-distributed-path]:not([type=checkbox])){display:flex;flex-direction:column;gap:.35rem;align-items:stretch}
 .distributed-editor .actor-settings{display:flex;flex-wrap:wrap;align-items:end;gap:1rem;max-width:48rem}
 .distributed-editor .actor-settings>.field{width:10rem}
@@ -33,7 +35,11 @@ function distributedSetLoadMode(raw,name,mode){
         {type:mode,'target-role':'dynamic','plateau-gain-percent':2,'plateau-points':2,'cpu-saturation-percent':95}};
   if(!Object.values(clients).some(c=>c.load.search))raw.measurement['verification-repetitions']=0;
 }
-function distributedDefault(template,tenant){
+function distributedTargetTenants(template){
+  return template.tenants.filter(t=>template.nodes.some(n=>n.role==='dynamic'&&n.tenant===t.path)).map(t=>t.path);
+}
+function distributedDefault(template,tenant=distributedTargetTenants(template)[0]){
+  if(!tenant)throw Error('The template needs a tenant with a dynamic node.');
   const clients={};
   for(const node of template.nodes.filter(n=>n.role==='cli')){
     clients[node.name]={tenant,dataset:'shared-kv',workload:{type:'kv',operation:'upsert',options:{'init-upserts':1000}},
@@ -45,43 +51,77 @@ function distributedDefault(template,tenant){
     'cli-nodes':clients,measurement:{warmup:2,duration:10,repetitions:1,'verification-repetitions':0}}
 }
 async function chooseDistributedProfile(profile,name){
-  const host=editorHost,original=editor.yaml;
+  const host=editorHost,original=editor.yaml,request=++chooseDistributedProfile.version;
+  const active=()=>request===chooseDistributedProfile.version&&host===editorHost&&original===editor.yaml&&location.hash.startsWith('#new');
   try{
     const records=await editorApi('/api/cluster-templates');
-    if(host!==editorHost||original!==editor.yaml||!location.hash.startsWith('#new'))return;
-    if(!records.length)throw Error('Add a cluster template before creating a distributed run.');
-    const dialog=document.createElement('dialog');
-    dialog.className='import-dialog';
-    dialog.innerHTML='<h2>Distributed run</h2><div class=form-grid>'+localSelect('distributed-template','Cluster template',records[0].id,
-      records.map(r=>r.id))+'<div class=field><label for=distributed-tenant>Initial target tenant</label><select id=distributed-tenant></select></div></div>'+
-      '<div class=toolbar><button type=button id=distributed-cancel>Cancel</button>'+
-      '<button type=button class=primary id=distributed-use>Use template</button></div><div id=distributed-error role=alert></div>';
-    // localSelect takes strings; explicit options retain stable template IDs.
-    dialog.querySelector('#distributed-template').innerHTML=records.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+'</option>').join('');
-    const refresh=()=>{const record=records.find(r=>r.id===dialog.querySelector('#distributed-template').value);
-      dialog.querySelector('#distributed-tenant').innerHTML=record.tenants.filter(t=>record.nodes.some(n=>n.role==='dynamic'&&n.tenant===t.path))
-        .map(t=>'<option>'+esc(t.path)+'</option>').join('')};
-    refresh();dialog.querySelector('#distributed-template').onchange=refresh;
-    const previous=document.activeElement;
-    dialog.onclose=()=>{dialog.remove();previous?.focus();
-      if(editor.yaml===original&&host===editorHost&&location.hash.startsWith('#new'))renderNew()};
-    dialog.querySelector('#distributed-cancel').onclick=()=>dialog.close();
-    dialog.querySelector('#distributed-use').onclick=async()=>{
-      const button=dialog.querySelector('#distributed-use');button.disabled=true;
+    if(!active())return;
+    const record=records.find(r=>r.nodes.some(n=>n.role==='cli')&&distributedTargetTenants(r).length);
+    if(!record)throw Error('Add a cluster template with a CLI node and a tenant with dynamic nodes.');
+    const model=JSON.parse(JSON.stringify(editor.model));
+    const item={benchmark:'distributed-ydb',name,key:'distributed-ydb/'+name,distributed_config:distributedDefault(record)};
+    if(profile)model.profiles[model.profiles.findIndex(p=>p.key===profile.key)]=item;else model.profiles.push(item);
+    const yaml=serializeConfig(model),validated=await editorApi('/api/editor-config',jsonOptions({yaml,perf:false}));
+    if(!active())return;
+    editor.model=validated;editor.yaml=yaml;editor.perf=false;editor.selected=item.key;saveDraft();renderNew('builder');
+  }catch(error){if(active()){
+    const benchmark=document.querySelector('#benchmark');if(benchmark&&profile)benchmark.value=profile.benchmark;
+    document.querySelector('#editor-message').innerHTML=displayError(error);
+  }}
+}
+chooseDistributedProfile.version=0;
+function distributedReplaceTemplate(raw,template){
+  const next=distributedDefault(template),previous=raw['cli-nodes'];
+  if(!previous)throw Error('Convert the legacy profile before changing its template.');
+  const removed=Object.keys(previous).filter(name=>!Object.hasOwn(next['cli-nodes'],name));
+  const targets=distributedTargetTenants(template),retargeted=[];
+  next.storage=JSON.parse(JSON.stringify(raw.storage||next.storage));
+  next.measurement=JSON.parse(JSON.stringify(raw.measurement||next.measurement));
+  if(Object.hasOwn(raw,'timeout'))next.timeout=raw.timeout;
+  for(const name of Object.keys(next.tenants))if(Object.hasOwn(raw.tenants||{},name))next.tenants[name]=JSON.parse(JSON.stringify(raw.tenants[name]));
+  const allow=Object.values(previous)[0]?.load?.['allow-errors']??false;
+  for(const [name,client] of Object.entries(next['cli-nodes'])){
+    if(Object.hasOwn(previous,name)){
+      next['cli-nodes'][name]=JSON.parse(JSON.stringify(previous[name]));
+      if(!targets.includes(previous[name].tenant)){next['cli-nodes'][name].tenant=targets[0];retargeted.push(name)}
+    }else client.load['allow-errors']=allow;
+  }
+  // New generators must not accidentally join a preserved dataset with different options.
+  for(const [name,client] of Object.entries(next['cli-nodes']))if(!Object.hasOwn(previous,name)){
+    const used=new Set(Object.entries(next['cli-nodes']).filter(([other,c])=>other!==name&&c.tenant===client.tenant).map(([,c])=>c.dataset));
+    let suffix=1;while(used.has(client.dataset))client.dataset='new-kv-'+suffix++;
+  }
+  if(!Object.values(next['cli-nodes']).some(c=>c.load.search))next.measurement['verification-repetitions']=0;
+  return {next,removed,retargeted};
+}
+function distributedProfileControls(profile){
+  const template=profile.distributed_config['cluster-template'];
+  const benchmarks=editor.model?.benchmarks||[{name:profile.benchmark}];
+  return '<div class=form-grid><div class=field><label for=benchmark>Benchmark</label><select id=benchmark>'+
+    benchmarks.map(b=>'<option value="'+esc(b.name)+'" '+(b.name===profile.benchmark?'selected':'')+'>'+esc(b.name)+'</option>').join('')+
+    '</select></div><div class=field><label for=distributed-template>Cluster template</label><select id=distributed-template disabled>'+
+    '<option value="">'+esc(template?.name||'Saved placement')+' · saved snapshot</option></select></div></div>';
+}
+async function bindDistributedTemplate(profile){
+  const select=document.querySelector('#distributed-template'),host=editorHost,original=editor.yaml;
+  const active=()=>select.isConnected&&host===editorHost&&original===editor.yaml&&location.hash.startsWith('#new');
+  try{
+    const records=await editorApi('/api/cluster-templates');if(!active())return;
+    select.innerHTML+=records.map((r,index)=>'<option value="'+index+'">'+esc(r.name)+' · revision '+esc(r.revision)+'</option>').join('');
+    select.disabled=!records.length||!profile.distributed_config['cli-nodes'];
+    select.onchange=async()=>{
+      if(!active()||select.value==='')return;
       try{
-        const record=records.find(r=>r.id===dialog.querySelector('#distributed-template').value);
-        const raw=distributedDefault(record,dialog.querySelector('#distributed-tenant').value);
-        const model=JSON.parse(JSON.stringify(editor.model));
-        const item=profile?model.profiles.find(p=>p.key===profile.key):{};
-        if(!profile)model.profiles.push(item);
-        Object.assign(item,{benchmark:'distributed-ydb',name,key:'distributed-ydb/'+name,distributed_config:raw});
-        const yaml=serializeConfig(model),validated=await editorApi('/api/editor-config',jsonOptions({yaml,perf:false}));
-        if(!dialog.isConnected||host!==editorHost||original!==editor.yaml)return;
-        editor.model=validated;editor.yaml=yaml;editor.perf=false;editor.selected=item.key;saveDraft();dialog.close();renderNew('builder');
-      }catch(error){dialog.querySelector('#distributed-error').innerHTML=displayError(error)}finally{button.disabled=false}
+        const {next,removed,retargeted}=distributedReplaceTemplate(profile.distributed_config,records[Number(select.value)]);
+        if((removed.length||retargeted.length)&&!confirm([
+          removed.length?'Remove CLI settings: '+removed.join(', ')+'.':'',
+          retargeted.length?'Reset target tenant for: '+retargeted.join(', ')+'.':''
+        ].filter(Boolean).join(' ')+' Apply template?'))return;
+        await commitDistributed(profile,next);
+      }catch(error){if(active())document.querySelector('#editor-message').innerHTML=displayError(error)}
+      finally{if(select.isConnected)select.value=''}
     };
-    document.body.append(dialog);dialog.showModal();
-  }catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}
+  }catch(error){if(active())document.querySelector('#editor-message').innerHTML=displayError(error)}
 }
 function serializeDistributedYdb(lines,profile){
   function append(value,prefix){
@@ -96,7 +136,8 @@ function serializeDistributedYdb(lines,profile){
 function distributedProfileEditor(profile){
   const raw=profile.distributed_config;
   const actions='';
-  if(!raw?.['cli-nodes'])return '<div class=notice>This profile uses the legacy single-CLI load controller. Its YAML is preserved.</div>'+
+  const controls=distributedProfileControls(profile);
+  if(!raw?.['cli-nodes'])return controls+'<div class=notice>This profile uses the legacy single-CLI load controller. Its YAML is preserved.</div>'+
     '<button type=button id=distributed-convert>Convert to fixed-load Builder</button>'+actions;
   const view=distributedView.get(profile.key)||{tab:'Cluster',item:''};distributedView.set(profile.key,view);
   const template=raw['cluster-template'],clients=raw['cli-nodes'];
@@ -141,7 +182,7 @@ function distributedProfileEditor(profile){
     const definition=localYdbWorkloadDefinition(object.workload.type),load=object.load,mode=load.search?load.objective.type:'fixed';
     const searchOwner=Object.entries(clients).find(([name,c])=>name!==view.item&&c.load.search)?.[0];
     content='<div class=distributed-summary>'+esc(node?.name)+' · '+esc(hostRecord(node?.host_id)?.name||node?.host_id)+' · affinity from template</div><div class=form-grid>'+
-      select('Target tenant',[...path,'tenant'],object.tenant,template.tenants.map(t=>t.path))+input('Dataset',[...path,'dataset'],object.dataset)+'</div>'+
+      select('Target tenant',[...path,'tenant'],object.tenant,distributedTargetTenants(template))+input('Dataset',[...path,'dataset'],object.dataset)+'</div>'+
       '<div class=distributed-summary>'+esc(object.workload.type)+' · '+(peers.length>1?
         'Shared with '+peers.filter(([n])=>n!==view.item).map(([n])=>esc(n)).join(', '):'Independent dataset')+
       ' · initialize once</div><div class=form-grid>'+
@@ -175,13 +216,30 @@ function distributedProfileEditor(profile){
       (owner?'<p class=muted>Verification uses independent measurements at the selected load. Set repetitions to 0 to disable verification.</p>':'')+
       '<p class=muted>Allow failed requests applies to all CLI generators. Failed requests remain visible in results but do not limit load search.</p>';
   }
-  return '<div class=distributed-editor><div class=tabs>'+tabs.map(t=>
+  return '<div class=distributed-editor>'+controls+'<div class=tabs>'+tabs.map(t=>
     '<button type=button class="'+(view.tab===t?'active':'')+'" data-distributed-tab="'+t+'" aria-pressed="'+(view.tab===t)+'">'+t+'</button>').join('')+
     '</div><div class="'+(items.length?'distributed-layout':'')+'">'+(items.length?'<div class=distributed-items>'+items.map(([key,label])=>
       '<button type=button data-distributed-item="'+esc(key)+'" aria-pressed="'+(view.item===key)+'">'+esc(label)+'</button>').join('')+
     '</div>':'')+'<section>'+content+'</section></div>'+actions+'</div>';
 }
 function bindDistributedEditor(profile){
+  bindDistributedTemplate(profile);
+  document.querySelector('#benchmark').onchange=event=>{
+    const benchmark=editor.model.benchmarks.find(b=>b.name===event.target.value);
+    if(benchmark.name===profile.benchmark)return;
+    if(editor.model.profiles.some(p=>p!==profile&&p.benchmark===benchmark.name&&p.name===profile.name)){
+      event.target.value=profile.benchmark;document.querySelector('#editor-message').innerHTML=displayError(Error('A profile with this benchmark and name already exists.'));return;
+    }
+    if(!confirm('Replace distributed settings with defaults for '+benchmark.name+'?')){event.target.value=profile.benchmark;return}
+    const next={benchmark:benchmark.name,name:profile.name,key:benchmark.name+'/'+profile.name,
+      parameters:Object.fromEntries(benchmark.parameters.map(p=>[p.name,p.default])),threads:[1],duration:3,repetitions:1,
+      affinity:['none'],background_load:['none']};
+    if(benchmark.profile_kind==='local-ydb'){
+      next.local_ydb=defaultLocalYdb();next.threads=[64];next.duration=30;next.affinity=['roles'];
+    }
+    editor.model.profiles[editor.model.profiles.indexOf(profile)]=next;
+    editor.selected=next.key;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew();
+  };
   const convert=document.querySelector('#distributed-convert');
   if(convert){convert.onclick=async()=>{
     if(!confirm('Replace the legacy workload/search settings with fixed-load defaults? The placement snapshot is retained.'))return;

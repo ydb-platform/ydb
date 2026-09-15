@@ -70,6 +70,9 @@ private:
         if (Current.CreateBCT) {
             modifySubDomain.SetExternalBackupController(true);
         }
+        if (Current.CreateWCC) {
+            modifySubDomain.SetExternalWasmCompileController(true);
+        }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TabletMigrator - send TEvModifySchemeTransaction"

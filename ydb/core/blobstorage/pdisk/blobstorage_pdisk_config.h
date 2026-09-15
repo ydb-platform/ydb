@@ -152,6 +152,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // EnableTightPDiskSpaceColors uses 30 (3%) plus per-color MinChunks floors; this default stays 130.
     ui32 ChunkBaseLimit = 130;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;

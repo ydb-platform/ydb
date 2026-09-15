@@ -1514,6 +1514,85 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
+    Y_UNIT_TEST(TightSpaceColorsLargeDiskCyanAtThreePercent) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .DiskSize = ui64(128) << 20 << 11, // 2048 chunks of 128 MB
+            .EnableTightPDiskSpaceColors = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        THolder<NPDisk::TEvCheckSpaceResult> space;
+        for (int i = 0; i < 100000; ++i) {
+            space = checkSpace();
+            const auto color = StatusFlagToSpaceColor(space->StatusFlags);
+            if (color >= TColor::CYAN) {
+                UNIT_ASSERT_VALUES_EQUAL(color, TColor::CYAN);
+                UNIT_ASSERT_C(space->NormalizedOccupancy > 0.96 && space->NormalizedOccupancy < 0.985,
+                    "occupancy# " << space->NormalizedOccupancy
+                    << " expected ~0.97 (3% free), not ~0.87 (13% free)");
+                return;
+            }
+            UNIT_ASSERT_GT(space->FreeChunks, 0);
+            ui32 n = 1;
+            if (space->NormalizedOccupancy < 0.90 && space->FreeChunks > 16) {
+                n = Min<ui32>(32, space->FreeChunks - 16);
+            }
+            vdisk.ReserveChunk(n);
+            vdisk.CommitReservedChunks();
+        }
+        UNIT_ASSERT_C(false, "never reached CYAN");
+    }
+
+    Y_UNIT_TEST(TightSpaceColorsSmallDiskUsesChunkFloors) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TActorTestContext testCtx({
+            .DiskSize = 10_GB,
+            .SmallDisk = true,
+            .EnableTightPDiskSpaceColors = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        auto checkSpace = [&] {
+            return testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+                new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+                NKikimrProto::OK);
+        };
+
+        THolder<NPDisk::TEvCheckSpaceResult> space;
+        for (int i = 0; i < 100000; ++i) {
+            space = checkSpace();
+            const auto color = StatusFlagToSpaceColor(space->StatusFlags);
+            if (color >= TColor::CYAN) {
+                UNIT_ASSERT_VALUES_EQUAL(color, TColor::CYAN);
+                UNIT_ASSERT_C(space->NormalizedOccupancy < 0.95,
+                    "occupancy# " << space->NormalizedOccupancy
+                    << " small-disk cyan should be the chunk floor, not 3% (~0.97)");
+                UNIT_ASSERT_C(space->NormalizedOccupancy > 0.70,
+                    "occupancy# " << space->NormalizedOccupancy);
+                return;
+            }
+            UNIT_ASSERT_GT(space->FreeChunks, 0);
+            ui32 n = 1;
+            if (space->NormalizedOccupancy < 0.70 && space->FreeChunks > 16) {
+                n = Min<ui32>(16, space->FreeChunks - 16);
+            }
+            vdisk.ReserveChunk(n);
+            vdisk.CommitReservedChunks();
+        }
+        UNIT_ASSERT_C(false, "never reached CYAN");
+    }
+
     Y_UNIT_TEST(SpaceColorDcbOverride) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

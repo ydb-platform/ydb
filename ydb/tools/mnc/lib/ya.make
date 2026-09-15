@@ -7,6 +7,8 @@ SUBSCRIBER(
 PY_SRCS(
     __init__.py
     agent_client.py
+    agents_md_bad.py
+    agents_md_ok.py
     common.py
     configs.py
     config.py

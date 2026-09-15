@@ -3,6 +3,8 @@ PY3TEST()
 TEST_SRCS(
     test_agent.py
     test_agent_client.py
+    test_agents_md_bad.py
+    test_agents_md_ok.py
     test_command_options.py
     test_configs.py
     test_disks.py

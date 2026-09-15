@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         const TPathId pathId(1, 1);
         const auto type = EStatType::COUNT_MIN_SKETCH;
         const TColumnTags columns = MultiColumn ? TColumnTags(std::vector<ui32>{1, 2}) : TColumnTags(1u);
-        const TString sampleKey = MultiColumn ? "sample/1,2" : "sample/1";
+        const TString columnKey = MultiColumn ? "1,2" : "1";
         const auto save = [&](TString data, bool sampled) {
             TStatisticsItem item(1, type, std::move(data));
             item.ColumnTags = columns;
@@ -38,12 +38,20 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
             runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database", pathId, {std::move(item)}));
             UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender)->Get()->Success);
         };
-        const auto read = [&](bool sampled) {
+        const auto read = [&](bool sampled, EStatType statType = EStatType::COUNT_MIN_SKETCH) {
             runtime.RunCall([&] {
-                DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, type, columns, sampled);
+                DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, columns, sampled);
                 return 0;
             });
             return runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        };
+        const auto readStored = [&] {
+            const auto result = ExecuteYqlScriptWithResult(env, TStringBuilder()
+                << "SELECT data, sampled_data FROM `/Root/Database/.metadata/statistics_v2` WHERE owner_id = 1ul"
+                << " AND local_path_id = 1ul AND stat_type = " << static_cast<ui32>(type)
+                << " AND column_tags = '" << columnKey << "';");
+            UNIT_ASSERT_VALUES_EQUAL(result.rows_size(), 1);
+            return result;
         };
         save("sample-only", true);
         auto result = read(true);
@@ -51,6 +59,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*result->Get()->Data, "sample-only");
         result = read(false);
         UNIT_ASSERT(!result->Get()->Success && !result->Get()->Data && !result->Get()->Sampling);
+        UNIT_ASSERT(readStored().rows(0).items(0).has_null_flag_value());
 
         save("full", false);
         result = read(true);
@@ -66,13 +75,10 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*result->Get()->Data, "full");
         save("new-sample", true);
         UNIT_ASSERT_VALUES_EQUAL(*read(true)->Get()->Data, "new-sample");
-        const auto stored = ExecuteYqlScriptWithResult(env, TStringBuilder()
-            << "SELECT data FROM `/Root/Database/.metadata/statistics_v2` WHERE owner_id = 1ul"
-            << " AND local_path_id = 1ul AND stat_type = " << static_cast<ui32>(type)
-            << " AND column_tags = '" << sampleKey << "';");
-        UNIT_ASSERT_VALUES_EQUAL(stored.rows_size(), 1);
+        const auto stored = readStored();
+        UNIT_ASSERT_VALUES_EQUAL(stored.rows(0).items(0).bytes_value(), "full");
         NKikimrStat::TSampledStatistic payload;
-        UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(0).bytes_value()));
+        UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(1).bytes_value()));
         UNIT_ASSERT_VALUES_EQUAL(payload.GetData(), "new-sample");
         UNIT_ASSERT_VALUES_EQUAL(payload.GetSampling().GetRequestedRate(), 0.5);
         UNIT_ASSERT_VALUES_EQUAL(payload.GetSampling().GetEligibleUnits(), 4);
@@ -81,16 +87,23 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
 
         TStatisticsItem anotherType(1, EStatType::SIMPLE_COLUMN, "another-type");
         anotherType.ColumnTags = columns;
+        TStatisticsItem sampled(1, type, "mixed-sample");
+        sampled.ColumnTags = columns;
+        sampled.Sampling = payload.GetSampling();
         runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database", pathId,
-            {TStatisticsItem(3, type, "another-column"), std::move(anotherType)}));
+            {TStatisticsItem(3, type, "another-column"), std::move(anotherType), std::move(sampled)}));
         UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender)->Get()->Success);
-        UNIT_ASSERT_VALUES_EQUAL(*read(true)->Get()->Data, "new-sample");
+        UNIT_ASSERT_VALUES_EQUAL(*read(true)->Get()->Data, "mixed-sample");
+        UNIT_ASSERT_VALUES_EQUAL(*read(false)->Get()->Data, "full");
+        UNIT_ASSERT_VALUES_EQUAL(*read(false, EStatType::SIMPLE_COLUMN)->Get()->Data, "another-type");
 
         save("new-full", false);
         result = read(true);
         UNIT_ASSERT(result->Get()->Success && !result->Get()->Sampling);
         UNIT_ASSERT_VALUES_EQUAL(*result->Get()->Data, "new-full");
-        UNIT_ASSERT_VALUES_EQUAL(CountStatisticsV2Rows(env, "Database", pathId, type, sampleKey), 0);
+        const auto full = readStored();
+        UNIT_ASSERT_VALUES_EQUAL(full.rows(0).items(0).bytes_value(), "new-full");
+        UNIT_ASSERT(full.rows(0).items(1).has_null_flag_value());
     }
 
     Y_UNIT_TEST(MalformedSampleFallsBackToFullStatistics) {
@@ -111,8 +124,8 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         for (const auto& data : {TString("broken"), incomplete.SerializeAsString()}) {
             ExecuteYqlScript(env, TStringBuilder()
                 << "UPSERT INTO `/Root/Database/.metadata/statistics_v2`"
-                << " (owner_id, local_path_id, stat_type, column_tags, data)"
-                << " VALUES (1ul, 1ul, 1u, 'sample/1', \"" << EscapeC(data) << "\");");
+                << " (owner_id, local_path_id, stat_type, column_tags, sampled_data)"
+                << " VALUES (1ul, 1ul, 1u, '1', \"" << EscapeC(data) << "\");");
             runtime.RunCall([&] {
                 DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, EStatType::SIMPLE_COLUMN, TColumnTags(1u), true);
                 return 0;

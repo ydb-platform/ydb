@@ -166,13 +166,14 @@ Y_UNIT_TEST_TWIN(AnalyzeSampling, QueryService) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         if (rate == "0.5") {
             const auto stored = ExecuteYqlScriptWithResult(env, TStringBuilder()
-                << "SELECT column_tags, data FROM `/Root/Database/.metadata/statistics_v2`"
+                << "SELECT column_tags, data, sampled_data FROM `/Root/Database/.metadata/statistics_v2`"
                 << " WHERE owner_id = " << table.PathId.OwnerId << "ul AND local_path_id = " << table.PathId.LocalPathId
                 << "ul AND stat_type = " << static_cast<ui32>(EStatType::SIMPLE_COLUMN) << "u;");
             UNIT_ASSERT_VALUES_EQUAL(stored.rows_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stored.rows(0).items(0).bytes_value(), "sample/2");
+            UNIT_ASSERT_VALUES_EQUAL(stored.rows(0).items(0).bytes_value(), "2");
+            UNIT_ASSERT(stored.rows(0).items(1).has_null_flag_value());
             NKikimrStat::TSampledStatistic payload;
-            UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(1).bytes_value()));
+            UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(2).bytes_value()));
             const auto& metadata = payload.GetSampling();
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetRequestedRate(), 0.5);
             UNIT_ASSERT_VALUES_EQUAL(metadata.GetEligibleUnits(), 4);

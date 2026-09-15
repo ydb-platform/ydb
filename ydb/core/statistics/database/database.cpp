@@ -25,12 +25,6 @@ static TString SerializeColumnTags(const TColumnTags& tags) {
     return {};
 }
 
-static constexpr TStringBuf SampledStatisticPrefix = "sample/";
-
-static TString SampledStatisticKey(TStringBuf tags) {
-    return TStringBuilder() << SampledStatisticPrefix << tags;
-}
-
 class TStatisticsTableCreator : public TActorBootstrapped<TStatisticsTableCreator> {
 public:
     explicit TStatisticsTableCreator(std::unique_ptr<NActors::IEventBase> resultEvent, const TString& database)
@@ -58,6 +52,7 @@ public:
                     Col("stat_type", NScheme::NTypeIds::Uint32),
                     Col("column_tags", NScheme::NTypeIds::String),
                     Col("data", NScheme::NTypeIds::String),
+                    Col("sampled_data", NScheme::NTypeIds::String),
                 },
                 { "owner_id", "local_path_id", "stat_type", "column_tags"},
                 NKikimrServices::STATISTICS,
@@ -122,7 +117,7 @@ public:
             DECLARE $stat_types AS List<Uint32>;
             DECLARE $column_tags AS List<String>;
             DECLARE $data AS List<String>;
-            DECLARE $sample_prefix AS String;
+            DECLARE $sampled AS List<Bool>;
 
             $to_struct = ($t) -> {
                 RETURN <|
@@ -131,19 +126,21 @@ public:
                     stat_type:$t.0,
                     column_tags:$t.1,
                     data:$t.2,
+                    sampled:$t.3,
                 |>;
             };
 
-            $rows = ListMap(ListZip($stat_types, $column_tags, $data), $to_struct);
+            $rows = ListMap(ListZip($stat_types, $column_tags, $data, $sampled), $to_struct);
 
             UPSERT INTO `)" << StatisticsTablePath << R"(`
-                (owner_id, local_path_id, stat_type, column_tags, data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data
-            FROM AS_TABLE($rows);
+                (owner_id, local_path_id, stat_type, column_tags, sampled_data)
+            SELECT owner_id, local_path_id, stat_type, column_tags, data AS sampled_data
+            FROM AS_TABLE($rows) WHERE sampled;
 
-            DELETE FROM `)" << StatisticsTablePath << R"(` ON
-            SELECT owner_id, local_path_id, stat_type, $sample_prefix || column_tags AS column_tags
-            FROM AS_TABLE($rows) WHERE NOT StartsWith(column_tags, $sample_prefix);
+            UPSERT INTO `)" << StatisticsTablePath << R"(`
+                (owner_id, local_path_id, stat_type, column_tags, data, sampled_data)
+            SELECT owner_id, local_path_id, stat_type, column_tags, data, NULL AS sampled_data
+            FROM AS_TABLE($rows) WHERE NOT sampled;
         )";
 
         NYdb::TParamsBuilder params;
@@ -155,8 +152,6 @@ public:
                 .Uint64(PathId.LocalPathId)
                 .Build();
 
-        params.AddParam("$sample_prefix").String(TString(SampledStatisticPrefix)).Build();
-
         auto& statTypes = params.AddParam("$stat_types").BeginList();
         for (const auto& item : Items) {
             statTypes
@@ -167,10 +162,9 @@ public:
 
         auto& columnTags = params.AddParam("$column_tags").BeginList();
         for (const auto& item : Items) {
-            const auto tags = SerializeColumnTags(item.ColumnTags);
             columnTags
                 .AddListItem()
-                .String(item.Sampling ? SampledStatisticKey(tags) : tags);
+                .String(SerializeColumnTags(item.ColumnTags));
         }
         columnTags.EndList().Build();
 
@@ -186,6 +180,12 @@ public:
             data.AddListItem().String(payload.SerializeAsString());
         }
         data.EndList().Build();
+
+        auto& sampled = params.AddParam("$sampled").BeginList();
+        for (const auto& item : Items) {
+            sampled.AddListItem().Bool(item.Sampling.has_value());
+        }
+        sampled.EndList().Build();
 
         RunDataQuery(sql, &params);
     }
@@ -262,23 +262,21 @@ void DispatchLoadStatisticsQuery(
 
     auto readRowsRequest = Ydb::Table::ReadRowsRequest();
     readRowsRequest.set_path(statisticsTablePath);
+    readRowsRequest.add_columns("data");
+    if (acceptSampledStatistics) {
+        readRowsRequest.add_columns("sampled_data");
+    }
 
     NYdb::TValueBuilder keys_builder;
-    keys_builder.BeginList();
-    const auto addKey = [&](const TString& key) {
-        keys_builder.AddListItem()
+    keys_builder.BeginList()
+        .AddListItem()
             .BeginStruct()
                 .AddMember("owner_id").Uint64(pathId.OwnerId)
                 .AddMember("local_path_id").Uint64(pathId.LocalPathId)
                 .AddMember("stat_type").Uint32(static_cast<ui32>(statType))
-                .AddMember("column_tags").String(key)
-            .EndStruct();
-    };
-    addKey(serializedColumnTags);
-    if (acceptSampledStatistics) {
-        addKey(SampledStatisticKey(serializedColumnTags));
-    }
-    keys_builder.EndList();
+                .AddMember("column_tags").String(serializedColumnTags)
+            .EndStruct()
+        .EndList();
     auto keys = keys_builder.Build();
     auto protoKeys = readRowsRequest.mutable_keys();
     *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
@@ -299,7 +297,7 @@ void DispatchLoadStatisticsQuery(
         if (response.status() == Ydb::StatusIds::SUCCESS) {
             NYdb::TResultSetParser parser(response.result_set());
             const auto rowsCount = parser.RowsCount();
-            Y_ABORT_UNLESS(rowsCount <= (acceptSampledStatistics ? 2u : 1u));
+            Y_ABORT_UNLESS(rowsCount < 2);
 
             if (rowsCount == 0) {
                 YDB_LOG_WARN("[ReadRowsResponse]",
@@ -307,25 +305,21 @@ void DispatchLoadStatisticsQuery(
                     {"rowsCount", 0});
             }
 
-            while(parser.TryNextRow()) {
+            if (parser.TryNextRow()) {
                 auto& col = parser.ColumnParser("data");
                 // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
-                std::optional<TString> data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
                     ? col.GetOptionalString()
                     : col.GetString();
-                auto& keyColumn = parser.ColumnParser("column_tags");
-                const auto key = keyColumn.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
-                    ? keyColumn.GetOptionalString().value_or(TString()) : keyColumn.GetString();
-                if (acceptSampledStatistics && TStringBuf(key).StartsWith(SampledStatisticPrefix)) {
+                if (acceptSampledStatistics) {
+                    const auto sampledData = parser.ColumnParser("sampled_data").GetOptionalString();
                     NKikimrStat::TSampledStatistic payload;
-                    if (data && payload.ParseFromString(*data) && payload.HasData() && payload.HasSampling()
+                    if (sampledData && payload.ParseFromString(*sampledData) && payload.HasData() && payload.HasSampling()
                             && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
                             && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
                         query_response->Data = std::move(*payload.MutableData());
                         query_response->Sampling = std::move(*payload.MutableSampling());
                     }
-                } else if (!query_response->Sampling) {
-                    query_response->Data = std::move(data);
                 }
             }
             query_response->Success = query_response->Data.has_value();

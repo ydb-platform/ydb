@@ -184,6 +184,10 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
+// out
+void FillMetricsSettings(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,

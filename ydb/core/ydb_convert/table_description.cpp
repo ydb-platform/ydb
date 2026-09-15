@@ -16,6 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -66,7 +67,9 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->has_alter_partitioning_settings() ||
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
         req->has_set_read_replicas_settings() ||
-        req->add_statistics_size() || req->drop_statistics_size())
+        req->add_statistics_size() || req->drop_statistics_size() ||
+        req->metrics_settings_action_case() !=
+            Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET)
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -2811,6 +2814,27 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
+}
+
+void FillMetricsSettings(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    if (!in.HasDetailedMetricsSettings() || !in.GetDetailedMetricsSettings().HasConfigured()) {
+        return;
+    }
+
+    switch (in.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()) {
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DISABLED);
+        break;
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE);
+        break;
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION);
+        break;
+    default:
+        break;
+    }
 }
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,

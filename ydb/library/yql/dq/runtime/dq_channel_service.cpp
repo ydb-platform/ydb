@@ -100,14 +100,20 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     return result;
 }
 
+// quotaManager may be null: a bind is aborted before the descriptor is assigned one
 THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+    TStringBuilder message;
+    message << "Channel: " << info.ChannelId
+        << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
+        << ", Channel memory limit exceeded, allocated: ";
+    if (quotaManager) {
+        message << quotaManager->GetCurrentQuota();
+    } else {
+        message << "unknown";
+    }
+    message << " bytes, Needed: " << bytes << " bytes";
     return NYql::NDq::TEvDq::TEvAbortExecution::Build(
-            NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-            TStringBuilder() << "Channel: " << info.ChannelId
-            << ", SrcStageId: " << info.SrcStageId << ", DstStageId: " << info.DstStageId
-            << ", Channel memory limit exceeded, allocated: " << quotaManager->GetCurrentQuota()
-            << " bytes, Needed: " << bytes << " bytes"
-        );
+            NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, message);
 }
 
 THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelFullInfo& info, const TString& message) {
@@ -974,9 +980,9 @@ void TInputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
-void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
+void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes, IMemoryQuotaManager::TPtr quotaManager) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, quotaManager ? quotaManager : QuotaManager, bytes).Release());
     }
 }
 
@@ -2051,7 +2057,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
                 result->QuotaManager->FreeQuota(result->QueueBytes);
             }
             if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes, /* isOptional = */ false)) {
-                result->AbortChannelByMemoryLimit(result->QueueBytes);
+                result->AbortChannelByMemoryLimit(result->QueueBytes, quotaManager);
                 quotaManager = nullptr;
             }
             result->QuotaManager = quotaManager;

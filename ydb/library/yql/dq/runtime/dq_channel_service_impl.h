@@ -537,7 +537,8 @@ public:
     bool EarlyFinish();
     void Terminate();
     void AbortChannel(const TString& message);
-    void AbortChannelByMemoryLimit(ui64 bytes);
+    // the quota manager which rejected the allocation, the descriptor's own when not given
+    void AbortChannelByMemoryLimit(ui64 bytes, IMemoryQuotaManager::TPtr quotaManager = nullptr);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;

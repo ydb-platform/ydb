@@ -376,18 +376,13 @@ Y_UNIT_TEST_SUITE(Channels20Quota) {
         test.Run();
     }
 
-    // Disabled while the defect it reproduces is open: the bind of a consumer to a descriptor whose queued
-    // bytes do not fit its quota calls TInputDescriptor::AbortChannelByMemoryLimit before the descriptor
-    // has a quota manager, and BuildMemoryLimitError dereferences it (dq_channel_service.cpp:2045, :979,
-    // :108) - a segmentation fault of the node.
-    /*
+    // the bind aborts before the descriptor has a quota manager of its own
     Y_UNIT_TEST(InputQuotaReallocationFails2n) {
         TInputBindQuotaTest test;
         test.Local = false;
         test.Fails = true;
         test.Run();
     }
-    */
 
     Y_UNIT_TEST(LocalBufferReaderWithoutQuota1n) {
         TLocalReassignTest test;

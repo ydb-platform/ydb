@@ -35,6 +35,13 @@ public:
     {
     }
 
+    ~TOutputListImpl() override {
+        with_lock(WorkerHolder_->GetScopedAlloc()) {
+            ResetOutput();
+            WorkerHolder_->Invalidate();
+        }
+    }
+
     TOutputMessage* Fetch() override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
@@ -45,6 +52,8 @@ public:
 
             NYql::NUdf::TUnboxedValue value;
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                ResetOutput();
+                WorkerHolder_->Invalidate();
                 return nullptr;
             }
 
@@ -88,6 +97,13 @@ public:
     }
 
 private:
+    void ResetOutput() {
+        Out.Data.clear();
+        Out.Value = {};
+        Out.Table.reset();
+        Out.EstimateSize = 0;
+    }
+
     TOutputMessage Out;
 };
 

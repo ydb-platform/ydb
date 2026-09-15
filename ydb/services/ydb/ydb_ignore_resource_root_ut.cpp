@@ -9,7 +9,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
+
 #include <chrono>
+#include <utility>
 
 namespace NKikimr::NGRpcService {
 namespace {
@@ -56,10 +59,20 @@ public:
         , Runner(Settings(Root, ignoreRoot))
     {
         auto& runtime = *Runner.GetTestServer().GetRuntime();
+        {
+            // CreateDatabase uses an anonymous local RPC. Restore authentication before test requests.
+            auto& allowedSids = runtime.GetAppData().AdministrationAllowedSIDs;
+            auto savedAllowedSids = std::exchange(allowedSids, {});
+            Y_DEFER {
+                allowedSids.swap(savedAllowedSids);
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Runner.RunCall([&] {
+                return Runner.CreateDatabase(Name, "ssd", {});
+            }), Database);
+        }
         for (ui32 node = 1; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).AdministrationAllowedSIDs.push_back("root@builtin");
         }
-        UNIT_ASSERT_VALUES_EQUAL(Runner.CreateDatabase(Name, "ssd", {}), Database);
 
         auto discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(
             grpc::CreateChannel(Runner.GetEndpoint(), grpc::InsecureChannelCredentials()));

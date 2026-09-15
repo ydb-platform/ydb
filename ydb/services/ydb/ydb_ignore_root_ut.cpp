@@ -12,9 +12,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/scope.h>
 
 #include <atomic>
 #include <chrono>
+#include <utility>
 
 namespace NKikimr::NGRpcService {
 namespace {
@@ -65,7 +67,7 @@ public:
         settings.SetEnableScriptExecutionOperations(true);
         settings.AppConfig.MutableGRpcConfig()->SetIgnoreRoot(ignoreRoot);
         settings.FeatureFlags.SetCheckDatabaseAccessPermission(true);
-        if (authenticated) {
+        if (authenticated && useRealThreads) {
             settings.SetAuthToken("root@builtin");
         }
         return settings;
@@ -81,10 +83,16 @@ public:
         , Runner(Settings(Root, ignoreRoot, authenticated, useRealThreads))
     {
         if (authenticated) {
-            // The runner grants the initial user's permissions before restricting
-            // administrators. Apply that restriction to tenant nodes as well.
+            // The simulated runtime needs dispatching during the initial grant.
+            // Restrict administrators on every node after granting permissions.
             auto& runtime = *Runner.GetTestServer().GetRuntime();
-            for (ui32 node = 1; node < runtime.GetNodeCount(); ++node) {
+            if (!useRealThreads) {
+                Runner.RunCall([&] {
+                    Runner.GetTestClient().TestGrant("/", Root, Token, NACLib::EAccessRights::GenericFull);
+                    return true;
+                });
+            }
+            for (ui32 node = useRealThreads ? 1 : 0; node < runtime.GetNodeCount(); ++node) {
                 runtime.GetAppData(node).AdministrationAllowedSIDs.push_back(Token);
             }
         }
@@ -94,7 +102,7 @@ public:
             });
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
-        UNIT_ASSERT_VALUES_EQUAL(Runner.CreateDatabase(Name, "ssd", {}), Database);
+        UNIT_ASSERT_VALUES_EQUAL(CreateDatabase(Name), Database);
         Discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(
             grpc::CreateChannel(Runner.GetEndpoint(), grpc::InsecureChannelCredentials()));
         Ydb::Discovery::ListEndpointsRequest request;
@@ -120,6 +128,19 @@ public:
         create.set_yql_text("CREATE TABLE `dir/data` (Key Uint64 NOT NULL, Value Utf8 NOT NULL, PRIMARY KEY(Key));");
         Call(*Table, &TTable::ExecuteSchemeQuery, create, Database);
         SetValue("target");
+    }
+
+    TString CreateDatabase(const TString& name) {
+        // The tenant helper uses an anonymous local RPC. Restore the admin
+        // restrictions before any client requests or permission assertions.
+        auto& adminSids = Runner.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs;
+        auto savedAdminSids = std::exchange(adminSids, {});
+        Y_DEFER {
+            adminSids = std::move(savedAdminSids);
+        };
+        return Runner.RunCall([&] {
+            return Runner.CreateDatabase(name, "ssd", {});
+        });
     }
 
     void Configure(grpc::ClientContext& context, const TString& database) const {
@@ -566,7 +587,7 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
 
     Y_UNIT_TEST_TWIN(SiblingDatabaseIsolation, SingleComponent) {
         TEnvironment env(SingleComponent, true);
-        const TString sibling = env.Runner.CreateDatabase("sibling", "ssd", {});
+        const TString sibling = env.CreateDatabase("sibling");
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(env.Runner.GetEndpoint())
             .SetDatabase(sibling).SetAuthToken(env.Token));
         NYdb::NTable::TTableClient table(driver);

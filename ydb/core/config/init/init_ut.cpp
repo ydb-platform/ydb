@@ -27,6 +27,8 @@ Y_UNIT_TEST_SUITE(Init) {
                 NLastGetopt::TOptsParseResult res(&opts, args.size(), args.data());
 
                 NKikimrConfig::TAppConfig appConfig;
+                appConfig.MutableDomainsConfig();
+                appConfig.MutableChannelProfileConfig();
                 UNIT_ASSERT(!appConfig.GetGRpcConfig().GetIgnoreRoot());
                 appConfig.MutableGRpcConfig()->SetIgnoreRoot(configured);
                 TEnvMock env;

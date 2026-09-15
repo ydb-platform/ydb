@@ -372,7 +372,7 @@ message TTableServiceConfig {
         optional double Multiplier = 7 [ default = 2.0 ];
 
         optional uint64 MaxWriteAttempts = 8 [ default = 5 ];
-        optional uint64 MaxResolveAttempts = 9 [ default = 5 ];
+        optional uint64 MaxResolveAttempts = 9 [ default = 20 ];
     }
 
     optional TWriteActorSettings WriteActorSettings = 72;

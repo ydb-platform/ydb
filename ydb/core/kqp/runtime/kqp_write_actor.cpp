@@ -1548,6 +1548,18 @@ public:
                         << " attempts. Table `" << TablePath << "`.");
                 return;
             }
+            if (!InconsistentTx) {
+                // TODO: support for resolve for inconsistent transactions
+                TxManager->SetError(shardId);
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder()
+                        << "Failed to deliver write to shard " << shardId
+                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
+                        << " attempts. Table `" << TablePath << "`.");
+                return;
+            }
             ++resolveCount;
             // Reset the send attempts so the pending batches are picked up again by the
             // next FlushToShards() once the re-resolve finishes (a same-shard-set resolve has
@@ -1728,7 +1740,7 @@ public:
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder()
-                    << "Can't resolve shards during commit."
+                    << "Can't resolve shards during commit. "
                     << (RetryResolveByShard.empty()
                         ? TString{}
                         : TStringBuilder() << "Tablet: " << RetryResolveByShard.begin()->first));

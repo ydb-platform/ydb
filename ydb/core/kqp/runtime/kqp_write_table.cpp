@@ -2296,9 +2296,7 @@ private:
         for (const ui64 shardId : deletedShards) {
             auto batches = ShardsInfo.ExtractShard(shardId);
             for (auto& batch : batches) {
-                if (!batch.Data) {
-                    continue;
-                }
+                AFL_ENSURE(batch.Data);
                 WriteInfos.at(batch.Token).Serializer->AddBatch(std::move(batch.Data));
                 affectedTokens.insert(batch.Token);
             }

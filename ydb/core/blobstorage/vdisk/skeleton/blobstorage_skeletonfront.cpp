@@ -743,7 +743,8 @@ namespace NKikimr {
         TNotificationIDs NotificationIDs;
 
         template <class TEv, class Decayed = std::decay_t<TEv>>
-        static constexpr bool IsWithoutNotify = std::is_same_v<TEvGetLogoBlobIndexStatRequest, Decayed>;
+        static constexpr bool IsWithoutNotify = std::is_same_v<TEvGetLogoBlobIndexStatRequest, Decayed>
+                || std::is_same_v<TEvGetVDiskSpaceReportRequest, Decayed>;
 
         template <class T>
         void NotifyIfNotReady(T &ev, const TActorContext &ctx) {
@@ -1954,6 +1955,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseNotReadyHandle)
             HFunc(TEvGetLogoBlobIndexStatRequest, DatabaseNotReadyHandle)
+            HFunc(TEvGetVDiskSpaceReportRequest, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
@@ -1999,6 +2001,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseNotReadyHandle)
             HFunc(TEvGetLogoBlobIndexStatRequest, DatabaseNotReadyHandle)
+            HFunc(TEvGetVDiskSpaceReportRequest, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
@@ -2047,6 +2050,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseErrorHandle)
             HFunc(TEvGetLogoBlobIndexStatRequest, DatabaseErrorHandle)
+            HFunc(TEvGetVDiskSpaceReportRequest, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseErrorHandle)
@@ -2085,6 +2089,7 @@ namespace NKikimr {
         static constexpr bool IsWithoutQoS = std::is_same_v<TEv, TEvBlobStorage::TEvVStatus>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDbStat>
                 || std::is_same_v<TEv, TEvGetLogoBlobIndexStatRequest>
+                || std::is_same_v<TEv, TEvGetVDiskSpaceReportRequest>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVCompact>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDefrag>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>
@@ -2105,6 +2110,7 @@ namespace NKikimr {
             std::is_same_v<TEv, TEvBlobStorage::TEvVGetBarrier> ||
             std::is_same_v<TEv, TEvBlobStorage::TEvVGetBlock> ||
             std::is_same_v<TEv, TEvGetLogoBlobIndexStatRequest> ||
+            std::is_same_v<TEv, TEvGetVDiskSpaceReportRequest> ||
             std::is_same_v<TEv, TEvBlobStorage::TEvVStatus> ||
             std::is_same_v<TEv, TEvBlobStorage::TEvVAssimilate> ||
             std::is_same_v<TEv, TEvBlobStorage::TEvVSync> ||
@@ -2131,7 +2137,8 @@ namespace NKikimr {
         }
 
         template<typename TEv>
-        static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, TEvGetLogoBlobIndexStatRequest>;
+        static constexpr bool IsWithoutVDiskId = std::is_same_v<TEv, TEvGetLogoBlobIndexStatRequest>
+                || std::is_same_v<TEv, TEvGetVDiskSpaceReportRequest>;
 
         template <typename TEventType>
         void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
@@ -2220,6 +2227,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, Check)
             HFunc(TEvBlobStorage::TEvVDbStat, Check)
             HFunc(TEvGetLogoBlobIndexStatRequest, Check)
+            HFunc(TEvGetVDiskSpaceReportRequest, Check)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSync, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSyncFull, HandleRequestWithoutQoS)

@@ -42,11 +42,31 @@ EValidationResult ValidateDefaultCompression(const NKikimrConfig::TColumnShardCo
     return EValidationResult::Ok;
 }
 
+EValidationResult ValidateActorSystemPoolName(
+    const bool hasField, const TString& name, const TString& field, std::vector<TString>& msg) {
+    if (!hasField) {
+        return EValidationResult::Ok;
+    }
+    if (name == "User" || name == "Batch") {
+        return EValidationResult::Ok;
+    }
+    msg.push_back(TStringBuilder() << "ColumnShardConfig: " << field << " must be User or Batch, got '" << name << "'");
+    return EValidationResult::Error;
+}
+
 }  // namespace
 
 EValidationResult ValidateColumnShardConfig(const NKikimrConfig::TColumnShardConfig& columnShardConfig, std::vector<TString>& msg) {
     EValidationResult validateDefaultCompressionResult = ValidateDefaultCompression(columnShardConfig, msg);
     if (validateDefaultCompressionResult == EValidationResult::Error) {
+        return EValidationResult::Error;
+    }
+    if (ValidateActorSystemPoolName(columnShardConfig.HasScanDefaultPool(), columnShardConfig.GetScanDefaultPool(),
+            "scan_default_pool", msg) == EValidationResult::Error) {
+        return EValidationResult::Error;
+    }
+    if (ValidateActorSystemPoolName(columnShardConfig.HasCompactionDefaultPool(), columnShardConfig.GetCompactionDefaultPool(),
+            "compaction_default_pool", msg) == EValidationResult::Error) {
         return EValidationResult::Error;
     }
     return EValidationResult::Ok;

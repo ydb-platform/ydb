@@ -168,6 +168,8 @@ public:
     TString DebugString() const;
 };
 
+TConclusion<EActorSystemPool> ParseActorSystemPool(const TString& name);
+
 }   // namespace NKikimr::NConveyorComposite::NConfig
 
 namespace NKikimr::NConveyorComposite {

@@ -534,6 +534,22 @@ for manual recovery rather than risking another workload.
 The server binds to `127.0.0.1` on a free port by default. A non-loopback
 listener requires the explicit `--allow-remote` opt-in.
 
+Run lists use a rebuildable `.run-index.sqlite3` database in the output directory.
+Only list/search metadata is indexed; manifests, logs and metrics remain in files.
+Startup reconciles the index with existing manifests. Known service runs and UI
+imports are refreshed before listing; a background reconciliation discovers other
+file changes every five seconds. To rebuild manually, stop the service and move
+the index (including any `-wal` and `-shm` sidecars) aside, then restart. Corrupt
+SQLite files are preserved with an `.invalid-*` suffix when automatically rebuilt.
+
+Runs and the comparison run picker use server-side filters and cursor pages of
+50 records. Each host returns a bounded page, merged by sort value, host ID and
+run ID. Both hosts must support `/api/run-page`; an older/unavailable peer is
+reported as incomplete, and advancing is disabled until it can be read. Refresh
+returns to the first page. Pages are a live view, not an immutable snapshot:
+changing durations or timestamps may move active runs between pages.
+The legacy `/api/runs` list response is retained for older clients.
+
 The offline UI has four persistent navigation sections:
 
 - **Runs** is the local/imported run journal. It filters by status, benchmark,

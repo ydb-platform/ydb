@@ -31,6 +31,7 @@ from ydb.tools.ydb_bench.lib.linux_telemetry import LogicalCpuSampler
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, _non_finite_json_as_null, load_manifest
+from ydb.tools.ydb_bench.lib.run_index import RunIndex
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import binary_catalog, extract_executable, load_profile_binaries
 from ydb.tools.ydb_bench.lib.import_results import MAX_TOTAL_SIZE, export_archive, import_archive
@@ -39,7 +40,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
 from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
-from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
+from ydb.tools.ydb_bench.lib.federation import Federation, split_reference, page_options
 from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions
 from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
@@ -1436,6 +1437,34 @@ function bindAutomaticFilters(fields,reset,apply,connected,invalidate=()=>{}){
   reset.onclick=()=>{for(const field of fields){if(field.type==='checkbox')field.checked=false;else field.value=''}run()};
   update();
 }
+function runPager(){return '<div class=runs-toolbar data-run-pager><span data-page-state role=status>Loading runs…</span>'+
+  '<div class=runs-actions><button data-page-refresh>Refresh</button><button data-page-prev disabled>Previous</button>'+
+  '<button data-page-next disabled>Next</button></div></div><div data-page-errors role=alert></div>'}
+function bindRunPager(container,query,draw,active){
+  const state=container.querySelector('[data-page-state]'),errors=container.querySelector('[data-page-errors]'),
+    prev=container.querySelector('[data-page-prev]'),next=container.querySelector('[data-page-next]');
+  let cursors=[''],page=0,nextCursor=null,version=0,controller;
+  const invalidate=()=>{version++;controller?.abort();prev.disabled=true;next.disabled=true};
+  async function load(reset=true){
+    invalidate();const current=version;controller=new AbortController();
+    if(reset){page=0;cursors=['']}
+    const params=query();params.set('limit','50');if(cursors[page])params.set('cursor',cursors[page]);
+    state.textContent='Updating…';errors.innerHTML='';
+    try{
+      const value=await api('/api/federation/run-page?'+params,{signal:controller.signal});
+      if(current!==version||!active())return;
+      draw(value);nextCursor=value.next_cursor;
+      state.textContent='Page '+(page+1)+' · '+value.entries.length+' runs'+(value.errors.length?' · incomplete':'');
+      errors.innerHTML=federationErrors(value.errors);prev.disabled=page===0;next.disabled=!nextCursor;
+    }catch(error){if(current===version&&active()&&error.name!=='AbortError'){
+      state.textContent='Could not update runs';errors.innerHTML=displayError(error);prev.disabled=page===0;
+    }}
+  }
+  prev.onclick=()=>{if(page){page--;load(false)}};
+  next.onclick=()=>{if(nextCursor){cursors[++page]=nextCursor;load(false)}};
+  container.querySelector('[data-page-refresh]').onclick=()=>load();
+  return {load,invalidate};
+}
 async function renderRuns(){
   clearRefresh();
   const hostOptions=await hostChoices();
@@ -1445,39 +1474,38 @@ async function renderRuns(){
     '<option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
     '<option value=longest>Longest first</option></select></label><div class=runs-actions>'+
     '<button id=reset-run-filters style="visibility:hidden" disabled>Reset filters</button><button id=open-import>Import</button>'+
-    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div></div><div id=runs-table></div>'+
+    '<a class=new-run-link href="#new"><span aria-hidden=true>+</span> New run</a></div></div>'+runPager()+'<div id=runs-table></div>'+
     '<dialog id=import-dialog class=import-dialog aria-labelledby=import-title><h2 id=import-title>Import results</h2>'+
     '<label for=import-file>Portable ZIP archive</label><input id=import-file type=file accept=".zip,application/zip">'+
     '<div id=import-error role=alert></div><div id=import-status role=status></div><div class=toolbar>'+
     '<button id=cancel-import>Cancel</button><button id=import-run class=primary>Import</button></div></dialog>');
   const target=document.querySelector('#runs-table'),sort=document.querySelector('#runs-sort');
-  let records=[],request=0,hostErrors=[],benchmarksLoaded=false;
+  let records=[];
   sort.value=runsSort;
   function draw(){
-    target.innerHTML=federationErrors(hostErrors)+(records.length?sortRuns(records,runsSort).map(compactRun).join(''):
+    target.innerHTML=(records.length?records.map(compactRun).join(''):
       '<div class=empty>No runs match these filters.</div>');
     for(const item of target.querySelectorAll('[data-repeat]'))item.onclick=event=>{
       event.preventDefault();reuseRun(item.dataset.repeat)
     };
   }
-  async function load(){
-    const current=++request,query=new URLSearchParams();
+  const pager=bindRunPager(app,()=>{
+    const query=new URLSearchParams({sort:runsSort});
     for(const [name,id] of Object.entries({status:'f-status',benchmark:'f-benchmark',profile:'f-profile',source:'f-source',since:'f-since',until:'f-until'})){
       const value=document.querySelector('#'+id).value.trim();if(value)query.set(name,value)
     }
     if(app.querySelector('#runs-host').value)query.set('host',app.querySelector('#runs-host').value);
-    try{const value=await api('/api/federation/runs?'+query);if(current!==request||!target.isConnected)return;records=value.entries;hostErrors=value.errors;
-      if(!query.size&&!benchmarksLoaded){
-        const select=app.querySelector('#f-benchmark');
-        select.innerHTML='<option value="">All benchmarks</option>'+[...new Set(records.flatMap(run=>run.benchmarks||[]))].sort()
-          .map(name=>'<option value="'+esc(name)+'">'+esc(name)+'</option>').join('');benchmarksLoaded=true;
-      }
-      draw()}
-    catch(error){if(current===request&&target.isConnected)target.innerHTML=displayError(error)}
-  }
-  sort.onchange=()=>{runsSort=sort.value;draw()};
+    return query;
+  },value=>{
+    records=value.entries;
+    const select=app.querySelector('#f-benchmark'),selected=select.value;
+    select.innerHTML='<option value="">All benchmarks</option>'+[...new Set([...value.benchmarks,...(selected?[selected]:[])])].sort()
+      .map(name=>'<option value="'+esc(name)+'">'+esc(name)+'</option>').join('');select.value=selected;draw();
+  },()=>target.isConnected);
+  const load=()=>pager.load();
+  sort.onchange=()=>{runsSort=sort.value;load()};
   bindAutomaticFilters([...app.querySelectorAll('.filters input,.filters select'),app.querySelector('#runs-host')],
-    app.querySelector('#reset-run-filters'),load,()=>target.isConnected,()=>++request);
+    app.querySelector('#reset-run-filters'),load,()=>target.isConnected,pager.invalidate);
   const dialog=document.querySelector('#import-dialog'),fileInput=document.querySelector('#import-file'),
     importButton=document.querySelector('#import-run'),cancelButton=document.querySelector('#cancel-import'),
     importError=document.querySelector('#import-error'),importStatus=document.querySelector('#import-status');
@@ -3449,7 +3477,8 @@ async function renderSavedComparisons(){
     const crumb='<div class=breadcrumbs><a href="#comparisons">Comparisons</a> / '+esc(record?.name||'New comparison')+'</div>';
     if(editing){
       if(record?.remote)throw Error('Edit this comparison on its owning host: '+record.host_name);
-      const runCatalog=await api('/api/federation/runs'),runs=runCatalog.entries,hostOptions=await hostChoices();if(!active())return;
+      const hostOptions=await hostChoices();if(!active())return;
+      let runs=[];const knownRuns=new Map();
       const selected=new Map((record?.profiles||[]).map(pair=>[JSON.stringify(pair),pair]));
       const seeds=record?[...new Set(record.profiles.map(pair=>pair[0]))]:new URLSearchParams(route.split('?')[1]||'').getAll('run');
       const chosenRuns=new Set(seeds),cache=new Map(),pending=new Map(),errors=new Map(),autoSelect=new Set(record?[]:seeds);
@@ -3458,10 +3487,11 @@ async function renderSavedComparisons(){
       app.innerHTML=shell('comparisons',crumb+'<h1 class=page-title>'+(record?'Edit comparison':'New comparison')+'</h1>'+
         '<div class=toolbar><label>Name <input id=comparison-name maxlength=200 value="'+esc(record?.name||'')+'"></label>'+
         '<button id=save-saved-comparison>'+(record?'Save':'Create comparison')+'</button><a href="#comparisons'+
-        (record?'/'+enc(record.id):'')+'">Cancel</a></div>'+federationErrors(runCatalog.errors)+'<div id=comparison-error role=alert></div>'+
+        (record?'/'+enc(record.id):'')+'">Cancel</a></div><div id=comparison-error role=alert></div>'+
         '<div class=filters><div class=field><label for=comparison-query>Search</label><input id=comparison-query type=search placeholder="Name, profile or run ID"></div>'+
         '<div class=field><label for=comparison-host>Host</label><select id=comparison-host>'+hostOptions+'</select></div>'+
-        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+options(runs.map(run=>run.status),'statuses')+'</select></div>'+
+        '<div class=field><label for=comparison-status>Status</label><select id=comparison-status>'+
+        options(['queued','running','completed','failed','cancelled','recovery_required'],'statuses')+'</select></div>'+
         '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
         options(runs.flatMap(run=>run.benchmarks||[]),'benchmarks')+'</select></div><div class=field><label for=comparison-since>Started from (UTC)</label>'+
         '<input id=comparison-since type=date></div><div class=field><label for=comparison-until>Started through (UTC)</label>'+
@@ -3469,7 +3499,7 @@ async function renderSavedComparisons(){
         '<label>Sort by <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
         '<option value=longest>Longest first</option></select></label><span id=comparison-selection-count aria-live=polite></span>'+
         '<label><input id=comparison-selected-only type=checkbox> Selected only</label><div class=runs-actions>'+
-        '<button id=comparison-reset style="visibility:hidden" disabled>Reset filters</button></div></div><div class=table-scroll><table><thead><tr>'+
+        '<button id=comparison-reset style="visibility:hidden" disabled>Reset filters</button></div></div>'+runPager()+'<div class=table-scroll><table><thead><tr>'+
         '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
         '<section id=comparison-picked-profiles><h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
         '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label></section>');
@@ -3482,12 +3512,12 @@ async function renderSavedComparisons(){
         element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
           '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
           '<span>'+esc(pair[2]||'local-ydb')+' / '+esc(pair[1])+'</span><span class=muted>'+
-          esc(runs.find(run=>run.id===pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
+          esc(knownRuns.get(pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
           '<div class=muted>'+(chosenRuns.size?'No profiles available from the selected runs.':'Select runs below to load profiles.')+'</div>';
         element('comparison-profiles-title').textContent='Profiles · '+selected.size;
         if(!selected.has(baseline))baseline=selected.keys().next().value||'';
         element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
-          (key===baseline?'selected':'')+'>'+esc((runs.find(run=>run.id===pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+
+          (key===baseline?'selected':'')+'>'+esc((knownRuns.get(pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+
           ' / '+(pair[2]||'local-ydb')+' / '+pair[1])+'</option>').join('');
         const loading=[...chosenRuns].filter(id=>pending.has(id));
         element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
@@ -3502,13 +3532,9 @@ async function renderSavedComparisons(){
         for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
       };
       const drawRuns=()=>{
-        const visible=filterComparisonRuns(runs.filter(run=>!element('comparison-host').value||run.host_id===element('comparison-host').value),{
-          query:element('comparison-query').value,status:element('comparison-status').value,
-          benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,until:element('comparison-until').value,
-          only:element('comparison-selected-only').checked,sort:element('comparison-sort').value
-        },chosenRuns);
+        const visible=runs;
         const outside=[...chosenRuns].filter(id=>!visible.some(run=>run.id===id)).length;
-        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside filters':'')+' · '+visible.length+' shown';
+        element('comparison-selection-count').textContent=chosenRuns.size+' selected'+(outside?' · '+outside+' outside this page':'')+' · '+visible.length+' shown';
         element('comparison-runs').innerHTML=visible.map(run=>'<tr data-picker-run="'+esc(run.id)+'" class="'+
           (chosenRuns.has(run.id)?'comparison-run-selected':'')+'"><td><input type=checkbox aria-label="Select '+esc(run.id)+
           '" '+(chosenRuns.has(run.id)?'checked':'')+'></td><td><div>'+esc((run.profile_names||[]).join(' · ')||'No profiles')+
@@ -3551,13 +3577,28 @@ async function renderSavedComparisons(){
             autoSelect.delete(id)
           }else loadRun(id)
         }
-        drawRuns();drawProfiles()
+        if(element('comparison-selected-only').checked)pager.load();else drawRuns();drawProfiles()
       };
       element('comparison-baseline').onchange=event=>{baseline=event.target.value};
       element('comparison-name').oninput=drawProfiles;
+      const pager=bindRunPager(app,()=>{
+        const query=new URLSearchParams({sort:element('comparison-sort').value});
+        for(const name of ['query','host','status','benchmark','since','until']){
+          const value=element('comparison-'+name).value.trim();if(value)query.set(name,value);
+        }
+        if(element('comparison-selected-only').checked)for(const id of chosenRuns.size?chosenRuns:['!'])query.append('selected',id);
+        return query;
+      },value=>{
+        runs=value.entries;
+        for(const [id] of knownRuns)if(!chosenRuns.has(id))knownRuns.delete(id);
+        for(const run of runs)knownRuns.set(run.id,run);
+        const select=element('comparison-benchmark'),selected=select.value;
+        select.innerHTML=options([...value.benchmarks,...(selected?[selected]:[])],'benchmarks');select.value=selected;
+        drawRuns();drawProfiles();
+      },active);
       bindAutomaticFilters(['comparison-query','comparison-host','comparison-status','comparison-benchmark','comparison-since',
-        'comparison-until','comparison-selected-only'].map(element),element('comparison-reset'),drawRuns,active);
-      element('comparison-sort').onchange=drawRuns;
+        'comparison-until','comparison-selected-only'].map(element),element('comparison-reset'),()=>pager.load(),active,pager.invalidate);
+      element('comparison-sort').onchange=()=>pager.load();
       element('save-saved-comparison').onclick=async()=>{
         if(saving)return;saving=true;drawProfiles();
         try{
@@ -3567,7 +3608,7 @@ async function renderSavedComparisons(){
         }catch(error){if(active())element('comparison-error').innerHTML=displayError(error)}
         finally{saving=false;if(active())drawProfiles()}
       };
-      drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
+      drawProfiles();pager.load();for(const id of chosenRuns)loadRun(id);return
     }
     app.innerHTML=shell('comparisons',crumb+'<div class=runs-toolbar><h1 class=page-title>'+esc(record.name)+'</h1><div class=runs-actions>'+
       (record.remote?'<span class=muted>Stored on '+esc(record.host_name)+' · read-only</span>':
@@ -3733,53 +3774,55 @@ def read_model(output):
     root = Path(output).resolve()
     result = {}
     for run_id, manifest in _manifests(output):
-        run_root = root / run_id
-        steps = manifest.get("steps", [])
-        runs = manifest.get("runs", [])
-        profile_keys = {
-            (str(item.get("benchmark")), str(item.get("profile")))
-            for item in steps + runs
-            if item.get("benchmark") is not None and item.get("profile") is not None
-        }
-        result[run_id] = {
-            "id": run_id,
-            "status": manifest.get("status", "unknown"),
-            "state": manifest.get("state", "unknown"),
-            "source": (
-                "imported"
-                if (
-                    (run_root / ".imported").is_file()
-                    or manifest.get("imported")
-                    or manifest.get("source") == "imported"
-                    or manifest.get("origin")
-                )
-                else "local"
-            ),
-            "queued_at": manifest.get("queued_at"),
-            "started_at": manifest.get("started_at"),
-            "finished_at": manifest.get("finished_at"),
-            "duration_seconds": _duration_seconds(manifest),
-            "profiles": len(profile_keys),
-            "repetitions": len(steps),
-            "benchmarks": sorted(
-                {str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}
-            ),
-            "profile_names": sorted(
-                {str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}
-            ),
-            "perf": bool(manifest.get("profiler")),
-            "config_path": manifest.get("config", {}).get("path")
-            or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
-            "output_directory": str(run_root),
-            "runs": runs,
-            "steps": steps,
-            "topology": manifest.get("topology"),
-            "events": manifest.get("events", 0),
-            "finished_steps": sum(
-                1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")
-            ),
-        }
+        result[run_id] = run_record(run_id, manifest, root)
     return result
+
+
+def run_record(run_id, manifest, root):
+    run_root = root / run_id
+    steps = manifest.get("steps", [])
+    runs = manifest.get("runs", [])
+    profile_keys = {
+        (str(item.get("benchmark")), str(item.get("profile")))
+        for item in steps + runs
+        if item.get("benchmark") is not None and item.get("profile") is not None
+    }
+    return {
+        "id": run_id,
+        "status": manifest.get("status", "unknown"),
+        "state": manifest.get("state", "unknown"),
+        "source": (
+            "imported"
+            if (
+                (run_root / ".imported").is_file()
+                or manifest.get("imported")
+                or manifest.get("source") == "imported"
+                or manifest.get("origin")
+            )
+            else "local"
+        ),
+        "queued_at": manifest.get("queued_at"),
+        "started_at": manifest.get("started_at"),
+        "finished_at": manifest.get("finished_at"),
+        "duration_seconds": _duration_seconds(manifest),
+        "profiles": len(profile_keys),
+        "repetitions": len(steps),
+        "benchmarks": sorted(
+            {str(item.get("benchmark")) for item in steps + runs if item.get("benchmark") is not None}
+        ),
+        "profile_names": sorted({str(item.get("profile")) for item in steps + runs if item.get("profile") is not None}),
+        "perf": bool(manifest.get("profiler")),
+        "config_path": manifest.get("config", {}).get("path")
+        or ("config.yaml" if (run_root / "config.yaml").is_file() else "config snapshot"),
+        "output_directory": str(run_root),
+        "runs": runs,
+        "steps": steps,
+        "topology": manifest.get("topology"),
+        "events": manifest.get("events", 0),
+        "finished_steps": sum(
+            1 for item in steps if item.get("state") in ("passed", "failed", "unsupported", "cancelled")
+        ),
+    }
 
 
 def benchmark_catalog():
@@ -4386,6 +4429,7 @@ class RunService:
         self._dispatcher_thread = None
         self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
+        self.run_index = RunIndex(self.output, run_record)
         self.distributed_sessions = HostSessions(
             self.output, self._lock, self._distributed_busy, self._cleanup_distributed
         )
@@ -4455,6 +4499,7 @@ class RunService:
                         recovery={"state": "completed", "at": _utc_now()},
                     )
                     atomic_write_json(root / "run.json", manifest)
+                    self.run_index.mark_dirty(root / "run.json")
                     if run_id in self._runs:
                         self._runs[run_id]["store"].manifest.update(manifest)
                     self._recovery_runs.discard(run_id)
@@ -4636,7 +4681,7 @@ class RunService:
                 "distributed_generation": None,
                 "root": root,
                 "loaded": loaded,
-                "store": ResultStore(root / "run.json", manifest),
+                "store": ResultStore(root / "run.json", manifest, on_write=self.run_index.mark_dirty),
                 "events": deque(maxlen=self.event_limit),
                 "tail": {"stdout": "", "stderr": ""},
                 "cancel": threading.Event(),
@@ -4874,6 +4919,7 @@ class RunService:
         if timeout is not None:
             timeout = max(0.0, float(timeout))
         self._recovery_stop.set()
+        self.run_index.close()
         if self._recovery_thread is not None:
             self._recovery_thread.join(timeout=6)
         with self._lock:
@@ -5690,7 +5736,30 @@ class RunService:
             'current_run_id',
             'queue_position',
         )
-        return [{key: item[key] for key in fields} for item in self.filtered_model(filters)]
+        return [{key: item[key] for key in fields} for item in self.indexed_runs(filters)]
+
+    def indexed_runs(self, filters, order='newest', limit=None, after=None):
+        with self._lock:
+            active = self._active_run_id
+            positions = {
+                run['id']: index
+                for index, run in enumerate(
+                    (run for run in self._queue if run['store'].manifest['state'] == 'queued'), 1
+                )
+            }
+        self.run_index.refresh_pending()
+        records = self.run_index.query(filters, order, limit, after, self.hosts.id)
+        return [
+            {**record, 'current_run_id': active, 'queue_position': positions.get(record['id'])} for record in records
+        ]
+
+    def run_page(self, query):
+        filters, order, limit, after, _ = page_options(query)
+        return {
+            'entries': self.indexed_runs(filters, order, limit + 1, after),
+            'benchmarks': self.run_index.facets()['benchmarks'],
+            'index_error': self.run_index.error,
+        }
 
     def save_comparison(self, value):
         if not isinstance(value, dict):
@@ -6051,6 +6120,8 @@ def _handler(service):
                         return self._json(200, federation.runs(filters, query.get('host', [None])[-1]))
                     if path == '/api/federation/comparisons':
                         return self._json(200, federation.comparisons())
+                    if path == '/api/federation/run-page':
+                        return self._json(200, federation.run_page(query))
                     if path == '/api/federation/profiles':
                         return self._json(200, federation.profiles(query.get('run', [])))
                     return self._json(404, {'error': 'not found'})
@@ -6126,6 +6197,11 @@ def _handler(service):
                 return self._json(200, service.run_list(filters))
             if path == "/api/saved-comparisons":
                 return self._json(200, service.saved_comparisons())
+            if path == '/api/run-page':
+                try:
+                    return self._json(200, service.run_page(parse_qs(parsed.query, keep_blank_values=True)))
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
             if path == "/api/comparisons":
                 return self._json(200, service.comparisons())
             if path == "/api/chart-data":
@@ -6337,7 +6413,9 @@ def _handler(service):
                 if path.startswith(("/peer/", "/api/hosts/")):
                     return self._json(403, {"error": "remote operation is not allowed"})
                 if path == "/api/import":
-                    return self._json(201, import_archive(service.output, self._raw_body()))
+                    result = import_archive(service.output, self._raw_body())
+                    service.run_index.refresh([service.output / result['id'] / 'run.json'])
+                    return self._json(201, result)
                 if path in ("/api/cluster-templates", "/api/cluster-templates/delete"):
                     origin = self.headers.get("Origin")
                     if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (

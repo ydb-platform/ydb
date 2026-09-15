@@ -18,6 +18,7 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
 
     {"query_sessions", ESysViewType::EQuerySessions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QuerySessions>},
     {"query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
+    {"query_metrics_one_hour", ESysViewType::EQueryMetricsOneHour, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
     {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
 
     {"ds_pdisks", ESysViewType::EPDisks, {ESource::Domain},  &FillSchema<Schema::PDisks>},

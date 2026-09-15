@@ -6,6 +6,18 @@
 namespace NKikimr {
 namespace NHive {
 
+namespace {
+
+bool IsMetricsOnlyState(const TTabletInfo& tablet, TTabletInfo::EVolatileState state) {
+    // UNKNOWN with no local placement represents a lock owner's metrics, even
+    // when the lock has already been cleared by the unlock transaction.
+    return tablet.IsLeader()
+        && tablet.NodeId == 0
+        && state == TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN;
+}
+
+} // anonymous namespace
+
 const ui64 TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE = NKikimrLocal::TTabletAvailability().GetMaxCount();
 
 TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
@@ -68,15 +80,16 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
 }
 
 bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState) {
-    if (Freeze) {
+    TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
+    const bool metricsOnly = IsMetricsOnlyState(*tablet, oldState) || IsMetricsOnlyState(*tablet, newState);
+    if (Freeze && !metricsOnly) {
         tablet->PreferredNodeId = Id;
         FrozenTablets.push_back(tablet->GetFullTabletId());
     }
-    TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
             UpdateResourceValues(tablet, tablet->GetResourceValues(), {});
-            if (!IsResourceDrainingState(newState)) {
+            if (!metricsOnly && !IsResourceDrainingState(newState)) {
                 LastScheduledTablet.reset();
             }
         } else {
@@ -101,7 +114,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
             UpdateResourceValues(tablet, {}, tablet->GetResourceValues());
-            if (!IsResourceDrainingState(oldState)) {
+            if (!metricsOnly && !IsResourceDrainingState(oldState)) {
                 LastScheduledTablet = {
                     .TabletId = tablet->GetFullTabletId(),
                     .UsageBefore = NodeTotalUsage,
@@ -454,6 +467,9 @@ void TNodeInfo::SetFreeze(bool freeze) {
         for (const auto& [state, tablets] : Tablets) {
             FrozenTablets.reserve(FrozenTablets.size() + tablets.size());
             for (auto* tablet : tablets) {
+                if (IsMetricsOnlyState(*tablet, state)) {
+                    continue;
+                }
                 FrozenTablets.push_back(tablet->GetFullTabletId());
                 tablet->PreferredNodeId = Id;
             }

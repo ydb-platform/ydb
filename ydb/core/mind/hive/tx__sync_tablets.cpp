@@ -78,6 +78,7 @@ public:
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
                         .Update<Schema::Tablet::LeaderNode>(0);
+                    tablet->AsLeader().RestoreLockedTabletMetrics();
                 } else {
                     db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId())
                         .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
@@ -95,6 +96,14 @@ public:
                     tablet->BecomeStarting(node.Id);
                     foundTablet(tablet, "starting");
                     continue;
+                }
+                if (tablet->IsLeader()
+                        && tablet->AsLeader().IsLockedToActor()
+                        && ti.GetBootMode() == NKikimrLocal::BOOT_MODE_LEADER)
+                {
+                    // A stale generation still needs to be stopped at the reporting Local.
+                    tablet->SendStopTablet(Local, SideEffects);
+                    tabletsToStop.erase(tabletId);
                 }
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
@@ -126,6 +135,14 @@ public:
                     }
                     foundTablet(tablet, "running");
                     continue;
+                }
+                if (tablet->IsLeader()
+                        && tablet->AsLeader().IsLockedToActor()
+                        && ti.GetBootMode() == NKikimrLocal::BOOT_MODE_LEADER)
+                {
+                    // Preserve the lock owner's accounting while stopping the outdated instance.
+                    tablet->SendStopTablet(Local, SideEffects);
+                    tabletsToStop.erase(tabletId);
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
                     YDB_LOG_TRACE("THive::TTxSyncTablets::Execute stopped running tablet on wrong node",

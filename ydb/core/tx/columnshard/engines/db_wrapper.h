@@ -18,6 +18,14 @@ class TDatabase;
 
 namespace NKikimr::NOlap {
 
+// Result type for seeding-mode loaders that use limited precharge.
+struct TSeedingBatchResult {
+    bool Ready;   // false = page fault, caller must retry
+    ui64 BytesPrecharged;
+    TConclusionStatus Error = TConclusionStatus::Success();
+    std::optional<std::pair<TInternalPathId, ui64>> LastKey;
+};
+
 class TColumnChunkLoadContextV2;
 class TIndexChunkLoadContext;
 class TColumnRecord;
@@ -105,6 +113,16 @@ public:
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
         return DsGroupSelector;
     }
+
+    // Seeding-mode loaders: Precharge + IterateRange with bytesLimit; return {false,…} on page fault.
+    TSeedingBatchResult LoadPortionsSeeding(std::pair<TInternalPathId, ui64> startKey, ui64 maxRows, ui64 bytesLimit,
+        const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback);
+
+    TSeedingBatchResult LoadColumnsSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey, ui64 bytesLimit,
+        const std::function<void(TColumnChunkLoadContextV2&&)>& callback);
+
+    TSeedingBatchResult LoadIndexesSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey, ui64 bytesLimit,
+        const std::function<void(const TInternalPathId, const ui64, TIndexChunkLoadContext&&)>& callback);
 
 private:
     NTable::TDatabase& Database;

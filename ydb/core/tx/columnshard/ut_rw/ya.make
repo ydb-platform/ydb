@@ -37,6 +37,7 @@ SRCS(
     ut_normalizer.cpp
     ut_backup.cpp
     ut_flow_control_manager.cpp
+    ut_seeding_parsers.cpp
 )
 
 END()

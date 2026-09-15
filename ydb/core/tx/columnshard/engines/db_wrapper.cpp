@@ -4,6 +4,8 @@
 #include "portions/constructor_portion.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
@@ -51,6 +53,64 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
     portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
     return std::make_pair(std::move(portion), std::move(metaProto));
 }
+
+class TRawRowAdapter {
+public:
+    TRawRowAdapter(const NTable::TRowState& row, NTable::TTagsRef tags)
+        : Row_(row)
+        , Tags_(tags)
+    {
+    }
+
+    bool IsReady() const {
+        return true;
+    }
+
+    bool EndOfSet() const {
+        return false;
+    }
+
+    template <typename ColumnType>
+    typename ColumnType::Type GetValue() const {
+        return CellValue<ColumnType>(Row_.Get(FindIdx(ColumnType::ColumnId)));
+    }
+
+    template <typename ColumnType>
+    typename ColumnType::Type GetValueOrDefault(typename ColumnType::Type defaultValue = {}) const {
+        const auto& cell = Row_.Get(FindIdx(ColumnType::ColumnId));
+        if (cell.IsNull()) {
+            return defaultValue;
+        }
+        return CellValue<ColumnType>(cell);
+    }
+
+    template <typename ColumnType>
+    bool HaveValue() const {
+        return !Row_.Get(FindIdx(ColumnType::ColumnId)).IsNull();
+    }
+
+private:
+    size_t FindIdx(NTable::TTag tag) const {
+        for (size_t i = 0; i < Tags_.size(); ++i) {
+            if (Tags_[i] == tag) {
+                return i;
+            }
+        }
+        Y_ABORT("tag %u not in row adapter", (unsigned)tag);
+    }
+
+    template <typename ColumnType>
+    static typename ColumnType::Type CellValue(const TCell& cell) {
+        if constexpr (std::is_same_v<typename ColumnType::Type, TString>) {
+            return TString(cell.Data(), cell.Size());
+        } else {
+            return cell.AsValue<typename ColumnType::Type>();
+        }
+    }
+
+    const NTable::TRowState& Row_;
+    NTable::TTagsRef Tags_;
+};
 
 }   // namespace
 
@@ -308,6 +368,155 @@ void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrT
         .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId())
         .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()))
         .Update(NIceDb::TUpdate<IndexColumnsV2::BlobIds>(protoBlobs.SerializeAsString()));
+}
+
+TSeedingBatchResult TDbWrapper::LoadPortionsSeeding(std::pair<TInternalPathId, ui64> startKey, ui64 maxRows, ui64 bytesLimit,
+    const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback)
+{
+    using IndexPortions = NColumnShard::Schema::IndexPortions;
+    static const auto& kTagIds = IndexPortions::Columns<IndexPortions::TColumns>::GetColumnIds();
+    NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
+    ui64 startPathId = startKey.first.GetRawValue();
+    ui64 startPortionId = startKey.second;
+    const NKikimr::TRawTypeValue minKeyArr[2] = {
+        { &startPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &startPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+    };
+    NTable::TRawVals minKey(minKeyArr, 2);
+    auto precharge = Database.Precharge(IndexPortions::TableId, minKey, {}, tags, 0, maxRows, bytesLimit);
+    if (!precharge.Ready) {
+        return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), {} };
+    }
+    NTable::TKeyRange range;
+    range.MinKey = minKey;
+    auto it = Database.IterateRange(IndexPortions::TableId, range, tags);
+    ui64 rowsRead = 0;
+    std::optional<std::pair<TInternalPathId, ui64>> lastKey;
+    while (rowsRead < maxRows) {
+        auto ready = it->Next(NTable::ENext::Data);
+        if (ready == NTable::EReady::Page) {
+            return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+        }
+        if (ready == NTable::EReady::Gone) {
+            break;
+        }
+        TRawRowAdapter adapter(it->Row(), tags);
+        auto pathId = TInternalPathId::FromRawValue(adapter.GetValue<IndexPortions::PathId>());
+        auto portionId = adapter.GetValue<IndexPortions::PortionId>();
+        lastKey = { pathId, portionId };
+        auto [portion, meta] = MakePortionInfoConstructor(adapter);
+        ++rowsRead;
+        if (!callback(std::move(portion), meta)) {
+            break;
+        }
+    }
+    return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+}
+
+TSeedingBatchResult TDbWrapper::LoadColumnsSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey,
+    ui64 bytesLimit, const std::function<void(TColumnChunkLoadContextV2&&)>& callback)
+{
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
+    static const auto& kTagIds = IndexColumnsV2::Columns<IndexColumnsV2::TColumns>::GetColumnIds();
+    NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
+    ui64 startPathId = startKey.first.GetRawValue();
+    ui64 startPortionId = startKey.second;
+    ui64 endPathId = endKey.first.GetRawValue();
+    ui64 endPortionId = endKey.second;
+    const NKikimr::TRawTypeValue minKeyArr[2] = {
+        { &startPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &startPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+    };
+    const NKikimr::TRawTypeValue maxKeyArr[2] = {
+        { &endPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &endPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+    };
+    NTable::TRawVals minKey(minKeyArr, 2);
+    NTable::TRawVals maxKey(maxKeyArr, 2);
+    auto precharge = Database.Precharge(IndexColumnsV2::TableId, minKey, maxKey, tags, 0, 0, bytesLimit);
+    if (!precharge.Ready) {
+        return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), {} };
+    }
+    NTable::TKeyRange range;
+    range.MinKey = minKey;
+    range.MaxKey = maxKey;
+    AFL_VERIFY(DsGroupSelector);
+    auto it = Database.IterateRange(IndexColumnsV2::TableId, range, tags);
+    std::optional<std::pair<TInternalPathId, ui64>> lastKey;
+    while (true) {
+        auto ready = it->Next(NTable::ENext::Data);
+        if (ready == NTable::EReady::Page) {
+            return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+        }
+        if (ready == NTable::EReady::Gone) {
+            break;
+        }
+        TRawRowAdapter adapter(it->Row(), tags);
+        const TString blobIdsData = adapter.GetValue<IndexColumnsV2::BlobIds>();
+        auto blobIds = TColumnChunkLoadContextV2::TryParseBlobIds(blobIdsData, *DsGroupSelector);
+        if (!blobIds.IsSuccess()) {
+            return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Fail(blobIds.GetErrorMessage()), lastKey };
+        }
+        auto pathId = TInternalPathId::FromRawValue(adapter.GetValue<IndexColumnsV2::PathId>());
+        auto portionId = adapter.GetValue<IndexColumnsV2::PortionId>();
+        lastKey = { pathId, portionId };
+        callback(TColumnChunkLoadContextV2(adapter, *DsGroupSelector));
+    }
+    return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+}
+
+TSeedingBatchResult TDbWrapper::LoadIndexesSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey,
+    ui64 bytesLimit, const std::function<void(const TInternalPathId, const ui64, TIndexChunkLoadContext&&)>& callback)
+{
+    using IndexIndexes = NColumnShard::Schema::IndexIndexes;
+    static const auto& kTagIds = IndexIndexes::Columns<IndexIndexes::TColumns>::GetColumnIds();
+    NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
+    ui64 startPathId = startKey.first.GetRawValue();
+    ui64 startPortionId = startKey.second;
+    ui64 endPathId = endKey.first.GetRawValue();
+    ui64 endPortionId = endKey.second;
+    const NKikimr::TRawTypeValue minKeyArr[2] = {
+        { &startPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &startPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+    };
+    const NKikimr::TRawTypeValue maxKeyArr[2] = {
+        { &endPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &endPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+    };
+    NTable::TRawVals minKey(minKeyArr, 2);
+    NTable::TRawVals maxKey(maxKeyArr, 2);
+    auto precharge = Database.Precharge(IndexIndexes::TableId, minKey, maxKey, tags, 0, 0, bytesLimit);
+    if (!precharge.Ready) {
+        return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), {} };
+    }
+    NTable::TKeyRange range;
+    range.MinKey = minKey;
+    range.MaxKey = maxKey;
+    auto it = Database.IterateRange(IndexIndexes::TableId, range, tags);
+    std::optional<std::pair<TInternalPathId, ui64>> lastKey;
+    while (true) {
+        auto ready = it->Next(NTable::ENext::Data);
+        if (ready == NTable::EReady::Page) {
+            return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+        }
+        if (ready == NTable::EReady::Gone) {
+            break;
+        }
+        TRawRowAdapter adapter(it->Row(), tags);
+        TInternalPathId pathId = TInternalPathId::FromRawValue(adapter.GetValue<IndexIndexes::PathId>());
+        ui64 portionId = adapter.GetValue<IndexIndexes::PortionId>();
+        // validate Blob column when present without BlobIdx (legacy direct-address rows)
+        if (adapter.HaveValue<IndexIndexes::Blob>() && !adapter.HaveValue<IndexIndexes::BlobIdx>()) {
+            const TString strBlobId = adapter.GetValue<IndexIndexes::Blob>();
+            auto blobId = TIndexChunkLoadContext::TryParseBlobAddress(strBlobId, *DsGroupSelector);
+            if (!blobId.IsSuccess()) {
+                return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Fail(blobId.GetErrorMessage()), lastKey };
+            }
+        }
+        lastKey = { pathId, portionId };
+        callback(pathId, portionId, TIndexChunkLoadContext(adapter, DsGroupSelector));
+    }
+    return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
 }
 
 }   // namespace NKikimr::NOlap

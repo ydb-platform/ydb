@@ -2957,6 +2957,16 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+
+    // Not reused: an old binary would misparse a uint32 written under a number it reads as a bool.
+    reserved 75, 76, 80;
+
+    // Bound IsDrained() queue scans per tablet — the cost that scales with ColumnShards per node.
+    optional uint32 CutHistoryNominateCadenceSeconds = 77 [default = 60];
+    optional uint32 CutHistoryMaxDrainChecksPerNomination = 78 [default = 8];
+
+    // Run the whole proof pipeline and export its timings, but never place a barrier or cut.
+    optional bool CutHistoryMeasureOnly = 79 [default = true];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

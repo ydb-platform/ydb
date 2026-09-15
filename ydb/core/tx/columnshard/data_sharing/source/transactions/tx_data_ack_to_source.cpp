@@ -35,6 +35,7 @@ void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
     YDB_LOG_NOTICE("",
         {"event", "TTxDataAckToSource::DoComplete"});
 
+    Self->GetStoragesManager()->GetSharedBlobsManager()->AddSharingBlobs(SharedBlobIds);
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 

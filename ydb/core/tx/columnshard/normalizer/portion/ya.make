@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    batch_cursor.cpp
     normalizer.cpp
     GLOBAL broken_blobs.cpp
     GLOBAL chunks.cpp

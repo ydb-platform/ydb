@@ -1216,19 +1216,38 @@ public:
         return TPortionAddress(PathId, PortionId);
     }
 
+    // Tolerant blob-id parser for seeding scan: returns error instead of crashing.
+    static TConclusion<std::vector<TUnifiedBlobId>> TryParseBlobIds(const TString& blobIdsProto, const IBlobGroupSelector& dsGroupSelector)
+    {
+        NKikimrTxColumnShard::TIndexPortionBlobsInfo blobsProto;
+        if (!blobsProto.ParseFromArray(blobIdsProto.data(), blobIdsProto.size())) {
+            return TConclusionStatus::Fail("cannot parse blobs data as protobuf");
+        }
+        std::vector<TUnifiedBlobId> result;
+        for (auto&& i : blobsProto.GetBlobIds()) {
+            if (i.size() != TLogoBlobID::BinarySize) {
+                return TConclusionStatus::Fail(TString("blob id binary size mismatch: ") + ToString(i.size()));
+            }
+            TLogoBlobID logoBlobId = TLogoBlobID::FromBinary(i.data());
+            TUnifiedBlobId blobId(dsGroupSelector.GetGroup(logoBlobId), logoBlobId);
+            if (!blobId.IsValid()) {
+                return TConclusionStatus::Fail("invalid blob id in column chunk");
+            }
+            result.emplace_back(std::move(blobId));
+        }
+        if (result.empty()) {
+            return TConclusionStatus::Fail("empty blob ids vector in column chunk");
+        }
+        return result;
+    }
+
     template <class TSource>
     TColumnChunkLoadContextV2(const TSource& rowset, const NOlap::IBlobGroupSelector& dsGroupSelector) {
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
-        const TString blobIdsProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::BlobIds>();
-
-        NKikimrTxColumnShard::TIndexPortionBlobsInfo blobsProto;
-        AFL_VERIFY(blobsProto.ParseFromArray(blobIdsProto.data(), blobIdsProto.size()))("event", "cannot parse blobs data as protobuf");
-        for (auto&& i : blobsProto.GetBlobIds()) {
-            TLogoBlobID logoBlobId = TLogoBlobID::FromBinary(i.data());
-            BlobIds.emplace_back(NOlap::TUnifiedBlobId(dsGroupSelector.GetGroup(logoBlobId), logoBlobId));
-        }
+        const TString blobIdsProtoData = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::BlobIds>();
+        BlobIds = TryParseBlobIds(blobIdsProtoData, dsGroupSelector).DetachResult();
     }
 
     TColumnChunkLoadContextV2(const TInternalPathId pathId, const ui64 portionId, const NKikimrTxColumnShard::TIndexPortionAccessor& proto)
@@ -1327,6 +1346,20 @@ public:
         }
     }
 
+    // Tolerant blob-address parser for seeding scan: returns error instead of crashing.
+    static TConclusion<TUnifiedBlobId> TryParseBlobAddress(const TString& strBlobId, const IBlobGroupSelector& dsGroupSelector)
+    {
+        if (strBlobId.size() != sizeof(TLogoBlobID)) {
+            return TConclusionStatus::Fail(TString("blob address size mismatch: ") + ToString(strBlobId.size()));
+        }
+        TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+        TUnifiedBlobId blobId(dsGroupSelector.GetGroup(logoBlobId), logoBlobId);
+        if (!blobId.IsValid()) {
+            return TConclusionStatus::Fail("invalid blob address in index chunk");
+        }
+        return blobId;
+    }
+
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
         : PathId(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
@@ -1346,10 +1379,8 @@ public:
         } else if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::Blob>()) {
             TBlobRange& bRange = BlobRangeAddress.emplace();
             TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
-            Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
-            TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
             AFL_VERIFY(dsGroupSelector);
-            bRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
+            bRange.BlobId = TryParseBlobAddress(strBlobId, *dsGroupSelector).DetachResult();
             bRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
             bRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
             AFL_VERIFY(bRange.BlobId.IsValid() && bRange.Size)("event", "incorrect blob")("blob", bRange.ToString());

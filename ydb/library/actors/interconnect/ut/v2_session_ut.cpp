@@ -816,13 +816,13 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         const TActorId echo1 = cluster->RegisterActor(new TEchoActor, 1);
         const TActorId echo2 = cluster->RegisterActor(new TEchoActor, 2);
 
-        // establish a v2 session in each direction
+        // Retry definite nondelivery if an initial handshake fails.
         auto* c1 = new TResponseCollectorActor;
         auto* c2 = new TResponseCollectorActor;
         const TActorId c1Id = cluster->RegisterActor(c1, 1);
         const TActorId c2Id = cluster->RegisterActor(c2, 2);
-        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echo2, c1Id, new TEvTest(0)));
-        cluster->GetNode(2)->GetActorSystem()->Send(new IEventHandle(echo1, c2Id, new TEvTest(0)));
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echo2, c1Id, new TEvTest(0), IEventHandle::FlagTrackDelivery, 0));
+        cluster->GetNode(2)->GetActorSystem()->Send(new IEventHandle(echo1, c2Id, new TEvTest(0), IEventHandle::FlagTrackDelivery, 0));
         WaitFor(TDuration::Seconds(20), [&] { return c1->GetCount() >= 1 && c2->GetCount() >= 1; },
             "v2 sessions established both ways");
         AssertV2InUse(*cluster, 1, 2);

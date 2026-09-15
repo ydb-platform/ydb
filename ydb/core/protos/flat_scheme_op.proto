@@ -331,6 +331,7 @@ enum ESpecialTableType {
     ESpecialTableTypeNone = 0;
     ESpecialTableTypeFulltextCompact = 1;
     ESpecialTableTypeFulltextCompactRelevance = 2;
+    ESpecialTableTypeHnsw = 3;
 }
 
 message TTableDescription {
@@ -1334,6 +1335,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
     EIndexTypeLocalCountMinSketch = 14;
+    EIndexTypeGlobalVectorKmeansTreeHnsw = 15;
 }
 
 enum EIndexState {
@@ -1345,6 +1347,8 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+    optional Ydb.Table.HnswSettings HnswSettings = 2;
+    optional uint32 HnswFormatVersion = 3 [default = 1];
 }
 
 message TFulltextIndexDescription {

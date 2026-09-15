@@ -174,6 +174,8 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("asyncGlobal");
         case TIndexDescription::EType::GlobalSyncUnique:
             return node.Q("syncGlobalUnique");
+        case TIndexDescription::EType::GlobalVectorKmeansTreeHnsw:
+            return node.Q("globalVectorKmeansTreeHnsw");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
         case TIndexDescription::EType::GlobalFulltextPlain:

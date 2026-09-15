@@ -65,6 +65,18 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix = {});
 
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeHnswImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseConfig,
+    const THashSet<TString>& dataColumns,
+    const NKikimrSchemeOp::TTableDescription& userDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeHnswImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseConfig,
+    const THashSet<TString>& dataColumns,
+    const NKikimrSchemeOp::TTableDescription& userDesc);
+
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -382,7 +394,19 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                 return false;
             }
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw) {
+                if (!AppData()->FeatureFlags.GetEnableVectorKMeansTreeHnswIndex()) {
+                    status = NKikimrScheme::StatusPreconditionFailed;
+                    error = "HNSW vector index support is disabled";
+                    return false;
+                }
+                if (!NHnsw::ValidateSettings(indexDesc.GetVectorIndexKmeansTreeDescription().GetHnswSettings(), error)) {
+                    status = NKikimrScheme::StatusInvalidParameter;
+                    return false;
+                }
+            }
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 

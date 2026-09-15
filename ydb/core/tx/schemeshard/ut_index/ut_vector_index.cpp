@@ -295,6 +295,36 @@ Y_UNIT_TEST_SUITE(TVectorIndexTests) {
               NLs::CheckColumns(PostingTable, {ParentColumn, "id1", "id2", "covered1", "covered2"}, {}, {ParentColumn, "id1", "id2"}, true) });
     }
 
+    Y_UNIT_TEST(HnswImplTableSchema) {
+        NKikimrSchemeOp::TTableDescription base;
+        for (const auto& [name, type] : TVector<std::pair<TString, TString>>{{"id", "Uint64"}, {"emb", "String"}, {"payload", "Utf8"}}) {
+            auto* column = base.AddColumns();
+            column->SetName(name);
+            column->SetType(type);
+            column->SetNotNull(true);
+        }
+        base.AddKeyColumnNames("id");
+        auto desc = CalcVectorKmeansTreeHnswImplTableDesc(base, {}, {"emb", "payload"}, {});
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetName(), NHnsw::HnswTable);
+        UNIT_ASSERT_VALUES_EQUAL(desc.KeyColumnNamesSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetKeyColumnNames(0), ParentColumn);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetKeyColumnNames(1), NHnsw::RecordTypeColumn);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetKeyColumnNames(2), NHnsw::NodeIdColumn);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetKeyColumnNames(3), NHnsw::KeyColumn);
+        UNIT_ASSERT(desc.GetPartitionConfig().GetSpecialTableType() == NKikimrSchemeOp::ESpecialTableTypeHnsw);
+        UNIT_ASSERT(desc.GetPartitionConfig().GetColumnFamilies(0).GetColumnCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPartitionConfig().GetPartitioningPolicy().GetSizeToSplit(), 0);
+        for (const auto& column : desc.GetColumns()) {
+            if (column.GetName() == "id" || column.GetName() == "emb" || column.GetName() == "payload") UNIT_ASSERT(!column.GetNotNull());
+        }
+        TVector<TString> keys{"emb"};
+        auto tables = GetImplTables(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw, keys);
+        UNIT_ASSERT_VALUES_EQUAL(tables.size(), 2);
+        UNIT_ASSERT(std::is_sorted(tables.begin(), tables.end()));
+        UNIT_ASSERT(std::find(tables.begin(), tables.end(), PostingTable) == tables.end());
+        UNIT_ASSERT(IsBuildImplTable(NHnsw::BuildTable));
+    }
+
     Y_UNIT_TEST(VectorKmeansTreeImplTable) {
       // partition
       NKikimrSchemeOp::TPartitionConfig baseTablePartitionConfig;

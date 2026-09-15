@@ -125,6 +125,23 @@ message GlobalVectorKMeansTreeIndex {
     KMeansTreeSettings vector_settings = 3;
 }
 
+// Immutable HNSW graphs in the leaves of the K-means tree.
+message HnswSettings {
+    optional uint32 m = 1;
+    optional uint32 ef_construction = 2;
+    optional uint32 ef_search = 3;
+    optional uint64 seed = 4;
+}
+
+// Experimental snapshot-only index: later writes are ignored until REBUILD INDEX.
+message GlobalVectorKMeansTreeHnswIndex {
+    GlobalIndexSettings level_table_settings = 1;
+    GlobalIndexSettings hnsw_table_settings = 2;
+    KMeansTreeSettings vector_settings = 3;
+    GlobalIndexSettings prefix_table_settings = 4;
+    HnswSettings hnsw_settings = 5;
+}
+
 message FulltextIndexSettings {
     // Specifies how text is tokenized during indexing
     enum Tokenizer {
@@ -403,6 +420,7 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
+       GlobalVectorKMeansTreeHnswIndex global_vector_kmeans_tree_hnsw_index = 15;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
        LocalBloomFilterIndex local_bloom_filter_index = 10;
@@ -435,6 +453,7 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
+       GlobalVectorKMeansTreeHnswIndex global_vector_kmeans_tree_hnsw_index = 16;
        GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
        GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
        LocalBloomFilterIndex local_bloom_filter_index = 12;

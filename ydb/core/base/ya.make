@@ -120,6 +120,7 @@ PEERDIR(
     library/cpp/time_provider
     ydb/core/audit/audit_config
     ydb/core/base/generated
+    ydb/core/base/hnsw
     ydb/core/base/services
     ydb/core/control/lib
     ydb/core/debug
@@ -164,6 +165,7 @@ RECURSE(
 
 IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
+    hnsw
     ut
     ut_auth
     ut_backtrace

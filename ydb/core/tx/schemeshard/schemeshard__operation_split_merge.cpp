@@ -687,6 +687,16 @@ public:
             return false;
         }
 
+        if (tableInfo->PartitionConfig().GetSpecialTableType() == NKikimrSchemeOp::ESpecialTableTypeHnsw) {
+            for (const auto& boundary : rangeEnds) {
+                TSerializedCellVec cells(boundary);
+                if (cells.GetCells().size() != 1 || cells.GetCells()[0].IsNull()) {
+                    errStr = "HNSW partitions may only split between parents";
+                    return false;
+                }
+            }
+        }
+
         // Last dst shard ends where src shard used to end
         rangeEnds.push_back(tableInfo->GetPartitions()[srcPartitionIdx]->EndOfRange);
 

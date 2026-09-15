@@ -6,6 +6,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/hnsw.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -42,6 +43,19 @@ struct TReadIteratorVectorTopItem {
     }
 };
 
+namespace NHnsw = NTableIndex::NHnsw;
+
+struct THnswReadIterator {
+    NHnsw::TSettings Settings;
+    NHnsw::TMeta Meta;
+    std::unique_ptr<NHnsw::TSearch> Search;
+    TVector<NHnsw::TCandidate> Candidates;
+    size_t NextCandidate = 0;
+    THashMap<ui64, NHnsw::TNode> Nodes;
+    ui64 CacheBytes = 0;
+    TString Error;
+};
+
 struct TReadIteratorVectorTop {
     ui32 Column = 0;
     ui32 Limit = 0;
@@ -53,10 +67,13 @@ struct TReadIteratorVectorTop {
     std::vector<TReadIteratorVectorTopItem> Rows;
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
+    std::unique_ptr<THnswReadIterator> Hnsw;
 
-    void AddRow(TConstArrayRef<TCell> cells) {
-        TotalReadRows++;
-        TotalReadBytes += EstimateSize(cells);
+    void AddRow(TConstArrayRef<TCell> cells, bool countRead = true) {
+        if (countRead) {
+            TotalReadRows++;
+            TotalReadBytes += EstimateSize(cells);
+        }
         TString serializedKey;
         if (DistinctColumns.size()) {
             TVector<TCell> key;
@@ -248,6 +265,7 @@ struct TShortTableInfo {
 
     TShortTableInfo(const TUserTable::TCPtr& tableInfo) {
         LocalTid = tableInfo->LocalTid;
+        SpecialTableType = tableInfo->SpecialTableType;
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
@@ -302,6 +320,7 @@ struct TShortTableInfo {
     }
 
     ui32 LocalTid = 0;
+    NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableTypeNone;
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -461,10 +480,125 @@ public:
         EndTime = StartTime;
     }
 
+    EReadStatus ReadHnsw(TTransactionContext& txc, ui64 parent) {
+        auto& top = *State.VectorTopK;
+        auto& hnsw = *top.Hnsw;
+        try {
+            if (ColumnTypes.empty()) {
+                for (auto tag : State.Columns) ColumnTypes.push_back(TableInfo.Columns.at(tag).Type);
+            }
+            auto tagFor = [&](const char* name) {
+                for (const auto& [tag, column] : TableInfo.Columns) {
+                    if (column.Name == name) return tag;
+                }
+                ythrow yexception() << "Missing HNSW column: " << name;
+            };
+            auto select = [&](ui8 recordType, ui64 id, const auto& tags, NTable::TRowState& row) {
+                TVector<TCell> cells{TCell::Make(parent), TCell::Make(recordType), TCell::Make(id), TCell("", 0)};
+                auto key = ToRawTypeValue(cells, TableInfo, true);
+                row.Init(tags.size());
+                NTable::TSelectStats stats;
+                auto ready = txc.DB.Select(TableInfo.LocalTid, key, tags, row, stats, 0,
+                    State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+                if (ready == NTable::EReady::Page) {
+                    txc.DB.Precharge(TableInfo.LocalTid, key, key, tags, 0, 1, Max<ui64>(),
+                        NTable::EDirection::Forward, State.ReadVersion);
+                } else {
+                    ++RowsProcessed;
+                    ++RowsSinceLastCheck;
+                    if (ready == NTable::EReady::Data) {
+                        ++top.TotalReadRows;
+                        top.TotalReadBytes += EstimateSize(*row);
+                    }
+                }
+                return ready;
+            };
+            if (!hnsw.Search) {
+                TVector<ui32> tags{tagFor(NHnsw::EntryIdColumn), tagFor(NHnsw::MaxLevelColumn),
+                    tagFor(NHnsw::BaseCountColumn), tagFor(NHnsw::FormatVersionColumn)};
+                NTable::TRowState row;
+                auto ready = select(NHnsw::MetaRecord, 0, tags, row);
+                if (ready == NTable::EReady::Page) return EReadStatus::NeedData;
+                if (ready == NTable::EReady::Gone) return EReadStatus::Done;
+                for (const auto& cell : *row) Y_ENSURE(!cell.IsNull(), "Incomplete HNSW metadata");
+                Y_ENSURE((*row)[3].AsValue<ui32>() == NHnsw::FormatVersion, "Unsupported HNSW format version");
+                hnsw.Meta = {(*row)[0].AsValue<ui64>(), (*row)[1].AsValue<ui32>(), (*row)[2].AsValue<ui64>()};
+                Y_ENSURE(hnsw.Meta.Count <= hnsw.Settings.MaxNodes, "HNSW leaf exceeds node limit");
+                hnsw.Search = std::make_unique<NHnsw::TSearch>(hnsw.Meta, top.Target,
+                    Max(top.Limit, hnsw.Settings.EfSearch), hnsw.Settings.MaxNodes);
+            }
+            TVector<ui32> tags{State.Columns.at(top.Column), tagFor(NHnsw::NeighborsColumn), tagFor(NHnsw::NodeLevelColumn)};
+            auto read = [&](ui64 id) -> std::optional<NHnsw::TNode> {
+                if (auto* cached = hnsw.Nodes.FindPtr(id)) return *cached;
+                NTable::TRowState row;
+                auto ready = select(NHnsw::NodeRecord, id, tags, row);
+                if (ready == NTable::EReady::Page) return std::nullopt;
+                Y_ENSURE(ready == NTable::EReady::Data, "Missing HNSW node " << id);
+                for (const auto& cell : *row) Y_ENSURE(!cell.IsNull(), "Incomplete HNSW node " << id);
+                Y_ENSURE(top.KMeans->IsExpectedFormat((*row)[0].AsBuf()), "Invalid HNSW embedding");
+                NHnsw::TNode node{TString((*row)[0].AsBuf()), NHnsw::DecodeNeighbors((*row)[1].AsBuf(),
+                    (*row)[2].AsValue<ui32>(), hnsw.Settings.M, hnsw.Meta.Count)};
+                ui64 bytes = sizeof(node) + node.Embedding.size() + node.Neighbors.size() * sizeof(TVector<ui64>);
+                for (const auto& layer : node.Neighbors) bytes += layer.size() * sizeof(ui64);
+                // A query-local cache only; the persistent graph lives in Flat Executor's page cache.
+                if (bytes <= 8_MB - hnsw.CacheBytes) {
+                    hnsw.CacheBytes += bytes;
+                    hnsw.Nodes.emplace(id, node);
+                }
+                return node;
+            };
+            auto status = hnsw.Search->Step(read,
+                [&](TStringBuf a, TStringBuf b) { return top.KMeans->CalcDistance(a, b); }, 128);
+            if (status == NHnsw::TSearch::EStatus::NeedData) return EReadStatus::NeedData;
+            if (status == NHnsw::TSearch::EStatus::NeedContinue) return EReadStatus::NeedContinue;
+            if (hnsw.Candidates.empty()) hnsw.Candidates = hnsw.Search->GetResult();
+            ui32 budget = 128;
+            while (hnsw.NextCandidate < Min<size_t>(top.Limit, hnsw.Candidates.size())) {
+                if (!budget--) return EReadStatus::NeedContinue;
+                NTable::TRowState row;
+                auto ready = select(NHnsw::NodeRecord, hnsw.Candidates[hnsw.NextCandidate].Id, State.Columns, row);
+                if (ready == NTable::EReady::Page) return EReadStatus::NeedData;
+                Y_ENSURE(ready == NTable::EReady::Data, "Missing HNSW result node");
+                top.AddRow(*row, false);
+                ++hnsw.NextCandidate;
+            }
+            hnsw.Search.reset();
+            hnsw.Nodes.clear();
+            hnsw.CacheBytes = 0;
+            hnsw.Candidates.clear();
+            hnsw.NextCandidate = 0;
+            return EReadStatus::Done;
+        } catch (const std::exception& e) {
+            hnsw.Error = e.what();
+            FirstUnprocessedQuery = Max<ui64>();
+            return EReadStatus::NeedContinue;
+        }
+    }
+
     EReadStatus ReadRange(
         TTransactionContext& txc,
         const TSerializedTableRange& range)
     {
+        if (State.VectorTopK && State.VectorTopK->Hnsw) {
+            const auto from = range.From.GetCells();
+            const auto to = range.To.GetCells();
+            // KQP encodes a parent as (parent - 1, parent], using key prefixes.
+            // Partition intersection may instead produce an inclusive lower bound at parent.
+            const bool hasParent = to.size() == 1 && !to[0].IsNull() && range.ToInclusive;
+            const ui64 parent = hasParent ? to[0].AsValue<ui64>() : 0;
+            const bool lowerAtParent = !from.empty() && !from[0].IsNull() && range.FromInclusive
+                && from[0].AsValue<ui64>() == parent
+                && std::all_of(from.begin() + 1, from.end(), [](const TCell& cell) { return cell.IsNull(); });
+            const bool lowerBeforeParent = from.size() == 1 && !range.FromInclusive && !from[0].IsNull()
+                && parent > 0 && from[0].AsValue<ui64>() == parent - 1;
+            const bool lowerUnbounded = parent == 0 && (from.empty() || from[0].IsNull());
+            if (!hasParent || !(lowerAtParent || lowerBeforeParent || lowerUnbounded)) {
+                State.VectorTopK->Hnsw->Error = "HNSW reads require one parent per range";
+                FirstUnprocessedQuery = Max<ui64>();
+                return EReadStatus::NeedContinue;
+            }
+            return ReadHnsw(txc, parent);
+        }
         bool fromInclusive;
         bool toInclusive;
         TSerializedCellVec keyFromCells;
@@ -536,6 +670,9 @@ public:
         const TSerializedCellVec& keyCells,
         ui64 keyIndex)
     {
+        if (State.VectorTopK && State.VectorTopK->Hnsw) {
+            return ReadHnsw(txc, keyCells.GetCells().at(0).AsValue<ui64>());
+        }
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
             TSerializedTableRange range;
@@ -764,7 +901,7 @@ public:
             case EReadStatus::Done:
                 break;
             case EReadStatus::NeedData:
-                PrechargeRangesAfter(txc, FirstUnprocessedQuery);
+                if (!(State.VectorTopK && State.VectorTopK->Hnsw)) PrechargeRangesAfter(txc, FirstUnprocessedQuery);
                 return false;
             case EReadStatus::NeedContinue:
                 return true;
@@ -799,7 +936,7 @@ public:
             case EReadStatus::Done:
                 break;
             case EReadStatus::NeedData:
-                PrechargeKeysAfter(txc, FirstUnprocessedQuery);
+                if (!(State.VectorTopK && State.VectorTopK->Hnsw)) PrechargeKeysAfter(txc, FirstUnprocessedQuery);
                 return false;
             case EReadStatus::NeedContinue:
                 return true;
@@ -867,6 +1004,12 @@ public:
 
         auto& record = result.Record;
         record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
+        if (State.VectorTopK && State.VectorTopK->Hnsw && !State.VectorTopK->Hnsw->Error.empty()) {
+            SetStatusError(record, Ydb::StatusIds::INTERNAL_ERROR, State.VectorTopK->Hnsw->Error);
+            state.IsFinished = true;
+            record.SetFinished(true);
+            return true;
+        }
 
         auto now = AppData()->MonotonicTimeProvider->Now();
         auto delta = now - StartTs;
@@ -1945,6 +2088,7 @@ public:
         };
 
         auto scanPossible = [&]() -> bool {
+            if (state.VectorTopK && state.VectorTopK->Hnsw) return false;
             if (Self->IsFollower()) {
                 // Cannot scan on followers
                 return false;
@@ -2399,6 +2543,16 @@ public:
                     error = TStringBuilder() << "Too large unique column index: " << colIdx;
                 }
                 topState->DistinctColumns.push_back(colIdx);
+            }
+            const bool hnswTable = TableInfo.SpecialTableType == NKikimrSchemeOp::ESpecialTableTypeHnsw;
+            if (topK.HasHnswSettings() != hnswTable) {
+                error = "HNSW search settings must match the table type";
+            } else if (hnswTable) {
+                if (topK.GetLimit() > 4096) error = "HNSW candidate limit exceeds 4096";
+                if (NHnsw::ValidateSettings(topK.GetHnswSettings(), error)) {
+                    topState->Hnsw = std::make_unique<THnswReadIterator>();
+                    topState->Hnsw->Settings = NHnsw::GetSettings(topK.GetHnswSettings());
+                }
             }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()

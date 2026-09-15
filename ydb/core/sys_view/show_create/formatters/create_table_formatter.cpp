@@ -500,6 +500,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
                 // Row-table local indexes represented as named scheme objects (e.g. prefix bloom
                 // filter) have no impl table. (Column-table/OLAP local indexes use a separate path.)
                 if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree
+                    && indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTreeHnsw
                     && indexDesc.IndexImplTableDescriptionsSize() > 0) {
                     FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
                 }
@@ -577,6 +578,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<HnswSettings> hnswSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;
     bool isLocalBloomFilter = false;
     bool isLocalBloomNgramFilter = false;
@@ -591,6 +593,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         }
         case TableIndex::kGlobalUniqueIndex: {
             Stream << " GLOBAL UNIQUE SYNC ON ";
+            break;
+        }
+        case TableIndex::kGlobalVectorKmeansTreeHnswIndex: {
+            Stream << " GLOBAL USING vector_kmeans_tree_hnsw ON ";
+            kMeansTreeSettings = index.global_vector_kmeans_tree_hnsw_index().vector_settings();
+            hnswSettings = index.global_vector_kmeans_tree_hnsw_index().hnsw_settings();
             break;
         }
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
@@ -724,6 +732,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        if (hnswSettings) {
+            if (hnswSettings->has_m()) Stream << ", hnsw_m=" << hnswSettings->m();
+            if (hnswSettings->has_ef_construction()) Stream << ", hnsw_ef_construction=" << hnswSettings->ef_construction();
+            if (hnswSettings->has_ef_search()) Stream << ", hnsw_ef_search=" << hnswSettings->ef_search();
+            if (hnswSettings->has_seed()) Stream << ", hnsw_seed=" << hnswSettings->seed();
+        }
         Stream << ")";
     }
 

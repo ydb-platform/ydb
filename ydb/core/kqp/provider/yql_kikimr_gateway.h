@@ -113,6 +113,7 @@ public:
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
         GlobalSyncVectorKMeansTree = 3,
+        GlobalSyncVectorKMeansTreeHnsw = 13,
         GlobalFulltextPlain = 4,
         GlobalFulltextRelevance = 5,
         LocalBloomFilter = 6,
@@ -181,9 +182,14 @@ public:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
+            case EType::GlobalSyncVectorKMeansTreeHnsw:
             case EType::GlobalSyncVectorKMeansTree: {
                 NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
                 *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+                if (Type == EType::GlobalSyncVectorKMeansTreeHnsw) {
+                    *vectorIndexDescription.MutableHnswSettings() = index.GetVectorIndexKmeansTreeDescription().GetHnswSettings();
+                    vectorIndexDescription.SetHnswFormatVersion(index.GetVectorIndexKmeansTreeDescription().GetHnswFormatVersion());
+                }
                 SpecializedIndexDescription = std::move(vectorIndexDescription);
                 break;
             }
@@ -252,6 +258,7 @@ public:
                     YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 }
                 break;
+            case EType::GlobalSyncVectorKMeansTreeHnsw:
             case EType::GlobalSyncVectorKMeansTree:
                 SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
                 break;
@@ -288,6 +295,8 @@ public:
                 return TIndexDescription::EType::GlobalAsync;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
                 return TIndexDescription::EType::GlobalSyncUnique;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTreeHnsw:
+                return TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
                 return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
@@ -321,6 +330,8 @@ public:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             case TIndexDescription::EType::GlobalSyncUnique:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTreeHnsw;
             case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             case NYql::TIndexDescription::EType::GlobalFulltextPlain:
@@ -383,6 +394,7 @@ public:
                     Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 }
                 break;
+            case EType::GlobalSyncVectorKMeansTreeHnsw:
             case EType::GlobalSyncVectorKMeansTree:
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
@@ -408,6 +420,10 @@ public:
             Type == other.Type;
     }
 
+    bool IsVectorIndex() const {
+        return Type == EType::GlobalSyncVectorKMeansTree || Type == EType::GlobalSyncVectorKMeansTreeHnsw;
+    }
+
     bool ItUsedForWrite() const {
         switch (Type) {
             case EType::GlobalSync:
@@ -415,6 +431,9 @@ public:
             case EType::GlobalSyncUnique:
                 return true;
             case EType::GlobalAsync:
+                return false;
+            case EType::GlobalSyncVectorKMeansTreeHnsw:
+                // Static snapshot index: no write effects and no DELTA overlay.
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
                 if (State != EIndexState::Ready) {
@@ -441,6 +460,7 @@ public:
             case EType::GlobalSync:
             case EType::GlobalSyncUnique:
             case EType::GlobalAsync:
+            case EType::GlobalSyncVectorKMeansTreeHnsw:
             case EType::GlobalSyncVectorKMeansTree:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:

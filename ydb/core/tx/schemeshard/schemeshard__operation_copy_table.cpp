@@ -1087,6 +1087,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                         Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
                     }
                     break;
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                     *operation->MutableVectorIndexKmeansTreeDescription() =
                         std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);

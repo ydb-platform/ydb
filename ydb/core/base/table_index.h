@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/hnsw.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>

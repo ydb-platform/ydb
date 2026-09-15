@@ -516,6 +516,22 @@ bool FillIndexTablePartitioning(
         }
         break;
 
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeHnswIndex: {
+        const bool prefixVectorIndex = index.index_columns().size() > 1;
+        indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_hnsw_index().level_table_settings(), indexImplTableDescriptions[NTableIndex::NHnsw::LevelTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_hnsw_index().hnsw_table_settings(), indexImplTableDescriptions[NTableIndex::NHnsw::HnswTablePosition])) {
+            return false;
+        }
+        if (prefixVectorIndex) {
+            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_hnsw_index().prefix_table_settings(), indexImplTableDescriptions[NTableIndex::NHnsw::PrefixTablePosition])) {
+                return false;
+            }
+        }
+        break;
+    }
     case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
         const bool prefixVectorIndex = index.index_columns().size() > 1;
         indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);

@@ -406,11 +406,20 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
         }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeHnswIndex:
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            const bool hnsw = index.has_global_vector_kmeans_tree_hnsw_index();
+            if (hnsw && !AppData()->FeatureFlags.GetEnableVectorKMeansTreeHnswIndex()) {
+                explain = "HNSW vector index support is disabled";
+                return false;
+            }
+            const auto& requestedSettings = hnsw ? index.global_vector_kmeans_tree_hnsw_index().vector_settings()
+                : index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            buildInfo.IndexType = hnsw ? NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw
+                : NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 
             if (buildInfo.IsRebuild) {
@@ -418,6 +427,10 @@ private:
                 const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
                 Y_ENSURE(indexPath.IsResolved());
                 auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
+                if (existingIndex->Type != buildInfo.IndexType) {
+                    explain = "REBUILD INDEX cannot change index type";
+                    return false;
+                }
                 const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                     &existingIndex->SpecializedIndexDescription);
                 if (!existingDesc) {
@@ -426,7 +439,7 @@ private:
                 }
                 vectorIndexKmeansTreeDescription = *existingDesc;
                 // Merge user-provided settings over existing ones
-                const auto& userSettings = index.global_vector_kmeans_tree_index().vector_settings();
+                const auto& userSettings = requestedSettings;
                 if (userSettings.has_settings()) {
                     const auto& userVectorSettings = userSettings.settings();
                     const auto& existingVectorSettings = existingDesc->GetSettings().settings();
@@ -445,7 +458,12 @@ private:
                 }
                 vectorIndexKmeansTreeDescription.MutableSettings()->MergeFrom(userSettings);
             } else {
-                *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+                *vectorIndexKmeansTreeDescription.MutableSettings() = requestedSettings;
+            }
+
+            if (hnsw) {
+                vectorIndexKmeansTreeDescription.MutableHnswSettings()->MergeFrom(index.global_vector_kmeans_tree_hnsw_index().hnsw_settings());
+                if (!NTableIndex::NHnsw::ValidateSettings(vectorIndexKmeansTreeDescription.GetHnswSettings(), explain)) return false;
             }
 
             if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
@@ -472,6 +490,7 @@ private:
             buildInfo.KMeans.K = kmSettings.clusters();
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + kmSettings.levels();
             buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
+            buildInfo.KMeans.Hnsw = hnsw;
             buildInfo.KMeans.Adaptive = kmSettings.adaptive_clusters() && buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
             buildInfo.KMeans.OverlapClusters = kmSettings.overlap_clusters()

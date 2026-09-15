@@ -245,6 +245,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
+                if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "HNSW vector indexes are not supported in serverless domains")};
+                }
+                [[fallthrough]];
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 TString msg;
                 if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
@@ -453,6 +458,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc, uniqueKeySize)));
                 break;
             }
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                 const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
@@ -466,7 +472,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-                result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw) {
+                    auto hnswColumns = indexDataColumns;
+                    hnswColumns.insert(*indexDescription.GetKeyColumnNames().rbegin());
+                    result.push_back(createIndexImplTable(CalcVectorKmeansTreeHnswImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), hnswColumns, userPostingDesc)));
+                } else {
+                    result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+                }
                 if (prefixVectorIndex) {
                     const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
                     result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(

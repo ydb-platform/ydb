@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
@@ -2152,6 +2153,177 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_C(levelTableReadCount.load() == 0,
                 "Query from new session should use cache, got " << levelTableReadCount.load());
         }
+    }
+
+    Y_UNIT_TEST_TWIN(HnswStaticSnapshot, Covering) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableVectorKMeansTreeHnswIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(flags);
+        // HNSW must choose the vector search actor even if the legacy lowering is enabled.
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db);
+        const TString ddl = TStringBuilder() << R"(
+            ALTER TABLE `/Root/TestTable` ADD INDEX hnsw
+            GLOBAL USING vector_kmeans_tree_hnsw ON (emb)
+        )" << (Covering ? " COVER (data) " : "") << R"(
+            WITH (distance=cosine, vector_type="uint8", vector_dimension=2,
+                  levels=2, clusters=2, hnsw_m=4, hnsw_ef_construction=32, hnsw_ef_search=16, hnsw_seed=42);
+        )";
+        auto create = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        auto describe = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto index = describe.GetTableDescription().GetIndexDescriptions().at(0);
+        UNIT_ASSERT(index.GetIndexType() == NYdb::NTable::EIndexType::GlobalVectorKMeansTreeHnsw);
+        const auto& indexSettings = std::get<TKMeansTreeSettings>(index.GetIndexSettings());
+        UNIT_ASSERT(indexSettings.Hnsw);
+        UNIT_ASSERT_VALUES_EQUAL(*indexSettings.Hnsw->M, 4);
+        UNIT_ASSERT_VALUES_EQUAL(*indexSettings.Hnsw->Seed, 42);
+
+        const TString mainQuery = R"(
+            SELECT pk, data FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02") LIMIT 3;
+        )";
+        const TString indexQuery = R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize="4";
+            SELECT pk, data FROM `/Root/TestTable` VIEW hnsw
+            ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02") LIMIT 3;
+        )";
+        DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), mainQuery, indexQuery);
+        const TString path = "/Root/TestTable/hnsw/indexImplHnswTable";
+        const auto before = ReadTablePartToYson(session, path);
+        auto mutation = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES (1000, "\x67\x71\x02", "new");
+            UPDATE `/Root/TestTable` SET data="changed" WHERE pk=1;
+            DELETE FROM `/Root/TestTable` WHERE pk=2;
+        )");
+        UNIT_ASSERT_C(mutation.IsSuccess(), mutation.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(ReadTablePartToYson(session, path), before);
+        auto records = ExecuteDataQuery(session, "SELECT COUNT(*) AS n FROM `" + path + "` WHERE __ydb_record_type > 1;");
+        UNIT_ASSERT_C(records.IsSuccess(), records.GetIssues().ToString());
+        TResultSetParser parser(records.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("n").GetUint64(), 0);
+
+        auto rebuild = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` REBUILD INDEX hnsw;").ExtractValueSync();
+        UNIT_ASSERT_C(rebuild.IsSuccess(), rebuild.GetIssues().ToString());
+        UNIT_ASSERT(ReadTablePartToYson(session, path) != before);
+        DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), mainQuery, indexQuery);
+        auto drop = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX hnsw;").ExtractValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(HnswInlineCreateAndRebuild) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableVectorKMeansTreeHnswIndex(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(flags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/StaticHnsw` (
+                pk Int64 NOT NULL, emb String, PRIMARY KEY (pk),
+                INDEX ann GLOBAL USING vector_kmeans_tree_hnsw ON (emb)
+                WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        auto write = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/StaticHnsw` (pk, emb) VALUES (1, "\x67\x71\x02");
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const TString query = R"(
+            SELECT pk FROM `/Root/StaticHnsw` VIEW ann
+            ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02") LIMIT 3;
+        )";
+        UNIT_ASSERT(DoPositiveQueryVectorIndex(session, TTxSettings::SerializableRW(), query).empty());
+        auto rebuild = session.ExecuteSchemeQuery("ALTER TABLE `/Root/StaticHnsw` REBUILD INDEX ann;").ExtractValueSync();
+        UNIT_ASSERT_C(rebuild.IsSuccess(), rebuild.GetIssues().ToString());
+        const auto rows = DoPositiveQueryVectorIndex(session, TTxSettings::SerializableRW(), query);
+        UNIT_ASSERT_VALUES_EQUAL(rows, std::vector<i64>{1});
+    }
+
+    Y_UNIT_TEST(HnswPrefixedOverlapAndRestart) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableVectorKMeansTreeHnswIndex(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(flags));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto create = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/PrefixedHnsw` (
+                pk Int64 NOT NULL, bucket Int64 NOT NULL, emb String, payload String,
+                PRIMARY KEY (pk)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        auto write = ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/PrefixedHnsw` (pk, bucket, emb, payload) VALUES
+                (1,1,"\x01\x0C\x02","a"), (2,1,"\x02\x0B\x02","b"),
+                (3,1,"\x03\x0A\x02","c"), (4,1,"\x04\x09\x02","d"),
+                (5,1,"\x05\x08\x02","e"), (6,1,"\x06\x07\x02","f"),
+                (7,2,"\x01\x0C\x02","g"), (8,2,"\x02\x0B\x02","h"),
+                (9,2,"\x03\x0A\x02","i"), (10,2,"\x04\x09\x02","j"),
+                (11,2,"\x05\x08\x02","k"), (12,2,"\x04\x08\x02","l");
+        )");
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        auto build = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/PrefixedHnsw` ADD INDEX ann
+            GLOBAL USING vector_kmeans_tree_hnsw ON (bucket, emb) COVER (bucket, payload)
+            WITH (distance=cosine, vector_type="uint8", vector_dimension=2,
+                  levels=1, clusters=2, overlap_clusters=2,
+                  hnsw_m=4, hnsw_ef_construction=32, hnsw_ef_search=16);
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(build.IsSuccess(), build.GetIssues().ToString());
+        const TString mainQuery = R"(
+            SELECT pk, payload FROM `/Root/PrefixedHnsw` WHERE bucket=1
+            ORDER BY Knn::CosineDistance(emb, "\x04\x08\x02") LIMIT 3;
+        )";
+        const TString indexQuery = R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize="4";
+            SELECT pk, payload FROM `/Root/PrefixedHnsw` VIEW ann WHERE bucket=1
+            ORDER BY Knn::CosineDistance(emb, "\x04\x08\x02") LIMIT 3;
+        )";
+        auto expected = DoPositiveQueryVectorIndex(session, TTxSettings::SerializableRW(), mainQuery);
+        DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), mainQuery, indexQuery);
+        const TString path = "/Root/PrefixedHnsw/ann/indexImplHnswTable";
+        const auto before = ReadTablePartToYson(session, path);
+        auto& server = kikimr.GetTestServer();
+        auto& runtime = *server.GetRuntime();
+        const auto shards = GetTableShards(&server, runtime.AllocateEdgeActor(), path);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
+        for (const ui64 shard : shards) {
+            runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+                new TEvPipeCache::TEvForward(new NActors::TEvents::TEvPoisonPill(), shard, false));
+        }
+        std::vector<i64> actual;
+        auto recovered = db.RetryOperationSync([&](TSession retry) {
+            auto result = ExecuteDataQuery(retry, indexQuery);
+            if (result.IsSuccess()) {
+                actual.clear();
+                TResultSetParser parser(result.GetResultSet(0));
+                while (parser.TryNextRow()) actual.push_back(parser.ColumnParser("pk").GetInt64());
+            }
+            return result;
+        });
+        UNIT_ASSERT_C(recovered.IsSuccess(), recovered.GetIssues().ToString());
+        absl::c_sort(expected);
+        absl::c_sort(actual);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+        UNIT_ASSERT_VALUES_EQUAL(ReadTablePartToYson(session, path), before);
+    }
+
+    Y_UNIT_TEST(HnswDisabledByDefault) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db);
+        auto result = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/TestTable` ADD INDEX hnsw
+            GLOBAL USING vector_kmeans_tree_hnsw ON (emb)
+            WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+        )").ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "HNSW vector index support is disabled");
     }
 
     const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{

@@ -690,7 +690,15 @@ namespace NKikimr {
 
                 // Posting key is (__ydb_parent, <main PK columns>).
                 AddUint64KeyColumnType(src);
-                AddMainKeyColumnTypes(src);
+                if (Settings.HasHnswSettings()) {
+                    src->AddKeyColumnTypes(NScheme::NTypeIds::Uint8);
+                    src->AddKeyColumnTypeInfos();
+                    AddUint64KeyColumnType(src);
+                    src->AddKeyColumnTypes(NScheme::NTypeIds::String);
+                    src->AddKeyColumnTypeInfos();
+                } else {
+                    AddMainKeyColumnTypes(src);
+                }
 
                 YQL_ENSURE(Settings.PostingTableKeyColumnIdsSize() == Settings.MainTableKeyColumnsSize() + 1);
                 if (PostingCovers) {
@@ -755,6 +763,14 @@ namespace NKikimr {
                     }
                 }
 
+                if (Settings.HasHnswSettings()) {
+                    Y_ENSURE(src->HasVectorTopK(), "HNSW requires the embedding column");
+                    const ui64 candidates = ui64(TopK) * std::max<ui32>(1, OverlapClusters);
+                    Y_ENSURE(candidates <= 4096, "HNSW topK * overlap_clusters exceeds 4096");
+                    auto* top = src->MutableVectorTopK();
+                    top->SetLimit(candidates);
+                    *top->MutableHnswSettings() = Settings.GetHnswSettings();
+                }
                 LaunchRead(src, arena, EReadKind::Posting);
             }
 

@@ -166,6 +166,50 @@ Y_UNIT_TEST_SUITE(AnalyzeSampling) {
         }
     }
 
+    Y_UNIT_TEST(BackgroundTraversalDoesNotCompleteSample) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            auto* stats = settings.AppConfig->MutableStatisticsConfig();
+            stats->SetEnableBackgroundColumnStatsCollection(true);
+            stats->SetBaseStatsSendInitialDelaySeconds(3);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        TBlockEvents<TEvStatistics::TEvAnalyzeActorResult> results(runtime, [](auto& ev) {
+            return ev->Get()->Final;
+        });
+        const auto table = PrepareColumnTable(env, "Database", "Table", 4);
+        runtime.WaitFor("background collection", [&] { return !results.empty(); }, TDuration::Seconds(30));
+
+        const TString operation = "queued-sample";
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeAnalyzeRequest({table.PathId}, operation, "/Root/Database");
+        request->Record.MutableTables(0)->SetPath(table.Path);
+        request->Record.MutableTables(0)->SetSampleRate(0.5);
+        runtime.SendToPipe(table.SaTabletId, sender, request.release());
+        AnalyzeStatus(runtime, sender, table.SaTabletId, operation,
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
+
+        // Keep subsequent completions blocked while checking the queued request.
+        results.Unblock();
+        runtime.WaitFor("background completed", [&] {
+            return GetBackgroundAnalyzeCompletedCount(runtime) > 0;
+        }, TDuration::Seconds(30));
+        const auto status = TestGetAnalyzeOp(runtime, table.SaTabletId, "/Root/Database", operation);
+        UNIT_ASSERT_C(status.GetAnalyzeOperation().GetState() != Ydb::Table::AnalyzeState::STATE_DONE,
+            status.ShortDebugString());
+        results.Stop().Unblock();
+        const auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+
+        const auto sampled = ReadSample(runtime, table.PathId, EStatType::TABLE_SUMMARY);
+        UNIT_ASSERT(sampled.Success && sampled.Sampling && sampled.TableSummary.Data);
+        UNIT_ASSERT_VALUES_EQUAL(sampled.Sampling->GetRequestedRate(), 0.5);
+        UNIT_ASSERT_VALUES_EQUAL(sampled.Sampling->GetEligibleUnits(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sampled.Sampling->GetSelectedUnits(), 2);
+        UNIT_ASSERT(sampled.Sampling->GetSampleRows() > 0 && sampled.Sampling->GetSampleRows() < ColumnTableRowsNumber);
+        UNIT_ASSERT_VALUES_EQUAL(sampled.TableSummary.Data->GetRowCount(), sampled.Sampling->GetSampleRows());
+    }
+
     Y_UNIT_TEST_TWIN(PartialAnalyzePreservesOtherStatistics, Restart) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
             settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);

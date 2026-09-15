@@ -35,17 +35,14 @@ namespace NKikimr::NBlobDepot {
             }
         }
         PipeServers.erase(it);
+
+        S3Manager->RunPendingPrepareWritesIfPossible();
     }
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
-
-        for (TS3Locator locator : agent.S3WritesInFlight) {
-            // they were not in InFlightTrashS3, so we just have to delete them
-            S3Manager->AddTrashToCollect(locator);
-        }
-        agent.S3WritesInFlight.clear();
+        S3Manager->OnAgentDisconnect(agent.Connection->PipeServerId, agent);
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {

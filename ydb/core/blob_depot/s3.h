@@ -79,6 +79,7 @@ namespace NKikimr::NBlobDepot {
         void RunPendingPrepareWritesIfPossible();
         void OnS3WriteInFlightAdded(ui32 count);
         void OnS3WriteInFlightRemoved(bool success);
+        void OnAgentDisconnect(const TActorId& pipeServerId, TAgent& agent);
 
     private: ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         class TUploaderActor;

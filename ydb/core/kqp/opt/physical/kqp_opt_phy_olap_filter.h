@@ -47,4 +47,14 @@ bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& a
                                        ui32& nextMemberId, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
 
+// Free lambda argument which stands for an OLAP expression computed by the column shard (see `TPushdownOptions::ExternalArgs`).
+struct TOlapExternalArg {
+    TExprNode::TPtr Arg;
+    TExprNode::TPtr OlapExpression;
+    const TTypeAnnotationNode* Type = nullptr;
+};
+
+TExprNode::TPtr ReplaceJsonValuesWithExternalArgs(const TExprNode::TPtr& predicate, const TExprNode& argument, TExprContext& ctx,
+                                                  const TPushdownOptions& pushdownOptions, TVector<TOlapExternalArg>& externalArgs);
+
 } // namespace NKikimr::NKqp::NOpt

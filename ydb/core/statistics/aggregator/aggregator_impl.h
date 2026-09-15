@@ -355,6 +355,7 @@ private: // stored in local db
     TInstant TraversalStartTime;
     TActorId AnalyzeActorId;
     TActorId SaveQueryActorId;
+    bool FinishingTraversal = false;
 
     std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals;
     std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;

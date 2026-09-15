@@ -17,6 +17,10 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .TabletInfo =
                 {.TabletId = 42,
                  .Generation = 7,
+                 .BlockSize = 4096,
+                 .BlockCount = 1024,
+                 .VChunkBlockCount = 256,
+                 .RegionBlockCount = 1024 * 1024,
                  .DiskId = "vol-1",
                  .State = "WORK"},
             .FastPathServiceInfo =
@@ -40,9 +44,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .InflightByOperation = inflightByOperation,
             .Errors =
                 {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
-            .PBuffersUsage{.Count = 1, .Size = 4096},
-            .FreshTotalBytes = 8192,
-            .RottenTotalBytes = 12288,
+            .DirtyMapStats =
+                {
+                    .PBuffersUsage = {.Count = 1, .Size = 4096},
+                    .FreshTotalBytes = 8192,
+                    .RottenTotalBytes = 12288,
+                },
         };
         THostSnapshot sufferer{
             .Index = 1,
@@ -70,7 +77,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     Y_UNIT_TEST(OverviewShowsHeaderAndSummary)
     {
         const TString html = RenderMonPage(MakeData());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
@@ -85,16 +91,37 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
         UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 1024 = 4.00 MiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 256 = 1.00 MiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 1048576 = 4.00 GiB");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Region count</td><td>1</td></tr><tr><td>DirectBlockGroups");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)
     {
         TDbgSnapshot first = MakeDbg(1);
-        first.UsedMemorySize = 1024;
-        first.AllocatedMemorySize = 4096;
+        first.MemoryStats.UsedSize = 1024;
+        first.MemoryStats.ReservedSize = 4096;
+        first.DetailedMemoryStats = {
+            {.SlotSize = 256,
+             .ArenaSize = 1_MB,
+             .ReservedSize = 16_KB,
+             .UsedSize = 5_KB,
+             .MaxUsedSize = 8_KB}};
         TDbgSnapshot second = MakeDbg(2);
-        second.UsedMemorySize = 2048;
-        second.AllocatedMemorySize = 8192;
+        second.MemoryStats.UsedSize = 2048;
+        second.MemoryStats.ReservedSize = 8192;
+        second.DetailedMemoryStats = {
+            {.SlotSize = 512,
+             .ArenaSize = 2_MB,
+             .ReservedSize = 32_KB,
+             .UsedSize = 7_KB,
+             .MaxUsedSize = 12_KB}};
 
         TMonPageData data{
             .Page = EMonPage::Memory,
@@ -104,20 +131,27 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                     .ArenaMemoryUsage =
                         {.Slots =
                              {{.SlotSize = 256,
+                               .ArenaSize = 1_MB,
                                .ReservedSize = 16_KB,
-                               .UsedSize = 5_KB},
+                               .UsedSize = 5_KB,
+                               .MaxUsedSize = 8_KB},
                               {.SlotSize = 512,
+                               .ArenaSize = 2_MB,
                                .ReservedSize = 32_KB,
-                               .UsedSize = 7_KB}}}},
+                               .UsedSize = 7_KB,
+                               .MaxUsedSize = 12_KB}}}},
             .Dbgs = {std::move(first), std::move(second)},
         };
 
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "Arena allocator");
+        UNIT_ASSERT(!html.Contains("partition_direct tablet"));
+        UNIT_ASSERT(!html.Contains("<td>TabletId</td>"));
         UNIT_ASSERT_STRING_CONTAINS(html, "Memory usage by DBG");
         UNIT_ASSERT_STRING_CONTAINS(html, "256 B");
         UNIT_ASSERT_STRING_CONTAINS(html, "512 B");
         UNIT_ASSERT_STRING_CONTAINS(html, "5.00 KiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "16.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "48.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
@@ -299,8 +333,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Online");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 Sufferer");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive success");
-        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers usage");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Consecutive<br>success");
+        UNIT_ASSERT_STRING_CONTAINS(html, "PBuffers<br>usage");
         UNIT_ASSERT_STRING_CONTAINS(html, "1 / 4.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "8.00 KiB");
         UNIT_ASSERT_STRING_CONTAINS(html, "12.00 KiB");

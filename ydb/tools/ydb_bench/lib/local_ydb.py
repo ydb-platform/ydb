@@ -27,7 +27,7 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_write_json,
     atomic_write_text,
 )
-from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
+from ydb.tools.ydb_bench.lib.linux_telemetry import CPU_METRIC_NAMES, LinuxCpuMonitor
 from ydb.tools.ydb_bench.lib.ydb_telemetry import YdbCountersMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
@@ -43,6 +43,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     workload_result_schema,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
+from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError
 from ydb.tools.ydb_bench.lib.runner import run_command, start_managed_process
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import CpuTopology, discover_topology, plan_affinity, topology_record
@@ -800,10 +801,10 @@ def _command_record(phase, repetition, command, cpu_affinity, result=None):
 def _aggregate_measurements(rows, workload_metrics=None):
     if not rows:
         raise BenchmarkError("cannot aggregate an empty workload measurement")
-    keys = tuple(rows[0])
-    expected_keys = set(keys)
+    keys = tuple(name for name in rows[0] if all(name in row for row in rows))
+    expected_keys = set(rows[0]) - set(CPU_METRIC_NAMES)
     for row in rows[1:]:
-        if set(row) != expected_keys:
+        if set(row) - set(CPU_METRIC_NAMES) != expected_keys:
             raise BenchmarkError("workload repetitions returned inconsistent metric keys")
     if workload_metrics is None:
         workload_metrics = GENERIC_TOTAL_RESULT.metrics
@@ -817,16 +818,7 @@ def _aggregate_measurements(rows, workload_metrics=None):
     return result
 
 
-_EXECUTOR_METRIC_NAMES = (
-    "static_cpu_mean",
-    "static_cpu_max",
-    "dynamic_cpu_mean",
-    "dynamic_cpu_max",
-    "cli_cpu_mean",
-    "cli_cpu_max",
-    "host_cpu_mean",
-    "host_cpu_max",
-)
+_EXECUTOR_METRIC_NAMES = CPU_METRIC_NAMES
 
 
 def _workload_metric_columns(benchmark, workload_metrics):
@@ -849,8 +841,10 @@ def _search_scaling_evidence(result, saturation_percent):
     # selected passing point.
     def dynamic_limited(item):
         return (
-            item.get("dynamic_cpu_mean", 0) >= saturation_percent
-            and item.get("static_cpu_mean", 0) < saturation_percent
+            "dynamic_cpu_mean" in item
+            and "static_cpu_mean" in item
+            and item["dynamic_cpu_mean"] >= saturation_percent
+            and item["static_cpu_mean"] < saturation_percent
         )
 
     failing = attempt_at(result.failing_load)
@@ -944,6 +938,7 @@ class WorkloadLifecycle:
         progress,
         command_timeout_seconds=None,
         metrics_path=None,
+        command_runner=None,
     ):
         self.cluster = cluster
         self.workload_cli = workload_cli
@@ -962,6 +957,7 @@ class WorkloadLifecycle:
             raise BenchmarkError("workload command timeout must be a positive finite number")
         self.command_timeout_seconds = command_timeout_seconds
         self.metrics_path = metrics_path
+        self.command_runner = command_runner
         self.definition = workload_definition(workload["type"])
         self._profile_opened = False
         self._profile_closed = False
@@ -1314,7 +1310,7 @@ class WorkloadLifecycle:
                 if configured_warmup is not None and warmup != configured_warmup:
                     progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
-            result = run_command(
+            result = (self.command_runner or run_command)(
                 plan.argv,
                 {},
                 self._plan_timeout(plan),
@@ -1376,6 +1372,8 @@ class WorkloadLifecycle:
         }
         if workload_result.details is not None:
             result_artifact["details"] = workload_result.details
+        if window is not None:
+            result_artifact["measurement_window"] = list(window)
         atomic_write_json(state.directory / "workload-result.json", result_artifact)
         collisions = sorted(set(workload_result.metrics).intersection(cpu))
         if collisions:
@@ -1444,10 +1442,11 @@ def run_local_ydb(
     work_dir_hint=None,
     event_sink=None,
     cancel_event=None,
+    runtime=None,
 ):
     """Run a local cluster profile using bundled ``ydbd`` and ``ydb`` executables."""
 
-    if not sys.platform.startswith("linux"):
+    if runtime is None and not sys.platform.startswith("linux"):
         raise BenchmarkError("local YDB benchmarks require Linux")
 
     del work_dir_hint
@@ -1460,8 +1459,11 @@ def run_local_ydb(
     metric_columns = _workload_metric_columns(benchmark, workload_metrics)
     metric_aggregations = {metric.name: metric.repetition_aggregation for metric in workload_metrics}
     topology = discover_topology()
-    affinities = plan_role_affinity(profile["affinity"], topology)
-    _validate_role_affinity(profile["geometry"], affinities)
+    if runtime is None:
+        affinities = plan_role_affinity(profile["affinity"], topology)
+        _validate_role_affinity(profile["geometry"], affinities)
+    else:
+        affinities = {"static_nodes": None, "dynamic_nodes": None, "ydb_cli": None}
     step = {
         "affinity": "roles",
         "background_load": "none",
@@ -1489,6 +1491,10 @@ def run_local_ydb(
         "progress": None,
     }
     manifest_path = output_directory / "run.json"
+    if runtime is not None:
+        manifest["distributed"] = runtime.metadata
+        manifest["coordinator_platform"] = manifest.pop("platform")
+        manifest["coordinator_topology"] = manifest.pop("cpu_topology")
     write_manifest(manifest_path, manifest)
     if event_sink is not None:
         event_sink(
@@ -1533,6 +1539,8 @@ def run_local_ydb(
         return compact
 
     def create_cluster(directory, geometry):
+        if runtime is not None:
+            return runtime.create_cluster(directory, geometry, publish_progress)
         return LocalYdbCluster(
             binaries["ydbd"].path,
             binaries["ydb_cli"].path,
@@ -1547,6 +1555,8 @@ def run_local_ydb(
         )
 
     def create_lifecycle(target_cluster):
+        if runtime is not None:
+            return runtime.create_lifecycle(target_cluster, publish_progress)
         return WorkloadLifecycle(
             target_cluster,
             WorkloadCli(target_cluster.ydb_cli, target_cluster.client_endpoint, target_cluster.database),
@@ -1666,6 +1676,8 @@ def run_local_ydb(
             scaling_evidence, scaling_evidence_reason = _search_scaling_evidence(result, saturation_percent)
             compute_limited = (
                 scaling_evidence is not None
+                and "dynamic_cpu_mean" in scaling_evidence
+                and "static_cpu_mean" in scaling_evidence
                 and scaling_evidence["dynamic_cpu_mean"] >= saturation_percent
                 and scaling_evidence["static_cpu_mean"] < saturation_percent
             )
@@ -2033,14 +2045,18 @@ def run_local_ydb(
                 "run.json",
                 "summary.csv",
                 "repetitions.csv",
-                "cluster/cluster.yaml",
+                "cluster/cluster.yaml" if runtime is None else "cluster/execution-plan.json",
             ]
             if (output_directory / "ydb-metrics.jsonl").is_file():
                 artifacts.append("ydb-metrics.jsonl")
             if verification["status"] == "completed":
                 artifacts += ["verification-summary.csv", "verification-repetitions.csv"]
                 if verification.get("cluster") == "fresh":
-                    artifacts.append("verification-cluster/cluster.yaml")
+                    artifacts.append(
+                        "verification-cluster/cluster.yaml"
+                        if runtime is None
+                        else "verification-cluster/execution-plan.json"
+                    )
             event_sink(
                 {
                     "type": "step-artifacts",
@@ -2107,4 +2123,9 @@ def run_local_ydb(
             close_lifecycle(primary_error=sys.exc_info()[1])
         finally:
             if not cluster_stopped:
-                cluster.stop()
+                try:
+                    cluster.stop()
+                except DistributedCleanupError as error:
+                    manifest.update(state="recovery_required", status="recovery_required", error=str(error))
+                    write_manifest(manifest_path, manifest)
+                    raise

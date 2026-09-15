@@ -52,6 +52,30 @@ TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) 
     return FindNode(input, isCallable);
 }
 
+TCoLambda ReplaceGroupRefs(TCoLambda lambda, const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
+                           TExprContext& ctx) {
+    const auto groupRefs = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+        return node->IsCallable("YqlGroupRef");
+    });
+    if (groupRefs.empty()) {
+        return lambda;
+    }
+
+    TNodeOnNodeOwnedMap replacements;
+    for (const auto& groupRef : groupRefs) {
+        // clang-format off
+        replacements[groupRef.Get()] = Build<TCoMember>(ctx, groupRef->Pos())
+            .Struct(lambda.Args().Arg(0))
+            .Name<TCoAtom>()
+                .Value(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap))
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+    }
+
+    return TCoLambda(ctx.ReplaceNodes(lambda.Ptr(), replacements));
+}
+
 bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("YqlAgg"); }
 
 TString GetAggregationFunction(TExprNode::TPtr node) {
@@ -61,7 +85,12 @@ TString GetAggregationFunction(TExprNode::TPtr node) {
     return TString(node->Content());
 }
 
-void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
+void CollectAggregationsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& aggregations,
+                             THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (IsAggregation(node)) {
         if (node->ChildrenSize() == 2) {
             Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
@@ -85,13 +114,14 @@ void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& agg
     }
 
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectAggregationsImpl(node->ChildPtr(i), aggregations);
+        CollectAggregationsImpl(node->ChildPtr(i), aggregations, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectAggregations(TExprNode::TPtr node) {
     TVector<TExprNode::TPtr> aggregations;
-    CollectAggregationsImpl(node, aggregations);
+    THashSet<const TExprNode*> visited;
+    CollectAggregationsImpl(node, aggregations, visited);
     return aggregations;
 }
 
@@ -306,9 +336,13 @@ TVector<TInfoUnit> GetSortDependencies(TExprNode::TPtr sort,
     for (const auto& sortItem : sort->Child(1)->Children()) {
         auto sortLambda = TCoLambda(sortItem->ChildPtr(1));
         TVector<TInfoUnit> lambdaMembers;
-        auto groupRef = GetCallable(sortLambda.Body().Ptr(), "YqlGroupRef");
-        if (groupRef) {
-            lambdaMembers.emplace_back(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+        const auto groupRefs = FindNodes(sortLambda.Body().Ptr(), [](const TExprNode::TPtr& node) {
+            return node->IsCallable("YqlGroupRef");
+        });
+        if (!groupRefs.empty()) {
+            for (const auto& groupRef : groupRefs) {
+                lambdaMembers.emplace_back(GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap));
+            }
         } else {
             GetAllMembers(sortLambda.Ptr(), lambdaMembers);
         }
@@ -332,21 +366,7 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort,
         auto direction = sortItem->Child(2);
         auto nullsFirst = sortItem->Child(3);
 
-        auto groupRef = GetCallable(sortLambda.Body().Ptr(), "YqlGroupRef");
-        if (groupRef) {
-            const TString aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
-            // clang-format off
-            sortLambda = Build<TCoLambda>(ctx, input->Pos())
-                .Args({"arg"})
-                .Body<TCoMember>()
-                    .Struct("arg")
-                    .Name<TCoAtom>()
-                        .Value(aggColName)
-                    .Build()
-                .Build()
-            .Done();
-            // clang-format on
-        }
+        sortLambda = ReplaceGroupRefs(sortLambda, groupByKeysExpressionsMap, ctx);
 
         // clang-format off
         sortElements.push_back(Build<TKqpOpSortElement>(ctx, input->Pos())
@@ -720,19 +740,25 @@ bool IsWindowCall(const TExprNode::TPtr& node) {
     return node->IsCallable("YqlWin") || node->IsCallable("YqlAggWin");
 }
 
-void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls) {
+void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls,
+                            THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (IsWindowCall(node)) {
         calls.push_back(node);
         return;
     }
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectWindowCallsImpl(node->ChildPtr(i), calls);
+        CollectWindowCallsImpl(node->ChildPtr(i), calls, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectWindowCalls(const TExprNode::TPtr& node) {
     TVector<TExprNode::TPtr> calls;
-    CollectWindowCallsImpl(node, calls);
+    THashSet<const TExprNode*> visited;
+    CollectWindowCallsImpl(node, calls, visited);
     return calls;
 }
 
@@ -2028,12 +2054,14 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             TString columnName = TString(column->Content());
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
-            auto aggregation = GetCallable(lambda.Body().Ptr(), "YqlAgg");
-            auto groupRef = GetCallable(lambda.Body().Ptr(), "YqlGroupRef");
-            const bool hasWindowCall = !CollectWindowCalls(lambda.Body().Ptr()).empty();
-            // Eliminate aggregation or reference to a group by expression from result lambda.
+            auto body = lambda.Body().Ptr();
+            auto aggregation = GetCallable(body, "YqlAgg");
+            auto groupRef = GetCallable(body, "YqlGroupRef");
+            const bool isDirectGroupRef = groupRef && groupRef.Get() == body.Get();
+            const bool hasWindowCall = !CollectWindowCalls(body).empty();
+            // Aggregations are materialized earlier. Keep any expression around a nested group reference.
             auto aggColName = columnName;
-            if (aggregation || groupRef || distinctAll || hasWindowCall) {
+            if (aggregation || distinctAll || hasWindowCall || isDirectGroupRef) {
                 if (groupRef) {
                     aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
                 }
@@ -2049,6 +2077,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     .Build()
                 .Done();
                 // clang-format on
+            } else if (groupRef) {
+                lambda = ReplaceGroupRefs(lambda, groupByKeysExpressionsMap, ctx);
             }
 
             if (resultElementCounters.contains(columnName)) {

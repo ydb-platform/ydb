@@ -10,6 +10,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <limits>
+
 namespace {
     using namespace NKafka;
 
@@ -104,7 +106,7 @@ namespace {
                 Ctx->Finalize();
             }
 
-            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0) {
+            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0, i64 baseTimestamp = 0, i64 timestampDelta = 0, ECompressionType compression = ECompressionType::NONE) {
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
@@ -120,7 +122,10 @@ namespace {
                 records->BaseOffset = 3;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
+                records->BaseTimestamp = baseTimestamp;
+                records->Attributes = static_cast<i16>(compression);
                 records->Records.resize(1);
+                records->Records[0].TimestampDelta = timestampDelta;
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                 records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
@@ -405,6 +410,30 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
             UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
                 NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+        }
+
+        Y_UNIT_TEST(OnProduce_TimestampOverflowIsNotAParseError) {
+            i32 sequence = 0;
+            for (const bool batchingEnabled : {false, true}) {
+                Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicMessagesBatching(batchingEnabled);
+                Ctx->Runtime->GetAppData().FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(batchingEnabled);
+                for (const auto compression : {ECompressionType::NONE, ECompressionType::GZIP, ECompressionType::ZSTD}) {
+                    if (!batchingEnabled && compression != ECompressionType::NONE) {
+                        continue;
+                    }
+                    for (const auto baseTimestamp : {std::numeric_limits<i64>::min(), std::numeric_limits<i64>::max()}) {
+                        const i64 delta = baseTimestamp == std::numeric_limits<i64>::min() ? -1 : 1;
+                        SendProduce({}, 1, 0, sequence++, 0, baseTimestamp, delta, compression);
+                        auto response = GrabProduceResponse();
+                        UNIT_ASSERT(response);
+                        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, EKafkaErrors::NONE_ERROR);
+                        const auto produceResponse = std::dynamic_pointer_cast<TProduceResponseData>(response->Response);
+                        UNIT_ASSERT(produceResponse);
+                        UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode,
+                            EKafkaErrors::NONE_ERROR);
+                    }
+                }
+            }
         }
 
         Y_UNIT_TEST(OnProduce_ManyRequests) {

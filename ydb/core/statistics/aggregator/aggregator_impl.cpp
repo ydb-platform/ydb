@@ -569,6 +569,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
         {"tabletId", TabletID()},
         {"success", ev->Get()->Success});
 
+    if (!SaveQueryActorId || ev->Sender != SaveQueryActorId) {
+        return;
+    }
+
     SaveQueryActorId = {};
 
     if (ev->Get()->Success) {
@@ -710,8 +714,9 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
     };
 
     if (items.empty()) {
-        Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
-            Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
+        if (!AnalyzeActorId) {
+            DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
         return;
     }
     size_t itemsSize = items.size();
@@ -1229,6 +1234,8 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
         AnalyzeActorId = {};
     }
     SaveQueryActorId = {};
+    PendingSaveStatistics = false;
+    FinishingTraversal = false;
     PersistTraversal(db);
 
     StatisticsToSave.clear();

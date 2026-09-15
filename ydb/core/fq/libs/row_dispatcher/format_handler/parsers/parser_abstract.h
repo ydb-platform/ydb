@@ -7,6 +7,8 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <span>
+
 namespace NFq::NRowDispatcher {
 
 class IParsedDataConsumer : public TThrRefBase {
@@ -29,7 +31,7 @@ public:
     virtual void Refresh(bool force = false) = 0;
     virtual TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) = 0;
 
-    virtual const TVector<ui64>& GetOffsets() const = 0;
+    virtual std::span<const ui64> GetOffsets() const = 0;
     virtual TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) = 0;
 
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) = 0;

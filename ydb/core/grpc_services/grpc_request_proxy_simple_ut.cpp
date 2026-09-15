@@ -159,7 +159,7 @@ struct TSimpleProxySetup {
         context->OnReply = [request, context = context.Get()] {
             context->EffectiveDatabase = request->GetDatabaseName().GetOrElse("");
         };
-        Runtime.Send(new IEventHandle(Proxy, {}, request));
+        Runtime.SendAsync(new IEventHandle(Proxy, {}, request));
         TDispatchOptions options;
         options.CustomFinalCondition = [&] { return context->Status.Defined(); };
         Runtime.DispatchEvents(options);

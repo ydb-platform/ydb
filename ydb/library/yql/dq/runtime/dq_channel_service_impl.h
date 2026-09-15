@@ -725,6 +725,8 @@ public:
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    // the progress of every input descriptor once more, for a sender which may have missed it; under Mutex
+    void ResendUpdates();
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major, char logSymbol);

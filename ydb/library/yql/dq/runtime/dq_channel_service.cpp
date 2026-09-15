@@ -1595,6 +1595,13 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
 
+    ResendUpdates();
+}
+
+void TNodeState::ResendUpdates() {
+    if (!OutputNodeActorId) {
+        return;
+    }
     for (auto& [_, descriptor] : InputDescriptors) {
         if (descriptor->EarlyFinished.load() || descriptor->PushStats.Bytes.load()) {
             SendUpdateProgress(descriptor);
@@ -2228,6 +2235,10 @@ void TNodeState::HandleCleanup() {
         // sends no disconnect, and the discovery makes it announce itself for ConnectSession to fail those
         // channels rather than leave them hanging.
         StartReconciliation(false, 'I');
+        // A quiet peer may be a sender blocked by an update it never got: the ping of this side carries
+        // the updates too, as the answer to its ping does. The pings of the two sides refresh each other's
+        // activity, so whichever asks first may be the only one to ask.
+        ResendUpdates();
     }
 
 }

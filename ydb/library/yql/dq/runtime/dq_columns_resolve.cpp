@@ -12,8 +12,8 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
     TMaybe<bool> isScalar;
     if (type->GetKind() == TType::EKind::Multi) {
         const auto& multiType = static_cast<const TMultiType&>(*type);
-        YQL_ENSURE(TryFromString(columnName, idx), "Expecting number as column name");
-        YQL_ENSURE(idx < multiType.GetElementsCount(), "Invalid column index");
+        YQL_ENSURE(TryFromString(columnName, idx), "Expecting number as column name, but got `" << columnName << "`");
+        YQL_ENSURE(idx < multiType.GetElementsCount(), "Invalid column index, " << idx << " >= " << multiType.GetElementsCount());
         memberType = multiType.GetElementType(idx);
         if (memberType->IsBlock()) {
             auto blockType = static_cast<const TBlockType*>(memberType);

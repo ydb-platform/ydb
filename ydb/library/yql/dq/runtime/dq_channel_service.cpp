@@ -2029,7 +2029,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     if (bound) {
         result->IsBound = true;
     } else {
-        UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+        UnboundOutputs.emplace(info, TInstant::Now() + Limits.UnboundWaitPeriod);
     }
     LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
         << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
@@ -2075,7 +2075,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
     if (bound) {
         result->IsBound = true;
     } else {
-        UnboundInputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+        UnboundInputs.emplace(info, TInstant::Now() + Limits.UnboundWaitPeriod);
     }
     LOG_T(LogPrefix << "ID CREATE, ChannelId=" << result->Info.ChannelId
         << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
@@ -2408,6 +2408,15 @@ void TDebugNodeState::PauseChannelAck() {
 
 void TDebugNodeState::ResumeChannelAck() {
     ChannelAckPaused.store(false);
+    ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvProcessPending(0)));
+}
+
+void TDebugNodeState::PauseChannelUpdate() {
+    ChannelUpdatePaused.store(true);
+}
+
+void TDebugNodeState::ResumeChannelUpdate() {
+    ChannelUpdatePaused.store(false);
     ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvProcessPending(0)));
 }
 

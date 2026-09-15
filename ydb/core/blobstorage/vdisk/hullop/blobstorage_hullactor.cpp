@@ -168,6 +168,7 @@ namespace NKikimr {
         typedef typename TLeveledSsts::TIterator TLeveledSstsIterator;
         typedef ::NKikimr::TAsyncLevelCommitter<TKey, TMemRec> TAsyncLevelCommitter;
         typedef ::NKikimr::TAsyncFreshCommitter<TKey, TMemRec> TAsyncFreshCommitter;
+        using TAsyncFreshAbortCommitter = NKikimr::TAsyncFreshAbortCommitter<TKey, TMemRec>;
         typedef ::NKikimr::TAsyncAdvanceLsnCommitter<TKey, TMemRec> TAsyncAdvanceLsnCommitter;
         typedef ::NKikimr::TAsyncReplSstCommitter<TKey, TMemRec> TAsyncReplSstCommitter;
         typedef ::NKikimr::TAsyncSyncSstCommitter<TKey, TMemRec> TAsyncSyncSstCommitter;
@@ -734,17 +735,20 @@ namespace NKikimr {
             // handle commit msg differently
             if (msg->FreshCompaction) {
                 if (msg->Aborted) {
-                    // Nothing was written, so hand the segment back for another attempt.
-                    // Leaving it held would keep fresh compaction "in progress" forever:
-                    // Old would never be released, Hull retention would stay at its first
-                    // lsn and the recovery log could never be cut.
                     YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Fresh compaction aborted",
                         {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                         {"signature", PDiskSignatureForHullDbKey<TKey>()});
-                    RTCtx->LevelIndex->FreshCompactionAborted();
-                    // As for level compactions: retrying at once would just fail the same
-                    // way, so let the scheduling interval pass first.
-                    ScheduleCompactionWakeup(ctx);
+                    // ReservedChunks contains every allocation made by the failed attempt,
+                    // including SST output already written. Return it before retrying;
+                    // otherwise each attempt can consume more of the remaining free space.
+                    if (msg->ReservedChunks.empty()) {
+                        FinishFreshCompactionAbort(ctx);
+                    } else {
+                        auto committer = std::make_unique<TAsyncFreshAbortCommitter>(HullLogCtx,
+                            HullDbCommitterCtx, RTCtx->LevelIndex, ctx.SelfID, std::move(msg->ReservedChunks));
+                        auto aid = ctx.RegisterWithSameMailbox(committer.release());
+                        ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+                    }
                 } else {
                     TStringStream dbg;
                     dbg << "{commiter# fresh"
@@ -921,6 +925,12 @@ namespace NKikimr {
             }
         }
 
+        void FinishFreshCompactionAbort(const TActorContext& ctx) {
+            RTCtx->LevelIndex->FreshCompactionAborted();
+            // Give other space-reclaiming work a chance before retrying the same segment.
+            ScheduleCompactionWakeup(ctx);
+        }
+
         void Handle(THullCommitFinished::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             switch (ev->Get()->Type) {
@@ -930,6 +940,9 @@ namespace NKikimr {
                 case THullCommitFinished::CommitFresh:
                     ProcessFreshOnlyCompactQ(ctx);
                     ScheduleCompaction(ctx, FullCompactionState.Enabled());
+                    break;
+                case THullCommitFinished::CommitFreshAborted:
+                    FinishFreshCompactionAbort(ctx);
                     break;
                 case THullCommitFinished::CommitAdvanceLsn:
                     AdvanceCommitInProgress = false;

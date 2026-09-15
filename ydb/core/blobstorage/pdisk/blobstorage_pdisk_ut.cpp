@@ -66,6 +66,26 @@ NPDisk::TEvChunkWrite::TPartsPtr GenParts(TReallyFastRng32& rng, size_t size) {
 }
 
 Y_UNIT_TEST_SUITE(TPDiskTest) {
+    Y_UNIT_TEST(ReservedChunksSurviveOwnerReinit) {
+        TActorTestContext testCtx{{}}; // Real PDisk with a sector-map device.
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        const ui32 chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
+
+        const auto reinit = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reinit->OwnedChunks.front(), chunk);
+        vdisk.PDiskParams = reinit->PDiskParams;
+        vdisk.ReadLog();
+
+        testCtx.RestartPDiskSync();
+        // InitFull verifies that PDisk reports exactly the committed chunks: none here.
+        vdisk.InitFull();
+    }
+
     Y_UNIT_TEST(TestAbstractPDiskInterface) {
         TString path = "/tmp/asdqwe";
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(path, 12345, 0xffffffffull,

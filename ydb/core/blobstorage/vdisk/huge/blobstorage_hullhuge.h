@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/fresh_space_tracker.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -27,6 +28,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        ui64 FreshSpaceAdmission = 0;
+        std::shared_ptr<TFreshSpaceTracker> SpaceTracker;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -89,6 +92,7 @@ namespace NKikimr {
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
         const bool IsStripe;
+        const ui64 FreshSpaceAdmission;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -103,7 +107,8 @@ namespace NKikimr {
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                            TWriteSource writeSource,
                            bool rewriteBlob = false,
-                           bool isStripe = false)
+                           bool isStripe = false,
+                           ui64 freshSpaceAdmission = 0)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -117,6 +122,7 @@ namespace NKikimr {
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
             , IsStripe(isStripe)
+            , FreshSpaceAdmission(freshSpaceAdmission)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);

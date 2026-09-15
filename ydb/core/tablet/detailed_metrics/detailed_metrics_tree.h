@@ -6,7 +6,7 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
-#include <util/string/cast.h>
+#include <util/generic/string.h>
 
 #include <utility>
 #include <vector>
@@ -19,73 +19,41 @@ namespace NKikimr::NDetailedMetrics {
     using TBucketKey = TMaybe<TTabletKey>;
     using TSubgroupPath = std::vector<std::pair<TString, TString>>;
 
-    inline const TString DATABASE_LABEL = "database";
-    inline const TString TABLE_LABEL = "table";
-    inline const TString DETAILED_METRICS_LABEL = "detailed_metrics";
-    inline const TString TABLET_ID_LABEL = "tablet_id";
-    inline const TString FOLLOWER_ID_LABEL = "follower_id";
-    inline const TString PER_PARTITION_VALUE = "per_partition";
+    extern const TString DATABASE_LABEL;
+    extern const TString TABLE_LABEL;
+    extern const TString DETAILED_METRICS_LABEL;
+    extern const TString TABLET_ID_LABEL;
+    extern const TString FOLLOWER_ID_LABEL;
+    extern const TString PER_PARTITION_VALUE;
 
     // The low level tablet counters use the same layout as the "tablets" group.
-    inline const TString TYPE_LABEL = "type";
-    inline const TString CATEGORY_LABEL = "category";
-    inline const TString EXECUTOR_CATEGORY = "executor";
-    inline const TString APP_CATEGORY = "app";
+    extern const TString TYPE_LABEL;
+    extern const TString CATEGORY_LABEL;
+    extern const TString EXECUTOR_CATEGORY;
+    extern const TString APP_CATEGORY;
 
-    inline TStringBuf ChopTrailingSlash(TStringBuf path) {
-        path.ChopSuffix("/");
-        return path;
-    }
+    TStringBuf ChopTrailingSlash(TStringBuf path);
 
     // Reports carry absolute table paths; counter trees use database-relative paths.
     // databasePrefix must already have its trailing slash removed. The returned view
     // aliases tablePath, including when it is outside the database and stays intact.
-    inline TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath) {
-        TStringBuf relativePath(tablePath);
-        // Require the separator: /Root/db10/table is not inside /Root/db1.
-        if (relativePath.SkipPrefix(databasePrefix) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
-            return relativePath;
-        }
-        return TStringBuf(tablePath);
-    }
+    TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath);
 
-    inline NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(
-        NMonitoring::TDynamicCounterPtr tableGroup)
-    {
-        return tableGroup->GetSubgroup(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
-    }
+    NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(
+        NMonitoring::TDynamicCounterPtr tableGroup);
 
-    inline NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
-        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet)
-    {
-        return parentGroup->GetSubgroup(TABLET_ID_LABEL, ToString(tablet.first))
-            ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(tablet.second));
-    }
+    NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
+        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet);
 
-    inline NMonitoring::TDynamicCounterPtr GetOrCreateTypeGroup(
-        NMonitoring::TDynamicCounterPtr bucketGroup, TTabletTypes::EType tabletType)
-    {
-        return bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType));
-    }
+    NMonitoring::TDynamicCounterPtr GetOrCreateTypeGroup(
+        NMonitoring::TDynamicCounterPtr bucketGroup, TTabletTypes::EType tabletType);
 
-    inline TSubgroupPath MakeTabletPath(const TTabletKey& tablet, TSubgroupPath prefix = {}) {
-        prefix.emplace_back(TABLET_ID_LABEL, ToString(tablet.first));
-        prefix.emplace_back(FOLLOWER_ID_LABEL, ToString(tablet.second));
-        return prefix;
-    }
+    TSubgroupPath MakeTabletPath(const TTabletKey& tablet, TSubgroupPath prefix = {});
 
     // Callers choose the removal root: the node prepends database/table to prune
     // empty ancestors across its shared leader/follower tree; the processor starts
     // at the table and manages table ownership separately.
-    inline TSubgroupPath MakeRawBucketPath(
-        const TBucketKey& key, TTabletTypes::EType tabletType, TSubgroupPath prefix = {})
-    {
-        if (key) {
-            prefix.emplace_back(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
-            return MakeTabletPath(*key, std::move(prefix));
-        }
-        prefix.emplace_back(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType));
-        return prefix;
-    }
+    TSubgroupPath MakeRawBucketPath(
+        const TBucketKey& key, TTabletTypes::EType tabletType, TSubgroupPath prefix = {});
 
 } // namespace NKikimr::NDetailedMetrics

@@ -191,6 +191,7 @@ public:
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
         QueryTextCollector.Clear();
+        SchemaObjects.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -335,6 +336,20 @@ public:
     IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
+
+    struct TSchemaIdentity {
+        NYql::TKikimrPathId PathId;
+        ui64 SchemaVersion = 0;
+
+        bool operator==(const TSchemaIdentity& other) const = default;
+    };
+
+    // A statement is compiled against one schema version of each object it uses, and every
+    // later statement of the transaction has to see that same version. This is what the
+    // earlier statements were compiled against.
+    // Keyed by path, not by path id: an object dropped and created anew under the same name is
+    // a different object, and the transaction must not read it as if nothing had changed.
+    THashMap<TString, TSchemaIdentity> SchemaObjects;
 
     NDataIntegrity::TQueryTextCollector QueryTextCollector;
 };
@@ -486,6 +501,9 @@ public:
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
     bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery);
+
+// Whether the mode promises that all reads of a transaction observe the same state.
+bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel);
 
 bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);

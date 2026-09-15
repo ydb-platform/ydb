@@ -312,6 +312,16 @@ The following system view contains detailed information about current sessions a
 | `WmState` | Query state in Workload Manager.<br/>Type: `Utf8`. |
 | `WmEnterTime` | Time when the query transitioned to PENDING or DELAYED status.<br/>Type: `Timestamp`. |
 | `WmExitTime` | Time when the query was submitted for execution.<br/>Type: `Timestamp`. |
+| `DurationUs` | Elapsed time since the current query started, in microseconds, including compilation and queueing.<br/>Type: `Uint64`. |
+| `CpuTimeUs` | Cumulative compute task CPU time and reported storage CPU time, in microseconds.<br/>Type: `Uint64`. |
+| `ComputeMemoryBytes` | Current accounted compute task memory, in bytes. Excludes the separate channel quota; this is neither RSS nor peak memory usage.<br/>Type: `Uint64`. |
+| `TableReadBytes` | Cumulative bytes read according to table statistics.<br/>Type: `Uint64`. |
+| `SourceReadBytes` | Cumulative incoming bytes according to source statistics.<br/>Type: `Uint64`. |
+
+Resource values reflect the latest task reports and are updated independently of client statistics requests. Resource values are `NULL` until the first report; all five columns are `NULL` when the session has no current query. CPU time and bytes are accumulated across the current query's physical executions, including completed executions. Memory accounts for active executions only. Completed query history is not retained.
+
+`TableReadBytes` and `SourceReadBytes` can overlap: do not add them together or interpret them as an IO breakdown between ordinary storage and S3. Use `WmPoolId` to group queries by pool. Summing `CpuTimeUs` over active queries does not give the pool's CPU utilization over an interval.
+
 
 Possible values of the `WmState` field:
 

@@ -178,6 +178,40 @@ Y_UNIT_TEST_SUITE(KqpCurrentExecutionStats) {
         }
     }
 
+    Y_UNIT_TEST(AggregatePhysicalExecutions) {
+        TCurrentQueryStats query;
+        UNIT_ASSERT(!query.Get());
+        TQueryExecutionStats first(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        TQueryExecutionStats second(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        Init(first);
+        Init(second);
+        auto report = MakeReport(1, 100, 4096, 1000, 700);
+        first.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        first.ReportCurrentStats(query);
+        first.ReportCurrentStats(query);
+        second.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        second.ReportCurrentStats(query);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->TableReadBytes, 2000);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->SourceReadBytes, 1400);
+        first.ReportCurrentStats(query, true);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
+        second.ReportCurrentStats(query, true);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 200);
+        // Task ids can repeat across physical executions.
+        TQueryExecutionStats third(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr, 0);
+        Init(third);
+        third.UpdateTaskStats(1, 1, report, nullptr, COMPUTE_STATE_EXECUTING, TDuration::Max());
+        third.ReportCurrentStats(query);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ObservedPeakComputeMemoryBytes, 8192);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->CpuTimeUs, 300);
+        UNIT_ASSERT_VALUES_EQUAL(query.Get()->ComputeMemoryBytes, 4096);
+    }
+
     Y_UNIT_TEST(FailureWithoutTaskStatsReleasesMemory) {
         TQueryExecutionStats stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC, nullptr, nullptr, 0);
         Init(stats);

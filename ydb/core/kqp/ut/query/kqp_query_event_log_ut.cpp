@@ -185,6 +185,13 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     UNIT_ASSERT_C(req["action"].GetStringSafe("").Contains("EXECUTE"), req["action"].GetStringSafe(""));
     UNIT_ASSERT_C(req.Has("type"), "type field");
     UNIT_ASSERT_C(req.Has("duration_us"), "duration_us field");
+    UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
+    UNIT_ASSERT(req.Has("cpu_time_us"));
+    UNIT_ASSERT(req.Has("compute_memory_bytes"));
+    UNIT_ASSERT_VALUES_EQUAL(req["compute_memory_bytes"].GetUIntegerSafe(1), 0);
+    UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
+    UNIT_ASSERT(req.Has("table_read_bytes"));
+    UNIT_ASSERT(req.Has("source_read_bytes"));
     UNIT_ASSERT_C(req.Has("query_len"), "query_len field");
     UNIT_ASSERT_C(req.Has("results_size"), "results_size field");
     UNIT_ASSERT_C(req.Has("database"), "database field");
@@ -257,6 +264,7 @@ Y_UNIT_TEST(ExecutePreparedLogsOriginalQueryText) {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(req["data"].GetStringSafe(""), queryText, e.RawLine);
         UNIT_ASSERT_VALUES_EQUAL_C(req["query_len"].GetUIntegerSafe(0), queryText.size(), e.RawLine);
+        UNIT_ASSERT_C(!req["ast"].GetStringSafe("").empty(), e.RawLine);
         found = true;
     }
     UNIT_ASSERT_C(found, "expected completed EXECUTE_PREPARED log entry");
@@ -359,6 +367,8 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
         UNIT_ASSERT_C(req.Has("database"), e.RawLine);
         UNIT_ASSERT_C(req.Has("started_at_us"), e.RawLine);
         UNIT_ASSERT_C(req.Has("duration_us"), e.RawLine);
+        UNIT_ASSERT_C(!req.Has("ast"), e.RawLine);
+        UNIT_ASSERT_C(!req.Has("cpu_time_us"), e.RawLine);
         foundFailure = true;
     }
     UNIT_ASSERT_C(foundFailure, "expected failure completed for broken_syntax at WARN");
@@ -469,8 +479,8 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
                 TStringBuilder() << "non-first part must not duplicate issues: " << e.RawLine);
             UNIT_ASSERT_C(!req.Has("data_truncated"),
                 TStringBuilder() << "non-first part must not carry data_truncated: " << e.RawLine);
-            UNIT_ASSERT_C(req.Has("data"),
-                TStringBuilder() << "non-first part must carry data continuation: " << e.RawLine);
+            UNIT_ASSERT_C(req.Has("data") || req.Has("ast"),
+                TStringBuilder() << "non-first part must carry SQL or AST continuation: " << e.RawLine);
         }
     }
     UNIT_ASSERT_C(sawPart1OfMulti, "long SQL must produce a multi-part envelope (part=1)");
@@ -650,12 +660,12 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
     UNIT_ASSERT_C(found, "expected a single-envelope failure with truncated issues at WARN");
 }
 
-// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (6 KB) bytes and
+// At DEBUG long SQL is truncated to QUERY_TEXT_LIMIT (3 KB) bytes and
 // emitted as a single envelope (`total=1`) — operators of the always-on
 // stream consume "one record per query". The original length is preserved
 // in `query_len` and the cut is flagged by `data_truncated: true`.
 Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
-    constexpr size_t QUERY_TEXT_LIMIT = 6 * 1024;
+    constexpr size_t QUERY_TEXT_LIMIT = 3 * 1024;
 
     TStringStream logStream;
     {
@@ -664,7 +674,7 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 
         auto db = kikimr.GetQueryClient();
 
-        // ~30 KB of SQL, well past the 6 KB cap.
+        // ~30 KB of SQL, well past the 3 KB cap.
         TStringBuilder sb;
         sb << "/*";
         for (size_t i = 0; i < 30000; ++i) {
@@ -702,6 +712,110 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         sawTruncated = true;
     }
     UNIT_ASSERT_C(sawTruncated, "expected a truncated completed envelope at DEBUG");
+}
+
+// Use a literal: a long SQL comment would not make the AST larger.
+Y_UNIT_TEST_TWIN(LargeAst, Trace) {
+    const TString literal = TString(12000, 'a') + "ast_payload_end";
+    const TString query = TStringBuilder() << "SELECT '" << literal << "' AS ast_log_marker";
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, Trace ? NLog::PRI_TRACE : NLog::PRI_DEBUG);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    const auto entries = CollectReqJson(logStream.Str());
+    const TReqJsonEntry* first = nullptr;
+    for (const auto& entry : entries) {
+        if (entry.Part == 1 && entry.Json["request"]["query_len"].GetUIntegerSafe(0) == query.size()) {
+            first = &entry;
+            break;
+        }
+    }
+    UNIT_ASSERT(first);
+    const auto& request = first->Json["request"];
+    const auto reqId = first->Json["req_id"].GetStringSafe("");
+    TString ast, sql;
+    int parts = 0;
+    for (const auto& entry : entries) {
+        if (entry.Json["req_id"].GetStringSafe("") != reqId) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(entry.Part, ++parts);
+        ast += entry.Json["request"]["ast"].GetStringSafe("");
+        sql += entry.Json["request"]["data"].GetStringSafe("");
+        if (entry.Part > 1) {
+            UNIT_ASSERT(!entry.Json["request"].Has("cpu_time_us"));
+            UNIT_ASSERT(!entry.Json["request"].Has("ast_len"));
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(parts, first->Total);
+    UNIT_ASSERT(request["ast_len"].GetUIntegerSafe(0) > 2 * 1024);
+    if constexpr (Trace) {
+        UNIT_ASSERT_VALUES_EQUAL(sql, query);
+        UNIT_ASSERT_VALUES_EQUAL(ast.size(), request["ast_len"].GetUIntegerSafe(0));
+        UNIT_ASSERT(ast.Contains(literal));
+        UNIT_ASSERT(!request.Has("ast_truncated"));
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(parts, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ast.size(), 2 * 1024);
+        UNIT_ASSERT(request["ast_truncated"].GetBooleanSafe(false));
+    }
+}
+
+Y_UNIT_TEST_TWIN(SensitiveSqlSuppressesAst, Trace) {
+    // Marker beyond the SQL truncation boundary must still protect both texts.
+    const TString query = TStringBuilder() << "SELECT 'do_not_log_me' /*"
+        << TString(8000, 'x') << " password */";
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, Trace ? NLog::PRI_TRACE : NLog::PRI_DEBUG);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    bool found = false;
+    for (const auto& entry : CollectReqJson(logStream.Str())) {
+        const auto& req = entry.Json["request"];
+        if (req["query_len"].GetUIntegerSafe(0) != query.size()) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(entry.Total, 1);
+        UNIT_ASSERT(req["data_protected"].GetBooleanSafe(false));
+        UNIT_ASSERT(req["ast_protected"].GetBooleanSafe(false));
+        UNIT_ASSERT(!req.Has("ast"));
+        UNIT_ASSERT(!req["data"].GetStringSafe("").Contains("do_not_log_me"));
+        found = true;
+    }
+    UNIT_ASSERT(found);
+}
+
+Y_UNIT_TEST(TableReadResourcesWithoutClientStats) {
+    const TString query = "SELECT * FROM `/Root/EightShard` WHERE Key > 0 /* resource_log_marker */";
+    TStringStream logStream;
+    {
+        TKikimrRunner kikimr(MakeStreamSettings(logStream));
+        SetKqpRequestLevel(kikimr, NLog::PRI_DEBUG);
+        auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    bool found = false;
+    for (const auto& entry : CollectReqJson(logStream.Str())) {
+        const auto& req = entry.Json["request"];
+        if (req["data"].GetStringSafe("") != query) {
+            continue;
+        }
+        UNIT_ASSERT(req["cpu_time_us"].GetUIntegerSafe(0) > 0);
+        UNIT_ASSERT(req["table_read_bytes"].GetUIntegerSafe(0) > 0);
+        UNIT_ASSERT(req.Has("observed_peak_compute_memory_bytes"));
+        UNIT_ASSERT(!req["ast"].GetStringSafe("").empty());
+        found = true;
+    }
+    UNIT_ASSERT(found);
 }
 
 Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {

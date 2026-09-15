@@ -1,6 +1,7 @@
 #include "kqp_log_query.h"
 
 #include <ydb/core/kqp/common/events/query.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/core/kqp/session_actor/kqp_query_state.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -17,19 +18,13 @@
 namespace NKikimr::NKqp {
 namespace {
 
-// Default rsyslog $MaxMessageSize is 8 KB.
-// Part-1 budget: 64 B log prefix + 950 B envelope/completed fields + 6 KB data + 1 KB issues = 8182 B.
-constexpr size_t RSYSLOG_MAX_MESSAGE_SIZE = 8_KB;
-constexpr size_t LOG_LINE_OVERHEAD = 64;
-constexpr size_t PART1_JSON_OVERHEAD = 982;
-
-constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
-constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB - 32;
+// Text limits exclude JSON/log escaping and metadata.
+constexpr size_t QUERY_TEXT_LIMIT = 3_KB;
+constexpr size_t SQL_TEXT_MAX_SIZE = QUERY_TEXT_LIMIT;
+constexpr size_t AST_TEXT_MAX_SIZE = 2_KB;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;
-constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
+constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + AST_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
-static_assert(SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA + LOG_LINE_OVERHEAD + PART1_JSON_OVERHEAD
-              <= RSYSLOG_MAX_MESSAGE_SIZE);
 
 // BUILTIN_ACL_METADATA traffic dominates KQP_REQUEST volume — silence SUCCESS, keep failures.
 bool IsMetadataServiceQuery(const TKqpQueryState& state) {
@@ -52,6 +47,16 @@ TString SafeExtractQueryText(const TKqpQueryState& state) {
     return {};
 }
 
+TStringBuf SafeExtractQueryAst(const TKqpQueryState& state) {
+    if (state.CompileResult && state.CompileResult->PreparedQuery) {
+        return state.CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst();
+    }
+    if (state.PreparedQuery) {
+        return state.PreparedQuery->GetPhysicalQuery().GetQueryAst();
+    }
+    return state.QueryAstForLogging;
+}
+
 struct TCompletedFields {
     TStringBuf Database;
     TStringBuf DatabaseId;
@@ -70,6 +75,9 @@ struct TCompletedFields {
     bool HasCompileStats = false;
     bool CompileFromCache = false;
     ui64 CompileTimeUs = 0;
+    std::optional<TCurrentQueryStats::TSnapshot> Resources;
+    ui64 AstLen = 0;
+    ui32 AstStatementIndex = 0;
 };
 
 void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
@@ -111,6 +119,17 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
         json.WriteKey("compile_from_cache").WriteBool(f.CompileFromCache);
         json.WriteKey("compile_time_us").WriteULongLong(f.CompileTimeUs);
     }
+    if (f.Resources) {
+        json.WriteKey("cpu_time_us").WriteULongLong(f.Resources->CpuTimeUs);
+        json.WriteKey("compute_memory_bytes").WriteULongLong(f.Resources->ComputeMemoryBytes);
+        json.WriteKey("observed_peak_compute_memory_bytes").WriteULongLong(f.Resources->ObservedPeakComputeMemoryBytes);
+        json.WriteKey("table_read_bytes").WriteULongLong(f.Resources->TableReadBytes);
+        json.WriteKey("source_read_bytes").WriteULongLong(f.Resources->SourceReadBytes);
+    }
+    if (f.AstLen) {
+        json.WriteKey("ast_len").WriteULongLong(f.AstLen);
+        json.WriteKey("ast_statement_index").WriteULongLong(f.AstStatementIndex);
+    }
 }
 
 void WriteJsonChunks(NActors::NLog::EPriority prio,
@@ -119,21 +138,27 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
                      TStringBuf sessionId,
                      TStringBuf userSID,
                      TStringBuf requestText,
+                     TStringBuf ast,
                      const NYql::TIssues& issues,
                      const TCompletedFields& fields,
                      bool truncateText)
 {
-    bool wasTruncated = false;
-    if (truncateText && requestText.size() > QUERY_TEXT_LIMIT) {
-        requestText = requestText.SubStr(0, QUERY_TEXT_LIMIT);
-        wasTruncated = true;
-    }
-
     TString protectedRequestText;
     TStringBuf loggingRequestText = requestText;
-    const bool dataProtected = NKikimr::ProtectQueryForLoggingIfSensitive(loggingRequestText, protectedRequestText);
+    // Inspect the full SQL before truncation; an AST can contain the same secrets.
+    const bool dataProtected = NKikimr::ProtectQueryForLoggingIfSensitive(requestText, protectedRequestText);
+    const bool astProtected = dataProtected && !ast.empty();
     if (dataProtected) {
         loggingRequestText = protectedRequestText;
+        ast = {};
+    }
+    const bool wasTruncated = truncateText && loggingRequestText.size() > QUERY_TEXT_LIMIT;
+    if (wasTruncated) {
+        loggingRequestText = loggingRequestText.SubStr(0, QUERY_TEXT_LIMIT);
+    }
+    const bool astTruncated = truncateText && ast.size() > AST_TEXT_MAX_SIZE;
+    if (astTruncated) {
+        ast = ast.SubStr(0, AST_TEXT_MAX_SIZE);
     }
 
     const size_t dataChunkSize = (truncateText && !loggingRequestText.empty())
@@ -142,6 +167,9 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
     const size_t dataChunks = loggingRequestText.empty()
         ? 0
         : (loggingRequestText.size() + dataChunkSize - 1) / dataChunkSize;
+
+    const size_t astChunks = (ast.size() + AST_TEXT_MAX_SIZE - 1) / AST_TEXT_MAX_SIZE;
+    const size_t contentChunks = Max(dataChunks, astChunks);
 
     TString issuesStr;
     bool issuesTruncated = false;
@@ -165,13 +193,13 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             issuesStr.resize(ISSUES_TEXT_MAX_TOTAL);
             issuesTruncated = true;
         }
-        const size_t phase1IssuesConsumedCap = dataChunks * ISSUES_CHUNK_WITH_DATA;
+        const size_t phase1IssuesConsumedCap = contentChunks * ISSUES_CHUNK_WITH_DATA;
         phase1IssuesConsumed = Min(issuesStr.size(), phase1IssuesConsumedCap);
         const size_t phase2IssuesBytes = issuesStr.size() - phase1IssuesConsumed;
         phase2Chunks = phase2IssuesBytes == 0
             ? 0
             : (phase2IssuesBytes + ISSUES_CHUNK_SOLO - 1) / ISSUES_CHUNK_SOLO;
-        total = Max<size_t>(dataChunks + phase2Chunks, 1);
+        total = Max<size_t>(contentChunks + phase2Chunks, 1);
     }
 
     for (size_t i = 0; i < total; ++i) {
@@ -193,10 +221,14 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             json.WriteKey("data").WriteString(loggingRequestText.SubStr(i * dataChunkSize, dataChunkSize));
         }
 
-        const size_t issuesOffset = (i < dataChunks)
+        if (i < astChunks) {
+            json.WriteKey("ast").WriteString(ast.SubStr(i * AST_TEXT_MAX_SIZE, AST_TEXT_MAX_SIZE));
+        }
+
+        const size_t issuesOffset = (i < contentChunks)
             ? i * ISSUES_CHUNK_WITH_DATA
-            : phase1IssuesConsumed + (i - dataChunks) * ISSUES_CHUNK_SOLO;
-        const size_t issuesBudget = (i < dataChunks) ? ISSUES_CHUNK_WITH_DATA : ISSUES_CHUNK_SOLO;
+            : phase1IssuesConsumed + (i - contentChunks) * ISSUES_CHUNK_SOLO;
+        const size_t issuesBudget = (i < contentChunks) ? ISSUES_CHUNK_WITH_DATA : ISSUES_CHUNK_SOLO;
         if (issuesOffset < issuesStr.size()) {
             const size_t take = Min(issuesBudget, issuesStr.size() - issuesOffset);
             json.WriteKey("issues").WriteString(TStringBuf(issuesStr).SubStr(issuesOffset, take));
@@ -205,6 +237,12 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         if (i == 0) {
             json.WriteKey("event").WriteString("completed");
             WriteCompletedFields(json, fields);
+            if (astTruncated) {
+                json.WriteKey("ast_truncated").WriteBool(true);
+            }
+            if (astProtected) {
+                json.WriteKey("ast_protected").WriteBool(true);
+            }
             if (wasTruncated) {
                 json.WriteKey("data_truncated").WriteBool(true);
             }
@@ -264,6 +302,7 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             return;
         }
         const TString queryText = SafeExtractQueryText(state);
+        const TStringBuf ast = SafeExtractQueryAst(state);
 
         const auto* userCtx = state.UserRequestContext.Get();
         TStringBuf sessionId = userCtx ? TStringBuf(userCtx->SessionId) : TStringBuf{};
@@ -287,6 +326,11 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
 
         TCompletedFields fields;
         fields.Database = state.Database;
+        fields.AstLen = ast.size();
+        fields.AstStatementIndex = state.CurrentStatementId;
+        if (userCtx && userCtx->CurrentQueryStats) {
+            fields.Resources = userCtx->CurrentQueryStats->Get();
+        }
         if (userCtx) {
             fields.DatabaseId = userCtx->DatabaseId;
             fields.TraceId = userCtx->TraceId;
@@ -322,6 +366,7 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             sessionId,
             userSID,
             queryText,
+            ast,
             issues,
             fields,
             truncate

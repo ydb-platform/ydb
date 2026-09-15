@@ -16,11 +16,14 @@ class StreamingDisposition;
 
 namespace NKikimr::NKqp {
 
+class TCurrentQueryStats;
+
 struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
     TString TraceId;
     TString Database;
     TString DatabaseId;
     TString SessionId;
+    std::shared_ptr<TCurrentQueryStats> CurrentQueryStats;
     bool UseBatchPool = false;
 
     // Workload manager info

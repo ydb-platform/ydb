@@ -12,6 +12,7 @@ ENDIF()
 
 SRCS(
     delete_ut.cpp
+    write_log_to_olap.cpp
     write_ut.cpp
 )
 

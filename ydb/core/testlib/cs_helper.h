@@ -8,7 +8,7 @@ namespace NKikimr::Tests::NCS {
 class THelperSchemaless : public NCommon::THelper {
 private:
     using TBase = NCommon::THelper;
-protected:
+public:
     void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);
 
 public:
@@ -17,6 +17,9 @@ public:
     using TBase::TBase;
     void CreateTestOlapStore(TString scheme);
     void CreateTestOlapTable(TString storeOrDirName, TString scheme);
+    void CreateTestOlapTableInternal(TString storeOrDirName, TString scheme) {
+        CreateTestOlapTable(storeOrDirName, scheme);
+    }
     void SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const;
     void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
         const Ydb::StatusIds_StatusCode& expectedStatus = Ydb::StatusIds::SUCCESS, const TString& expectedIssuePrefix = {}) const;
@@ -36,7 +39,7 @@ protected:
     TString ShardingMethod = "HASH_FUNCTION_CONSISTENCY_64";
 private:
     bool WithSomeNulls_ = false;
-protected:
+public:
     void CreateSchemaOlapTablesWithStore(const TString tableSchema, TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
         ui32 storeShardsCount = 4, ui32 tableShardsCount = 3);
     void CreateOlapTablesWithStore(TVector<TString> tableName = {"olapTable"}, TString storeName = "olapStore",
@@ -53,6 +56,10 @@ public:
         Y_ABORT_UNLESS(value == "HASH_FUNCTION_CLOUD_LOGS" || value == "HASH_FUNCTION_MODULO_N" || value == "HASH_FUNCTION_CONSISTENCY_64");
         ShardingMethod = value;
         return *this;
+    }
+
+    const TString& GetShardingMethod() const {
+        return ShardingMethod;
     }
 
     void SetForcedCompaction(const TString& storeName = "olapStore");

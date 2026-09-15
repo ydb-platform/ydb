@@ -58,7 +58,7 @@ private:
     inline static const TString DefaultAuthToken = "root@builtin";
     YDB_ACCESSOR(TString, AuthToken, DefaultAuthToken);
 
-protected:
+public:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) const;
 

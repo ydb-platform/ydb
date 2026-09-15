@@ -14,6 +14,8 @@
 
 {% endnote %}
 
+{% include [limitation](_includes/limitation-dump-column-tables.md) %}
+
 ## Параметры командной строки {#pars}
 
 `[options]` - параметры команды:

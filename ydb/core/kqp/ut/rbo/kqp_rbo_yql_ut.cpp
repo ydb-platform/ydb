@@ -9996,6 +9996,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             {R"(
                 SELECT t1.a FROM `/Root/t1` as t1
+                WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.b NOT IN (SELECT t2.b FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 1) AND t2.a <= 3)
+                ORDER BY t1.a;
+             )",
+             R"([[3];[7];[11]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
                 WHERE (SELECT max(t2.c) FROM `/Root/t2` as t2 WHERE t2.e == t1.e) IS NULL
                 ORDER BY t1.a;
              )",
@@ -10043,6 +10071,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.a;
              )",
              R"([[11];[12]])"},
+
+            {R"(
+                SELECT t1.a FROM `/Root/t1` as t1
+                WHERE t1.c > (SELECT min(t2.c) FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0))
+                ORDER BY t1.a;
+             )",
+             R"([[1];[2];[4];[5];[6];[8];[9];[10];[12]])"},
         };
 
         for (ui32 i = 0; i < cases.size(); ++i) {

@@ -661,7 +661,19 @@ bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
                 .Done();
         }
 
-        YQL_ENSURE(newEffect);
+        if (!newEffect) {
+            // The SELECT feeding this data-modification effect could not be lowered to a
+            // physical input. A known trigger is OFFSET without a bounding LIMIT
+            // (e.g. `INSERT INTO ... SELECT ... LIMIT NULL OFFSET N`), which leaves a bare
+            // Skip node that is not a physical stage. Surface a query error instead of
+            // crashing with an internal YQL_ENSURE assert.
+            ctx.AddError(TIssue(ctx.GetPosition(effect.Pos()),
+                "Unsupported SELECT in a data modification query: it could not be lowered to a "
+                "physical input. A common cause is OFFSET without a bounding LIMIT "
+                "(e.g. LIMIT NULL OFFSET N). Add an explicit LIMIT or use a key-range "
+                "predicate instead of OFFSET."));
+            return false;
+        }
         builtEffects.push_back(newEffect.Cast());
     }
 

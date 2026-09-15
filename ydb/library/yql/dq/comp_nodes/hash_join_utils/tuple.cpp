@@ -1,6 +1,7 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <cstring>
 #include <vector>
 #include <queue>
 
@@ -90,6 +91,41 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         *dst[ind] = x;
         x >>= 8;
     }
+}
+
+Y_FORCE_INLINE bool ColumnIsValid(const ui8* bits, ui32 start) {
+    return !bits || ((bits[start / 8] >> (start % 8)) & 1u);
+}
+
+// CRC32 hashes packed key bytes and ignores the validity bitmap. Zero leftover
+// payload of EqualNulls NULLs so two NULLs land in the same bucket and compare equal.
+void NormalizeEqualNullsFixedKeys(
+    const TTupleLayout* layout, const ui8** isValidBitmask, ui8* res, ui32 start)
+{
+    const ui64 mask = layout->EqualNullsKeyMask;
+    if (Y_LIKELY(!mask)) {
+        return;
+    }
+    for (ui32 j = 0; j < layout->KeyColumnsFixedNum; ++j) {
+        if (((mask >> j) & 1ull) == 0) {
+            continue;
+        }
+        const auto& col = layout->KeyColumns[j];
+        if (!ColumnIsValid(isValidBitmask[col.OriginalIndex], start)) {
+            std::memset(res + col.Offset, 0, col.DataSize);
+        }
+    }
+}
+
+Y_FORCE_INLINE bool HashVariableKey(
+    const TTupleLayout* layout, const ui8** isValidBitmask, ui32 keyColIdx, ui32 start)
+{
+    if (Y_LIKELY(!layout->EqualNullsKeyMask) ||
+        ((layout->EqualNullsKeyMask >> keyColIdx) & 1ull) == 0)
+    {
+        return true;
+    }
+    return ColumnIsValid(isValidBitmask[layout->KeyColumns[keyColIdx].OriginalIndex], start);
 }
 
 } // namespace
@@ -240,12 +276,13 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     return false;
 }
 
-void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsJoinKeys) {
+void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns) {
+    Y_ENSURE(KeyColumnsNum <= 64, "EqualNulls supports at most 64 key columns");
+
     ui64 packed = 0;
     for (ui32 j = 0; j < KeyColumnsNum; ++j) {
-        Y_ENSURE(j < 64, "EqualNulls supports at most 64 key columns");
-        const ui32 joinKeyIdx = KeyColumns[j].OriginalColumnIndex;
-        if (std::find(equalNullsJoinKeys.begin(), equalNullsJoinKeys.end(), joinKeyIdx) != equalNullsJoinKeys.end()) {
+        if (std::find(equalNullsInputColumns.begin(), equalNullsInputColumns.end(),
+                      KeyColumns[j].OriginalColumnIndex) != equalNullsInputColumns.end()) {
             packed |= (1ull << j);
         }
     }
@@ -685,10 +722,15 @@ void TTupleLayoutFallback::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        NormalizeEqualNullsFixedKeys(this, isValidBitmask, res, start);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(this, isValidBitmask, i, start)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -963,10 +1005,15 @@ void TTupleLayoutFallback::BucketPack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        NormalizeEqualNullsFixedKeys(this, isValidBitmask, res, start);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(this, isValidBitmask, i, start)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1157,10 +1204,15 @@ void TTupleLayoutSIMD<TTraits>::Pack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(this, isValidBitmask, res, start);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(this, isValidBitmask, i, start)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1537,10 +1589,15 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(this, isValidBitmask, res, start);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(this, isValidBitmask, i, start)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);

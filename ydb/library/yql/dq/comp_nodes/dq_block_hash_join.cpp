@@ -220,9 +220,16 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
         for(ESide side: EachSide) {
-            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
+            const auto& keyColumns = Meta_->KeyColumns.SelectSide(side);
+            const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), keyColumns);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
-            layouts.SelectSide(side)->ApplyEqualNulls(Meta_->Settings.EqualNullsKeys);
+            TVector<ui32> equalNullsInputColumns;
+            equalNullsInputColumns.reserve(Meta_->Settings.EqualNullsKeys.size());
+            for (ui32 joinKeyIdx : Meta_->Settings.EqualNullsKeys) {
+                MKQL_ENSURE(joinKeyIdx < keyColumns.size(), "EqualNulls key index is out of range");
+                equalNullsInputColumns.push_back(keyColumns[joinKeyIdx]);
+            }
+            layouts.SelectSide(side)->ApplyEqualNulls(equalNullsInputColumns);
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 

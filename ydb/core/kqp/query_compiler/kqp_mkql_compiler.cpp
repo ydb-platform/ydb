@@ -422,18 +422,11 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;
                     }
                 } else if (name == NMiniKQL::EqualNullsSettingName) {
-                    auto parseKeyIndex = [](const TExprNode& value) {
-                        YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
-                        return FromString<ui32>(value.Head().Content());
-                    };
                     const auto& value = *setting->Child(1);
-                    if (value.IsList()) {
-                        for (const auto& child : value.Children()) {
-                            settings.EqualNullsKeys.push_back(parseKeyIndex(*child));
-                        }
-                    } else {
-                        settings.EqualNullsKeys.push_back(parseKeyIndex(value));
-                    }
+                    YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
+                    const ui32 keyIndex = FromString<ui32>(value.Head().Content());
+                    YQL_ENSURE(keyIndex < leftKeyColumns.size(), "EqualNulls key index is out of range");
+                    settings.EqualNullsKeys.push_back(keyIndex);
                 }
             }
 

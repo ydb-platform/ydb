@@ -175,9 +175,9 @@ struct TTupleLayout {
     // SQL equality (NULL never matches).
     ui64 EqualNullsKeyMask = 0;
 
-    // Settings store 0-based join-key positions. Packed bits follow layout
-    // ColumnIndex (keys may be reordered by size), so remap via OriginalColumnIndex.
-    void ApplyEqualNulls(const std::vector<ui32>& equalNullsJoinKeys);
+    // Input-column indexes (OriginalColumnIndex) that use IS NOT DISTINCT FROM.
+    // Join-key slots from settings must be remapped to these indexes first.
+    void ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns);
 
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
@@ -341,6 +341,10 @@ template <bool EqualNulls>
 Y_FORCE_INLINE
 bool TTupleLayout::KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow,
                                  const ui8 *rhsRow, const ui8 *rhsOverflow) const {
+    if (KeySizeTag_ >= 5) {
+        return TupleKeysEqual<EqualNulls>(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+    }
+
     const ui8 keyNullMask = (1u << KeyColumnsNum) - 1;
     const bool nullsOk = KeyNullsCompatible<EqualNulls>(
         ReadUnaligned<ui8>(lhsRow + BitmaskOffset),
@@ -376,7 +380,7 @@ bool TTupleLayout::KeysEqualImpl(const ui8 *lhsRow, const ui8 *lhsOverflow,
                nullsOk;
 
     default:
-        return TupleKeysEqual<EqualNulls>(this, lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+        Y_UNREACHABLE();
     }
 }
 

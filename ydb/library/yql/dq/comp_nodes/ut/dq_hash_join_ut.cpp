@@ -5,12 +5,15 @@
 #include <type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+
+#include <arrow/util/bit_util.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -2227,6 +2230,30 @@ void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal
                          << stats.MaxBlockRows << " rows) should be at most " << maxBlockBytes);
 }
 
+void PoisonNullUi64Slots(const NUdf::TUnboxedValue& blockList, ui32 column, ui64 leftover) {
+    NUdf::TUnboxedValue row;
+    auto iter = blockList.GetListIterator();
+    ui32 poisoned = 0;
+    while (iter.Next(row)) {
+        const auto col = row.GetElement(column);
+        const auto arr = TArrowBlock::From(col).GetDatum().array();
+        UNIT_ASSERT(arr);
+        UNIT_ASSERT(arr->buffers.size() >= 2 && arr->buffers[1]);
+        ui8* raw = arr->buffers[1]->mutable_data();
+        UNIT_ASSERT_C(raw, "null-slot leftover test needs a mutable values buffer");
+        auto* values = reinterpret_cast<ui64*>(raw) + arr->offset;
+        const ui8* bits = arr->buffers[0] ? arr->buffers[0]->data() : nullptr;
+        for (int64_t i = 0; i < arr->length; ++i) {
+            const bool isNull = bits && !arrow::BitUtil::GetBit(bits, arr->offset + i);
+            if (isNull) {
+                values[i] = leftover;
+                ++poisoned;
+            }
+        }
+    }
+    UNIT_ASSERT_GT(poisoned, 0);
+}
+
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
@@ -2295,6 +2322,27 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestInnerJoinEqualNulls) {
         Test(InnerJoinEqualNullsTestData(), /*blockJoin=*/true);
+    }
+
+    // arrow builders zero null slotsPoison
+    // poison leftover so hash/equality cannot
+    // rely on that and must canonicalize EqualNulls NULLs
+    Y_UNIT_TEST(TestInnerJoinEqualNullsDistinctNullSlotData) {
+        TJoinTestData td = InnerJoinEqualNullsTestData();
+        auto descr = MakeJoinDescription(td);
+        auto dummy = td.Setup->BuildGraph(td.Setup->PgmBuilder->NewDataLiteral<ui64>(0));
+        auto& ctx = dummy->GetContext();
+        NUdf::TUnboxedValue leftBlocks = ToBlocks(ctx, td.BlockSize, descr.LeftSource.ColumnTypes, td.Left.Value);
+        NUdf::TUnboxedValue rightBlocks = ToBlocks(ctx, td.BlockSize, descr.RightSource.ColumnTypes, td.Right.Value);
+        PoisonNullUi64Slots(leftBlocks, td.LeftKeyColmns[0], 0x1111111111111111ull);
+        PoisonNullUi64Slots(rightBlocks, td.RightKeyColmns[0], 0x2222222222222222ull);
+        descr.InputsAreBlocks = true;
+        descr.LeftSource.ValuesList = leftBlocks;
+        descr.RightSource.ValuesList = rightBlocks;
+
+        THolder<IComputationGraph> got = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+        CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
     }
 
     Y_UNIT_TEST(TestInnerJoinEqualNullsNullVsZero) {
@@ -2727,6 +2775,37 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
         auto td = CrossJoinOutputBufferBoundedSpillingTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 8 * 20000);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDqHashJoinSettingsCompatibilityTest) {
+    Y_UNIT_TEST(NewRuntimeReadsOldSettingsTuple) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        const auto oldSettings = pb.NewTuple({pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Left))});
+
+        const auto parsed = ParseHashJoinSettingsTuple(oldSettings);
+        UNIT_ASSERT_EQUAL(parsed.BuildSide, EBuildSide::Left);
+        UNIT_ASSERT(parsed.EqualNullsKeys.empty());
+    }
+
+    Y_UNIT_TEST(OldRuntimeIgnoresNewSettingsField) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        const TVector<ui32> keys = {0, 2};
+        const auto newSettings = pb.NewTuple({
+            pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Left)),
+            pb.AsTuple(keys),
+        });
+        const auto* tuple = AS_VALUE(TTupleLiteral, newSettings);
+
+        // This is exactly how the pre-EqualNulls runtime parsed settings.
+        const auto oldBuildSide =
+            static_cast<EBuildSide>(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().Get<ui32>());
+        UNIT_ASSERT_EQUAL(oldBuildSide, EBuildSide::Left);
+
+        const auto parsed = ParseHashJoinSettingsTuple(newSettings);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.EqualNullsKeys, keys);
     }
 }
 } // namespace NKikimr::NMiniKQL

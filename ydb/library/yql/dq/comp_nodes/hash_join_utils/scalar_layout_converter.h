@@ -36,7 +36,6 @@ public:
     virtual void UnpackBatch(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) = 0;
 
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
-    virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
 };
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(

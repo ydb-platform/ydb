@@ -46,21 +46,30 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
-    bool blockHashJoinBuildSideLeft = false
+    bool blockHashJoinBuildSideLeft = false,
+    bool enableBlockHashJoinEqualNulls = false
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
-
-// Join-key positions (index in LeftJoinKeyNames / RightJoinKeyNames) that use IS NOT DISTINCT FROM.
-// Sources: TDqJoin.Flags "EqualNulls" (all keys) or JoinAlgoOptions EqualNulls=true / EqualNulls=<index>.
-TVector<ui32> CollectEqualNullsKeys(const NNodes::TDqJoin& join, ui32 keyCount);
-
-// Settings emitted on TDqPhyBlockHashJoin: optional BuildSide=Left plus one EqualNulls Uint32 per key.
-TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
+NNodes::TExprBase DqBuildHashJoin(
     const NNodes::TDqJoin& join,
+    EHashJoinMode mode,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx,
+    bool shuffleElimination,
+    bool shuffleEliminationWithMap,
+    bool useBlockHashJoin = false,
+    bool blockHashJoinBuildSideLeft = false,
+    bool enableBlockHashJoinEqualNulls = false);
+
+// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left; when enableEqualNulls,
+// one EqualNulls Uint32 per join-key position (IS NOT DISTINCT FROM).
+TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
+    TPositionHandle pos,
     EJoinAlgoType joinAlgo,
     ui32 keyCount,
-    TExprContext& ctx);
+    TExprContext& ctx,
+    bool enableEqualNulls = false);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

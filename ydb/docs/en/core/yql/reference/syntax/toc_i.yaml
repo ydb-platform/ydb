@@ -6,6 +6,7 @@ items:
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md,    when: feature_async_replication }
 - { name: ALTER DATABASE,               include: { mode: link, path: alter_database/toc_p.yaml } }
 - { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
+- { name: ALTER SEQUENCE,               href: alter-sequence.md,             when: feature_serial }
 - { name: ALTER TABLE, include: { mode: link, path: alter_table/toc_p.yaml }, when: feature_map_tables }
 - { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER SECRET,                 href: alter-secret.md}

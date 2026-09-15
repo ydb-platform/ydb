@@ -11,3 +11,6 @@ items:
 - name: Service objects
   items:
   - { name: Backup collections,                      href: backup-collection.md }
+  - name: Sequences
+    href: sequence.md
+    when: feature_serial

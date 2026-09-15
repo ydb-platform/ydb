@@ -5,8 +5,16 @@
 * [Директории](dir.md)
 * [Таблицы](table.md)
 
+{% if feature_serial %}
+
+* [Sequence](sequence.md)
+
+{% endif %}
+
 {% if feature_view %}
+
 * [Представления](view.md)
+
 {% endif %}
 
 * [Топики](topic.md)

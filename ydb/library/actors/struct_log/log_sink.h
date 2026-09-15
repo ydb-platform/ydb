@@ -13,6 +13,7 @@ struct TLogMessage {
     TInstant Time;
     NLog::EPrio Priority {NLog::EPrio::Emerg};
     NLog::EComponent Component {0};
+    ui32 NodeId {0};
     const char* FileName {nullptr};
     ui64 LineNumber {0};
     TString TextMessage;

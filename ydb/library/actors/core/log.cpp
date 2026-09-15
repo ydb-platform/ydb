@@ -545,6 +545,7 @@ namespace NActors {
                 .Time = evLog->Stamp,
                 .Priority = evLog->Level.ToPrio(),
                 .Component = evLog->Component,
+                .NodeId = Settings->NodeId,
                 .FileName = evLog->FileName,
                 .LineNumber = evLog->LineNumber,
                 .TextMessage = evLog->Line,

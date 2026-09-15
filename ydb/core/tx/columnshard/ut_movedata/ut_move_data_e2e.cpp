@@ -7,8 +7,10 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -466,6 +468,138 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             f.Runtime.Send(ev.Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1101);
+    }
+
+    // MoveData must rewrite index blobs (InheritPortionStorage=false) left in BlobStorage by a tiered portion.
+    Y_UNIT_TEST(MoveDataMovesIndexBlobsOfTieredPortion) {
+        // TWaitCompactionController must be registered before the runtime is set up.
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(EBackground::TTL);
+        csController->SetSkipSpecialCheckForEvict(true);
+        csController->SetOverrideMaxReadStaleness(TDuration::Zero());
+
+        TIntrusivePtr<NFake::TProxyDS> oldProxy = new NFake::TProxyDS(TGroupId::FromValue(OldGroup));
+        TIntrusivePtr<NFake::TProxyDS> newProxy = new NFake::TProxyDS(TGroupId::FromValue(NewGroup));
+
+        TTestBasicRuntime runtime;
+        runtime.SetScheduledLimit(10'000);
+        TTester::Setup(
+            runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), oldProxy, newProxy, new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
+        runtime.GetAppData().FeatureFlags.SetEnableColumnshardGroupDecommission(true);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId tabletActorId = BootTablet(runtime, MakeTabletInfo(TabletId, { { 0, OldGroup } }));
+
+        // Tier "warm" with a MAX index (DefaultStorageId=__DEFAULT) so its blobs stay in BlobStorage after tiering.
+        static constexpr ui32 kBsIndexId = 3000;
+        TTestSchema::TTableSpecials specials;
+        {
+            TTestSchema::TStorageTier warm("warm");
+            warm.EvictAfter = TDuration::Zero();
+            specials.Tiers.push_back(warm);
+        }
+
+        TPlanStep readStep;
+        {
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            auto* initShard = tx.MutableInitShard();
+            initShard->SetOwnerPath("/Root/olap");
+            initShard->SetOwnerPathId(TableId);
+            auto* tableProto = initShard->AddTables();
+            TSchemeShardLocalPathId::FromRawValue(TableId).ToProto(*tableProto);
+            auto* schemaProto = tableProto->MutableSchema();
+            TTestSchema::InitSchema(TTestSchema::YdbSchema(), TTestSchema::YdbPkSchema(), specials, schemaProto);
+            // MAX index on timestamp (column 1), __DEFAULT storage, InheritPortionStorage=false.
+            *schemaProto->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
+                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
+                    kBsIndexId, "ts_max_bs", NOlap::IStoragesManager::DefaultStorageId, /*inheritPortionStorage=*/false, /*columnId=*/1))
+                                             .SerializeToProto();
+            TTestSchema::InitTiersAndTtl(specials, tableProto->MutableTtlSettings());
+            TString txBody;
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            readStep = SetupSchema(runtime, sender, txBody, 11);
+        }
+
+        // Write 1000 rows and wait for compaction to produce a single compacted portion.
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, TabletId, 1, TableId, MakeTestBlob({ 0, 1000 }, TTestSchema::YdbSchema()),
+                TTestSchema::YdbSchema(), &writeIds));
+            const auto planStep = ProposeCommit(runtime, sender, TabletId, 1, writeIds);
+            PlanCommit(runtime, sender, TabletId, planStep, TSet<ui64>{ 1 });
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        // Apply tier config and enable TTL so the compacted portion is tiered to S3.
+        csController->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(specials));
+        csController->EnableBackground(EBackground::TTL);
+
+        // Kick the tablet so tiering actualization runs immediately.
+        ForwardToTablet(runtime, TabletId, sender, new TEvPrivate::TEvPeriodicWakeup());
+
+        // Wait for TTL to start and then finish (export + BlobStorage delete-intent commit).
+        {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            while (csController->GetTTLStartedCounter().Val() == 0 && TInstant::Now() < deadline) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(csController->GetTTLStartedCounter().Val() > 0, "TTL never started");
+            while (csController->GetTTLFinishedCounter().Val() < csController->GetTTLStartedCounter().Val() && TInstant::Now() < deadline) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(
+                csController->GetTTLFinishedCounter().Val() == csController->GetTTLStartedCounter().Val(), "TTL started but never finished");
+        }
+
+        // Allow GC to set the DoNotKeep flags on the exported column blobs.
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        // (a) Column blobs are in S3; the MAX index blob (DefaultStorage) remains live in OldGroup.
+        const size_t indexBlobsInOld = LivePortionBlobs(*oldProxy, TabletId).size();
+        UNIT_ASSERT_C(indexBlobsInOld > 0, "expected index blobs to remain in OldGroup after tiering, but found none");
+
+        // Reassign channel history: new writes go to NewGroup; old blobs stay in OldGroup.
+        ui32 reassignFrom = 0;
+        for (const auto& id : LivePortionBlobs(*oldProxy, TabletId)) {
+            reassignFrom = Max(reassignFrom, id.Generation() + 1);
+        }
+        runtime.Send(new IEventHandle(tabletActorId, tabletActorId, new TKikimrEvents::TEvPoisonPill));
+        tabletActorId = BootTablet(runtime, MakeTabletInfo(TabletId, { { 0, OldGroup }, { reassignFrom, NewGroup } }));
+        UNIT_ASSERT_VALUES_EQUAL_C(LivePortionBlobs(*newProxy, TabletId).size(), 0u, "no portion data may exist in NewGroup before MoveData");
+
+        // Start MoveData for OldGroup.
+        runtime.SendToPipe(TabletId, sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup }), 0, GetPipeConfigWithRetries());
+
+        // Drive the gate; write one extra row at step 25 to advance minSnapshotForNewReads.
+        TEvTablet::TEvMoveDataResponse::TPtr response;
+        TPlanStep lastWriteStep = readStep;
+        for (ui32 i = 0; i < 200 && !response; ++i) {
+            Wakeup(runtime, sender, TabletId);
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+            if (i == 25) {
+                std::vector<ui64> wids;
+                UNIT_ASSERT(WriteData(runtime, sender, TabletId, 2, TableId, MakeTestBlob({ 1000, 1001 }, TTestSchema::YdbSchema()),
+                    TTestSchema::YdbSchema(), &wids));
+                lastWriteStep = ProposeCommit(runtime, sender, TabletId, 2, wids);
+                PlanCommit(runtime, sender, TabletId, lastWriteStep, TSet<ui64>{ 2 });
+            }
+            response = runtime.GrabEdgeEventIf<TEvTablet::TEvMoveDataResponse>(sender, [](const TEvTablet::TEvMoveDataResponse::TPtr&) {
+                return true;
+            }, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(response, "no TEvMoveDataResponse: MoveData never completed");
+
+        // (b) and (d): all tablet blobs have been rewritten out of OldGroup.
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            LivePortionBlobs(*oldProxy, TabletId).size(), 0u, "blobs remain live in OldGroup after MoveData answered Success");
+        UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
+
+        // (c) The table is still readable after the move.
+        UNIT_ASSERT_C(ReadAllAsBatch(runtime, TableId, NOlap::TSnapshot(lastWriteStep.Val(), 1), TTestSchema::YdbSchema())->num_rows() > 0,
+            "table is empty after MoveData");
+
+        (void)tabletActorId;
     }
 }
 

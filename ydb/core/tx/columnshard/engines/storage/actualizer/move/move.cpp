@@ -53,6 +53,21 @@ public:
     }
 };
 
+// True when at least one entity (column or index) of this portion lives in default storage for the given tier.
+bool HasEntityInDefaultStorage(const TPortionInfo& info, const TVersionedIndex& versionedIndex) {
+    const TString tier = info.GetTierNameDef(IStoragesManager::DefaultStorageId);
+    if (tier == IStoragesManager::DefaultStorageId) {
+        return true;
+    }
+    const auto schema = info.GetSchema(versionedIndex);
+    for (const auto entityId : schema->GetIndexInfo().GetEntityIds()) {
+        if (schema->GetIndexInfo().GetEntityStorageId(entityId, tier) == IStoragesManager::DefaultStorageId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }   // anonymous namespace
 
 void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
@@ -83,7 +98,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
         return;
     }
-    if (info.GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
+    if (!HasEntityInDefaultStorage(info, VersionedIndex)) {
         return;
     }
     InFlightPortionIds.erase(portionId);
@@ -265,7 +280,7 @@ void TMoveDataActualizer::Refresh(
     RejectedPortions = 0;
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
-        if (portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
+        if (!HasEntityInDefaultStorage(*portion, VersionedIndex)) {
             continue;
         }
         InitialPortionIds.emplace(portionId);
@@ -273,7 +288,7 @@ void TMoveDataActualizer::Refresh(
     }
     // Initial membership lets a write that commits after the admission window still move.
     for (const auto& [portionId, portion] : uncommitted) {
-        if (portion->HasRemoveSnapshot() || portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
+        if (portion->HasRemoveSnapshot() || !HasEntityInDefaultStorage(*portion, VersionedIndex)) {
             continue;
         }
         InitialPortionIds.emplace(portionId);

@@ -1,18 +1,15 @@
 #pragma once
 
-#include <memory>
+#include "mon_model.h"
+
+#include <util/stream/output.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TInflightInfo;
-
-class TBlocksDirtyMap;
-using TBlocksDirtyMapPtr = std::shared_ptr<TBlocksDirtyMap>;
-
-struct ILockableRanges;
-using ILockableRangesWeakPtr = std::weak_ptr<ILockableRanges>;
+// Renders the state persisted in the partition tablet's Local DB.
+void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db);
 
 ////////////////////////////////////////////////////////////////////////////////
 

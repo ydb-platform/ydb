@@ -156,6 +156,7 @@ TDBGFixture::MakeDirectBlockGroup(
     ui32 dbgConnectionsConfigGeneration) const
 {
     return std::make_shared<TDirectBlockGroup>(
+        CreateArenaAllocator(),
         Runtime->GetActorSystem(0),
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,

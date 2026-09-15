@@ -66,13 +66,13 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
-        CreateArenaAllocator(),
+        CreateArenaAllocatorPool(),
         VChunkConfig,
         BlockSize,
         VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
-    TBlockRange64 ExpectedRange;
+    TBlockRange16 ExpectedRange;
     TString RangeData;
 
     TMutex PromisesGuard;

@@ -7,6 +7,7 @@ SRCS(
     host_roles_ut.cpp
     host_stat_ut.cpp
     oracle_ut.cpp
+    region_geometry_ut.cpp
     time_predictor_ut.cpp
     vchunk_config_ut.cpp
 )

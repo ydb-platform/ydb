@@ -53,7 +53,6 @@ NProto::TError MakeVChunkStoppedError()
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
-    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -82,7 +81,7 @@ TVChunk::TVChunk(
      }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
-          std::move(arenaAllocator),
+          DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
           BlockSize,
           BlocksCount))
@@ -149,7 +148,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -208,7 +207,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -314,30 +313,6 @@ TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
     return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
 }
 
-ui64 TVChunk::GetFreshTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetFreshTotalBytes(hostIndex);
-}
-
-ui64 TVChunk::GetRottenTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetRottenTotalBytes(hostIndex);
-}
-
-size_t TVChunk::GetAllocatedMemorySize() const
-{
-    return BlocksDirtyMap->GetAllocatedSize();
-}
-
-size_t TVChunk::GetUsedMemorySize() const
-{
-    return BlocksDirtyMap->GetUsedSize();
-}
-
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -374,6 +349,18 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
+}
+
+TDirtyMapStats TVChunk::GetDirtyMapStats() const
+{
+    return BlocksDirtyMap->GetStats();
+}
+
+TDirtyMapHostStats TVChunk::GetDirtyMapHostStats(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetHostStats(hostIndex);
 }
 
 TVChunkSnapshot TVChunk::BuildMonSnapshot()
@@ -456,28 +443,28 @@ void TVChunk::OnBelatedWriteBlocksResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TBlockRange64> TVChunk::GetFreshRange(THostIndex host) const
+std::optional<TBlockRange16> TVChunk::GetFreshRange(THostIndex host) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->GetFreshRange(host);
 }
 
-TReadHint TVChunk::MakeReadHint(TBlockRange64 range)
+TReadHint TVChunk::MakeReadHint(TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->MakeReadHint(range);
 }
 
-TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange64 range, THostMask mask)
+TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange16 range, THostMask mask)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return TRangeLock(BlocksDirtyMap, range, mask);
 }
 
-TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange64 range)
+TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -606,7 +593,7 @@ void TVChunk::OnStopped()
 
 void TVChunk::DoReadBlocksLocal(
     TTracedPromise<TReadBlocksLocalResponse> promise,
-    TBlockRange64 vchunkRange,
+    TBlockRange16 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     std::shared_ptr<NWilson::TSpan> span)

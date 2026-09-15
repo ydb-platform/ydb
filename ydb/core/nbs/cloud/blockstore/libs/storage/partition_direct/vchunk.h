@@ -37,7 +37,6 @@ class TVChunk
 {
 public:
     TVChunk(
-        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
@@ -74,11 +73,6 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] size_t GetAllocatedMemorySize() const;
-    [[nodiscard]] size_t GetUsedMemorySize() const;
-
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest record id still held in PBuffers, or nullopt when nothing is
     // inflight. Until the dirty map is restored it returns the zero record id
@@ -88,6 +82,9 @@ public:
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
+    [[nodiscard]] TDirtyMapStats GetDirtyMapStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetDirtyMapHostStats(
+        THostIndex hostIndex) const;
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
@@ -104,13 +101,13 @@ public:
         THostMask completedWrites) override;
 
     // IRangeSyncClient implementation
-    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const override;
-    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range) override;
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range) override;
     [[nodiscard]] TRangeLock MakeDDiskRangeLock(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override;
-    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range) override;
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range) override;
     void EndRangeSync(ui64 syncId, bool success) override;
     void OnCopyProgress(ui64 totalBytes) override;
 
@@ -134,7 +131,7 @@ private:
 
     void DoReadBlocksLocal(
         TTracedPromise<TReadBlocksLocalResponse> promise,
-        TBlockRange64 vchunkRange,
+        TBlockRange16 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
@@ -189,7 +186,7 @@ private:
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ui32 BlockSize;
-    const ui64 BlocksCount;
+    const ui16 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
     TLogTitle LogTitle;

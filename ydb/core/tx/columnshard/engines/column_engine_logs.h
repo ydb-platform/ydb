@@ -6,6 +6,7 @@
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
 #include "scheme/versions/preset_schemas.h"
+#include "storage/actualizer/move/queue_sizes.h"
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
@@ -154,6 +155,10 @@ public:
         return GranulesStorage->CollectMetadataRequests();
     }
 
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const TInstant now) const {
+        return GranulesStorage->CollectMoveDataMetadataRequests(now);
+    }
+
     ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority) const noexcept override;
     std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
@@ -166,10 +171,31 @@ public:
     std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
+        const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit,
+        const bool moveDataOnly = false) noexcept override;
 
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
+    }
+
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            granule->StartMoveData(targetGroups);
+        }
+    }
+
+    void StopMoveData() {
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            granule->StopMoveData();
+        }
+    }
+
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        NActualizer::TMoveDataQueueSizes result;
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            result += granule->GetMoveDataQueueSizes();
+        }
+        return result;
     }
 
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
@@ -240,6 +266,17 @@ public:
     void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
         AFL_VERIFY(info->HasRemoveSnapshot());
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
+    }
+
+    // O(1): checks whether any cleanup portion has planInstant <= instant.
+    bool HasCleanupPortionsAtOrBefore(TInstant instant) const {
+        const auto earliest = CleanupPortions.empty() ? std::nullopt : std::make_optional(CleanupPortions.begin()->first);
+        return NActualizer::CleanupBlocksGate(earliest, instant);
+    }
+
+    // O(1): newest pending cleanup, used to seed the MoveData gate watermark.
+    TInstant GetMaxCleanupPortionInstant() const {
+        return CleanupPortions.empty() ? TInstant::Zero() : CleanupPortions.rbegin()->first;
     }
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {

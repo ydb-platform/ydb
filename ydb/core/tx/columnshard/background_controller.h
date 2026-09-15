@@ -22,6 +22,7 @@ private:
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
+    TInstant ActiveCleanupOldestRemove;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
     bool ActiveCleanupSchemas = false;
@@ -102,9 +103,10 @@ public:
         MaxInflightCompactions = 1;
     }
 
-    void StartCleanupPortions() {
+    void StartCleanupPortions(const TInstant oldestRemove) {
         Y_ABORT_UNLESS(!ActiveCleanupPortions);
         ActiveCleanupPortions = true;
+        ActiveCleanupOldestRemove = oldestRemove;
     }
 
     void FinishCleanupPortions() {
@@ -114,6 +116,11 @@ public:
 
     bool IsCleanupPortionsActive() const {
         return ActiveCleanupPortions;
+    }
+
+    // Oldest remove instant among the running cleanup's portions; Zero when it also drops tables.
+    std::optional<TInstant> GetActiveCleanupOldestRemove() const {
+        return ActiveCleanupPortions ? std::optional<TInstant>(ActiveCleanupOldestRemove) : std::nullopt;
     }
 
     void StartCleanupTables() {

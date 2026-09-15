@@ -60,5 +60,6 @@ RECURSE(
     types/fatal_error_handlers
     types/operation
     types/status
+    udf
     value
 )

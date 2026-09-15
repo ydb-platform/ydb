@@ -52,6 +52,44 @@ void AssertNoCpuValues(const NJson::TJsonValue& node, const NJson::TJsonValue& p
     UNIT_ASSERT_C(FindPlanNodes(node, "A-Cpu").empty(), plan);
 }
 
+struct TReturningRun {
+    NYdb::NQuery::TExecuteQueryResult Result;
+    NJson::TJsonValue Plan;
+};
+
+TReturningRun RunReturningQuery(NYdb::NQuery::TQueryClient& client, const TString& query, ui64 expectedRows) {
+    auto settings = NYdb::NQuery::TExecuteQuerySettings()
+        .StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+    auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // RETURNING must actually return the written rows.
+    const auto& resultSets = result.GetResultSets();
+    UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+    NYdb::TResultSetParser parser(resultSets[0]);
+    UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), expectedRows);
+
+    UNIT_ASSERT(result.GetStats());
+    UNIT_ASSERT(result.GetStats()->GetPlan());
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    return {std::move(result), std::move(plan)};
+}
+
+void AssertReturningSinkNode(const NJson::TJsonValue& plan, bool useStreamIndex) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "ReturningSink"), useStreamIndex ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Node Type", "Sink"), useStreamIndex ? 0 : 1);
+}
+
+void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opName) {
+    UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plan, "Name", opName), 1);
+}
+
 Y_UNIT_TEST_SUITE(KqpStats) {
 
 auto GetYqlStreamIterator(
@@ -1446,6 +1484,217 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+}
+
+Y_UNIT_TEST_TWIN(UpsertWithReturningStats, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(run.Plan, "Node Type", "TableFullScan"), 1);
+
+        // Both the source read and the destination write stats must be collected.
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsModes, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningDst` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `/Root/ReturningSrc` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningSrc` (Key, Value) VALUES (1, "a"), (2, "b"), (3, "c");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            INSERT INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Insert");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            REPLACE INTO `/Root/ReturningDst`
+            SELECT * FROM `/Root/ReturningSrc`
+            RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Replace");
+        AssertTableStats(run.Result, "/Root/ReturningDst", { .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPDATE `/Root/ReturningSrc` SET Value = "x" WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Upsert");
+        // The read-before-write of the UPDATE is collected too.
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            DELETE FROM `/Root/ReturningSrc` WHERE Key <= 3 RETURNING *;
+        )", 3);
+        AssertReturningSinkNode(run.Plan, UseStreamIndex);
+        AssertSingleOperatorName(run.Plan, "Delete");
+        // Delete reads each row (read-before-write plus the returned row).
+        AssertTableStats(run.Result, "/Root/ReturningSrc", { .ExpectedReads = 6, .ExpectedDeletes = 3 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsWithIndex, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    CreateSampleTablesWithIndex(session);
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 12, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 3 });
+    }
+
+    {
+        auto run = RunReturningQuery(client, R"(
+            UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (10, 10, "A"), (11, 11, "B"), (12, 20, "C")
+                RETURNING *;
+        )", 3);
+
+        // The plan shape for indexed writes is serializer-dependent (stream-write
+        // uses the RBO serializer, legacy uses "Sink" nodes), so only the resulting
+        // write stats and the presence of an upsert write are asserted here.
+        UNIT_ASSERT(CountPlanNodesByKv(run.Plan, "Name", "Upsert") >= 1);
+
+        // Both the main table write and the secondary index write must be collected.
+        AssertTableStats(run.Result, "/Root/SecondaryKeys", { .ExpectedReads = 3, .ExpectedUpdates = 3 });
+        AssertTableStats(run.Result, "/Root/SecondaryKeys/Index/indexImplTable", { .ExpectedReads = 0, .ExpectedUpdates = 1, .ExpectedDeletes = 1 });
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningStatsNeedsLookup, UseStreamIndex) {
+    auto serverSettings = TKikimrSettings();
+    serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+    TKikimrRunner kikimr(serverSettings);
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/ReturningExtra` (
+                Key Uint64 NOT NULL,
+                Value String,
+                Extra String,
+                PRIMARY KEY (Key)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            UPSERT INTO `/Root/ReturningExtra` (Key, Value, Extra) VALUES (1, "a", "old_extra");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Extra is not written by the UPDATE, so RETURNING it requires reading the row.
+    auto run = RunReturningQuery(client, R"(
+        UPDATE `/Root/ReturningExtra` SET Value = "b" WHERE Key = 1 RETURNING Key, Value, Extra;
+    )", 1);
+
+    AssertReturningSinkNode(run.Plan, UseStreamIndex);
+    AssertSingleOperatorName(run.Plan, "Upsert");
+
+    NYdb::TResultSetParser parser(run.Result.GetResultSets()[0]);
+    UNIT_ASSERT(parser.TryNextRow());
+    auto optionalValue = parser.ColumnParser(1).GetOptionalString();
+    UNIT_ASSERT(optionalValue);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalValue, "b");
+    auto optionalExtra = parser.ColumnParser(2).GetOptionalString();
+    UNIT_ASSERT(optionalExtra);
+    UNIT_ASSERT_VALUES_EQUAL(*optionalExtra, "old_extra");
+
+    // RETURNING a column that is not written ("Extra") requires reading the row.
+    // In both modes this adds a lookup read next to the single-row write.
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedUpdates = 1 });
+    AssertTableStats(run.Result, "/Root/ReturningExtra", { .ExpectedReads = 2 });
 }
 
 } // suite

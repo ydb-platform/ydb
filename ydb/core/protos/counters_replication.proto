@@ -62,4 +62,5 @@ enum ETxTypes {
     TXTYPE_RUN_WORKER = 20 [(TxTypeOpts) = {Name: "TxRunWorker"}];
     TXTYPE_REMOVE_WORKER = 21 [(TxTypeOpts) = {Name: "TxRemoveWorker"}];
     TXTYPE_COMPLETE_WORKER_SET = 22 [(TxTypeOpts) = {Name: "TxCompleteWorkerSet"}];
+    TXTYPE_SCHEMA_CHANGE_REPORT = 23 [(TxTypeOpts) = {Name: "TxSchemaChangeReport"}];
 }

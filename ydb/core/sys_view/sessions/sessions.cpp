@@ -108,6 +108,27 @@ public:
             insert({TSchema::WmClassifiedBy::ColumnId, [] (const TNodeInfo& info, ui32) {  // 22
                 return info.HasWmClassifiedBy() ? TCell(info.GetWmClassifiedBy().data(), info.GetWmClassifiedBy().size()) : TCell();
             }});
+
+            insert({TSchema::DurationUs::ColumnId, [] (const TNodeInfo& info, ui32) {  // 23
+                return info.HasDurationUs() ? TCell::Make<ui64>(info.GetDurationUs()) : TCell();
+            }});
+
+            insert({TSchema::CpuTimeUs::ColumnId, [] (const TNodeInfo& info, ui32) {  // 24
+                return info.HasCpuTimeUs() ? TCell::Make<ui64>(info.GetCpuTimeUs()) : TCell();
+            }});
+
+            insert({TSchema::ComputeMemoryBytes::ColumnId, [] (const TNodeInfo& info, ui32) {  // 25
+                return info.HasComputeMemoryBytes() ? TCell::Make<ui64>(info.GetComputeMemoryBytes()) : TCell();
+            }});
+
+            insert({TSchema::TableReadBytes::ColumnId, [] (const TNodeInfo& info, ui32) {  // 26
+                return info.HasTableReadBytes() ? TCell::Make<ui64>(info.GetTableReadBytes()) : TCell();
+            }});
+
+            insert({TSchema::SourceReadBytes::ColumnId, [] (const TNodeInfo& info, ui32) {  // 27
+                return info.HasSourceReadBytes() ? TCell::Make<ui64>(info.GetSourceReadBytes()) : TCell();
+            }});
+
         }
     };
 

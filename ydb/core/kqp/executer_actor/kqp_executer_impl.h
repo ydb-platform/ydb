@@ -962,6 +962,9 @@ protected:
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
             }
+            if (auto currentStats = GetUserRequestContext()->CurrentQueryStats) {
+                Stats->ReportCurrentStats(*currentStats);
+            }
             ProcessStreamingQueryCounters();
         }
 
@@ -1642,7 +1645,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
+            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero() || bool(GetUserRequestContext()->CurrentQueryStats),
             .RlPath = Request.RlPath,
             .ExecuterSpan = tasksSpan,
             .Trace = TraceStats ? &*TraceStats : nullptr,
@@ -1950,6 +1953,9 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
+            if (auto currentStats = GetUserRequestContext()->CurrentQueryStats) {
+                Stats->ReportCurrentStats(*currentStats, true);
+            }
 
             {
                 ui64 cycleCount = GetCycleCountFast();

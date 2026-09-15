@@ -456,6 +456,12 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     if (QueryTextForLogging.empty() && PreparedQuery && (!RequestEv || RequestEv->GetQuery().empty())) {
         QueryTextForLogging = PreparedQuery->GetText();
     }
+    QueryAstForLogging.clear();
+    if (ProcessingLastStatementPart() && PreparedQuery &&
+        IS_CTX_LOG_PRIORITY_ENABLED(*TlsActivationContext, NActors::NLog::PRI_WARN, NKikimrServices::KQP_REQUEST, 0ull))
+    {
+        QueryAstForLogging = PreparedQuery->GetPhysicalQuery().GetQueryAst();
+    }
     QueryData = {};
     PreparedQuery = {};
     CompileResult = {};

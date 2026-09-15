@@ -86,13 +86,16 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
     }
 
-    Y_UNIT_TEST(ResultChannelFlowControlPauseResume) {
+    Y_UNIT_TEST_TWIN(ResultChannelFlowControlPauseResume, ClientStats) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
 
         TKikimrRunner kikimr(settings);
         const ui32 totalRows = 2000;
         kikimr.RunCall([&] { CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
 
+        auto client = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
+        auto checkSession = kikimr.RunCall([&] { return client.CreateSession().GetValueSync().GetSession(); });
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
@@ -119,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                 receivedCurrentStats = true;
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType && ev->Recipient == streamSender) {
                 auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
                 auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
@@ -142,17 +145,60 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         auto request = NDataShard::NKqpHelpers::MakeStreamRequest(
             streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false);
-        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
-        request->SetProgressStatsPeriod(TDuration::MilliSeconds(1));
+        request->Record.MutableRequest()->SetSessionId(session.GetId().c_str());
+        request->Record.MutableRequest()->SetDatabase("/Root");
+        request->Record.MutableRequest()->SetKeepSession(true);
+        if (ClientStats) {
+            request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+            request->SetProgressStatsPeriod(TDuration::MilliSeconds(1));
+        }
         NDataShard::NKqpHelpers::SendRequest(runtime, streamSender, std::move(request));
 
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        runtime.SimulateSleep(TDuration::Seconds(6));
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
-        UNIT_ASSERT_C(receivedCurrentStats, "expected execution stats before the query completes");
-        UNIT_ASSERT_GT(reportedCpuTimeUs, 0);
-        UNIT_ASSERT_GT(reportedReadBytes, 0);
+        if (ClientStats) {
+            UNIT_ASSERT_C(receivedCurrentStats, "expected execution stats before the query completes");
+            UNIT_ASSERT_GT(reportedCpuTimeUs, 0);
+            UNIT_ASSERT_GT(reportedReadBytes, 0);
+        } else {
+            UNIT_ASSERT(!receivedCurrentStats);
+        }
+
+        auto checkSysView = [&](bool executing) {
+            auto result = kikimr.RunCall([&] {
+                return checkSession.ExecuteDataQuery(TStringBuilder()
+                    << "SELECT State, Query, DurationUs, CpuTimeUs, ComputeMemoryBytes, TableReadBytes, SourceReadBytes "
+                    << "FROM `/Root/.sys/query_sessions` WHERE SessionId = '" << session.GetId() << "';",
+                    TTxControl::BeginTx().CommitTx()).GetValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), executing ? "EXECUTING" : "IDLE");
+            for (const auto* name : {"DurationUs", "CpuTimeUs", "ComputeMemoryBytes", "TableReadBytes", "SourceReadBytes"}) {
+                const auto value = parser.ColumnParser(name).GetOptionalUint64();
+                UNIT_ASSERT_VALUES_EQUAL_C(value.has_value(), executing, name);
+            }
+            if (executing) {
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Query").GetOptionalUtf8().value(), "SELECT * FROM `/Root/ManyShardsTable`;");
+                UNIT_ASSERT_GT(parser.ColumnParser("DurationUs").GetOptionalUint64().value(), 0);
+                UNIT_ASSERT_GT(parser.ColumnParser("CpuTimeUs").GetOptionalUint64().value(), 0);
+                UNIT_ASSERT_GT(parser.ColumnParser("TableReadBytes").GetOptionalUint64().value(), 0);
+            }
+        };
+        checkSysView(true);
+
+        // A rejected concurrent request must not replace or clear the running query.
+        auto busySender = runtime.AllocateEdgeActor();
+        auto busyRequest = NDataShard::NKqpHelpers::MakeStreamRequest(busySender, "SELECT 1;");
+        busyRequest->Record.MutableRequest()->SetSessionId(session.GetId().c_str());
+        busyRequest->Record.MutableRequest()->SetDatabase("/Root");
+        busyRequest->Record.MutableRequest()->SetKeepSession(true);
+        auto busyReply = NDataShard::NKqpHelpers::ExecRequest(runtime, busySender, std::move(busyRequest));
+        UNIT_ASSERT_VALUES_EQUAL(busyReply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SESSION_BUSY);
+        checkSysView(true);
 
         resuming = true;
         // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.
@@ -167,6 +213,13 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         UNIT_ASSERT_GT(rowsAfterResume, 0);
         UNIT_ASSERT_VALUES_EQUAL(rowsWhilePaused + rowsAfterResume, totalRows);
+        checkSysView(false);
+        // Reuse the session: a short query must not leave the previous snapshot visible.
+        auto next = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery("SELECT 1;", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        });
+        UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
+        checkSysView(false);
     }
 
     // TODO: Test shard write shuffle.

@@ -29,6 +29,36 @@ std::optional<ui64> GetSafeBarrierOnExecutor(
     return future.GetValue(TDuration::Seconds(10));
 }
 
+<<<<<<< HEAD
+=======
+// Drives dirtyMap into a state where NeedPersist() is true and the persist
+// generation has advanced. Mirrors the flush choreography used in dirty_map_ut:
+// a write above the fresh DDisk's watermark populates its Ahead field, which
+// bumps the behind/ahead generation on flush. Must run on the executor thread.
+void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
+{
+    THostMask requested;
+    requested.Set(0);
+    requested.Set(1);
+    requested.Set(2);
+    requested.Set(3);
+
+    dirtyMap.RegisterInflightWrite(
+        MakeKey(100),
+        TBlockRange16::WithLength(10, 10));
+    dirtyMap.WriteFinished(
+        MakeKey(100),
+        TBlockRange16::WithLength(10, 10),
+        requested,
+        requested);
+
+    auto flushHint = dirtyMap.MakeFlushHint(1);
+    for (const auto& [route, hint]: flushHint.GetAllHints()) {
+        dirtyMap.FlushFinished(route, MakePBufferKeys(hint.Segments), {});
+    }
+}
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,7 +69,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     {
         Init();
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 1);
+        const auto range = TBlockRange16::WithLength(10, 1);
         ExpectedRange = range;
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
@@ -48,11 +78,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         request->Sglist = MakeSgList();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -130,7 +159,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     {
         Init();
 
-        const TBlockRange64 range = TBlockRange64::WithLength(10, 1);
+        const auto range = TBlockRange16::WithLength(10, 1);
         ExpectedRange = range;
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
@@ -138,7 +167,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         PartitionDirectService->LsnGenerator = 122;
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -158,7 +186,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         request->Sglist = MakeSgList();
 
         auto future =
@@ -217,7 +245,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         };
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -262,7 +289,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -374,7 +400,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -447,7 +472,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         VChunkConfig.SetWatermark(3, std::nullopt);
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -506,7 +530,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         VChunkConfig.DisableHost(0);
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -548,7 +571,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
-             TBlockRange64 range,
+             TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
         {
@@ -571,7 +594,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
-             TBlockRange64 range,
+             TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
         {
@@ -592,7 +615,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         };
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -753,12 +775,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             return neverResolvePromise.GetFuture();
         };
 
-        const TBlockRange64 range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         ExpectedRange = range;
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -779,7 +800,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         writeRequest->Sglist = MakeSgList();
         auto writeFuture = vchunk->WriteBlocksLocal(
             callContext,
@@ -792,7 +813,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 2,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         readRequest->Sglist = TGuardedSgList(
             TSgList{TBlockDataRef{readBuffer.data(), readBuffer.size()}});
         auto readFuture = vchunk->ReadBlocksLocal(
@@ -856,12 +877,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Default handler returns an immediately-resolved future, so
         // DirtyMapReady becomes true inside DoStart.
 
-        const TBlockRange64 range = TBlockRange64::WithLength(0, 1);
+        const auto range = TBlockRange16::WithLength(0, 1);
         ExpectedRange = range;
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             PartitionDirectService.get(),
             VChunkConfig,
@@ -893,7 +913,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
                 .VolumeConfig = PartitionDirectService->GetVolumeConfig(),
                 .RequestId = 1,
-                .Range = range});
+                .Range = ConvertRangeSafe<TBlockRange64>(range)});
         writeRequest->Sglist = MakeSgList();
         auto writeFuture = vchunk->WriteBlocksLocal(
             callContext,
@@ -932,7 +952,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -1009,7 +1028,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -1057,7 +1075,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),

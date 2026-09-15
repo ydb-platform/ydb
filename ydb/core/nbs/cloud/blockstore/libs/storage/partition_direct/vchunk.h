@@ -35,7 +35,6 @@ class TVChunk
 {
 public:
     TVChunk(
-        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
@@ -69,11 +68,6 @@ public:
 =======
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] size_t GetAllocatedMemorySize() const;
-    [[nodiscard]] size_t GetUsedMemorySize() const;
-
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest record id still held in PBuffers, or nullopt when nothing is
     // inflight. Until the dirty map is restored it returns the zero record id
@@ -84,6 +78,9 @@ public:
 
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     [[nodiscard]] TString DebugPrintDirtyMap();
+    [[nodiscard]] TDirtyMapStats GetDirtyMapStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetDirtyMapHostStats(
+        THostIndex hostIndex) const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
@@ -100,6 +97,20 @@ public:
         std::shared_ptr<TWriteRequestBundle> bundle,
         THostMask completedWrites) override;
 
+<<<<<<< HEAD
+=======
+    // IRangeSyncClient implementation
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
+        THostIndex host) const override;
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range) override;
+    [[nodiscard]] TRangeLock MakeDDiskRangeLock(
+        TBlockRange16 range,
+        THostMask mask) override;
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range) override;
+    void EndRangeSync(ui64 syncId, bool success) override;
+    void OnCopyProgress(ui64 totalBytes) override;
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 private:
     friend struct TBaseFixture;
 
@@ -121,7 +132,7 @@ private:
 
     void DoReadBlocksLocal(
         TTracedPromise<TReadBlocksLocalResponse> promise,
-        TBlockRange64 vchunkRange,
+        TBlockRange16 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
@@ -170,7 +181,7 @@ private:
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
     const ui32 BlockSize;
-    const ui64 BlocksCount;
+    const ui16 BlocksCount;
     const ui32 SyncRequestsBatchSize;
 
     TLogTitle LogTitle;

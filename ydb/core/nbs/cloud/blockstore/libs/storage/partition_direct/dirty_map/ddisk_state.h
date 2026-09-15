@@ -101,8 +101,7 @@ public:
     [[nodiscard]] ui16 GetRottenBlockCount() const;
 
     // Memory usage.
-    [[nodiscard]] size_t GetAllocatedSize() const;
-    [[nodiscard]] size_t GetUsedSize() const;
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
 
     void UpdateWatermarkDebugOnly(ui16 blockCount);
     [[nodiscard]] TString DebugPrint() const;

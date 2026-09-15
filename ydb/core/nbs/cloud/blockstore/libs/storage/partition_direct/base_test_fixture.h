@@ -60,14 +60,14 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
 =======
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
-        CreateArenaAllocator(),
+        CreateArenaAllocatorPool(),
         VChunkConfig,
         BlockSize,
         VChunkBlockCount);
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 
     THostIndex ExpectedHost = 0;
-    TBlockRange64 ExpectedRange;
+    TBlockRange16 ExpectedRange;
     TString RangeData;
 
     TMutex PromisesGuard;

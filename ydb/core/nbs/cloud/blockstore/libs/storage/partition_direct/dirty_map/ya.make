@@ -6,11 +6,13 @@ GENERATE_ENUM_SERIALIZATION(inflight_info.h)
 SRCS(
     dirty_map.cpp
     inflight_info.cpp
+    mon_model.cpp
     range_locker.cpp
 )
 
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
+    ydb/core/nbs/cloud/blockstore/libs/common/memory
     ydb/core/nbs/cloud/blockstore/libs/common/block_range
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
 

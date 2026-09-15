@@ -25,6 +25,12 @@ namespace {
 constexpr size_t MinArenaSize = 1_MB;
 constexpr size_t Alignment = 8;
 
+size_t RoundUp(size_t size, size_t alignment)
+{
+    const size_t remainder = size % alignment;
+    return remainder ? size + alignment - remainder : size;
+}
+
 size_t CalculateArenaSize(size_t slotSize)
 {
     const size_t slotCount = (MinArenaSize + slotSize - 1) / slotSize;
@@ -101,17 +107,21 @@ public:
 
     void* Allocate()
     {
+        void* result = nullptr;
         if (FreeList) {
-            TSlot* result = FreeList;
+            result = FreeList;
             FreeList = FreeList->Next;
             std::memset(result, 0, SlotSize);
             --FreeCount;
-            return result;
+        } else {
+            if (AllocatedSlots == SlotsPerArena) {
+                return nullptr;
+            }
+            result = static_cast<char*>(Base) + AllocatedSlots++ * SlotSize;
         }
-        if (AllocatedSlots == SlotsPerArena) {
-            return nullptr;
-        }
-        return static_cast<char*>(Base) + AllocatedSlots++ * SlotSize;
+
+        MaxAllocatedSlots = Max(MaxAllocatedSlots, AllocatedSlots - FreeCount);
+        return result;
     }
 
     bool Deallocate(void* slot)
@@ -128,6 +138,11 @@ public:
         return FreeCount == AllocatedSlots;
     }
 
+    [[nodiscard]] size_t GetMaxAllocatedSlots() const
+    {
+        return MaxAllocatedSlots;
+    }
+
 private:
     const size_t ArenaSize = 0;
     const TBase Base = nullptr;
@@ -136,6 +151,7 @@ private:
     size_t AllocatedSlots = 0;
     TSlot* FreeList = nullptr;
     size_t FreeCount = 0;
+    size_t MaxAllocatedSlots = 0;
 };
 
 // Manages arenas that contain slots of the same size.
@@ -197,16 +213,27 @@ public:
         return SlotSize;
     }
 
-    [[nodiscard]] TArenaAllocatorStats GetStats() const
+    [[nodiscard]] TArenaAllocatorSlotStats GetStats() const
     {
-        return TArenaAllocatorStats{
+        return TArenaAllocatorSlotStats{
             .SlotSize = SlotSize,
+            .ArenaSize = ArenaSize,
             .ReservedSize = GetReservedSize(),
             .UsedSize = GetAllocatedSize(),
+            .MaxUsedSize = Max(MaxUsedSize, GetMaxUsedSize()),
             .Count = AllocateCount};
     }
 
 private:
+    [[nodiscard]] size_t GetMaxUsedSize() const
+    {
+        size_t result = 0;
+        for (const auto& arena: Arenas) {
+            result += arena.GetMaxAllocatedSlots() * SlotSize;
+        }
+        return result;
+    }
+
     void FreeArena(TArenaPtr arena)
     {
         if (arena == LastUsed) {
@@ -214,6 +241,7 @@ private:
         }
         for (auto it = Arenas.begin(); it != Arenas.end(); ++it) {
             if (&*it == arena) {
+                MaxUsedSize = Max(MaxUsedSize, GetMaxUsedSize());
                 Arenas.erase(it);
                 return;
             }
@@ -227,6 +255,7 @@ private:
     TArena* LastUsed = nullptr;
     size_t AllocateCount = 0;
     size_t DeallocateCount = 0;
+    size_t MaxUsedSize = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -293,14 +322,23 @@ public:
         }
     }
 
-    [[nodiscard]] TVector<TArenaAllocatorStats> GetStats() const override
+    [[nodiscard]] size_t UsedSize() const override
+    {
+        return AllocatedSize();
+    }
+
+    [[nodiscard]] TArenaAllocatorStats GetDetailedStat() const override
     {
         with_lock (Mutex) {
-            TVector<TArenaAllocatorStats> result;
+            TArenaAllocatorStats result;
             result.reserve(ArenasBySlotSize.size());
             for (const auto& entry: ArenasBySlotSize) {
                 result.push_back(entry.second.GetStats());
             }
+            Sort(
+                result,
+                [](const auto& lhs, const auto& rhs)
+                { return lhs.SlotSize < rhs.SlotSize; });
             return result;
         }
     }
@@ -329,25 +367,22 @@ IArenaAllocatorPtr CreateArenaAllocator()
 
 size_t RoundAllocationSize(size_t size)
 {
-    constexpr size_t MaxPowerOfTwoSize = 128 * 1024;
-
-    if (size && !(size & (size - 1))) {
-        // Size already power of 2.
-        return size;
+    if (size <= 4) {
+        return 4;
     }
-
-    if (size <= MaxPowerOfTwoSize) {
-        if (!size) {
-            return 0;
-        }
-
-        return FastClp2(size);
+    if (size <= 128) {
+        return RoundUp(size, 8);
     }
-
-    constexpr size_t Alignment = MaxPowerOfTwoSize;
-    const size_t remainder = size % Alignment;
-    return remainder ? size + Alignment - remainder : size;
+    if (size <= 512) {
+        return RoundUp(size, 16);
+    }
+    if (size <= 10_KB) {
+        return RoundUp(size, 32);
+    }
+    return RoundUp(size, 64);
 }
+
+//////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////
 

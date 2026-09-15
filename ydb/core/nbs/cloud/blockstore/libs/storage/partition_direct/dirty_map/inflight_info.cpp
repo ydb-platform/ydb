@@ -33,12 +33,18 @@ TInflightInfo::TInflightInfo(
 =======
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     IReadyQueue* readyQueue,
+<<<<<<< HEAD
     ui64 lsn,
     size_t byteCount)
     : State(EState::PBufferPendingWrite)
     , ReadyQueue(readyQueue)
     , Lsn(lsn)
     , ByteCount(byteCount)
+=======
+    THostMask desiredDDisks,
+    THostMask disabled)
+    : ReadyQueue(readyQueue)
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     , StartAt(TInstant::Now())
 {
     // Pending: no PBuffer holds the data yet, so nothing is registered in a
@@ -47,13 +53,24 @@ TInflightInfo::TInflightInfo(
 }
 
 TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
+<<<<<<< HEAD
     : State(other.State)
     , ReadyQueue(other.ReadyQueue)
     , Lsn(other.Lsn)
     , ByteCount(other.ByteCount)
+=======
+    : ReadyQueue(other.ReadyQueue)
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     , StartAt(other.StartAt)
-    , PBuffersLockCount(other.PBuffersLockCount)
     , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
+<<<<<<< HEAD
+=======
+    , PersistGeneration(other.PersistGeneration)
+    , PBuffersLockCount(other.PBuffersLockCount)
+    , State(other.State)
+    , DesiredDDisks(other.DesiredDDisks)
+    , Disabled(other.Disabled)
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushDesired(other.FlushDesired)
@@ -69,8 +86,12 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 TInflightInfo::~TInflightInfo()
 {
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
+<<<<<<< HEAD
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
+=======
+    Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 }
 
 void TInflightInfo::Detach()
@@ -99,6 +120,7 @@ void TInflightInfo::RestorePBuffer(THostIndex host)
 
         SetState(EState::PBufferWritten);
 <<<<<<< HEAD
+<<<<<<< HEAD
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
 =======
         ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Flush);
@@ -106,6 +128,12 @@ void TInflightInfo::RestorePBuffer(THostIndex host)
         SetState(EState::PBufferIncompleteWrite);
         ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Clone);
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+        ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
+    } else {
+        SetState(EState::PBufferIncompleteWrite);
+        ReadyQueue->Register(*this, IReadyQueue::EQueueType::Clone);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     }
 }
 
@@ -122,7 +150,11 @@ void TInflightInfo::OnWritten(
     SetState(EState::PBufferWritten);
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, true);
+<<<<<<< HEAD
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
+=======
+    ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 }
 
 TInflightInfo::EState TInflightInfo::GetState() const
@@ -154,7 +186,11 @@ TReadSource TInflightInfo::ReadMask() const
         case EState::PBufferFlushing:
             // The data is written to PBuffer, but not transferred to DDisk.
             // Will read from confirmed PBuffer at this inflight's Lsn.
+<<<<<<< HEAD
             return {.Mask = WriteConfirmed, .Lsn = Lsn};
+=======
+            return {.Mask = WriteConfirmed, .PBufferKey = GetPBufferKey()};
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         case EState::PBufferFlushed:
         case EState::PBufferErasing:
@@ -210,6 +246,7 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
 
     FlushConfirmed.Set(host);
 <<<<<<< HEAD
+<<<<<<< HEAD
 
     if (FlushDesired == FlushConfirmed) {
         SetState(EState::PBufferFlushed);
@@ -220,6 +257,9 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
     }
 =======
     ReadyQueue->InflightFlushFinished(PBufferKey, host);
+=======
+    ReadyQueue->InflightFlushFinished(*this, host);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     MaybeAdvanceToFlushed();
 >>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 }
@@ -232,11 +272,16 @@ void TInflightInfo::FlushFailed(THostIndex host)
 
     FlushRequested.Reset(host);
 <<<<<<< HEAD
+<<<<<<< HEAD
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
 =======
     ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Flush);
     ReadyQueue->InflightFlushFinished(PBufferKey, host);
 >>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
+=======
+    ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
+    ReadyQueue->InflightFlushFinished(*this, host);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 }
 
 THostMask TInflightInfo::GetRequestedFlushes() const
@@ -356,13 +401,11 @@ void TInflightInfo::RemoveHosts(THostMask removed)
                 DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);
             if (!notRequestsFlushes.Empty()) {
                 // New desired added. Will flush to it.
-                ReadyQueue->Register(
-                    PBufferKey,
-                    IReadyQueue::EQueueType::Flush);
+                ReadyQueue->Register(*this, IReadyQueue::EQueueType::Flush);
             }
 
             for (const auto host: droppedFlushes) {
-                ReadyQueue->InflightFlushFinished(PBufferKey, host);
+                ReadyQueue->InflightFlushFinished(*this, host);
             }
 
             MaybeAdvanceToFlushed();
@@ -399,7 +442,12 @@ void TInflightInfo::LockPBuffer()
     ++PBuffersLockCount;
 
     if (PBuffersLockCount == 1) {
+<<<<<<< HEAD
         ReadyQueue->UnRegister(Lsn);
+=======
+        // When lsn locked for reading, we should not erase it.
+        ReadyQueue->UnRegister(*this, IReadyQueue::EQueueType::Erase);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         ApplyBytes(WriteConfirmed, IReadyQueue::EPBufferCounter::Locked, true);
     }
 }
@@ -428,7 +476,12 @@ TString TInflightInfo::DebugPrint(TInstant now) const
 {
     TStringBuilder result;
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
+<<<<<<< HEAD
            << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
+=======
+           << ", locks:" << PBuffersLockCount << ", pgen:" << PersistGeneration
+           << ", dd:" << DesiredDDisks.Print() << ", d:" << Disabled.Print()
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
            << ", wr:" << WriteRequested.Print()
            << ", wc:" << WriteConfirmed.Print()
            << ", fd:" << FlushDesired.Print()
@@ -450,9 +503,9 @@ void TInflightInfo::ApplyBytes(
     }
 
     if (add) {
-        ReadyQueue->DataToPBufferAdded(host, counter, ByteCount);
+        ReadyQueue->DataToPBufferAdded(*this, host, counter);
     } else {
-        ReadyQueue->DataFromPBufferReleased(host, counter, ByteCount);
+        ReadyQueue->DataFromPBufferReleased(*this, host, counter);
     }
 }
 
@@ -502,8 +555,11 @@ void TInflightInfo::SetState(EState newState)
     CheckInvariants();
 
     if (State == EState::PBufferFlushed) {
-        ReadyQueue->UnRegister(PBufferKey, IReadyQueue::EQueueType::Flush);
-        ReadyQueue->FlushCompleted(PBufferKey, FlushConfirmed);
+        ReadyQueue->UnRegister(*this, IReadyQueue::EQueueType::Flush);
+        ReadyQueue->FlushCompleted(*this, FlushConfirmed);
+    }
+    if (State == EState::PBufferErased) {
+        ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
     }
 }
 
@@ -606,11 +662,19 @@ void TInflightInfo::MaybeQueryErase()
     const auto hostsToErase =
         WriteRequested.Exclude(Disabled).Exclude(EraseRequested);
     if (!hostsToErase.Empty()) {
-        ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Erase);
+        ReadyQueue->Register(*this, IReadyQueue::EQueueType::Erase);
     }
 }
 
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+TPBufferKey TInflightInfo::GetPBufferKey() const
+{
+    return ReadyQueue->GetPBufferKey(*this);
+}
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

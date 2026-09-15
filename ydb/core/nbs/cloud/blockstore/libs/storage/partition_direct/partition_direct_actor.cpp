@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
@@ -258,6 +259,14 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 {
     const auto nbsService = GetNbsService();
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
+=======
+    auto arenaAllocator = CreateArenaAllocator();
+    directBlockGroups.reserve(DirectBlockGroupsCount);
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
+    chaosInjectorControls.reserve(DirectBlockGroupsCount);
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
@@ -279,6 +288,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
+            arenaAllocator,
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],

@@ -21,7 +21,6 @@ class TRegion: public std::enable_shared_from_this<TRegion>
 {
 public:
     TRegion(
-        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,

@@ -40,7 +40,7 @@ public:
     }
 
     TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override
     {
         Y_UNUSED(range);
@@ -78,8 +78,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 123);
             TRangeLock lock2 = TRangeLockAccess::Make(
+<<<<<<< HEAD
                 &mock,
                 TBlockRange64::MakeOneBlock(100),
+=======
+                mock,
+                TBlockRange16::MakeOneBlock(100),
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                 mask);
             UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
             UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
@@ -111,8 +116,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
 
         {
             TRangeLock lock = TRangeLockAccess::Make(
+<<<<<<< HEAD
                 &mock,
                 TBlockRange64::MakeOneBlock(100),
+=======
+                mock,
+                TBlockRange16::MakeOneBlock(100),
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                 mask);
 
             lock.Arm();
@@ -132,8 +142,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
             TRangeLock lock2 = TRangeLockAccess::Make(
+<<<<<<< HEAD
                 &mock,
                 TBlockRange64::MakeOneBlock(100),
+=======
+                mock,
+                TBlockRange16::MakeOneBlock(100),
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                 mask);
             lock1.Arm();
             lock2.Arm();
@@ -159,8 +174,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
         {
             TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
             TRangeLock lock2 = TRangeLockAccess::Make(
+<<<<<<< HEAD
                 &mock,
                 TBlockRange64::MakeOneBlock(100),
+=======
+                mock,
+                TBlockRange16::MakeOneBlock(100),
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
                 mask);
             lock1.Arm();
             lock2.Arm();
@@ -187,8 +207,13 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
 
         TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
         TRangeLock lock2 = TRangeLockAccess::Make(
+<<<<<<< HEAD
             &mock,
             TBlockRange64::MakeOneBlock(100),
+=======
+            mock,
+            TBlockRange16::MakeOneBlock(100),
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             mask);
         lock1.Arm();
         lock2.Arm();

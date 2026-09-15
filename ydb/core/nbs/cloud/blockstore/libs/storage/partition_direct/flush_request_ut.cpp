@@ -20,11 +20,19 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 0, .DestinationHostIndex = 0};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
+<<<<<<< HEAD
             .Lsn = 42,
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .Lsn = 43,
             .Range = TBlockRange64::WithLength(20, 3)});
+=======
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
+        hint.Segments.push_back(TPBufferSegment{
+            .PBufferKey = MakeKey(43),
+            .Range = TBlockRange16::WithLength(20, 3)});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -61,11 +69,19 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
+<<<<<<< HEAD
             .Lsn = 42,
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .Lsn = 43,
             .Range = TBlockRange64::WithLength(20, 3)});
+=======
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
+        hint.Segments.push_back(TPBufferSegment{
+            .PBufferKey = MakeKey(43),
+            .Range = TBlockRange16::WithLength(20, 3)});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -102,11 +118,19 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
+<<<<<<< HEAD
             .Lsn = 42,
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .Lsn = 43,
             .Range = TBlockRange64::WithLength(20, 3)});
+=======
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
+        hint.Segments.push_back(TPBufferSegment{
+            .PBufferKey = MakeKey(43),
+            .Range = TBlockRange16::WithLength(20, 3)});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -144,11 +168,19 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
+<<<<<<< HEAD
             .Lsn = 42,
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .Lsn = 43,
             .Range = TBlockRange64::WithLength(20, 3)});
+=======
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
+        hint.Segments.push_back(TPBufferSegment{
+            .PBufferKey = MakeKey(43),
+            .Range = TBlockRange16::WithLength(20, 3)});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -195,8 +227,13 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
+<<<<<<< HEAD
             .Lsn = 42,
             .Range = TBlockRange64::WithLength(10, 3)});
+=======
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),

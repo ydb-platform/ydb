@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
@@ -43,6 +44,7 @@ class TDirectBlockGroup
 {
 public:
     TDirectBlockGroup(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
@@ -68,6 +70,7 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+    TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
 
     IOraclePtr GetOracle() override;
 
@@ -82,30 +85,40 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -113,8 +126,13 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -295,6 +313,7 @@ private:
 
     TDbgSnapshot DoBuildMonSnapshot();
 
+    const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;

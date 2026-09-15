@@ -14,7 +14,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 TRequestHeaders MakeWriteTestRequestHeaders(
-    const TBlockRange64& range,
+    const TBlockRange16& range,
     ui32 blockSize)
 {
     auto volumeConfig = std::make_shared<TVolumeConfig>(TVolumeConfig{
@@ -27,7 +27,7 @@ TRequestHeaders MakeWriteTestRequestHeaders(
     return TRequestHeaders{
         .VolumeConfig = std::move(volumeConfig),
         .RequestId = 1,
-        .Range = range};
+        .Range = ConvertRangeSafe<TBlockRange64>(range)};
 }
 
 THostMask MakeHostMask(std::initializer_list<THostIndex> hosts)
@@ -108,8 +108,13 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
+<<<<<<< HEAD
              ui64 lsn,
              TBlockRange64 range,
+=======
+             TPBufferKey pBufferKey,
+             TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
         {
@@ -171,8 +176,13 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
+<<<<<<< HEAD
              ui64 lsn,
              TBlockRange64 range,
+=======
+             TPBufferKey pBufferKey,
+             TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
         {

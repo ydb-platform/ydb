@@ -102,8 +102,11 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
 
 TVector<TRegionPtr> CreateRegions(
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     IArenaAllocatorPtr arenaAllocator,
+=======
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     ITraceService* traceService,
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     IPartitionDirectService* partitionDirectService,
@@ -121,7 +124,6 @@ TVector<TRegionPtr> CreateRegions(
             counters->GetSubgroup("region", ToString(i));
 
         regions[i] = std::make_shared<TRegion>(
-            arenaAllocator,
             TActorContext::ActorSystem(),
             partitionDirectService,
             i,
@@ -158,10 +160,14 @@ TFastPathService::TFastPathService(
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
-    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
+<<<<<<< HEAD
+=======
+    , ArenaAllocator(
+          DirectBlockGroups.front()->GetArenaAllocatorPool()->GetAllocator())
+    , ChaosInjectorControls(std::move(chaosInjectorControls))
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     , Regions(CreateRegions(
-          ArenaAllocator,
           this,
           blockCount,
           blockSize,
@@ -183,7 +189,30 @@ TFastPathService::TFastPathService(
           .BlockCount = blockCount,
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
+<<<<<<< HEAD
 {}
+=======
+{
+    Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+    Y_ABORT_UNLESS(ArenaAllocator);
+
+    const ui64 copyRangeBandwidth =
+        StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
+    if (copyRangeBandwidth) {
+        CopyRangeBucket.emplace(
+            ActorSystem->Timestamp(),
+            copyRangeBandwidth,
+            copyRangeBandwidth);
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Regions: %zu",
+        LogTitle.GetWithTime().c_str(),
+        Regions.size());
+}
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
 TFastPathService::~TFastPathService()
 {
@@ -471,7 +500,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .LsnCounter = SequenceGenerator.load(),
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
-        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
 

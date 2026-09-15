@@ -38,8 +38,13 @@ void TWriteRequestTestFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [this]   //
         (ui32 vChunkIndex,
          ui8 hostIndex,
+<<<<<<< HEAD
          ui64 lsn,
          TBlockRange64 range,
+=======
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -60,8 +65,13 @@ void TWriteRequestTestFixture::Init()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
+<<<<<<< HEAD
             ui64 lsn,
             TBlockRange64 range,
+=======
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId,
@@ -142,8 +152,13 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
+<<<<<<< HEAD
             ui64 lsn,
             TBlockRange64 range,
+=======
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId,

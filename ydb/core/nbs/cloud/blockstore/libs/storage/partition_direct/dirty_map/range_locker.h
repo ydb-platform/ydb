@@ -27,7 +27,7 @@ struct ILockableRanges
     virtual void LockPBuffer(ui64 lsn) = 0;
     virtual void UnlockPBuffer(ui64 lsn) = 0;
     virtual TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) = 0;
     virtual void UnLockDDiskRange(TLockRangeHandle handle) = 0;
 };
@@ -55,6 +55,7 @@ private:
 
     // Lock the range on the DDisks specified by the mask.
     TRangeLock(
+<<<<<<< HEAD
         ILockableRanges* lockableRanges,
         TBlockRange64 range,
         THostMask mask);
@@ -62,6 +63,15 @@ private:
     ILockableRanges* LockableRanges = nullptr;
     ui64 Lsn = 0;
     TBlockRange64 Range;
+=======
+        ILockableRangesWeakPtr lockableRanges,
+        TBlockRange16 range,
+        THostMask mask);
+
+    ILockableRangesWeakPtr LockableRanges;
+    TPBufferKey PBufferKey;
+    TBlockRange16 Range;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     THostMask Mask;
 
     ILockableRanges::TLockRangeHandle LockRange{};

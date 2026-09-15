@@ -26,7 +26,6 @@ using namespace NThreading;
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
-    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
@@ -51,7 +50,7 @@ TVChunk::TVChunk(
     , Counters(std::move(counters))
 =======
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
-          std::move(arenaAllocator),
+          DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
           BlockSize,
           BlocksCount))
@@ -108,7 +107,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -167,7 +166,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -277,6 +276,7 @@ ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
 =======
 ui64 TVChunk::GetFreshTotalBytes(THostIndex hostIndex) const
@@ -303,6 +303,8 @@ size_t TVChunk::GetUsedMemorySize() const
     return BlocksDirtyMap->GetUsedSize();
 }
 
+=======
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 {
@@ -337,6 +339,38 @@ TString TVChunk::DebugPrintDirtyMap()
     return sb;
 }
 
+<<<<<<< HEAD
+=======
+TDirtyMapStats TVChunk::GetDirtyMapStats() const
+{
+    return BlocksDirtyMap->GetStats();
+}
+
+TDirtyMapHostStats TVChunk::GetDirtyMapHostStats(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetHostStats(hostIndex);
+}
+
+TVChunkSnapshot TVChunk::BuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return {
+        .VChunkConfig = VChunkConfig,
+        .SafeBarrier = GetSafeBarrierForErase(),
+        .DirtyMapDump = DebugPrintDirtyMap(),
+    };
+}
+
+const TVChunkStats& TVChunk::GetStats() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    return Stats;
+}
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 void TVChunk::OnWriteBlocksResponse(
     std::shared_ptr<TWriteRequestBundle> bundle,
     const TWriteRequestResponse& response)
@@ -397,6 +431,71 @@ void TVChunk::OnBelatedWriteBlocksResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
+=======
+std::optional<TBlockRange16> TVChunk::GetFreshRange(THostIndex host) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetFreshRange(host);
+}
+
+TReadHint TVChunk::MakeReadHint(TBlockRange16 range)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->MakeReadHint(range);
+}
+
+TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange16 range, THostMask mask)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return TRangeLock(BlocksDirtyMap, range, mask);
+}
+
+TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange16 range)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->BeginRangeSync(host, range);
+}
+
+void TVChunk::EndRangeSync(ui64 syncId, bool success)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    BlocksDirtyMap->EndRangeSync(syncId, success);
+}
+
+void TVChunk::OnCopyProgress(ui64 totalBytes)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto prepare = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            auto newConfig = self->VChunkConfig;
+            for (const auto& [hostIndex, _]: self->Copiers) {
+                const auto freshRange = self->GetFreshRange(hostIndex);
+                newConfig.SetWatermark(
+                    hostIndex,
+                    freshRange ? std::optional<ui64>(
+                                     freshRange->Start * self->BlockSize)
+                               : std::nullopt);
+            }
+            return newConfig;
+        }
+        return TVChunkConfig{};
+    };
+    UpdateConfig(
+        std::move(prepare),
+        TStringBuilder() << "copy progress " << totalBytes << " bytes");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -456,7 +555,7 @@ void TVChunk::DoStop()
 
 void TVChunk::DoReadBlocksLocal(
     TTracedPromise<TReadBlocksLocalResponse> promise,
-    TBlockRange64 vchunkRange,
+    TBlockRange16 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     std::shared_ptr<NWilson::TSpan> span)

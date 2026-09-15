@@ -42,9 +42,17 @@ TListPBufferResponse MakeListPBufferResponse(
     for (const auto& segment: response.GetRecords()) {
         ui64 lsn = segment.GetLsn();
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
+<<<<<<< HEAD
         auto range = TBlockRange64::WithLength(
             segment.GetSelector().GetOffsetInBytes() / DefaultBlockSize,
             segment.GetSelector().GetSize() / DefaultBlockSize);
+=======
+        const ui16 rangeStart =
+            segment.GetSelector().GetOffsetInBytes() / blockSize;
+        const ui16 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        Y_ABORT_UNLESS(rangeSize);
+        const auto range = TBlockRange16::WithLength(rangeStart, rangeSize);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex, .Lsn = lsn, .Range = range});
     }
@@ -115,6 +123,7 @@ TString TDirectBlockGroup::TDDiskConnection::DebugPrint() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
@@ -131,8 +140,14 @@ TDirectBlockGroup::TDirectBlockGroup(
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
+<<<<<<< HEAD
 >>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831))
     : ActorSystem(actorSystem)
+=======
+    : ArenaAllocatorPool(
+          std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
+    , ActorSystem(actorSystem)
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(tabletId)
@@ -209,6 +224,11 @@ TDirectBlockGroup::TDirectBlockGroup(
     GrowOracleToConnections();
 }
 
+TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
+}
+
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -276,7 +296,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -352,8 +372,13 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
+<<<<<<< HEAD
     ui64 lsn,
     TBlockRange64 range,
+=======
+    TPBufferKey pBufferKey,
+    TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -427,7 +452,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -505,8 +530,13 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
+<<<<<<< HEAD
     ui64 lsn,
     TBlockRange64 range,
+=======
+    TPBufferKey pBufferKey,
+    TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -580,8 +610,13 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
+<<<<<<< HEAD
     ui64 lsn,
     TBlockRange64 range,
+=======
+    TPBufferKey pBufferKey,
+    TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -2052,20 +2087,18 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
-    size_t allocatedMemorySize = 0;
-    size_t usedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
+
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                auto& stat = hostsStat[host];
-                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
-                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
+                hostsStat[host].DirtyMapStats.Aggregate(
+                    vChunk->GetDirtyMapHostStats(host));
             }
-            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
-            usedMemorySize += vChunk->GetUsedMemorySize();
+            dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
@@ -2079,8 +2112,9 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
-        .AllocatedMemorySize = allocatedMemorySize,
-        .UsedMemorySize = usedMemorySize,
+        .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
+        .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
+        .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     };

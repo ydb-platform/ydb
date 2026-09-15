@@ -60,7 +60,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -89,8 +89,13 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
+<<<<<<< HEAD
          ui64 lsn,
          TBlockRange64 range,
+=======
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -117,8 +122,13 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
+<<<<<<< HEAD
          ui64 lsn,
          TBlockRange64 range,
+=======
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -153,7 +163,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {

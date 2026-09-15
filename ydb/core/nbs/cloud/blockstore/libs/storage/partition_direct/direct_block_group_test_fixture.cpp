@@ -81,6 +81,7 @@ TDBGFixture::MakeDirectBlockGroup(
     const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds) const
 {
     return std::make_shared<TDirectBlockGroup>(
+        CreateArenaAllocator(),
         Runtime->GetActorSystem(0),
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,

@@ -36,7 +36,7 @@ size_t GetVChunkIndex(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange);
 
-TBlockRange64 TranslateToVChunk(
+TBlockRange16 TranslateToVChunk(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange);
 

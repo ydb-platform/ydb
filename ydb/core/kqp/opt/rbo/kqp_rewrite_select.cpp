@@ -85,7 +85,12 @@ TString GetAggregationFunction(TExprNode::TPtr node) {
     return TString(node->Content());
 }
 
-void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& aggregations) {
+void CollectAggregationsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& aggregations,
+                             THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (IsAggregation(node)) {
         if (node->ChildrenSize() == 2) {
             Y_ENSURE(node->ChildPtr(0)->Content() == "count", "Unsupported aggregation function for *");
@@ -109,13 +114,14 @@ void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& agg
     }
 
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectAggregationsImpl(node->ChildPtr(i), aggregations);
+        CollectAggregationsImpl(node->ChildPtr(i), aggregations, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectAggregations(TExprNode::TPtr node) {
     TVector<TExprNode::TPtr> aggregations;
-    CollectAggregationsImpl(node, aggregations);
+    THashSet<const TExprNode*> visited;
+    CollectAggregationsImpl(node, aggregations, visited);
     return aggregations;
 }
 
@@ -734,19 +740,25 @@ bool IsWindowCall(const TExprNode::TPtr& node) {
     return node->IsCallable("YqlWin") || node->IsCallable("YqlAggWin");
 }
 
-void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls) {
+void CollectWindowCallsImpl(const TExprNode::TPtr& node, TVector<TExprNode::TPtr>& calls,
+                            THashSet<const TExprNode*>& visited) {
+    if (!visited.insert(node.Get()).second) {
+        return;
+    }
+
     if (IsWindowCall(node)) {
         calls.push_back(node);
         return;
     }
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        CollectWindowCallsImpl(node->ChildPtr(i), calls);
+        CollectWindowCallsImpl(node->ChildPtr(i), calls, visited);
     }
 }
 
 TVector<TExprNode::TPtr> CollectWindowCalls(const TExprNode::TPtr& node) {
     TVector<TExprNode::TPtr> calls;
-    CollectWindowCallsImpl(node, calls);
+    THashSet<const TExprNode*> visited;
+    CollectWindowCallsImpl(node, calls, visited);
     return calls;
 }
 

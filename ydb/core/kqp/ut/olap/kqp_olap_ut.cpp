@@ -2330,6 +2330,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY a
                 LIMIT 1;
             )",
+            // Several projections over the same JSON_VALUE: the column shard computes it once,
+            // but every projection must still be a separate output column of the SSA program.
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT a, JSON_VALUE(jsonDoc1, "$.\"a\"") as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2
+                FROM `/Root/foo`
+                ORDER BY a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT col1, col2, col3, COUNT(*) as c
+                FROM `/Root/foo`
+                GROUP BY
+                    JSON_VALUE(jsonDoc1, "$.\"a\"") as col1,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 2.0 as col3
+                ORDER BY col1;
+            )",
         };
 
         std::vector<TString> results = {
@@ -2341,7 +2361,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[#];[[1.1]];[[2.1]]])",
             R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
             R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])",
-            R"([[1;["a1"]]])"
+            R"([[1;["a1"]]])",
+            R"([[1;["1.1"];[2.1]];[2;["2.1"];[3.1]];[3;#;#]])",
+            R"([[#;#;#;1u];[["1.1"];[2.1];[3.1];1u];[["2.1"];[3.1];[4.1];1u]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

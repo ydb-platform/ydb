@@ -2517,7 +2517,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             creds.ConnectionToken.emplace(reply->Get()->Record.GetConnectionToken());
             if (recipient == PBService && registerBuffer) {
                 // Real PDisk bootstrap can advance virtual time beyond the registration
-                // timeout. Wait for its initial chunks before timestamping the request.
+                // timeout. Wait for its initial chunks before obtaining the registration token.
                 const auto pbId = Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(PBService);
                 Runtime.Sim([&] {
                     bool ready = false;
@@ -2526,7 +2526,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                     }));
                     return !ready;
                 });
-                Send(recipient, new NDDisk::TEvRegisterPersistentBuffer(creds, Runtime.GetClock()));
+                Send(recipient, new NDDisk::TEvGetPersistentBufferRegistrationToken(creds));
+                auto token = Grab<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>();
+                UNIT_ASSERT(token->Get()->Record.GetStatus() == TStatus::OK);
+                Send(recipient, new NDDisk::TEvRegisterPersistentBuffer(creds, token->Get()->Record.GetToken()));
                 ExpectOk<NDDisk::TEvRegisterPersistentBufferResult>();
             }
             return creds;

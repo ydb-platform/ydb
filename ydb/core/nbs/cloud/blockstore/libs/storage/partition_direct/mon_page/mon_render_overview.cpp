@@ -1,6 +1,9 @@
 #include "mon_render_overview.h"
 
 #include "mon_model.h"
+#include "mon_util.h"
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -33,6 +36,144 @@ enum class EDbgConfigCellKind
     Empty,       // The node is not used by this DBG.
     Total,       // An aggregate across nodes or DBGs.
 };
+
+void RenderSize(
+    IOutputStream& str,
+    TStringBuf name,
+    ui32 blockSize,
+    ui64 blockCount)
+{
+    HTML (str) {
+        TABLER () {
+            TABLED () {
+                str << name;
+            }
+            TABLED () {
+                str << FormatByteSize(blockSize) << " * " << blockCount << " = "
+                    << FormatByteSize(blockSize * blockCount);
+            }
+        }
+    }
+}
+
+ui64 CalculateRegionCount(ui64 blockCount, ui64 regionBlockCount)
+{
+    if (regionBlockCount == 0) {
+        return 0;
+    }
+    return blockCount / regionBlockCount + (blockCount % regionBlockCount != 0);
+}
+
+void RenderOverviewInfo(
+    IOutputStream& str,
+    const TTabletInfo& tabletInfo,
+    const std::optional<TFastPathServiceInfo>& serviceInfo)
+{
+    HTML (str) {
+        TAG (TH3) {
+            str << "Overview";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEBODY () {
+                TABLER () {
+                    TABLED () {
+                        str << "TabletId";
+                    }
+                    TABLED () {
+                        str << tabletInfo.TabletId;
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "Generation";
+                    }
+                    TABLED () {
+                        str << tabletInfo.Generation;
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "DiskId";
+                    }
+                    TABLED () {
+                        str << HtmlEscape(tabletInfo.DiskId);
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "State";
+                    }
+                    TABLED () {
+                        str << HtmlEscape(tabletInfo.State);
+                    }
+                }
+                RenderSize(
+                    str,
+                    "Disk size",
+                    tabletInfo.BlockSize,
+                    tabletInfo.BlockCount);
+                RenderSize(
+                    str,
+                    "VChunk size",
+                    tabletInfo.BlockSize,
+                    tabletInfo.VChunkBlockCount);
+                RenderSize(
+                    str,
+                    "Region size",
+                    tabletInfo.BlockSize,
+                    tabletInfo.RegionBlockCount);
+                TABLER () {
+                    TABLED () {
+                        str << "Region count";
+                    }
+                    TABLED () {
+                        str << CalculateRegionCount(
+                            tabletInfo.BlockCount,
+                            tabletInfo.RegionBlockCount);
+                    }
+                }
+                if (serviceInfo) {
+                    TABLER () {
+                        TABLED () {
+                            str << "DirectBlockGroups";
+                        }
+                        TABLED () {
+                            str << serviceInfo->DbgCount;
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "VChunks (total)";
+                        }
+                        TABLED () {
+                            str << serviceInfo->TotalVChunks;
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "LSN counter";
+                        }
+                        TABLED () {
+                            str << serviceInfo->LsnCounter;
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "Last safe barrier";
+                        }
+                        TABLED () {
+                            if (serviceInfo->LastSafeBarrier != 0) {
+                                str << serviceInfo->LastSafeBarrier;
+                            } else {
+                                str << "-";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 TDbgConfigColumn BuildDbgConfigColumn(const TDbgSnapshot& dbg)
 {
@@ -129,55 +270,6 @@ void RenderDbgConfigCell(
         str << BuildDDisksStates(cell, true);
     }
     str << "</td>";
-}
-
-void RenderOverviewHeader(IOutputStream& str, const TFastPathServiceInfo& info)
-{
-    HTML (str) {
-        TAG (TH3) {
-            str << "Overview";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEBODY () {
-                TABLER () {
-                    TABLED () {
-                        str << "DirectBlockGroups";
-                    }
-                    TABLED () {
-                        str << info.DbgCount;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "VChunks (total)";
-                    }
-                    TABLED () {
-                        str << info.TotalVChunks;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "LSN counter";
-                    }
-                    TABLED () {
-                        str << info.LsnCounter;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Last safe barrier";
-                    }
-                    TABLED () {
-                        if (info.LastSafeBarrier != 0) {
-                            str << info.LastSafeBarrier;
-                        } else {
-                            str << "-";
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 void RenderDbgConfig(
@@ -298,9 +390,7 @@ void RenderDbgConfig(
 
 void RenderOverview(IOutputStream& str, const TMonPageData& data)
 {
-    if (data.FastPathServiceInfo) {
-        RenderOverviewHeader(str, *data.FastPathServiceInfo);
-    }
+    RenderOverviewInfo(str, data.TabletInfo, data.FastPathServiceInfo);
     RenderDbgConfig(str, data.Dbgs, data.TabletInfo);
 }
 

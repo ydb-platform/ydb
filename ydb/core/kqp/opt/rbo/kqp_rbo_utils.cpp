@@ -119,8 +119,8 @@ bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOConte
         return false;
     }
 
-    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleEliminationForAggregation.Get()
-        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
+    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
     if (!enableShuffleElimination) {
         return false;
     }

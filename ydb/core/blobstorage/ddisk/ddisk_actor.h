@@ -30,6 +30,7 @@
 
 #include <array>
 #include <atomic>
+#include <deque>
 #include <optional>
 #include <queue>
 
@@ -51,6 +52,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     XX(ReadPersistentBuffer) \
     XX(ErasePersistentBuffer) \
     XX(ListPersistentBuffer) \
+    XX(GetPersistentBufferRegistrationToken) \
     /**/
 
 namespace NKikimr::NDDisk {
@@ -273,6 +275,11 @@ namespace NKikimr::NDDisk {
                 EvCompleteStop,
                 EvRetryIODelayed,
                 EvProcessPersistentBufferRemoval,
+                EvExpirePersistentBufferRegistrationToken,
+            };
+
+            struct TEvExpirePersistentBufferRegistrationToken
+                : TEventLocal<TEvExpirePersistentBufferRegistrationToken, EvExpirePersistentBufferRegistrationToken> {
             };
 
             struct TEvProcessPersistentBufferRemoval : TEventLocal<TEvProcessPersistentBufferRemoval, EvProcessPersistentBufferRemoval> {
@@ -1219,6 +1226,21 @@ namespace NKikimr::NDDisk {
         void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
+        struct TPersistentBufferRegistrationToken {
+            ui64 Token = 0;
+            TMonotonic IssuedAt = TMonotonic::Zero();
+            TPersistentBufferTabletKey Key{};
+            ui32 Generation = 0;
+
+            TPersistentBufferRegistrationToken() = default;
+            TPersistentBufferRegistrationToken(TMonotonic now, const TQueryCredentials& creds);
+            static ui64 Generate(TMonotonic now);
+        };
+        // Actor-local, ordered by token and issue time; never survives a PB restart.
+        std::deque<TPersistentBufferRegistrationToken> PersistentBufferRegistrationTokens;
+        bool PersistentBufferRegistrationTokenExpiryScheduled = false;
+        void Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev);
+        void Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr ev);
         void Handle(TEvRegisterPersistentBuffer::TPtr ev);
         void Handle(TEvUnregisterPersistentBuffer::TPtr ev);
         void Handle(TEvPrivate::TEvProcessPersistentBufferRemoval::TPtr ev);

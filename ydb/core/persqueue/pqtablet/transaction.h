@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -18,8 +19,11 @@
 
 namespace NKikimr::NPQ {
 
-struct TDistributedTransaction {
-    TDistributedTransaction() = default;
+struct TDistributedTransaction : TLogPrefix {
+    TDistributedTransaction()
+        : TLogPrefix(NKikimrServices::PQ_TX)
+    {
+    }
     explicit TDistributedTransaction(const NKikimrPQ::TTransaction& tx);
 
     void OnProposeTransaction(const NKikimrPQ::TEvProposeTransaction& event,
@@ -102,7 +106,7 @@ struct TDistributedTransaction {
     template<class E>
     void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    TString LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
 
     THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 

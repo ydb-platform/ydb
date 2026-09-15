@@ -14,7 +14,7 @@ namespace NYdb::NBS::NBlockStore {
 struct TWeightedRange
 {
     TPBufferKey Key{};
-    TBlockRange64 Range;
+    TBlockRange16 Range;
 
     bool operator<(const TWeightedRange& other) const
     {
@@ -25,7 +25,7 @@ struct TWeightedRange
 // Splits overlapping ranges into a continuous sequence of non-overlapping
 // ranges covering fullRange. Holes are filled with a default-constructed key.
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
-    TBlockRange64 fullRange,
+    TBlockRange16 fullRange,
     std::span<const TWeightedRange> overlappingRanges);
 
 }   // namespace NYdb::NBS::NBlockStore

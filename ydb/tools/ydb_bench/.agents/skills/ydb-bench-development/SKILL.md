@@ -29,6 +29,8 @@ relative to this skill.
 | Federation | `ydb/tools/ydb_bench/lib/hosts.py`: identities, membership, tokens and peer allowlists; `ydb/tools/ydb_bench/lib/federation.py`: read-through aggregation and host-qualified references |
 | Topology/metrics | `ydb/tools/ydb_bench/lib/topology.py`: discovery and placement; `ydb/tools/ydb_bench/lib/system_info.py`, `ydb/tools/ydb_bench/lib/linux_telemetry.py`, `ydb/tools/ydb_bench/lib/ydb_telemetry.py`: system/process/YDB measurements |
 | Templates | `ydb/tools/ydb_bench/lib/cluster_templates.py`: validated revisioned specifications; `ydb/tools/ydb_bench/lib/cluster_templates_ui.py`: placement views and joint previews |
+| Distributed execution | `ydb/tools/ydb_bench/lib/distributed_coordinator.py`, `ydb/tools/ydb_bench/lib/distributed_sessions.py`, `ydb/tools/ydb_bench/lib/distributed_worker.py`: protocol preflight, renewable host leases, typed worker operations and cleanup; `ydb/tools/ydb_bench/lib/distributed_runtime.py` reuses the workload/search lifecycle |
+| Distributed results | `ydb/tools/ydb_bench/lib/distributed_artifacts.py`, `ydb/tools/ydb_bench/lib/distributed_telemetry.py`, `ydb/tools/ydb_bench/lib/distributed_reports.py`: bounded checksummed transfers, clock-aware CPU aggregation and per-host counter reports |
 
 Web assets are Python strings served by the executable, not a separately
 deployed frontend. Editing sources does not update a running binary. Register
@@ -37,6 +39,9 @@ new modules in the relevant `ya.make`.
 ## Boundaries
 
 - Template CRUD describes placement; it does not launch a distributed cluster.
+  New run creates a detached distributed-YDB configuration draft; only Start run
+  invokes the coordinator. Keep draft replacement explicit and do not mutate the
+  template while preparing a run.
   Physical host, logical DC/rack/body and tenant are independent dimensions.
   CLI generators have only physical placement; static nodes are shared
   infrastructure; dynamic nodes can belong to tenants.
@@ -58,6 +63,10 @@ new modules in the relevant `ya.make`.
   establish SLO success.
 - Preserve cancellation and cleanup. Read `ydb/tools/ydb_bench/model/README.md`
   and `ydb/tools/ydb_bench/model/run_lifecycle.pml` when changing run/queue lifecycle semantics.
+  Distributed workers require matching host identity/protocol before reservation,
+  renewable generation-scoped leases and confirmed process cleanup. Unknown
+  cleanup must remain non-successful. The local lifecycle model does not cover
+  remote worker leases; do not present it as distributed failure validation.
 
 Update guidance when a documented contract changes. Keep machine aliases,
 credentials, deployment paths and transient run IDs out of repository skills.

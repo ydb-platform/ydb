@@ -386,6 +386,11 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
+    optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
+    // Judges a VDisk write by the space color the disk will be in once the Fresh
+    // it holds has been compacted, rather than by the color it is in while the
+    // write is still cheap.
+    optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
     // Gates both ColumnShard decommission legs; EnableCutHistory governs channels 0/1 instead.
-    optional bool EnableColumnshardGroupDecommission = 330 [default = false];
+    optional bool EnableColumnshardGroupDecommission = 332 [default = false];
 }

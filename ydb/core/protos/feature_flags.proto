@@ -395,4 +395,5 @@ message TFeatureFlags {
     // databases. Without it nothing compiles WASM modules to native code:
     // dinodes only ever compile what this tablet assigns them.
     optional bool EnableWasmCompileController = 332 [default = false];
+    optional bool EnableSysViewOrderByLimitPushdown = 333 [default = false];
 }

@@ -126,9 +126,13 @@ public:
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 break;
-            default:
+            case NSo::NProto::ESolomonClusterType::CT_UNSPECIFIED:
                 Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+            case NSo::NProto::ESolomonClusterType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NSo::NProto::ESolomonClusterType_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_UNREACHABLE();
         }
     }
 
@@ -367,8 +371,10 @@ private:
             case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(clusterType));
+            case NSo::NProto::ESolomonClusterType::CT_UNSPECIFIED:
+            case NSo::NProto::ESolomonClusterType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NSo::NProto::ESolomonClusterType_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_UNREACHABLE();
         }
     }
 
@@ -488,8 +494,10 @@ private:
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
                 parser.AddField("writtenMetricsCount", true);
                 break;
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+            case NSo::NProto::ESolomonClusterType::CT_UNSPECIFIED:
+            case NSo::NProto::ESolomonClusterType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NSo::NProto::ESolomonClusterType_INT_MAX_SENTINEL_DO_NOT_USE_:
+                Y_UNREACHABLE();
         }
         parser.AddField("errorMessage", false);
 
@@ -660,8 +668,10 @@ TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& proje
             builder.AddUrlParam("service", service);
             break;
         }
-        default:
-            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
+        case NSo::NProto::ESolomonClusterType::CT_UNSPECIFIED:
+        case NSo::NProto::ESolomonClusterType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NSo::NProto::ESolomonClusterType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            Y_UNREACHABLE();
     }
 
     return builder.Build();

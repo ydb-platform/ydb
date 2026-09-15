@@ -1,16 +1,21 @@
 UNITTEST_FOR(ydb/core/tx/columnshard)
 
-SIZE(SMALL)
+SIZE(MEDIUM)
+
+FORK_SUBTESTS()
 
 PEERDIR(
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/counters
     ydb/core/tx/columnshard/hooks/abstract
+    ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/test_helper
     ydb/core/testlib/default
 )
 
 SRCS(
     ut_cut_history.cpp
+    ut_cut_history_tablet.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -410,6 +410,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
+    GCTaskInFlight = true;
     return result;
 }
 
@@ -513,7 +514,7 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 
 bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
     // A built GC task drains BlobsToDelete before its rows leave the local DB, so the queues alone lie.
-    if (CollectGenStepInFlight) {
+    if (GCTaskInFlight) {
         return true;
     }
     const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
@@ -542,6 +543,7 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 }
 
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    GCTaskInFlight = false;
     if (genStep) {
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -101,6 +102,40 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
         UNIT_ASSERT_C(
             mgr->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while the GC task is in flight, even though the queue is drained");
+    }
+
+    // A delete-only GC task sets no barrier, and the gate must still wait for its commit.
+    Y_UNIT_TEST(TestMoveDataGateHeldWhileDeleteOnlyGCInFlight) {
+        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 44;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 NewGroup = 200;
+        static constexpr ui32 ReassignGen = 5;
+        static constexpr ui32 TabletGen = 3;
+
+        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
+        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+
+        // The first GC of an incarnation collects up to the current step; once it commits, the next task has no barrier to set.
+        const NOlap::TGenStep barrier(TabletGen, 0);
+        UNIT_ASSERT_C(
+            mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters), "the first GC must set a barrier");
+        mgr->OnGCStartOnComplete(barrier);
+        mgr->OnGCFinishedOnComplete(barrier);
+
+        mgr->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
+        auto task = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
+        UNIT_ASSERT_C(mgr->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while a delete-only GC task is in flight");
+
+        mgr->OnGCFinishedOnComplete(std::nullopt);
+        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");
     }
 
     // After submission InitialPortionIds is preserved, so a failed change can re-enter Pending.

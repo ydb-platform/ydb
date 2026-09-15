@@ -595,7 +595,7 @@ public:
         return result;
     }
 
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
+    std::shared_ptr<NYql::NDq::TComputationPatternCache> GetPatternCache() override {
         with_lock (Lock) {
             return PatternCache;
         }
@@ -666,16 +666,16 @@ public:
     }
 
     void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
-        std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> tmp;
+        std::shared_ptr<NYql::NDq::TComputationPatternCache> tmp;
         with_lock(Lock) {
             if (maxSizeBytes == 0) {
                 tmp.swap(PatternCache);
                 return;
             }
 
-            NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
+            NYql::NDq::TComputationPatternCache::TConfig config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
             if (!PatternCache) {
-                PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                PatternCache = std::make_shared<NYql::NDq::TComputationPatternCache>(config, Counters->GetKqpCounters());
                 return;
             }
 
@@ -688,7 +688,7 @@ public:
                 auto unguard = Unguard(Lock);
                 PatternCache->UpdateConfiguration(config);
             } else {
-                tmp = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
+                tmp = std::make_shared<NYql::NDq::TComputationPatternCache>(config, Counters->GetKqpCounters());
                 tmp.swap(PatternCache);
             }
         }
@@ -730,7 +730,7 @@ public:
     std::atomic_flag PublishAfterBootstrap;
     std::atomic_flag PublishScheduled;
     // pattern cache for different actors
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<NYql::NDq::TComputationPatternCache> PatternCache;
 
     // state for resource info exchanger
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;

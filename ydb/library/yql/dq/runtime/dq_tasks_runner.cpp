@@ -13,9 +13,9 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/runtime/pattern_cache/dq_pattern_cache.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -389,7 +389,7 @@ public:
     std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
         const bool useSeparatePattern = UseSeparatePatternAlloc(task);
-        auto entry = TComputationPatternLRUCache::CreateCacheEntry(useSeparatePattern);
+        auto entry = TComputationPatternCache::CreateCacheEntry(useSeparatePattern);
         auto& patternAlloc = useSeparatePattern ? entry->Alloc : Alloc();
         auto& patternEnv = useSeparatePattern ? entry->Env : TypeEnv();
         patternAlloc.Ref().UseRefLocking = forCache;
@@ -504,13 +504,14 @@ public:
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
         std::shared_ptr<TPatternCacheEntry> entry;
-        bool canBeCached;
+        bool canBeCached = false;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
             Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
             TProgramKey cacheKey{program.GetLangVer(), StableHashRuntimeSettings(*RuntimeSettings), program.GetRaw()};
             auto future = cache->FindOrSubscribe(cacheKey);
-            if (!future.HasValue()) {
+            if (!future) {
+                // Nobody is building an entry for this key yet, so it is up to this task to do it.
                 try {
                     entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
                     if (canBeCached && entry->Pattern->GetSuitableForCache()) {
@@ -525,7 +526,9 @@ public:
                     throw;
                 }
             } else {
-                entry = future.GetValueSync();
+                // Either a cache hit, or somebody is already building the very same pattern - waiting for them beats
+                // building it once again in every task of the stage.
+                entry = future->GetValueSync();
             }
         }
 

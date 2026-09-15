@@ -13,9 +13,9 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/runtime/pattern_cache/dq_pattern_cache.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
@@ -160,7 +160,7 @@ struct TDqTaskRunnerContext {
     NUdf::IApplyContext* ApplyCtx = nullptr;
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
-    std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<TComputationPatternCache> PatternCache;
     std::shared_ptr<IDqChannelService> ChannelService;
 };
 

@@ -36,6 +36,7 @@ PEERDIR(
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
+    yql/essentials/utils/backtrace
 )
 
 CHECK_DEPENDENT_DIRS(ALLOW_ONLY PEERDIRS

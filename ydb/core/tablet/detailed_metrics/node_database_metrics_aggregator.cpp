@@ -1,14 +1,13 @@
 #include "node_database_metrics_aggregator.h"
 
 #include "detailed_metrics_counter_set.h"
+#include "detailed_metrics_tree.h"
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
-#include <util/generic/vector.h>
-#include <util/string/cast.h>
 #include <util/system/mutex.h>
 
 namespace NKikimr {
@@ -23,64 +22,15 @@ TMutex& DetailedMetricsLock() {
 
 namespace {
 
-// Labels of the detailed metrics counter tree
-const TString DATABASE_LABEL = "database";
-const TString TABLE_LABEL = "table";
-const TString DETAILED_METRICS_LABEL = "detailed_metrics";
-const TString TABLET_ID_LABEL = "tablet_id";
-const TString FOLLOWER_ID_LABEL = "follower_id";
+using namespace NDetailedMetrics;
 
-const TString PER_PARTITION_VALUE = "per_partition";
-
-// Labels of the low level tablet counters (the same as in the "tablets" group)
-const TString TYPE_LABEL = "type";
-const TString CATEGORY_LABEL = "category";
-
-const TString EXECUTOR_CATEGORY = "executor";
-const TString APP_CATEGORY = "app";
-
-/**
- * A single tablet (a leader or a follower) within a table.
- */
-using TTabletKey = std::pair<ui64, ui32>;
-using TBucketKey = TMaybe<TTabletKey>; // Empty identifies the TABLE partial.
+// Pending reports retain the absolute path even after its published group is gone.
 using TContributionKey = std::pair<TString, TBucketKey>;
 
 struct TTabletInfo {
     TString RelativePath;
     EDetailedMetricsLevel Level;
 };
-
-/**
- * @return path with any trailing "/" chopped, as a view into path.
- */
-TStringBuf ChopTrailingSlash(const TStringBuf path) {
-    TStringBuf chopped(path);
-    chopped.ChopSuffix("/");
-    return chopped;
-}
-
-/**
- * Strip the database path prefix from the full path of the table.
- *
- * @param[in] databasePrefix The database path with the trailing "/" already chopped
- *                            (see TNodeDatabaseMetricsAggregatorImpl::DatabasePrefix)
- * @param[in] tablePath The full path of the table, which outlives the returned view
- *
- * @return A view into tablePath: either the stripped suffix, or tablePath itself
- *         when it does not start with the database. No allocation either way.
- */
-TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString& tablePath) {
-    TStringBuf relativePath(tablePath);
-
-    // The "/" is required, so that /Root/db10/table is NOT stripped down to "0/table"
-    // within the database /Root/db1
-    if (relativePath.SkipPrefix(databasePrefix) && relativePath.SkipPrefix("/") && !relativePath.empty()) {
-        return relativePath;
-    }
-
-    return TStringBuf(tablePath);
-}
 
 /**
  * A single bucket of the detailed metrics counter tree: the low level counters
@@ -100,7 +50,7 @@ public:
         NMonitoring::TCountableBase::EVisibility visibility
     )
         : TabletType(tabletType)
-        , TypeGroup(bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)))
+        , TypeGroup(GetOrCreateTypeGroup(bucketGroup, tabletType))
         , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
         , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
         , CounterNames(&counterNames)
@@ -199,6 +149,7 @@ private:
  */
 struct TTableEntry {
     NMonitoring::TDynamicCounterPtr TableGroup;
+    // Absolute path sent in reports; Tables itself is keyed by the relative path.
     TString TablePath;
 
     /**
@@ -322,9 +273,7 @@ public:
             auto& leaf = entry->Leaves[tablet];
             if (!leaf) {
                 leaf = MakeHolder<TCountersBucket>(
-                    GetOrCreatePerPartitionGroup(*entry)
-                        ->GetSubgroup(TABLET_ID_LABEL, ToString(tabletId))
-                        ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(followerId)),
+                    GetOrCreateTabletGroup(GetOrCreatePerPartitionGroup(*entry), tablet),
                     tabletType,
                     *counterNames,
                     CounterVisibility
@@ -498,10 +447,7 @@ private:
 
     NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(TTableEntry& entry) {
         if (!entry.PerPartitionGroup) {
-            entry.PerPartitionGroup = entry.TableGroup->GetSubgroup(
-                DETAILED_METRICS_LABEL,
-                PER_PARTITION_VALUE
-            );
+            entry.PerPartitionGroup = NDetailedMetrics::GetOrCreatePerPartitionGroup(entry.TableGroup);
         }
 
         return entry.PerPartitionGroup;
@@ -592,11 +538,10 @@ private:
         RetireBucket(entry.TablePath, Nothing(), *entry.TableBucket);
         entry.TableBucket.Reset();
 
-        TargetCounterGroup->RemoveSubgroupChain({
+        TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(Nothing(), tabletType, {
             {DATABASE_LABEL, DatabasePath},
             {TABLE_LABEL, relativePath},
-            {TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)},
-        });
+        }));
     }
 
     void ForgetLeaf(const TString& relativePath, TTableEntry& entry, const TTabletKey& tablet) {
@@ -614,15 +559,10 @@ private:
         RetireBucket(entry.TablePath, tablet, *it->second);
         entry.Leaves.erase(it);
 
-        const auto& [tabletId, followerId] = tablet;
-
-        TargetCounterGroup->RemoveSubgroupChain({
+        TargetCounterGroup->RemoveSubgroupChain(MakeRawBucketPath(tablet, entry.RegisteredTabletType, {
             {DATABASE_LABEL, DatabasePath},
             {TABLE_LABEL, relativePath},
-            {DETAILED_METRICS_LABEL, PER_PARTITION_VALUE},
-            {TABLET_ID_LABEL, ToString(tabletId)},
-            {FOLLOWER_ID_LABEL, ToString(followerId)},
-        });
+        }));
 
         if (entry.Leaves.empty()) {
             entry.PerPartitionGroup.Reset();

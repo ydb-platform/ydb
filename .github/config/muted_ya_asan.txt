@@ -348,6 +348,7 @@ ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBat
 ydb/services/test_shard/ut unittest.sole chunk
 ydb/tests/compatibility/indexes py3test.[test_fulltext_index.py */*] chunk
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_exact_feature_config[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-strict]
@@ -436,6 +437,7 @@ ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedClust
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_prestable-26-4]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_prestable-26-4_and_stable-26-3-1]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-3-1_and_stable-26-2-1]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
 ydb/tests/compatibility/workloads test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk

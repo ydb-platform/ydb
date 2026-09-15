@@ -46,10 +46,10 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
     , Counters(counters)
-    , InFlightShards(ScanId, *this)
+    , ScanSpan(MakeScanTrace(traceId, ScanDataMeta.TablePath))
+    , InFlightShards(ScanId, *this, ScanSpan.GetTraceId())
     , InFlightComputes(ComputeActorIds)
     , TableKind(Meta.GetTable().HasTableKind() ? (NKqp::ETableKind)Meta.GetTable().GetTableKind() : NKqp::ETableKind::Unknown) {
-    Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(TableKind != NKqp::ETableKind::SysView);
     YDB_LOG_DEBUG("Created scan fetcher actor",
@@ -151,6 +151,10 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
+    InFlightShards.GetShardScannerVerified(state->TabletId)->Trace.OnData(
+        ev->Sender.NodeId(), ev->Get()->GetRowsCount(),
+        ev->Get()->CpuTime, ev->Get()->WaitTime, ev->Get()->Finished);
+
     TStringBuilder locks;
     for (const auto& lock : ev->Get()->LocksInfo.Locks) {
         locks << lock.ShortDebugString();
@@ -213,6 +217,10 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
     }
     if (state->Generation != ev->Get()->Record.GetGeneration()) {
         return;
+    }
+
+    if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
+        scanner->Trace.Finish(status);
     }
 
     if (state->State == EShardState::Starting) {
@@ -476,7 +484,8 @@ void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::T
 }
 
 bool TKqpScanFetcherActor::SendGlobalFail(
-    const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) const {
+    const NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssuesIds::EIssueCode issueCode, const TString& message) {
+    EndQueryTraceSpan(ScanSpan, NYql::NDq::DqStatusToYdbStatus(statusCode));
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(statusCode, issueCode, message));
     }
@@ -484,7 +493,8 @@ bool TKqpScanFetcherActor::SendGlobalFail(
 }
 
 bool TKqpScanFetcherActor::SendGlobalFail(
-    const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) const {
+    const NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
+    EndQueryTraceSpan(ScanSpan, NYql::NDq::DqStatusToYdbStatus(statusCode));
     for (auto&& i : ComputeActorIds) {
         Send(i, new TEvScanExchange::TEvTerminateFromFetcher(state, statusCode, issues));
     }
@@ -492,6 +502,7 @@ bool TKqpScanFetcherActor::SendGlobalFail(
 }
 
 bool TKqpScanFetcherActor::SendScanFinished() {
+    EndQueryTraceSpan(ScanSpan, Ydb::StatusIds::SUCCESS);
     for (auto&& i : ComputeActorIds) {
         Sender<TEvScanExchange::TEvFetcherFinished>().SendTo(i);
     }
@@ -701,6 +712,9 @@ void TKqpScanFetcherActor::StartTableScan() {
 }
 
 void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
+    if (auto scanner = InFlightShards.GetShardScanner(state->TabletId)) {
+        scanner->Trace.Finish(Ydb::StatusIds::UNAVAILABLE);
+    }
     InFlightShards.StopScanner(state->TabletId, false);
     Counters->ScanQueryShardDisconnect->Inc();
 
@@ -765,7 +779,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
     request->DatabaseName = Database;
     request->ResultSet.emplace_back(std::move(keyDesc));
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, ScanSpan.GetTraceId());
 }
 
 void TKqpScanFetcherActor::EnqueueResolveShard(const std::shared_ptr<TShardState>& state) {
@@ -780,7 +794,7 @@ void TKqpScanFetcherActor::EnqueueResolveShard(const std::shared_ptr<TShardState
     }
 }
 
-void TKqpScanFetcherActor::StopOnError(const TString& errorMessage) const {
+void TKqpScanFetcherActor::StopOnError(const TString& errorMessage) {
     YDB_LOG_ERROR("Unexpected error in scan fetcher actor",
         {"logPrefix", this->LogPrefix},
         {"problem", errorMessage});

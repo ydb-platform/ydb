@@ -461,6 +461,10 @@ public:
         HistorySampleCount = 32;
     }
 
+    ui64 GetCpuTimeUs() const {
+        return StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    }
+
     void Prepare();
 
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "knn-float16.h"
+#include <ydb/library/vector_distance/float16.h>
 
 #include "util/system/types.h"
 

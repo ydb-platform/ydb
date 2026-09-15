@@ -1,5 +1,5 @@
-#include "knn-half-distance-avx2.h"
-#include "knn-half-distance-sse.h"
+#include "half_distance_avx2.h"
+#include "half_distance_sse.h"
 
 #if defined(_avx2_)
 

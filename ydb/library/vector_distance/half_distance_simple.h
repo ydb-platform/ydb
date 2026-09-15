@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../knn-float16.h"
+#include "float16.h"
 
 #include <library/cpp/dot_product/common.h>
 
@@ -8,7 +8,7 @@
 
 #include <cmath>
 
-namespace NKnnHalfDistance::NSimple {
+namespace NVectorDistance::NSimple {
     template <typename T>
     Y_FORCE_INLINE float L1(const T* lhs, const T* rhs, size_t n) noexcept {
         float sum = 0.f;

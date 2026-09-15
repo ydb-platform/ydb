@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../knn-float16.h"
+#include "float16.h"
 
 #include <library/cpp/dot_product/common.h>
 

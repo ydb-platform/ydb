@@ -1,14 +1,14 @@
 LIBRARY()
 
 SRCS(
-    knn-half-distance.cpp
-    knn-half-distance-sse.cpp
+    half_distance.cpp
+    half_distance_sse.cpp
 )
 
 IF (USE_SSE4 == "yes" AND OS_LINUX == "yes")
-    SRC_C_AVX2(knn-half-distance-avx2.cpp -mf16c)
+    SRC_C_AVX2(half_distance_avx2.cpp -mf16c)
 ELSE()
-    SRC(knn-half-distance-avx2.cpp)
+    SRC(half_distance_avx2.cpp)
 ENDIF()
 
 PEERDIR(

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "knn-defines.h"
-#include "half_distance/knn-half-distance.h"
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/half_distance.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -134,11 +134,11 @@ public:
                 });
             case EFormat::Float16Vector:
                 return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::L1Distance(v1, v2, len);
+                    return NVectorDistance::L1Distance(v1, v2, len);
                 });
             case EFormat::BFloat16Vector:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::L1Distance(v1, v2, len);
+                    return NVectorDistance::L1Distance(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -175,11 +175,11 @@ public:
                 });
             case EFormat::Float16Vector:
                 return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::L2Distance(v1, v2, len);
+                    return NVectorDistance::L2Distance(v1, v2, len);
                 });
             case EFormat::BFloat16Vector:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::L2Distance(v1, v2, len);
+                    return NVectorDistance::L2Distance(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -216,11 +216,11 @@ public:
                 });
             case EFormat::Float16Vector:
                 return VectorFunc<TFloat16>(str1, str2, [](const TFloat16* v1, const TFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::DotProduct(v1, v2, len);
+                    return NVectorDistance::DotProduct(v1, v2, len);
                 });
             case EFormat::BFloat16Vector:
                 return VectorFunc<TBFloat16>(str1, str2, [](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
-                    return NKnnHalfDistance::DotProduct(v1, v2, len);
+                    return NVectorDistance::DotProduct(v1, v2, len);
                 });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
@@ -264,12 +264,12 @@ public:
                 });
             case EFormat::Float16Vector:
                 return VectorFunc<TFloat16>(str1, str2, [&](const TFloat16* v1, const TFloat16* v2, size_t len) {
-                    const auto res = NKnnHalfDistance::TriWayDotProduct(v1, v2, len);
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::BFloat16Vector:
                 return VectorFunc<TBFloat16>(str1, str2, [&](const TBFloat16* v1, const TBFloat16* v2, size_t len) {
-                    const auto res = NKnnHalfDistance::TriWayDotProduct(v1, v2, len);
+                    const auto res = NVectorDistance::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });
             case EFormat::Int8Vector:

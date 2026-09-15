@@ -1,5 +1,5 @@
-#include "knn-half-distance-sse.h"
-#include "knn-half-distance-simple.h"
+#include "half_distance_sse.h"
+#include "half_distance_simple.h"
 
 #include <library/cpp/sse/sse.h>
 
@@ -39,7 +39,7 @@ namespace {
             rhs += 8;
             n -= 8;
         }
-        return Hsum128(_mm_add_ps(sum0, sum1)) + NKnnHalfDistance::NSimple::L1(lhs, rhs, n);
+        return Hsum128(_mm_add_ps(sum0, sum1)) + NVectorDistance::NSimple::L1(lhs, rhs, n);
     }
 
     template <typename T, auto Load8>
@@ -58,7 +58,7 @@ namespace {
             rhs += 8;
             n -= 8;
         }
-        return Hsum128(_mm_add_ps(sum0, sum1)) + NKnnHalfDistance::NSimple::L2Sqr(lhs, rhs, n);
+        return Hsum128(_mm_add_ps(sum0, sum1)) + NVectorDistance::NSimple::L2Sqr(lhs, rhs, n);
     }
 
     template <typename T, auto Load8>
@@ -75,7 +75,7 @@ namespace {
             rhs += 8;
             n -= 8;
         }
-        return Hsum128(_mm_add_ps(sum0, sum1)) + NKnnHalfDistance::NSimple::Dot(lhs, rhs, n);
+        return Hsum128(_mm_add_ps(sum0, sum1)) + NVectorDistance::NSimple::Dot(lhs, rhs, n);
     }
 
     template <typename T, auto Load8>
@@ -100,7 +100,7 @@ namespace {
             rhs += 8;
             n -= 8;
         }
-        auto tail = NKnnHalfDistance::NSimple::TriWay(lhs, rhs, n);
+        auto tail = NVectorDistance::NSimple::TriWay(lhs, rhs, n);
         tail.LL += Hsum128(_mm_add_ps(ll0, ll1));
         tail.LR += Hsum128(_mm_add_ps(lr0, lr1));
         tail.RR += Hsum128(_mm_add_ps(rr0, rr1));
@@ -137,29 +137,29 @@ TTriWayDotProduct<float> TriWayDotProductSse(const TBFloat16* lhs, const TBFloat
 #else
 
 float L1DistanceSse(const TFloat16* lhs, const TFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::L1(lhs, rhs, length);
+    return NVectorDistance::NSimple::L1(lhs, rhs, length);
 }
 float L2SqrDistanceSse(const TFloat16* lhs, const TFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::L2Sqr(lhs, rhs, length);
+    return NVectorDistance::NSimple::L2Sqr(lhs, rhs, length);
 }
 float DotProductSse(const TFloat16* lhs, const TFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::Dot(lhs, rhs, length);
+    return NVectorDistance::NSimple::Dot(lhs, rhs, length);
 }
 TTriWayDotProduct<float> TriWayDotProductSse(const TFloat16* lhs, const TFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::TriWay(lhs, rhs, length);
+    return NVectorDistance::NSimple::TriWay(lhs, rhs, length);
 }
 
 float L1DistanceSse(const TBFloat16* lhs, const TBFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::L1(lhs, rhs, length);
+    return NVectorDistance::NSimple::L1(lhs, rhs, length);
 }
 float L2SqrDistanceSse(const TBFloat16* lhs, const TBFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::L2Sqr(lhs, rhs, length);
+    return NVectorDistance::NSimple::L2Sqr(lhs, rhs, length);
 }
 float DotProductSse(const TBFloat16* lhs, const TBFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::Dot(lhs, rhs, length);
+    return NVectorDistance::NSimple::Dot(lhs, rhs, length);
 }
 TTriWayDotProduct<float> TriWayDotProductSse(const TBFloat16* lhs, const TBFloat16* rhs, size_t length) noexcept {
-    return NKnnHalfDistance::NSimple::TriWay(lhs, rhs, length);
+    return NVectorDistance::NSimple::TriWay(lhs, rhs, length);
 }
 
 #endif

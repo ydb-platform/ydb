@@ -14,14 +14,10 @@ PEERDIR(
     library/cpp/dot_product
     library/cpp/l1_distance
     library/cpp/l2_distance
-    ydb/library/yql/udfs/common/knn/half_distance
+    ydb/library/vector_distance
 )
 
 END()
-
-RECURSE(
-    half_distance
-)
 
 RECURSE_FOR_TESTS(
     test

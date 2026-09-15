@@ -1,7 +1,7 @@
-#include "knn-half-distance.h"
-#include "knn-half-distance-avx2.h"
-#include "knn-half-distance-simple.h"
-#include "knn-half-distance-sse.h"
+#include "half_distance.h"
+#include "half_distance_avx2.h"
+#include "half_distance_simple.h"
+#include "half_distance_sse.h"
 
 #include <library/cpp/sse/sse.h>
 
@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace NKnnHalfDistance {
+namespace NVectorDistance {
     namespace {
         float (*L1Float16Impl)(const TFloat16*, const TFloat16*, size_t) noexcept = &NSimple::L1<TFloat16>;
         float (*L2SqrFloat16Impl)(const TFloat16*, const TFloat16*, size_t) noexcept = &NSimple::L2Sqr<TFloat16>;

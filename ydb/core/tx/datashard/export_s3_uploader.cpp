@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
@@ -147,7 +148,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             YDB_LOG_ERROR("[Export] Error at 'StateResolveProxy'",
                 {"self", this->SelfId()},
                 {"error", msg.GetError()});
-
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
@@ -448,7 +448,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
-
         YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvReady",
             {"sender", ev->Sender});
 
@@ -653,11 +652,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            TStringBuilder prefixStr;
-            NStructuredLog::TTextWriter writer;
-            writer.Write(prefixStr, LogPrefix());
+            NActors::NStructuredLog::TTextWriter writer;
 
-            Error = TStringBuilder() << prefixStr << " error: " << error;
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
             PassAway();
         }
     }
@@ -677,11 +678,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             UploadId.Clear();
             Retry();
         } else {
-            TStringBuilder prefixStr;
-            NStructuredLog::TTextWriter writer;
-            writer.Write(prefixStr, LogPrefix());
+            NActors::NStructuredLog::TTextWriter writer;
 
-            Error = TStringBuilder() << prefixStr << " error: " << error;
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
+
+            Error = errorBuilder;
             PassAway();
         }
     }
@@ -743,11 +746,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            TStringBuilder prefixStr;
             NStructuredLog::TTextWriter writer;
-            writer.Write(prefixStr, LogPrefix());
+            TStringBuilder errorBuilder;
+            writer.Write(errorBuilder, LogPrefix());
+            errorBuilder << " error: " << error;
 
-            Finish(false, TStringBuilder() << prefixStr << " error: " << error);
+            Finish(false, errorBuilder);
         }
     }
 
@@ -800,7 +804,7 @@ public:
         return NKikimrServices::TActivity::EXPORT_UPLOADER_ACTOR;
     }
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "S3Uploader"},
             {"selfId", this->SelfId()},
@@ -870,7 +874,8 @@ public:
     }
 
     STATEFN(StateBase) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReady, Handle);
 
@@ -880,7 +885,8 @@ public:
     }
 
     STATEFN(StateResolveProxy) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateResolveProxy"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         default:
@@ -889,7 +895,8 @@ public:
     }
 
     STATEFN(StateUploadScheme) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadScheme"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
         default:
@@ -898,7 +905,8 @@ public:
     }
 
     STATEFN(StateUploadPermissions) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadPermissions"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissions);
         default:
@@ -907,7 +915,8 @@ public:
     }
 
     STATEFN(StateUploadChangefeed) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChangefeed"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChangefeed);
         default:
@@ -916,7 +925,8 @@ public:
     }
 
     STATEFN(StateUploadTopic) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadTopic"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleTopic);
         default:
@@ -925,7 +935,8 @@ public:
     }
 
     STATEFN(StateUploadMetadata) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadMetadata"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
         default:
@@ -934,7 +945,8 @@ public:
     }
 
     STATEFN(StateUploadChecksum) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadChecksum"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleChecksum);
         default:
@@ -943,7 +955,8 @@ public:
     }
 
     STATEFN(StateUploadData) {
-        YDB_LOG_CREATE_CONTEXT(LogPrefix());
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateUploadData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
             hFunc(TEvDataShard::TEvS3Upload, Handle);

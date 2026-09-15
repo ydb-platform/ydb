@@ -148,8 +148,11 @@ class TExportScan: private NActors::IActorCallback, public IActorExceptionHandle
     }
 
 public:
-    static constexpr TStringBuf LogPrefix() {
-        return "scanner"sv;
+
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ExportScan"},
+            {"selfId", this->SelfId()});
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)
@@ -249,6 +252,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReset, Handle);
             hFunc(TEvExportScan::TEvFeed, Handle);

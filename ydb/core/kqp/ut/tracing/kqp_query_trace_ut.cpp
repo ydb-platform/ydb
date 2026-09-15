@@ -1148,7 +1148,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(shardRetried);
             bool taskRetried = false;
             for (const auto& event : StageSpans(*uploader)) {
-                for (const auto& task : FindAttribute(event, "ydb.interesting_tasks")->value().array_value().values()) {
+                for (const auto& task : FindAttribute(event, "ydb.ranked_tasks")->value().array_value().values()) {
                     for (const auto& attr : task.kvlist_value().values()) {
                         taskRetried |= attr.key() == "ydb.read_retries" && attr.value().int_value() == 1;
                     }

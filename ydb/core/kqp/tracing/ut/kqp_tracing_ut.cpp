@@ -237,26 +237,31 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
                 NWilson::TTraceId::NewTraceId(level, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
             NKqp::TExecutionTrace trace(level);
             NKqpProto::TKqpPhyStage stage;
-            const auto spanId = trace.StartStage(parent, {0, 1}, stage, 1);
-            UNIT_ASSERT_VALUES_EQUAL(bool(spanId), level == 10);
+            const auto stageTraceId = trace.StartStage(parent, {0, 1}, stage, 1);
+            UNIT_ASSERT_VALUES_EQUAL(bool(stageTraceId), level == 10);
             NYql::NDqProto::TDqTask task;
             trace.AnnotateTask({0, 1}, task);
             auto context = NKqp::GetTaskTraceParent(task, parent.GetTraceId());
             UNIT_ASSERT(context.IsSameTrace(parent.GetTraceId()));
+            if (level == 10) {
+                UNIT_ASSERT(context == stageTraceId);
+            }
             UNIT_ASSERT_VALUES_EQUAL(context.GetVerbosity(), level);
             UNIT_ASSERT_VALUES_EQUAL(context == parent.GetTraceId(), level == 6);
             if (level == 10) {
                 UNIT_ASSERT_VALUES_EQUAL(context.GetTimeToLive(), parent.GetTraceId().GetTimeToLive() - 1);
             }
-            NKqp::SaveTaskTraceParent(task, 0);
+            NKqp::SaveTaskTraceParent(task, {});
             UNIT_ASSERT(NKqp::GetTaskTraceParent(task, parent.GetTraceId()) == parent.GetTraceId());
             UNIT_ASSERT(task.GetTaskParams().empty());
-            (*task.MutableTaskParams())["ydb.trace.stage_span_id"] = "invalid";
+            (*task.MutableTaskParams())["ydb.trace.stage_trace_id"] = "invalid";
             UNIT_ASSERT(NKqp::GetTaskTraceParent(task, parent.GetTraceId()) == parent.GetTraceId());
-            NKqp::SaveTaskTraceParent(task, 42);
+            NKqp::SaveTaskTraceParent(task, stageTraceId);
             UNIT_ASSERT(!NKqp::GetTaskTraceParent(task, {}));
             auto basic = NWilson::TTraceId::NewTraceId(6, 100);
             UNIT_ASSERT(NKqp::GetTaskTraceParent(task, basic) == basic);
+            auto unrelated = NWilson::TTraceId::NewTraceId(10, 100);
+            UNIT_ASSERT(NKqp::GetTaskTraceParent(task, unrelated) == unrelated);
             NYql::NDqProto::TDqExecutionStats stats;
             trace.Finish(parent, stats, Ydb::StatusIds::CANCELLED);
             parent.EndError("cancelled");
@@ -301,7 +306,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.task_duration_max_us")->value().int_value(), 1000);
         UNIT_ASSERT_DOUBLES_EQUAL(FindAttribute(event, "ydb.task_skew")->value().double_value(), 1000.0 / 550, 1e-9);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(event, "ydb.tasks_by_node")->value().string_value(), "1:5,2:5");
-        const auto& tasks = FindAttribute(event, "ydb.interesting_tasks")->value().array_value();
+        const auto& tasks = FindAttribute(event, "ydb.ranked_tasks")->value().array_value();
         UNIT_ASSERT_VALUES_EQUAL(tasks.values_size(), NKqp::NQueryTraceSettings::MAX_TASKS_PER_STAGE);
         bool hasFailed = false;
         bool hasSpill = false;

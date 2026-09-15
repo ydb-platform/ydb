@@ -36,7 +36,7 @@ class TExecutionTrace {
 public:
     explicit TExecutionTrace(ui8 verbosity);
 
-    ui64 StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
+    NWilson::TTraceId StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
         const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount);
     void AnnotateTask(std::pair<ui64, ui32> stageId, NYql::NDqProto::TDqTask& task) const;
     void OnTaskFinished(std::pair<ui64, ui32> stageId, ui64 taskCount, const NYql::NDqProto::TEvComputeActorState& state, ui32 nodeId);

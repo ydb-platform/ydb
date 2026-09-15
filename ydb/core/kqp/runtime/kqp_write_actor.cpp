@@ -922,6 +922,11 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            Counters->WriteActorLocalShardWrites->Inc();
+        } else {
+            Counters->WriteActorRemoteShardWrites->Inc();
+        }
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 

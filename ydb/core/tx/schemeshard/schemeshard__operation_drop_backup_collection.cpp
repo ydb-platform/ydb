@@ -4,6 +4,8 @@
 #include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 #include <algorithm>
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -161,7 +163,7 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         auto* state = context.SS->IncrementalRestoreStates.FindPtr(stateId);
         context.SS->CleanupIncrementalRestoreItems(stateId, db, state);
         if (state && state->Uid) {
-            context.SS->BackupOperationsByUid.erase({NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, state->Uid});
+            context.SS->SchemeOperationsByUid.erase({Ydb::TOperationId::RESTORE, state->Uid});
         }
         context.SS->IncrementalRestoreStates.erase(stateId);
         db.Table<Schema::IncrementalRestoreState>().Key(stateId).Delete();
@@ -490,7 +492,7 @@ public:
                 .Delete();
             
             if (const auto* state = context.SS->IncrementalRestoreStates.FindPtr(opId); state && state->Uid) {
-                context.SS->BackupOperationsByUid.erase({NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, state->Uid});
+                context.SS->SchemeOperationsByUid.erase({Ydb::TOperationId::RESTORE, state->Uid});
             }
             context.SS->IncrementalRestoreStates.erase(opId);
             

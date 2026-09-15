@@ -7,6 +7,9 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
+#include <functional>
+#include <utility>
+
 namespace Ydb {
 enum TOperationId_EKind : int;
 }
@@ -59,8 +62,48 @@ enum class EUidReplayMatch {
     RequestMismatch,
 };
 
-// Import/export compare domains; backup/restore SQL compares owner and DDL.
+// Only the identity fields requested by the operation are compared.
 EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested);
+
+// The kind preserves the separate UID namespaces of the existing operations.
+using TOperationUidKey = std::pair<Ydb::TOperationId_EKind, TString>;
+
+struct TOperationUidRecord {
+    ui64 OperationId = 0;
+    TMaybe<TPathId> DomainPathId;
+    TString UserSID;
+    TString RequestBody;
+};
+
+// This object is local to one admission transaction. Callbacks run synchronously;
+// operation handlers retain ownership of their records, checks, and persistence.
+class TOperationUidAdmission {
+public:
+    enum class EDuplicatePolicy { Replay, Reject };
+    enum class EDecision { Proceed, Replay, AlreadyExists, OwnerMismatch, DomainMismatch, RequestMismatch };
+
+    using TLookup = std::function<TMaybe<TOperationUidRecord>(const TOperationUidKey&)>;
+    using TCheck = std::function<EUidReplayMatch(const TOperationUidRecord&)>;
+
+    // Empty legacy UIDs disable deduplication. Protocol-specific validation
+    // (including rejecting explicitly empty SQL UIDs) belongs to the caller.
+    static TOperationUidAdmission Prepare(const TOperationUidKey& key,
+        EDuplicatePolicy policy, const TLookup& lookup, const TCheck& check = {});
+
+    EDecision GetDecision() const { return Decision; }
+    ui64 GetOperationId() const { return OperationId; }
+
+    // Invoke the operation's persistence/binding callback only for newly
+    // admitted work. The callback participates in the caller's local transaction.
+    bool Commit(bool admitted, const std::function<void()>& persist);
+
+private:
+    EDecision Decision = EDecision::Proceed;
+    ui64 OperationId = 0;
+    bool Committed = false;
+};
+
+TMaybe<Ydb::TOperationId_EKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType);
 
 // Capabilities of keyed TModifyScheme submissions and their SQL/KQP forms.
 // Legacy RPC admission paths use the UID helpers above.

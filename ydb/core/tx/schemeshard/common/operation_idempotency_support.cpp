@@ -64,13 +64,17 @@ bool SupportsSqlOperationIdempotency(Ydb::TOperationId::EKind kind) {
     return false;
 }
 
-bool SupportsOperationIdempotency(NKikimrSchemeOp::EOperationType operationType) {
+TMaybe<Ydb::TOperationId_EKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType) {
     for (const auto& supported : SupportedOperations) {
         if (supported.SchemeOperation && supported.SchemeOperation->OperationType == operationType) {
-            return true;
+            return supported.Kind;
         }
     }
-    return false;
+    return Nothing();
+}
+
+bool SupportsOperationIdempotency(NKikimrSchemeOp::EOperationType operationType) {
+    return GetOperationUidKind(operationType).Defined();
 }
 
 bool SupportsSqlOperationIdempotency(TStringBuf writeMode) {

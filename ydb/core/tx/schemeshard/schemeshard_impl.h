@@ -12,7 +12,6 @@
 #include "schemeshard_export.h"
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
-#include "schemeshard_idempotency.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
@@ -25,6 +24,7 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -1797,11 +1797,11 @@ public:
     TMap<ui64, TFullBackupInfo::TPtr> FullBackups;
 
     // UID index keyed by operation type and UID, rebuilt from backup and restore operation records.
-    TMap<TBackupOperationUidKey, ui64> BackupOperationsByUid;
-    TMaybe<TBackupOperationReplay> FindBackupOperationByUid(const TBackupOperationUidKey& key) const;
-    void BindBackupOperationUid(const TBackupOperationUidKey& key, ui64 id,
+    TMap<TOperationUidKey, ui64> SchemeOperationsByUid;
+    TMaybe<TOperationUidRecord> FindSchemeOperationByUid(const TOperationUidKey& key) const;
+    void BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
         const NKikimrSchemeOp::TModifyScheme& tx, const TString& userSID);
-    void PersistBackupOperationUidKey(NIceDb::TNiceDb& db, const TBackupOperationUidKey& key);
+    void PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOperationUidKey& key);
 
     // Reverse index: backup-collection TPathId -> running control op id.
     // Rebuilt at TTxInit from non-terminal rows; used by the control op's Propose

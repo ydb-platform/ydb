@@ -1,6 +1,8 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 #include <ydb/core/backup/impl/logging.h>
 
 namespace NKikimr::NSchemeShard {
@@ -79,7 +81,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         if (incrementalBackup.Uid) {
-            Self->BackupOperationsByUid.erase({NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, incrementalBackup.Uid});
+            Self->SchemeOperationsByUid.erase({Ydb::TOperationId::INCREMENTAL_BACKUP, incrementalBackup.Uid});
         }
         PersistRemoveIncrementalBackup(db, incrementalBackup);
         Self->IncrementalBackups.erase(incrementalBackup.Id);

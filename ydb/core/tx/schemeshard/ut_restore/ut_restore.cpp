@@ -5345,6 +5345,17 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         // check previous operation
         TestGetImport(runtime, importId, "/MyRoot");
         env.TestWaitNotification(runtime, importId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
+        TestGetImport(runtime, txId, "/MyRoot");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST_FLAG(ImportStartTime, EnableDataShardDirectPartImport) {

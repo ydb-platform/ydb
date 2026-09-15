@@ -2936,6 +2936,17 @@ partitioning_settings {
         // check previous operation
         TestGetExport(Runtime(), exportId, "/MyRoot");
         Env().TestWaitNotification(Runtime(), exportId);
+
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestExport(Runtime(), ++txId, "/MyRoot", differentBody);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        TestGetExport(Runtime(), exportId, "/MyRoot");
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestExport(Runtime(), ++txId, "/MyRoot", request);
+        TestGetExport(Runtime(), txId, "/MyRoot");
+        Env().TestWaitNotification(Runtime(), txId);
     }
 
     Y_UNIT_TEST(ExportStartTime) {

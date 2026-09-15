@@ -40,7 +40,15 @@ public:
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::BUILD_INDEX, request.GetOperationParams());
-        if (uid && Self->IndexBuildsByUid.contains(uid)) {
+        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::BUILD_INDEX, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
+                if (const auto* existing = FindOperationByUid(Self->IndexBuildsByUid, key.second)) {
+                    return TOperationUidRecord{ui64((*existing)->Id), {}, {}, {}};
+                }
+                return Nothing();
+            });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");
         }
@@ -357,21 +365,23 @@ public:
             buildInfo->UserSID = request.GetUserSID();
         }
 
-        Self->PersistCreateBuildIndex(db, *buildInfo);
+        admission.Commit(true, [&] {
+            Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsFulltextProvisioning()) {
-            Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
-            // Provision the rowid infrastructure (sequentially, via child builds) before this build
-            // takes its own lock and builds the fulltext index.
-            buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
-                ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
-                : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
-        } else {
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+            if (buildInfo->IsFulltextProvisioning()) {
+                Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
+                // Provision the rowid infrastructure (sequentially, via child builds) before this build
+                // takes its own lock and builds the fulltext index.
+                buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
+                    ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
+                    : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
+            } else {
+                buildInfo->State = TIndexBuildInfo::EState::Locking;
+            }
 
-        Self->PersistBuildIndexState(db, *buildInfo);
-        Self->AddIndexBuild(buildInfo);
+            Self->PersistBuildIndexState(db, *buildInfo);
+            Self->AddIndexBuild(buildInfo);
+        });
 
         Progress(BuildId);
 

@@ -3468,7 +3468,6 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
             YQL_ENSURE(task.Meta.Writes && task.Meta.Writes->size() == 1,
                 "CS Write Affinity: task has no Writes or multiple Writes (stage "
                 << stageInfo.Id << ")");
-            settings.AddTargetShardIds(task.Meta.Writes->front().ShardId);
         }
 
 

@@ -265,7 +265,6 @@ struct TShardedWriteControllerSettings {
     bool Inconsistent = false;
     bool EnableWriteSeqNum = false;
     ui64 WriterIndex = 0;
-    std::optional<THashSet<ui64>> TargetShardIds;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

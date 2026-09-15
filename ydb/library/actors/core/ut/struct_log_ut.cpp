@@ -53,6 +53,28 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TestType<TInstant>({TInstant::Now()});
     }
 
+    template <typename T>
+    void CheckTypeLimits(const TString& minValue, const TString& maxValue) {
+        auto value = TTypesMapping::ToString(std::numeric_limits<T>::min());
+        UNIT_ASSERT_STRINGS_EQUAL(minValue, value);
+
+        value = TTypesMapping::ToString(std::numeric_limits<T>::max());
+        UNIT_ASSERT_STRINGS_EQUAL(maxValue, value);
+    }
+
+    Y_UNIT_TEST(NativeTypesLimits) {
+        CheckTypeLimits<ui8>("0", "255");
+        CheckTypeLimits<i8>("-128", "127");
+        CheckTypeLimits<ui16>("0", "65535");
+        CheckTypeLimits<i16>("-32768", "32767");
+        CheckTypeLimits<ui32>("0", "4294967295");
+        CheckTypeLimits<i32>("-2147483648", "2147483647");
+        CheckTypeLimits<ui64>("0", "18446744073709551615");
+        CheckTypeLimits<i64>("-9223372036854775808", "9223372036854775807");
+        CheckTypeLimits<float>("1.17549e-38", "3.40282e+38");
+        CheckTypeLimits<double>("2.225073859e-308", "1.797693135e+308");
+    }
+
     #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
         {                                                                 \
             TStringValueExtractor extractor;                              \
@@ -659,6 +681,32 @@ Y_UNIT_TEST_SUITE(StructLog) {
             R"({"value":"2026-09-12T17:15:27.128336Z"})"
         );
     }
+
+    template <typename T>
+    void CheckJsonTypeLimits(const TString& required) {
+        auto message = YDB_LOG_CREATE_MESSAGE(
+            {"min", std::numeric_limits<T>::min()},
+            {"max", std::numeric_limits<T>::max()});
+
+        NJsonWriter::TBuf jsonWriter;
+        TJsonWriter().Write(jsonWriter, message);
+
+        UNIT_ASSERT_STRINGS_EQUAL(required, jsonWriter.Str());
+    }
+
+    Y_UNIT_TEST(GenerateJsonLimits) {
+        CheckJsonTypeLimits<ui8>(R"({"max":255,"min":0})");
+        CheckJsonTypeLimits<i8>(R"({"max":127,"min":-128})");
+        CheckJsonTypeLimits<ui16>(R"({"max":65535,"min":0})");
+        CheckJsonTypeLimits<i16>(R"({"max":32767,"min":-32768})");
+        CheckJsonTypeLimits<ui32>(R"({"max":4294967295,"min":0})");
+        CheckJsonTypeLimits<i32>(R"({"max":2147483647,"min":-2147483648})");
+        CheckJsonTypeLimits<ui64>(R"({"max":18446744073709551615,"min":0})");
+        CheckJsonTypeLimits<i64>(R"({"max":9223372036854775807,"min":-9223372036854775808})");
+        CheckJsonTypeLimits<float>(R"({"max":3.40282e+38,"min":1.17549e-38})");
+        CheckJsonTypeLimits<double>(R"({"max":1.797693135e+308,"min":2.225073859e-308})");
+    }
+
 
 }
 }  // namespace NActors::NStructuredLog

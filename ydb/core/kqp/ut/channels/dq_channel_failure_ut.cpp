@@ -24,7 +24,6 @@ struct TLossTest : public TSessionTest {
         auto resent = GetCounter(Service0, "Session/MessagesResent", true) + GetCounter(Service1, "Session/MessagesResent", true);
         auto details = TStringBuilder() << "resent " << resent << ", log0=" << GetReconciliationLog(Debug0)
             << ", log1=" << GetReconciliationLog(Debug1);
-        ReleaseSessions();
         CheckSensors();
         if (ExpectResend) {
             UNIT_ASSERT_C(resent > 0, TStringBuilder() << "nothing was resent although messages were lost, " << details);

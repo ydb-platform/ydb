@@ -2210,21 +2210,21 @@ void TNodeState::HandleCleanup() {
     }
 
     auto idlePeriod = now - LastPeerActivity.load();
+    // One session covers both directions, so the traffic of the peer does not say whether our own sending
+    // has stalled, and nothing else notices a stuck queue: the receiver drops stale data silently and every
+    // other trigger needs an ack, a bounce or a dropped link. The last message of a channel may still be
+    // queued after the channel is gone, so this is asked with or without descriptors.
+    const bool queueStuck = !Queue.empty() && now - LastQueueProgress.load() > Limits.IdlePingPeriod;
 
-    if (OutputDescriptors.empty() && InputDescriptors.empty()) {
+    if (OutputDescriptors.empty() && InputDescriptors.empty() && Queue.empty()) {
         // is the session still in use: a question about the peer, which its traffic answers
         if (idlePeriod > Limits.IdleDestroyPeriod) {
             Terminating.store(true);
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
                 new TEvPrivate::TEvFreeNodeSession(NodeId)));
         }
-    } else if ((!Queue.empty() && now - LastQueueProgress.load() > Limits.IdlePingPeriod)
-        || idlePeriod > Limits.IdlePingPeriod) {
-        // Has our own sending stalled: one session covers both directions, so the traffic of the peer
-        // cannot answer that, and nothing else notices a stuck queue - the receiver drops stale data
-        // silently and every other trigger needs an ack, a bounce or a dropped link.
-        //
-        // With nothing queued it is the 1st question again: a peer which freed its session with the link up
+    } else if (queueStuck || idlePeriod > Limits.IdlePingPeriod) {
+        // With nothing stuck it is the 1st question again: a peer which freed its session with the link up
         // sends no disconnect, and the discovery makes it announce itself for ConnectSession to fail those
         // channels rather than leave them hanging.
         StartReconciliation(false, 'I');

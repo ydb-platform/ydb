@@ -1,7 +1,7 @@
 #include "frontend_runtime.h"
 
 #include "blockstore_facade.h"
-#include "mvp_frontend_state.h"
+#include "frontend_state.h"
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 
@@ -10,7 +10,7 @@ namespace NYdb::NBS::NBlockStore {
 ////////////////////////////////////////////////////////////////////////////////
 
 TNbsFrontendRuntime::TNbsFrontendRuntime(TLog log)
-    : FrontendState(std::make_shared<TMVPFrontendState>())
+    : FrontendState(std::make_shared<TFrontendState>())
     , BlockStore(CreateNbsFrontendBlockStore(FrontendState, std::move(log)))
 {}
 

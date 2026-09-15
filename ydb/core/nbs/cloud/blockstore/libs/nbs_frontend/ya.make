@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    mvp_frontend_state.cpp
+    frontend_state.cpp
     blockstore_facade.cpp
     frontend_runtime.cpp
 )

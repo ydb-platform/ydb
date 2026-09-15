@@ -14,14 +14,15 @@ class TVolumeConfig;
 
 namespace NYdb::NBS::NBlockStore {
 
-// Owns request admission, disk metadata and process-local session for the
-// MVP frontend.
-class TMVPFrontendState final
+// Owns request admission, disk metadata and process-local session.
+// For now this is a prototype and there is no a goal to support full sessions
+// logic for all possible disks.
+class TFrontendState final
 {
 public:
     // Creates closed frontend state without a registered disk or session.
-    TMVPFrontendState();
-    ~TMVPFrontendState() noexcept;
+    TFrontendState();
+    ~TFrontendState() noexcept;
 
     // Opens the admission gate without changing the registered partition.
     void Start();

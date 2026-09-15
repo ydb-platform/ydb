@@ -1,4 +1,4 @@
-#include "mvp_frontend_state.h"
+#include "frontend_state.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
@@ -108,7 +108,7 @@ NNbs1CompatApi::NBlockStore::NProto::TVolume MakeClassicVolume(
 
 // A request holds one immutable version of admission, registration and session
 // state.
-struct TMVPFrontendState::TSnapshot
+struct TFrontendState::TSnapshot
 {
     bool AcceptingRequests = false;
     std::optional<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
@@ -116,13 +116,13 @@ struct TMVPFrontendState::TSnapshot
     std::optional<TSession> Session;
 };
 
-TMVPFrontendState::TMVPFrontendState()
+TFrontendState::TFrontendState()
     : Snapshot(new TSnapshot())
 {}
 
-TMVPFrontendState::~TMVPFrontendState() noexcept = default;
+TFrontendState::~TFrontendState() noexcept = default;
 
-void TMVPFrontendState::Start()
+void TFrontendState::Start()
 {
     with_lock (Mutex) {
         auto next = std::make_unique<TSnapshot>(*Snapshot);
@@ -131,7 +131,7 @@ void TMVPFrontendState::Start()
     }
 }
 
-void TMVPFrontendState::Stop()
+void TFrontendState::Stop()
 {
     with_lock (Mutex) {
         auto next = std::make_unique<TSnapshot>(*Snapshot);
@@ -141,14 +141,14 @@ void TMVPFrontendState::Stop()
     }
 }
 
-NProto::TError TMVPFrontendState::CheckAcceptingRequests() const
+NProto::TError TFrontendState::CheckAcceptingRequests() const
 {
     const auto snapshot = Snapshot.atomic_load();
     return snapshot->AcceptingRequests ? NProto::TError{}
                                        : NotAcceptingRequests();
 }
 
-TResultOrError<TString> TMVPFrontendState::RegisterVolume(
+TResultOrError<TString> TFrontendState::RegisterVolume(
     const NKikimrBlockStore::TVolumeConfig& volumeConfig)
 {
     if (const auto error = ValidateVolumeConfig(volumeConfig); HasError(error))
@@ -176,7 +176,7 @@ TResultOrError<TString> TMVPFrontendState::RegisterVolume(
     }
 }
 
-void TMVPFrontendState::UnregisterVolume(const TString& registrationId)
+void TFrontendState::UnregisterVolume(const TString& registrationId)
 {
     with_lock (Mutex) {
         if (registrationId.empty() ||
@@ -194,7 +194,7 @@ void TMVPFrontendState::UnregisterVolume(const TString& registrationId)
 }
 
 TResultOrError<NNbs1CompatApi::NBlockStore::NProto::TVolume>
-TMVPFrontendState::GetVolume(const TString& diskId) const
+TFrontendState::GetVolume(const TString& diskId) const
 {
     const auto snapshot = Snapshot.atomic_load();
     if (const auto error = CheckDisk(*snapshot, diskId); HasError(error)) {
@@ -204,7 +204,7 @@ TMVPFrontendState::GetVolume(const TString& diskId) const
 }
 
 NNbs1CompatApi::NBlockStore::NProto::TMountVolumeResponse
-TMVPFrontendState::MountVolume(const NCompatProto::TMountVolumeRequest& request)
+TFrontendState::MountVolume(const NCompatProto::TMountVolumeRequest& request)
 {
     NCompatProto::TMountVolumeResponse response;
     with_lock (Mutex) {
@@ -247,7 +247,7 @@ TMVPFrontendState::MountVolume(const NCompatProto::TMountVolumeRequest& request)
     return response;
 }
 
-NProto::TError TMVPFrontendState::UnmountVolume(
+NProto::TError TFrontendState::UnmountVolume(
     const TString& diskId,
     const TString& clientId,
     const TString& sessionId)
@@ -276,7 +276,7 @@ NProto::TError TMVPFrontendState::UnmountVolume(
     return {};
 }
 
-NProto::TError TMVPFrontendState::ValidateIoSession(
+NProto::TError TFrontendState::ValidateIoSession(
     const TString& diskId,
     const TString& clientId,
     const TString& sessionId) const
@@ -289,7 +289,7 @@ NProto::TError TMVPFrontendState::ValidateIoSession(
 }
 
 // static
-NProto::TError TMVPFrontendState::CheckDisk(
+NProto::TError TFrontendState::CheckDisk(
     const TSnapshot& snapshot,
     const TString& diskId)
 {
@@ -306,7 +306,7 @@ NProto::TError TMVPFrontendState::CheckDisk(
 }
 
 // static
-NProto::TError TMVPFrontendState::CheckSession(
+NProto::TError TFrontendState::CheckSession(
     const TSnapshot& snapshot,
     const TString& clientId,
     const TString& sessionId)

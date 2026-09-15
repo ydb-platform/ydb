@@ -12,7 +12,7 @@ class TVolumeConfig;
 
 namespace NYdb::NBS::NBlockStore {
 
-class TMVPFrontendState;
+class TFrontendState;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +42,7 @@ public:
     void UnregisterVolume(const TString& registrationId);
 
 private:
-    const std::shared_ptr<TMVPFrontendState> FrontendState;
+    const std::shared_ptr<TFrontendState> FrontendState;
     NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore;
 };
 

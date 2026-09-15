@@ -1,6 +1,6 @@
 #include "blockstore_facade.h"
 
-#include "mvp_frontend_state.h"
+#include "frontend_state.h"
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
@@ -25,7 +25,7 @@ class TNbsFrontendBlockStore final
 public:
     // Shares metadata, admission and session state with the frontend runtime.
     explicit TNbsFrontendBlockStore(
-        std::shared_ptr<TMVPFrontendState> frontendState,
+        std::shared_ptr<TFrontendState> frontendState,
         TLog log);
 
     // Opens the admission gate for requests.
@@ -46,14 +46,14 @@ public:
         std::shared_ptr<typename TMethod::TRequest> request);
 
 private:
-    const std::shared_ptr<TMVPFrontendState> FrontendState;
+    const std::shared_ptr<TFrontendState> FrontendState;
     TLog Log;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TNbsFrontendBlockStore::TNbsFrontendBlockStore(
-    std::shared_ptr<TMVPFrontendState> frontendState,
+    std::shared_ptr<TFrontendState> frontendState,
     TLog log)
     : FrontendState(std::move(frontendState))
     , Log(std::move(log))
@@ -142,7 +142,7 @@ TNbsFrontendBlockStore::Execute(
 
 NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
 CreateNbsFrontendBlockStore(
-    std::shared_ptr<TMVPFrontendState> frontendState,
+    std::shared_ptr<TFrontendState> frontendState,
     TLog log)
 {
     return std::make_shared<TNbsFrontendBlockStore>(

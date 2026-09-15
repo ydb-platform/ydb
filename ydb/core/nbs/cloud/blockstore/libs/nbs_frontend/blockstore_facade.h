@@ -8,14 +8,14 @@
 
 namespace NYdb::NBS::NBlockStore {
 
-class TMVPFrontendState;
+class TFrontendState;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 // Creates the classic-compatible facade sharing the supplied frontend state.
 NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
 CreateNbsFrontendBlockStore(
-    std::shared_ptr<TMVPFrontendState> frontendState,
+    std::shared_ptr<TFrontendState> frontendState,
     TLog log);
 
 ////////////////////////////////////////////////////////////////////////////////

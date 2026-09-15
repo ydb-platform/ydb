@@ -1,4 +1,4 @@
-#include "mvp_frontend_state.h"
+#include "frontend_state.h"
 
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -42,11 +42,11 @@ NCompatProto::TMountVolumeRequest MakeMountRequest()
 
 }   // namespace
 
-Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
+Y_UNIT_TEST_SUITE(TFrontendStateMetadataTest)
 {
     Y_UNIT_TEST(ShouldCopyMetadataAndConvertClassicVolume)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         auto config = MakeVolumeConfig();
         const auto registration = state.RegisterVolume(config);
         UNIT_ASSERT(!HasError(registration));
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
 
     Y_UNIT_TEST(ShouldRejectInvalidMetadataWithoutReplacingRegistration)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         const auto good = MakeVolumeConfig();
         UNIT_ASSERT(!HasError(state.RegisterVolume(good)));
         state.Start();
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
 
     Y_UNIT_TEST(ShouldGuardReplacementFromOldUnregister)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         auto config = MakeVolumeConfig();
         const auto first = state.RegisterVolume(config);
         UNIT_ASSERT(!HasError(first));
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
 
     Y_UNIT_TEST(ShouldPreserveRegistrationAcrossStopStart)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         UNIT_ASSERT_VALUES_EQUAL(
             state.GetVolume("disk1").GetError().GetCode(),
             E_REJECTED);
@@ -170,13 +170,13 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
     {
         TString oldRegistration;
         {
-            TMVPFrontendState oldState;
+            TFrontendState oldState;
             const auto registration =
                 oldState.RegisterVolume(MakeVolumeConfig());
             UNIT_ASSERT(!HasError(registration));
             oldRegistration = registration.GetResult();
         }
-        TMVPFrontendState state;
+        TFrontendState state;
         state.Start();
         UNIT_ASSERT_VALUES_EQUAL(
             state.GetVolume("disk1").GetError().GetCode(),
@@ -189,11 +189,11 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateMetadataTest)
     }
 }
 
-Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
+Y_UNIT_TEST_SUITE(TFrontendStateSessionTest)
 {
     Y_UNIT_TEST(ShouldMountIdempotentlyAndIgnoreNonIdentityParameters)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         UNIT_ASSERT(!HasError(state.RegisterVolume(MakeVolumeConfig())));
         state.Start();
         auto request = MakeMountRequest();
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
         // Even an explicitly supplied empty key parameter is unsupported.
         invalid[14].MutableEncryptionSpec()->SetKeyHash("");
         for (const auto& request: invalid) {
-            TMVPFrontendState state;
+            TFrontendState state;
             UNIT_ASSERT(!HasError(state.RegisterVolume(MakeVolumeConfig())));
             state.Start();
             UNIT_ASSERT_VALUES_EQUAL(
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
 
     Y_UNIT_TEST(ShouldApplyMountErrorPriority)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         auto request = MakeMountRequest();
         request.MutableHeaders()->ClearClientId();
         request.SetMountSeqNumber(1);
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
 
     Y_UNIT_TEST(ShouldValidateUnmountAndIoWithoutRevokingAnotherSession)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         UNIT_ASSERT_VALUES_EQUAL(
             state.UnmountVolume("", "", "").GetCode(),
             E_REJECTED);
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
 
     Y_UNIT_TEST(ShouldRevokeSessionOnStopAndPartitionReplacement)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         const auto registration = state.RegisterVolume(MakeVolumeConfig());
         UNIT_ASSERT(!HasError(registration));
         state.Start();
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
             state.ValidateIoSession("disk1", "client1", third.GetSessionId())
                 .GetCode(),
             E_BS_INVALID_SESSION);
-        TMVPFrontendState recreated;
+        TFrontendState recreated;
         recreated.Start();
         UNIT_ASSERT_VALUES_EQUAL(
             recreated
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
 
     Y_UNIT_TEST(ShouldReadConsistentSessionSnapshotsDuringControlChanges)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         UNIT_ASSERT(!HasError(state.RegisterVolume(MakeVolumeConfig())));
         state.Start();
         auto request = MakeMountRequest();
@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TMVPFrontendStateSessionTest)
 
     Y_UNIT_TEST(ShouldSerializeConcurrentMountsAndStop)
     {
-        TMVPFrontendState state;
+        TFrontendState state;
         UNIT_ASSERT(!HasError(state.RegisterVolume(MakeVolumeConfig())));
         const auto request = MakeMountRequest();
         for (size_t iteration = 0; iteration != 32; ++iteration) {

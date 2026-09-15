@@ -1,6 +1,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/mvp_frontend_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
     Y_UNIT_TEST(ShouldRejectEveryMethodOutsideAcceptingState)
     {
         auto blockStore = CreateNbsFrontendBlockStore(
-            std::make_shared<TMVPFrontendState>(),
+            std::make_shared<TFrontendState>(),
             TLog{});
 
         // A newly created facade must keep every method behind the closed
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TNbsFrontendBlockStoreTest)
     Y_UNIT_TEST(ShouldServePingAndRejectDiskRequestsWithoutRegistration)
     {
         auto blockStore = CreateNbsFrontendBlockStore(
-            std::make_shared<TMVPFrontendState>(),
+            std::make_shared<TFrontendState>(),
             TLog{});
 
 #define TEST_METHOD(name, ...)                                                 \

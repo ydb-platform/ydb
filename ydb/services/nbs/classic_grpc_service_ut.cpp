@@ -4,7 +4,7 @@
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/mvp_frontend_state.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_state.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
@@ -187,7 +187,7 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldReflectFacadeLifecycleThroughTransport) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TMVPFrontendState>(),
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateControlStub();
@@ -223,7 +223,7 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldRegisterEverySupportedMethod) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TMVPFrontendState>(),
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);
@@ -361,7 +361,7 @@ namespace NKikimr::NGRpcService {
 
             Y_UNIT_TEST(ShouldRejectUnknownAndPrivateMethodPaths) {
                 auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
-                    std::make_shared<NYdb::NBS::NBlockStore::TMVPFrontendState>(),
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
                     TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);

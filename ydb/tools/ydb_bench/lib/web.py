@@ -294,6 +294,9 @@ _CSS += """
 .run-configuration{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;padding:1rem;background:var(--panel)}
 .configuration-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.2rem 2rem}
 .configuration-grid h3{margin:.6rem 0}.configuration-values{margin:0}
+.configuration-grid>section{min-width:0;border-top:1px solid var(--line);padding-top:.6rem}
+.topbar .run-refresh{margin-left:.5rem;padding:.15rem .5rem;font-size:1.25rem}
+.run-header{justify-content:flex-end}.run-header+.muted{margin:.3rem 0 .7rem}
 .configuration-values>div{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,1.4fr);gap:1rem;padding:.5rem 0;border-bottom:1px solid #d0d5dd}
 .configuration-values dt{color:var(--muted)}.configuration-values dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .configuration-subgroup{margin:.6rem 0}.configuration-subgroup h4{margin:.8rem 0 .3rem}
@@ -317,6 +320,16 @@ _CSS += """
 .new-run-page .editor-plan{margin:.8rem 0;color:var(--muted)}
 .new-run-page .page-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .new-run-page .page-heading .toolbar{margin:0}.new-run-page .page-heading .page-title{margin:0}
+.new-run-page[data-editor-profile]>.page-heading{position:sticky;top:0;z-index:5;background:#fff;padding:.65rem 0;border-bottom:1px solid var(--line);margin-bottom:.7rem}
+.new-run-page[data-editor-profile]>.page-heading .toolbar{min-width:0}
+.new-run-page[data-editor-profile]>.page-heading label{min-width:0;max-width:100%}
+.new-run-page[data-editor-profile]>.page-heading select{max-width:100%}
+.new-run-page[data-editor-profile] :is(input,select,textarea,button,summary){scroll-margin-top:calc(var(--editor-toolbar-height,12rem) + 1rem)}
+@media(max-width:550px){
+.new-run-page[data-editor-profile]>.page-heading{gap:.5rem}
+.new-run-page[data-editor-profile]>.page-heading .toolbar{width:100%}
+.new-run-page[data-editor-profile]>.page-heading label{width:100%}
+.new-run-page[data-editor-profile]>.page-heading select{width:100%}}
 @media(max-width:800px){.new-run-page .editor-grid{grid-template-columns:1fr}}
 @media(max-width:550px){.new-run-page .editor-role{grid-template-columns:1fr}.new-run-page .editor-role strong{padding-top:0}}
 """
@@ -364,6 +377,7 @@ _JS = (
     "\\n    repetitions: 1\\n    affinity: [none]\\n',perf:false,continueOnError:false,model:null,error:null,selected:null};\n"
     "let activeRun=sessionStorage.getItem('ydb-bench-active-run')||'';\n"
     'let refreshTimer=null;\n'
+    'let editorToolbarObserver=null;\n'
     "const viewedHost=new URLSearchParams(location.search).get('host')||'';\n"
     """
 function splitRunRef(value){const match=/^([0-9a-f]{8}-[0-9a-f-]{27}):(.*)$/.exec(value);return match?{host:match[1],id:match[2]}:null}
@@ -392,7 +406,7 @@ function hostApiPath(path){
 function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
 async function hostChoices(selected='',all=true){
   const value=await api('/api/hosts'),hosts=[value.local,...value.hosts];
-  for(const host of hosts)distributedHosts.set(host.id,host.name);
+  for(const host of hosts)distributedHosts.set(host.id,host.name||host.endpoint||host.id);
   return (all?'<option value="">All hosts</option>':'')+hosts.map(host=>'<option value="'+esc(host.id===value.local.id&&!all?'':host.id)+'" '+
     ((selected||value.local.id)===host.id&&!all||selected===host.id?'selected':'')+'>'+esc(host.name)+(host.id===value.local.id?' (this host)':'')+'</option>').join('')
 }
@@ -441,7 +455,7 @@ async function renderHosts(){
       '<label class=field>Server endpoint<input id=host-endpoint placeholder="http://127.0.0.1:42420"></label>'+
       '<label class=field>Peer token<input id=host-token type=password autocomplete=off></label>'+
       '<p class=muted>HTTP sends the token and data unencrypted; use it only on trusted networks. Open Hosts on the server you want to add and click Copy token.</p>'+
-      '<div id=host-error role=alert></div><div class=toolbar><button id=cancel-host>Cancel</button><button id=save-host>Add host</button></div></dialog>');
+      '<div id=host-error role=alert></div><div class=toolbar><button id=cancel-host>Cancel</button><button id=save-host class=primary>Add host</button></div></dialog>');
     const dialog=app.querySelector('#host-dialog');
     app.querySelector('#refresh-hosts').onclick=renderHosts;
     app.querySelector('#copy-host-token').onclick=async event=>{
@@ -490,7 +504,7 @@ function shell(current,body,breadcrumb=''){
     '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
       '<a href="'+(id==='hosts'?'/?#hosts':'#'+id)+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
-      'No active run')+'</span></header><main>'+
+      'No active run')+'</span>'+(/^#run[/]/.test(location.hash)?'<button type=button id=refresh-run class=run-refresh aria-label="Refresh run" title="Refresh run">↻</button>':'')+'</header><main>'+
       (viewedHost&&/^#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)?
         '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
       breadcrumb+body+'</main></div></div>'
@@ -665,6 +679,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
     ">[...parts,parameter.name+'='+value]))}return cases}\n"
     'function bindEditorControls(){\n'
+    "  const page=document.querySelector('.new-run-page[data-editor-profile]'),heading=page?.querySelector('.page-heading');\n"
+    "  editorToolbarObserver?.disconnect();\n"
+    "  if(heading&&typeof ResizeObserver!=='undefined'){editorToolbarObserver=new ResizeObserver(()=>"
+    "page.style.setProperty('--editor-toolbar-height',heading.offsetHeight+'px'));editorToolbarObserver.observe(heading)}\n"
     '  refreshEditorActivity();\n'
     "  document.querySelector('#run-host').onchange=async event=>{editorHost=event.target.value;clearTimeout(window.ydbBenchYamlTimer);await renderNew()};\n"
     "  const message=document.querySelector('#editor-message');\n"
@@ -1319,7 +1337,7 @@ async function renderNew(tab){
     "mark);if(benchmark?.profile_kind==='distributed-ydb')bindDistributedEditor(selected);"
     "else if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
     "fileEditor(selected)}}\n"
-    'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}\n'
+    'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}editorToolbarObserver?.disconnect();editorToolbarObserver=null}\n'
     "function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value"
     '="">Any</option><option>queued</option><option>running</option><option>completed</option><option>failed</option><option>'
     'cancelled</option><option>recovery_required</option></select></div><div class=field><label>Benchmark</label><input id=f-'
@@ -3072,7 +3090,8 @@ function configurationLabel(key){
 }
 function configurationFields(value){
   if(Array.isArray(value)&&value.some(item=>item&&typeof item==='object'))return value.map((item,index)=>
-    '<div class=configuration-subgroup><h4>'+esc(item?.name||item?.path||'#'+(index+1))+'</h4>'+configurationFields(item)+'</div>'
+    '<div class=configuration-subgroup><h4>'+esc(item?.name||item?.path||'#'+(index+1))+'</h4>'+configurationFields(
+      item?.name||item?.path?Object.fromEntries(Object.entries(item).filter(([key])=>key!==(item.name?'name':'path'))):item)+'</div>'
   ).join('');
   const scalar=item=>Array.isArray(item)?item.map(scalar).join(', '):item===null?'—':String(item);
   if(!value||typeof value!=='object'||Array.isArray(value))return '<p>'+esc(scalar(value))+'</p>';
@@ -3081,11 +3100,29 @@ function configurationFields(value){
     if(item&&typeof item==='object'&&(!Array.isArray(item)||item.some(entry=>entry&&typeof entry==='object')))groups.push(
       '<div class=configuration-subgroup><h4>'+esc(configurationLabel(key))+'</h4>'+configurationFields(item)+'</div>'
     );
-    else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(scalar(item))+'</dd></div>')
+    else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(
+      key==='host_id'?hostRecord(item).name:key==='host_ids'&&Array.isArray(item)?item.map(id=>hostRecord(id).name).join(', '):scalar(item))+'</dd></div>')
   }
   return (fields.length?'<dl class=configuration-values>'+fields.join('')+'</dl>':'')+groups.join('')
 }
 function configurationProfile(value){
+  if(value['cluster-template']){
+    const sections=[],section=(title,item)=>'<section><h3>'+esc(title)+'</h3>'+configurationFields(item)+'</section>';
+    const template=value['cluster-template'];
+    if(template&&typeof template==='object'){
+      const general=Object.fromEntries(Object.entries(template).filter(([key])=>key!=='nodes'));
+      sections.push('<section class=configuration-wide><h3>Cluster</h3>'+configurationFields(general)+
+        '<div class=configuration-role-grid>'+(template.nodes||[]).map(node=>'<div><h4>'+esc(node.name)+'</h4>'+
+          configurationFields(Object.fromEntries(Object.entries(node).filter(([key])=>key!=='name')))+'</div>').join('')+'</div></section>');
+    }else sections.push(section('Cluster',template));
+    if(value.storage)sections.push(section('Storage',value.storage));
+    for(const [name,settings] of Object.entries(value.tenants||{}))sections.push(section('Tenant · '+name,settings));
+    for(const [name,settings] of Object.entries(value['cli-nodes']||{}))sections.push(section('Load generator · '+name,settings));
+    if(value.measurement)sections.push(section('Run policy',value.measurement));
+    const extra=Object.fromEntries(Object.entries(value).filter(([key])=>!['cluster-template','storage','tenants','cli-nodes','measurement'].includes(key)));
+    if(Object.keys(extra).length)sections.push(section('Additional settings',extra));
+    return '<div class=configuration-grid>'+sections.join('')+'</div>'
+  }
   const titles={workload:'Workload',load:'Load & objective',measurement:'Measurement',geometry:'Cluster',
     affinity:'CPU placement','actor-system':'Actor system',client:'YDB CLI'};
   const sections=[],general={};
@@ -3143,6 +3180,7 @@ function bindRunConfiguration(container,id){
     '  try{\n'
     "    const run=await api('/api/runs/'+enc(id));\n"
     "    const directory=await api('/api/hosts'),owner=splitRunRef(id)?.host||viewedHost||directory.local.id;\n"
+    "    for(const host of [directory.local,...directory.hosts])distributedHosts.set(host.id,host.name||host.endpoint||host.id);\n"
     "    const hostName=[directory.local,...directory.hosts].find(host=>host.id===owner)?.name||owner;\n"
     "    activeRun=run.current_run_id||(['running','recovery_required'].includes(run.state)?id:'');\n"
     "    const queueNotice=run.state==='queued'?'<div class=notice>Queue position: '+esc(run.queue_position??'—')+'. '+(run.c"
@@ -3152,10 +3190,8 @@ function bindRunConfiguration(container,id){
     '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),selection=parseLocalYdbProfileSelection('
     "groups,selectedProfile),activeProfile=runView==='configuration'?'':selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
-    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];if(activeProfile&&profileKeys.length>1)cr"
-    "umbs.push({route:'run/'+enc(id)+'/profile/'+enc(activeProfile),label:activeProfile});\n"
-    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><h1 class=page-title>'+esc(activeProfile||runDisplay(id))+'</h1><div class=toolbar><button id=ref"
-    "resh-run>Refresh</button>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
+    "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];\n"
+    "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><div class=toolbar>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
@@ -3362,7 +3398,7 @@ async function renderSavedComparisons(){
         '<div class=field><label for=comparison-benchmark>Benchmark</label><select id=comparison-benchmark>'+
         options(runs.flatMap(run=>run.benchmarks||[]))+'</select></div><div class=field><label for=comparison-since>Started since</label>'+
         '<input id=comparison-since type=date></div></div><div class=runs-toolbar><span id=comparison-selection-count aria-live=polite></span>'+
-        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><button id=comparison-reset>Reset filters</button>'+
+        '<label><input id=comparison-selected-only type=checkbox> Selected only</label><button id=comparison-reset hidden>Reset filters</button>'+
         '<label>Sort <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
         '<option value=longest>Longest first</option></select></label></div><div class=table-scroll><table><thead><tr>'+
         '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
@@ -3397,6 +3433,8 @@ async function renderSavedComparisons(){
         for(const button of app.querySelectorAll('[data-retry-run]'))button.onclick=()=>loadRun(button.dataset.retryRun);
       };
       const drawRuns=()=>{
+        element('comparison-reset').hidden=!['comparison-query','comparison-host','comparison-status','comparison-benchmark','comparison-since']
+          .some(id=>element(id).value.trim())&&!element('comparison-selected-only').checked;
         const visible=filterComparisonRuns(runs.filter(run=>!element('comparison-host').value||run.host_id===element('comparison-host').value),{
           query:element('comparison-query').value,status:element('comparison-status').value,
           benchmark:element('comparison-benchmark').value,since:element('comparison-since').value,
@@ -3467,9 +3505,9 @@ async function renderSavedComparisons(){
       };
       drawRuns();drawProfiles();for(const id of chosenRuns)loadRun(id);return
     }
-    app.innerHTML=shell('comparisons',crumb+'<div class=toolbar><h1 class=page-title>'+esc(record.name)+'</h1>'+
+    app.innerHTML=shell('comparisons',crumb+'<div class=runs-toolbar><h1 class=page-title>'+esc(record.name)+'</h1><div class=runs-actions>'+
       (record.remote?'<span class=muted>Stored on '+esc(record.host_name)+' · read-only</span>':
-        '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button>')+'</div>'+
+        '<a href="#comparisons/'+enc(record.id)+'/edit">Edit comparison</a><button id=delete-comparison>Delete</button>')+'</div></div>'+
       '<div class=muted>'+record.profiles.length+' profiles · Baseline: '+esc(runDisplay(record.baseline[0])+' / '+record.baseline[1])+'</div>'+
       '<div id=comparison-error></div><div id=comparison-missing></div><section id=local-ydb-comparison>Loading profiles…</section>');
     const deleteComparison=document.querySelector('#delete-comparison');

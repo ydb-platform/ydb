@@ -163,6 +163,9 @@ class DistributedBuilderTest(unittest.TestCase):
         script += "\nconst profile=" + json.dumps(model["profiles"][0]) + ";\n"
         script += """
 const lines=[];serializeDistributedYdb(lines,profile);
+assert(lines.some(line=>line.trim()==='-'));
+assert(!lines.some(line=>line.includes('"nodes": [')));
+distributedHosts.set('host','Build host');
 const draft=distributedDefault(profile.distributed_config['cluster-template'],'/Root/db');
 assert.deepStrictEqual(Object.keys(draft['cli-nodes']),['c1','c2']);
 assert.equal(draft['cli-nodes'].c1.workload.options['init-upserts'],1000);
@@ -172,6 +175,7 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   const html=distributedProfileEditor(profile);assert(!html.includes('>YAML<'));
   assert(!html.includes('id=delete-profile'));
   if(tab==='Cluster'){
+    assert(html.includes('Build host'));
     assert(html.includes('<th>Tenant</th>'));assert(html.includes('<th>Affinity</th>'));
     assert(html.includes('dc / dc-R1'));assert(html.includes('/Root/db'));
     assert(html.includes('bundled'));assert(html.includes('No pinning'));
@@ -180,10 +184,12 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   assert(html.includes('class="active" data-distributed-tab="'+tab+'"'));
   assert(!html.includes('class=view-tabs'));
   if(tab==='Storage'||tab==='Tenants'){
+    assert(html.includes('class=actor-settings'));
     assert.equal((html.match(/type=checkbox/g)||[]).length,3);
     assert(!html.includes('<select'));
   }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}
+  if(tab==='Run policy')assert(html.includes('Failed requests remain visible'));
 }
 distributedSetLoadMode(draft,'c2','latency-slo');
 assert.equal(draft['cli-nodes'].c2.load.objective.type,'latency-slo');

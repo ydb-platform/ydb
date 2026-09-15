@@ -2,6 +2,11 @@
 
 CSS = """
 .distributed-editor>.tabs{flex-wrap:wrap}
+.distributed-editor .field>label:has([data-distributed-path]:not([type=checkbox])){display:flex;flex-direction:column;gap:.35rem;align-items:stretch}
+.distributed-editor .actor-settings{display:flex;flex-wrap:wrap;align-items:end;gap:1rem;max-width:48rem}
+.distributed-editor .actor-settings>.field{width:10rem}
+.distributed-editor .actor-flags{display:flex;flex-wrap:wrap;gap:.6rem 1rem;padding-bottom:.5rem}
+.distributed-editor .actor-flags label{display:flex;align-items:center;gap:.35rem}
 .distributed-editor .distributed-layout{display:grid;grid-template-columns:13rem minmax(0,1fr);gap:1.5rem;margin-top:1rem}
 .distributed-editor .distributed-items{display:flex;flex-direction:column;gap:.4rem;align-self:start}
 .distributed-editor .distributed-items button{text-align:left;overflow-wrap:anywhere}
@@ -46,6 +51,7 @@ async function chooseDistributedProfile(profile,name){
     if(host!==editorHost||original!==editor.yaml||!location.hash.startsWith('#new'))return;
     if(!records.length)throw Error('Add a cluster template before creating a distributed run.');
     const dialog=document.createElement('dialog');
+    dialog.className='import-dialog';
     dialog.innerHTML='<h2>Distributed run</h2><div class=form-grid>'+localSelect('distributed-template','Cluster template',records[0].id,
       records.map(r=>r.id))+'<div class=field><label for=distributed-tenant>Initial target tenant</label><select id=distributed-tenant></select></div></div>'+
       '<div class=toolbar><button type=button id=distributed-cancel>Cancel</button>'+
@@ -80,8 +86,8 @@ async function chooseDistributedProfile(profile,name){
 function serializeDistributedYdb(lines,profile){
   function append(value,prefix){
     for(const [key,item] of Object.entries(value)){
-      const name=prefix+JSON.stringify(key)+':';
-      if(item&&typeof item==='object'&&!Array.isArray(item)&&Object.keys(item).length){lines.push(name);append(item,prefix+'  ')}
+      const name=prefix+(Array.isArray(value)?'-':JSON.stringify(key)+':');
+      if(item&&typeof item==='object'&&Object.keys(item).length){lines.push(name);append(item,prefix+'  ')}
       else lines.push(name+' '+JSON.stringify(item));
     }
   }
@@ -127,9 +133,9 @@ function distributedProfileEditor(profile){
       }).join('')+'</tbody></table></div></div>').join('');
   }else if(view.tab==='Storage'||view.tab==='Tenants'){
     content='<div class=distributed-summary>'+template.nodes.filter(n=>view.tab==='Storage'?n.role==='static':n.role==='dynamic'&&n.tenant===view.item)
-      .map(n=>esc(n.name)).join(' · ')+'</div><div class=form-grid>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
-      ['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>'<div class=field><label><input type=checkbox data-distributed-path="'+
-        esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label></div>').join('')+'</div>';
+      .map(n=>esc(n.name)).join(' · ')+'</div><div class=actor-settings>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
+      '<div class=actor-flags>'+['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>'<label><input type=checkbox data-distributed-path="'+
+        esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label>').join('')+'</div></div>';
   }else if(view.tab==='Load generators'){
     const node=template.nodes.find(n=>n.name===view.item),peers=Object.entries(clients).filter(([name,c])=>c.tenant===object.tenant&&c.dataset===object.dataset);
     const definition=localYdbWorkloadDefinition(object.workload.type),load=object.load,mode=load.search?load.objective.type:'fixed';
@@ -165,7 +171,9 @@ function distributedProfileEditor(profile){
       [['warmup','Warm-up, s',2],['duration','Duration, s',10],['repetitions','Repetitions',1]].map(([k,label,d])=>input(label,['measurement',k],raw.measurement?.[k]??d,'number')).join('')+
       (owner?input('Verification repetitions',['measurement','verification-repetitions'],raw.measurement?.['verification-repetitions']??0,'number'):'')+
       select('Allow failed requests (all CLI)', ['cli-nodes',Object.keys(clients)[0],'load','allow-errors'],
-        String(Object.values(clients)[0].load['allow-errors']??false),['false','true'])+'</div>';
+        String(Object.values(clients)[0].load['allow-errors']??false),['false','true'])+'</div>'+
+      (owner?'<p class=muted>Verification uses independent measurements at the selected load. Set repetitions to 0 to disable verification.</p>':'')+
+      '<p class=muted>Allow failed requests applies to all CLI generators. Failed requests remain visible in results but do not limit load search.</p>';
   }
   return '<div class=distributed-editor><div class=tabs>'+tabs.map(t=>
     '<button type=button class="'+(view.tab===t?'active':'')+'" data-distributed-tab="'+t+'" aria-pressed="'+(view.tab===t)+'">'+t+'</button>').join('')+

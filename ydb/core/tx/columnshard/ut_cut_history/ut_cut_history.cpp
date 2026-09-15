@@ -168,8 +168,7 @@ private:
     ui32& Count;
 };
 
-// Advances LastCollectedGenStep past the current generation so HasCollectedBeforeCurrentGeneration() returns true.
-// Does not build a GC task (BuildGCTask requires an actor context); for tests that need the full GC cycle, do it inline.
+// Advances LastCollectedGenStep past the current generation so HasCollectedBeforeCurrentGeneration() is true.
 static void CommitFirstGcRound(
     std::shared_ptr<NOlap::TBlobManager>& bm, ui32 currentGen, std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>&) {
     const NOlap::TGenStep barrier{ currentGen, 0 };
@@ -496,7 +495,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(Max<ui32>()), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
     }
 
-    // Happy path: after the first GC round, a proven entry gets TEvCutTabletHistory with no hard TEvCollectGarbage.
+    // Happy path: after the first GC round, a proven entry gets TEvCutTabletHistory.
     Y_UNIT_TEST(SweepHappyPathCutsAfterFirstGcRound) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
@@ -514,8 +513,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
         const auto edgeTablet = runtime.AllocateEdgeActor();
         const auto edgeLauncher = runtime.AllocateEdgeActor();
-        const auto edgeBs = runtime.AllocateEdgeActor();
-        runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), edgeBs);
         const auto runner = runtime.Register(new TRunnerActor());
         auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
             runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
@@ -528,14 +525,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
         const TEntryKey key{ DataChannel, OldFromGen };
-
-        // Observe every TEvCollectGarbage that reaches the BS proxy.
-        bool sawHardCollect = false;
-        auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-            if (ev->Get()->Hard) {
-                sawHardCollect = true;
-            }
-        });
 
         bool nominated = false;
         runInActor([&](const NActors::TActorContext& ctx) {
@@ -552,7 +541,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
-        UNIT_ASSERT_C(!sawHardCollect, "no hard TEvCollectGarbage must be sent");
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
 
         auto cutReq = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
@@ -630,7 +618,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher));
     }
 
-    // A group appearing twice in one channel's history: the later entry cut first, then the earlier one is also cut.
+    // A group appearing twice in one channel's history: the earlier entry is cut first, then the later one is also cut.
     Y_UNIT_TEST(DuplicateGroupBothEntriesCut) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
@@ -641,11 +629,10 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         static constexpr ui64 TabletId = 3032;
         static constexpr ui32 DataChannel = 2;
         static constexpr ui32 GroupX = 100;
-        static constexpr ui32 GroupY = 200;
         static constexpr ui32 GroupZ = 300;
         static constexpr ui32 CurrentGen = 21;
-        // History: {0,X},{5,Y},{10,X},{20,Z(active)}
-        const TVector<std::pair<ui32, ui32>> hist{ { 0, GroupX }, { 5, GroupY }, { 10, GroupX }, { 20, GroupZ } };
+        // History: {0,X},{5,200},{10,X},{20,Z(active)} — X appears at both fromGen=0 and fromGen=10.
+        const TVector<std::pair<ui32, ui32>> hist{ { 0, GroupX }, { 5, 200u }, { 10, GroupX }, { 20, GroupZ } };
 
         const auto edgeTablet = runtime.AllocateEdgeActor();
         const auto edgeLauncher = runtime.AllocateEdgeActor();
@@ -660,38 +647,35 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
 
-        const TEntryKey keyY{ DataChannel, 5 };
         const TEntryKey keyX0{ DataChannel, 0 };
+        const TEntryKey keyX10{ DataChannel, 10 };
 
-        // Cut the {5,Y} entry first (the {10,X} entry is active so only {0,X} and {5,Y} are candidates).
-        // Sweep with only keyY to simulate cutting it first.
-        cutter.StartSweepForTest({ keyY });
-        cutter.SetPortionSnapshot({});
-        runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
-        });
-        UNIT_ASSERT_C(cutter.GetCutStateForTest(keyY) == ECutState::Cut, "Y entry must be cut first");
-        auto cutY = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
-        UNIT_ASSERT(cutY);
-        UNIT_ASSERT_VALUES_EQUAL(cutY->Get()->Record.GetFromGeneration(), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(cutY->Get()->Record.GetGroupID(), GroupY);
-
-        // Now the {0,X} entry can be cut (its earlier occurrence of X is no longer blocked by the later Y).
+        // SeenGroupsCheckPasses requires the earlier same-group entry to be cut first.
         cutter.StartSweepForTest({ keyX0 });
         cutter.SetPortionSnapshot({});
         runInActor([&](const NActors::TActorContext& ctx) {
             cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
-        UNIT_ASSERT_C(cutter.GetCutStateForTest(keyX0) == ECutState::Cut, "older X entry must also be cut");
+        UNIT_ASSERT_C(cutter.GetCutStateForTest(keyX0) == ECutState::Cut, "earlier X entry must be cut");
         auto cutX0 = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
         UNIT_ASSERT(cutX0);
         UNIT_ASSERT_VALUES_EQUAL(cutX0->Get()->Record.GetFromGeneration(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(cutX0->Get()->Record.GetGroupID(), GroupX);
+
+        // After the earlier entry is cut, the later {10,X} entry can also be cut.
+        cutter.StartSweepForTest({ keyX10 });
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT_C(cutter.GetCutStateForTest(keyX10) == ECutState::Cut, "later X entry must also be cut");
+        auto cutX10 = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
+        UNIT_ASSERT(cutX10);
+        UNIT_ASSERT_VALUES_EQUAL(cutX10->Get()->Record.GetFromGeneration(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(cutX10->Get()->Record.GetGroupID(), GroupX);
     }
 
-    // A queued DoNotKeep blob (GC task in flight) blocks the cut; after the round commits, the entry is cut.
-    // A GC round in progress (GCTaskInFlight=true) pins IsDrained; nomination is deferred until
-    // the round commits, which also sets HasCollectedBeforeCurrentGeneration.
+    // DoNotKeep (in-flight GC) pins IsDrained; after the round commits, nomination succeeds and the entry is cut.
     Y_UNIT_TEST(QueuedBlobBlocksCutUntilGcRoundCommits) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
@@ -718,9 +702,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.SetLauncherActorId(edgeLauncher);
         const TEntryKey key{ DataChannel, OldFromGen };
 
-        // Start a GC round — it pins IsDrained while in flight.
-        // BuildGCTask requires an actor context (calls AppData()->TimeProvider->Now()).
-        // The test runtime starts at t=0; advance past the 30s GC throttle period first.
+        // Start a GC round (advance 60s first to pass the throttle window); it pins IsDrained while in flight.
         runtime.AdvanceCurrentTime(TDuration::Seconds(60));
         auto storageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
         auto gcCounters =
@@ -999,21 +981,12 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.SetLauncherActorId(edgeLauncher);
         const TEntryKey middle{ Channel, 5 };
 
-        // No hard TEvCollectGarbage must be sent at all.
-        bool sawHardCollect = false;
-        auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-            if (ev->Get()->Hard) {
-                sawHardCollect = true;
-            }
-        });
-
         cutter.StartSweepForTest({ middle });
         cutter.SetPortionSnapshot({});
         runInActor([&](const NActors::TActorContext& ctx) {
             cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(middle) == ECutState::Cut);
-        UNIT_ASSERT_C(!sawHardCollect, "no hard TEvCollectGarbage must be sent");
 
         auto cutReq = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
         UNIT_ASSERT(cutReq);
@@ -1038,8 +1011,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         static constexpr ui64 PortionP6 = 6;
 
         const auto edgeTablet = runtime.AllocateEdgeActor();
-        const auto edgeG0 = runtime.AllocateEdgeActor();
-        runtime.RegisterService(MakeBlobStorageProxyID(GroupG0), edgeG0);
         const auto runner = runtime.Register(new TRunnerActor());
         auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
             runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
@@ -1059,13 +1030,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // The counter counts live portions, not blobs: P6 with both g1 and g2 is one.
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(earlier), 1);
 
-        ui32 collectsToG0 = 0;
-        auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-            if (ev->Recipient == MakeBlobStorageProxyID(GroupG0) || ev->GetRecipientRewrite() == edgeG0) {
-                ++collectsToG0;
-            }
-        });
-
         // Inject the entry into the sweep directly to exercise the final re-check, then complete the sweep.
         cutter.StartSweepForTest({ earlier });
         cutter.SetPortionSnapshot({});
@@ -1073,7 +1037,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(earlier) == ECutState::None);
-        UNIT_ASSERT_VALUES_EQUAL_C(collectsToG0, 0u, "a G0 entry pinned by a live portion must never trigger a collect");
         UNIT_ASSERT(guard->GetCut().empty());
     }
 

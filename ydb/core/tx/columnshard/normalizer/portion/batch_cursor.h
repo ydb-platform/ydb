@@ -61,8 +61,7 @@ public:
         return TierName.empty() || TierName == NBlobOperations::TGlobal::DefaultStorageId;
     }
 
-    // Returns true if the given entity lives in the default (local) storage for this portion.
-    // Defined in batch_cursor.cpp to avoid including index_info.h in this header.
+    // True if the entity lives in the default (local) storage; defined in batch_cursor.cpp.
     bool IsInDefaultStorage(ui32 entityId) const;
 };
 

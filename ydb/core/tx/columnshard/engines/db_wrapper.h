@@ -114,8 +114,7 @@ public:
         return DsGroupSelector;
     }
 
-    // Seeding-mode loaders: use TDatabase::Precharge + IterateRange with a finite bytesLimit.
-    // Return {false, ...} on page fault; caller retries with the same or advanced startKey.
+    // Seeding-mode loaders: Precharge + IterateRange with bytesLimit; return {false,…} on page fault.
     TSeedingBatchResult LoadPortionsSeeding(std::pair<TInternalPathId, ui64> startKey, ui64 maxRows, ui64 bytesLimit,
         const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback);
 

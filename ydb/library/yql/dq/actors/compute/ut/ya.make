@@ -42,7 +42,9 @@ PEERDIR(
 CHECK_DEPENDENT_DIRS(ALLOW_ONLY PEERDIRS
     build
     certs
-    contrib
+    contrib/libs
+    contrib/proto
+    contrib/restricted
     library
     tools
     util

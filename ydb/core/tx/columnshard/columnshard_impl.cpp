@@ -1956,7 +1956,6 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
         HFunc(TEvPrivate::TEvTieringModified, Handle);
         HFunc(TEvPrivate::TEvStartCutHistorySweep, Handle);
-        HFunc(TEvPrivate::TEvCutHistoryBarrierDone, Handle);
         HFunc(TEvPrivate::TEvCutHistorySweepBatchDone, Handle);
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);

@@ -50,7 +50,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr Nominations;
     NMonitoring::TDynamicCounters::TCounterPtr SweepsCompleted;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesCut;
-    NMonitoring::TDynamicCounters::TCounterPtr BarriersFailed;
     NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
@@ -67,12 +66,8 @@ public:
         SweepsCompleted->Add(1);
     }
 
-    void OnBarrierResult(const bool ok) const {
-        if (ok) {
-            EntriesCut->Add(1);
-        } else {
-            BarriersFailed->Add(1);
-        }
+    void OnEntryCut() const {
+        EntriesCut->Add(1);
     }
 
     // Deltas, not absolute values: tablets share one subgroup, so Set() would be last-tablet-wins.

@@ -151,7 +151,7 @@ class TestYdbWorkload(StressFixture):
             "--database", self.database,
             "--duration", self.base_duration,
         ])
-        # Require the full pipeline: Entries/Cut must grow within one nomination cadence plus a barrier round-trip.
+        # Require the full pipeline: Entries/Cut must grow within one nomination cadence plus one GC round.
         pool = ydb.QuerySessionPool(self.driver)
         try:
             probe = self._prepare_cut_history_candidate(pool)
@@ -178,4 +178,3 @@ class TestYdbWorkload(StressFixture):
             f"CutHistory nominated but never cut the probe entry: {sensors}"
         )
         assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
-        assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"

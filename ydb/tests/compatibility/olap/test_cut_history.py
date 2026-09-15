@@ -235,7 +235,6 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             logger.info("cut_history sensors: %s", sensors)
             # A poisoned channel means a refcount underflow — a real defect, not an environmental hiccup.
             assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
-            assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"
 
         # Allow the cutter time to settle, then verify health and data.
         time.sleep(90)

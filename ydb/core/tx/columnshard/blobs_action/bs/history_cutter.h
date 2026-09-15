@@ -48,7 +48,6 @@ namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 enum class ECutState {
     None,
     Verifying,
-    SentBarrier,
     Cut,
 };
 
@@ -139,8 +138,6 @@ public:
 
     void OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx);
 
-    void OnBarrierResult(const TEntryKey& key, bool ok, TInstant now);
-
     ui64 GetSweepRound() const {
         return SweepRound;
     }
@@ -188,7 +185,7 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 CurrentGen;
     std::weak_ptr<NOlap::TBlobManager> Manager;
-    // Shared-out blobs are in no GC queue, so the drain gate consults this registry before a hard barrier.
+    // Shared-out blobs are in no GC queue; the drain gate consults this registry.
     std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> SharedBlobs;
     TActorId TabletActorId;
     TActorId LauncherActorId;

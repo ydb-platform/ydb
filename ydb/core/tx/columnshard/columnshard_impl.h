@@ -615,7 +615,6 @@ private:
     void SetupCutHistory();
 
     void Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, const TActorContext& ctx);
 
     void UpdateIndexCounters();

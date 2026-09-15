@@ -249,6 +249,11 @@ public:
     // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
     bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
 
+    // True once the first GC round of this incarnation has committed a soft barrier covering all prior groups.
+    bool HasCollectedBeforeCurrentGeneration() const {
+        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
+    }
+
     // Shared by regular GC and CutHistory barriers alike; pass PerGenerationCounterStepSize().
     static ui32 AllocateGCPerGenerationCounter(ui32 step);
 

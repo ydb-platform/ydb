@@ -2,7 +2,6 @@
 #include "history_cutter.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -16,121 +15,6 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
-
-namespace {
-
-class TCutHistoryBarrierActor: public TActorBootstrapped<TCutHistoryBarrierActor> {
-public:
-    TCutHistoryBarrierActor(const TActorId& tabletActorId, const TActorId& launcherActorId, ui64 tabletId, ui32 currentGen, ui32 channel,
-        ui32 group, ui32 fromGen, ui32 nextFromGen)
-        : TabletActorId(tabletActorId)
-        , LauncherActorId(launcherActorId)
-        , TabletId(tabletId)
-        , CurrentGen(currentGen)
-        , Channel(channel)
-        , Group(group)
-        , FromGen(fromGen)
-        , NextFromGen(nextFromGen)
-    {
-        AFL_VERIFY(NextFromGen > 0);   // NextFromGen - 1 below would underflow to collect-everything
-    }
-
-    void Bootstrap(const TActorContext& ctx) {
-        Become(&TThis::StateWait);
-        SendBarrier(ctx);
-    }
-
-    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Tag == RetryTag) {
-            SendBarrier(ctx);
-            return;
-        }
-        // A watchdog is stale once its attempt got a reply or a later attempt replaced it.
-        if (AwaitingReply && ev->Get()->Tag == Attempt) {
-            OnAttemptFailed(ctx);
-        }
-    }
-
-    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
-        const auto status = ev->Get()->Status;
-        if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
-            // ALREADY means the barrier is already at or beyond the requested level; any attempt's success proves the same barrier.
-            auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
-            req->Record.SetTabletID(TabletId);
-            req->Record.SetChannel(Channel);
-            req->Record.SetFromGeneration(FromGen);
-            req->Record.SetGroupID(Group);
-            ctx.Send(LauncherActorId, req.Release());
-            ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone(Channel, FromGen, true));
-            Die(ctx);
-            return;
-        }
-        if (status == NKikimrProto::BLOCKED) {
-            Fail(ctx);
-            return;
-        }
-        // An error from an attempt the watchdog already gave up on changes nothing.
-        if (AwaitingReply && ev->Cookie == Attempt) {
-            OnAttemptFailed(ctx);
-        }
-    }
-
-    STFUNC(StateWait) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
-            HFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
-        }
-    }
-
-private:
-    static constexpr int MaxRetries = 3;
-    static constexpr ui64 RetryTag = 0;
-    // The request carries no deadline, so a reply that never comes would otherwise hold the entry in SentBarrier.
-    static constexpr TDuration ReplyTimeout = TDuration::Minutes(2);
-
-    void OnAttemptFailed(const TActorContext& ctx) {
-        AwaitingReply = false;
-        if (++Retries >= MaxRetries) {
-            Fail(ctx);
-            return;
-        }
-        // Linear backoff: an immediate retry against an overloaded group would only add load.
-        ctx.Schedule(TDuration::Seconds(1) * Retries, new NActors::TEvents::TEvWakeup(RetryTag));
-    }
-
-    void Fail(const TActorContext& ctx) {
-        ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone(Channel, FromGen, false));
-        Die(ctx);
-    }
-
-    // Resending is safe: a hard barrier at the same level answers OK or ALREADY.
-    void SendBarrier(const TActorContext& ctx) {
-        const ui32 perGenerationCounter =
-            TBlobManager::AllocateGCPerGenerationCounter(TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(nullptr, nullptr));
-        auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(TabletId, CurrentGen, perGenerationCounter, Channel, /*collect=*/true,
-            /*collectGeneration=*/NextFromGen - 1, /*collectStep=*/Max<ui32>(), /*keep=*/nullptr, /*doNotKeep=*/nullptr, TInstant::Max(),
-            /*issueKeepFlag=*/false, TWriteSource::ColumnShardGC, /*hard=*/true);
-        ++Attempt;
-        AwaitingReply = true;
-        SendToBSProxy(ctx, Group, ev.Release(), Attempt);
-        ctx.Schedule(ReplyTimeout, new NActors::TEvents::TEvWakeup(Attempt));
-    }
-
-    TActorId TabletActorId;
-    TActorId LauncherActorId;
-    ui64 TabletId = 0;
-    ui32 CurrentGen = 0;
-    ui32 Channel = 0;
-    ui32 Group = 0;
-    ui32 FromGen = 0;
-    ui32 NextFromGen = 0;
-    int Retries = 0;
-    // Starts past RetryTag, so every attempt's watchdog tag differs from the retry wakeup.
-    ui64 Attempt = 0;
-    bool AwaitingReply = false;
-};
-
-}   // anonymous namespace
 
 THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui32 currentGen,
     const std::weak_ptr<NOlap::TBlobManager>& manager, const std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
@@ -222,7 +106,7 @@ bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
     if (!manager->HasNoBlobsInRange(key.Channel, key.FromGeneration, nextGen)) {
         return false;
     }
-    // Shared-out blobs sit in no GC queue, but a hard barrier would collect them under the borrower.
+    // Shared-out blobs sit in no GC queue; the borrower's GC manages them, so they must drain here first.
     const auto sharedBlobs = SharedBlobs.lock();
     if (!sharedBlobs) {
         return false;
@@ -514,11 +398,23 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             continue;
         }
 
+        // The first GC round of this incarnation carries a soft barrier for every history group, so wait for it.
+        if (const auto mgr = Manager.lock(); !mgr || !mgr->HasCollectedBeforeCurrentGeneration()) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+
         DisprovedAt.erase(key);
         PublishLevels();
-        CutState[key] = ECutState::SentBarrier;
-        ctx.Register(new TCutHistoryBarrierActor(
-            TabletActorId, LauncherActorId, TabletInfo->TabletID, CurrentGen, key.Channel, *groupId, key.FromGeneration, nextFromGen));
+        CutState[key] = ECutState::Cut;
+        NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
+        Signals.OnEntryCut();
+        auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
+        req->Record.SetTabletID(TabletInfo->TabletID);
+        req->Record.SetChannel(key.Channel);
+        req->Record.SetFromGeneration(key.FromGeneration);
+        req->Record.SetGroupID(*groupId);
+        ctx.Send(LauncherActorId, req.Release());
     }
     SweepSurvivors.clear();
 
@@ -527,25 +423,6 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
         if (state == ECutState::Verifying) {
             state = ECutState::None;
         }
-    }
-}
-
-void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok, TInstant now) {
-    auto* state = CutState.FindPtr(key);
-    if (!state) {
-        return;
-    }
-    Signals.OnBarrierResult(ok);
-    if (ok) {
-        *state = ECutState::Cut;
-        NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
-    } else {
-        *state = ECutState::None;
-        // Nomination erased the record, so repeated failures plateau at cooldown(1) instead of retrying every cadence.
-        auto& disproval = DisprovedAt[key];
-        disproval.At = now;
-        ++disproval.Attempts;
-        PublishLevels();
     }
 }
 

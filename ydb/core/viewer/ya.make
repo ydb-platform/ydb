@@ -844,8 +844,7 @@ RESOURCE(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/helpers
+    contrib/libs/yaml-cpp
     library/cpp/archive
     library/cpp/json
     library/cpp/mime/types
@@ -870,17 +869,19 @@ PEERDIR(
     ydb/core/viewer/json
     ydb/core/viewer/yaml
     ydb/core/viewer/protos
+    ydb/library/actors/core
+    ydb/library/actors/helpers
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
+    ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common
-    ydb/public/api/grpc
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
-    contrib/libs/yaml-cpp
 )
 
 YQL_LAST_ABI_VERSION()

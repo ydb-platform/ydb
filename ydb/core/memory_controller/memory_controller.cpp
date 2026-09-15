@@ -70,18 +70,30 @@ public:
     }
 
     virtual ui64 GetConsumption() const {
-        return Consumption;
+        return Used;
     }
 
-    void SetConsumption(ui64 value) override {
-        Consumption = value;
+    ui64 GetDemand() const {
+        return Demand;
+    }
+
+    ui64 GetReclaimable() const {
+        return Reclaimable;
+    }
+
+    void SetReport(TConsumerReport report) override {
+        Used = report.Used;
+        Demand = report.Demand;
+        Reclaimable = report.Reclaimable;
     }
 
 public:
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
 private:
-    std::atomic<ui64> Consumption = 0;
+    std::atomic<ui64> Used = 0;
+    std::atomic<ui64> Demand = 0;
+    std::atomic<ui64> Reclaimable = 0;
 };
 
 class TColumnTablesPortionsMetaDataCacheMemoryConsumer: public TMemoryConsumer {
@@ -99,6 +111,8 @@ struct TConsumerState {
     const EMemoryConsumerKind Kind;
     const TActorId ActorId;
     const ui64 Consumption;
+    const ui64 Demand;
+    const ui64 Reclaimable;
     ui64 MinBytes = 0;
     ui64 MaxBytes = 0;
     bool CanZeroLimit = false;
@@ -107,6 +121,9 @@ struct TConsumerState {
         : Kind(consumer.Kind)
         , ActorId(consumer.ActorId)
         , Consumption(consumer.GetConsumption())
+        // Three atomics are not a snapshot: clamp torn reads instead of asserting invariants.
+        , Demand(Max(consumer.GetDemand(), Consumption))
+        , Reclaimable(Min(consumer.GetReclaimable(), Consumption))
     {
     }
 
@@ -118,6 +135,8 @@ struct TConsumerState {
 
 struct TConsumerCounters {
     TCounterPtr Consumption;
+    TCounterPtr Demand;
+    TCounterPtr Reclaimable;
     TCounterPtr Reservation;
     TCounterPtr LimitBytes;
     TCounterPtr LimitMinBytes;
@@ -299,11 +318,15 @@ private:
             YDB_LOG_INFO_CTX(ctx, "Consumer state",
                 {"consumerKind", consumer.Kind},
                 {"consumption", HumanReadableBytes(consumer.Consumption)},
+                {"demand", HumanReadableBytes(consumer.Demand)},
+                {"reclaimable", HumanReadableBytes(consumer.Reclaimable)},
                 {"limit", HumanReadableBytes(limitBytes)},
                 {"min", HumanReadableBytes(consumer.MinBytes)},
                 {"max", HumanReadableBytes(consumer.MaxBytes)});
             auto& counters = GetConsumerCounters(consumer.Kind);
             counters.Consumption->Set(consumer.Consumption);
+            counters.Demand->Set(consumer.Demand);
+            counters.Reclaimable->Set(consumer.Reclaimable);
             counters.Reservation->Set(SafeDiff(limitBytes, consumer.Consumption));
             counters.LimitBytes->Set(limitBytes);
             counters.LimitMinBytes->Set(consumer.MinBytes);
@@ -516,6 +539,8 @@ private:
 
         return ConsumerCounters.emplace(consumer, TConsumerCounters{
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Consumption"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Demand"),
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reclaimable"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Reservation"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/Limit"),
             Counters->GetCounter(TStringBuilder() << "Consumer/" << consumer << "/LimitMin"),
@@ -529,12 +554,16 @@ private:
                 Y_ASSERT(!stats.HasMemTableConsumption());
                 Y_ASSERT(!stats.HasMemTableLimit());
                 stats.SetMemTableConsumption(consumer.Consumption);
+                stats.SetMemTableDemand(consumer.Demand);
+                stats.SetMemTableReclaimable(consumer.Reclaimable);
                 stats.SetMemTableLimit(limitBytes);
                 break;
             }
             case EMemoryConsumerKind::SharedCache: {
                 Y_ASSERT(!stats.HasSharedCacheLimit());
                 stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
+                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
+                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
                 stats.SetSharedCacheLimit(limitBytes);
                 break;
             }
@@ -542,6 +571,8 @@ private:
                 Y_ASSERT(!stats.HasCompactionConsumption());
                 Y_ASSERT(!stats.HasCompactionLimit());
                 stats.SetCompactionConsumption(consumer.Consumption);
+                stats.SetCompactionDemand(consumer.Demand);
+                stats.SetCompactionReclaimable(consumer.Reclaimable);
                 stats.SetCompactionLimit(limitBytes);
                 break;
             }
@@ -550,11 +581,15 @@ private:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
             case EMemoryConsumerKind::ColumnTablesBlobCache: {
                 stats.SetSharedCacheConsumption(stats.GetSharedCacheConsumption() + consumer.Consumption);
+                stats.SetSharedCacheDemand(stats.GetSharedCacheDemand() + consumer.Demand);
+                stats.SetSharedCacheReclaimable(stats.GetSharedCacheReclaimable() + consumer.Reclaimable);
                 break;
             }
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
                 stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
+                stats.SetQueryExecutionDemand(stats.GetQueryExecutionDemand() + consumer.Demand);
+                stats.SetQueryExecutionReclaimable(stats.GetQueryExecutionReclaimable() + consumer.Reclaimable);
                 break;
             }
         }

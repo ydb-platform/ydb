@@ -104,6 +104,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+        KeyedOperation = KeyedOperation || (Op->HasKeysInfo() && Op->KeysCount() > 0);
 
         switch (status) {
             case EExecutionStatus::Restart:

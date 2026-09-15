@@ -1052,6 +1052,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), msg);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTableStats().GetCPUWithKeys(), 0, msg);
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
@@ -1084,6 +1087,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetFollowerId(), followerId, msg);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetTabletMetrics().GetCPU(), 0, msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), msg);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), msg);
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().GetSplitProtocolVersion(), expectedSplitProtocolVersion, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetTableStats().HasKeyAccessSample(), false, msg);
@@ -1810,6 +1815,184 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
      */
     Y_UNIT_TEST(GetInfoFollower) {
         VerifyGetInfo(true /* testFollower */);
+    }
+
+    /**
+     * Verify that CPU spent on operations which actually touch table rows by key
+     * (an UPSERT write, a SELECT read) is attributed to CPUWithKeys, while CPU spent
+     * on non-keyed background bookkeeping (i.e. idling, with no user requests at all)
+     * is attributed to CPUWithoutKeys and CPUWithKeys decays back down once the
+     * keyed load stops.
+     */
+    Y_UNIT_TEST(CpuUsageAttributedToKeyedOperations) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        const auto shardId = shards.at(0);
+
+        auto sampleStats = [&](const TString& label) {
+            auto result = SendEvTableStats(
+                runtime, sender, shardId, tableId.PathId.LocalPathId,
+                false /* collectKeySample */, false /* toFollower */
+            );
+
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), label);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), label);
+
+            Cerr << "TEST " << label
+                << ": CPUWithKeys=" << result.GetTableStats().GetCPUWithKeys()
+                << ", CPUWithoutKeys=" << result.GetTableStats().GetCPUWithoutKeys()
+                << Endl;
+
+            return result.GetTableStats();
+        };
+
+        // Let the shard settle down (past the first decaying-average window)
+        // before taking the initial, mostly idle sample.
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        auto idleBefore = sampleStats("idle before any load");
+
+        // A plain UPSERT is a keyed write (goes through TTxWrite/TTxProposeTransactionBase
+        // with real HasKeysInfo()/KeysCount() > 0).
+        UpsertRows(server, sender, 1, 500);
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        auto afterWrite = sampleStats("after a keyed UPSERT");
+
+        UNIT_ASSERT_GT(afterWrite.GetCPUWithKeys(), idleBefore.GetCPUWithKeys());
+        UNIT_ASSERT_GT(afterWrite.GetCPUWithKeys(), afterWrite.GetCPUWithoutKeys());
+
+        // A plain SELECT by key range is a keyed read (goes through the read
+        // iterator: TTxReadViaPipeline/TTxReadContinue).
+        auto selectResult = KqpSimpleExec(
+            runtime,
+            "SELECT COUNT(*) FROM `/Root/table-1` WHERE key >= 1 AND key <= 500"
+        );
+        Y_UNUSED(selectResult);
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        auto afterRead = sampleStats("after a keyed SELECT");
+
+        UNIT_ASSERT_GT(afterRead.GetCPUWithKeys(), afterRead.GetCPUWithoutKeys());
+
+        // Once the keyed load stops, only the small keyless bookkeeping tick
+        // (see TDataShard::CollectCpuUsage) keeps CPUWithoutKeys alive, and
+        // CPUWithKeys should decay back down.
+        runtime.SimulateSleep(TDuration::Seconds(60));
+        auto idleAfter = sampleStats("idle after the load stopped");
+
+        UNIT_ASSERT_LT(idleAfter.GetCPUWithKeys(), afterRead.GetCPUWithKeys());
+    }
+
+    /**
+     * Verify that TTxUploadRows (BulkUpsert -- the raw upload-rows protocol
+     * used by bulk import and by the BulkUpsert API, as opposed to a regular
+     * KQP-driven UPSERT) is counted as a keyed operation. Unlike the regular
+     * write path, TTxDirectBase::IsKeyedOperation() (its base class) returns
+     * a hardcoded true rather than deriving it from HasKeysInfo()/KeysCount(),
+     * since a bulk upload always operates on explicit row keys by construction.
+     */
+    Y_UNIT_TEST(BulkUpsertIsKeyedOperation) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        const auto shardId = shards.at(0);
+
+        auto [tables, ownerId] = GetTables(server, shardId);
+        const auto& userTable = tables.at("table-1");
+        const auto& description = userTable.GetDescription();
+
+        std::set<ui32> keyColumnIds(
+            description.GetKeyColumnIds().begin(),
+            description.GetKeyColumnIds().end()
+        );
+
+        auto sampleStats = [&](const TString& label) {
+            auto result = SendEvTableStats(
+                runtime, sender, shardId, tableId.PathId.LocalPathId,
+                false /* collectKeySample */, false /* toFollower */
+            );
+
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithKeys(), label);
+            UNIT_ASSERT_C(result.GetTableStats().HasCPUWithoutKeys(), label);
+
+            Cerr << "TEST " << label
+                << ": CPUWithKeys=" << result.GetTableStats().GetCPUWithKeys()
+                << ", CPUWithoutKeys=" << result.GetTableStats().GetCPUWithoutKeys()
+                << Endl;
+
+            return result.GetTableStats();
+        };
+
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        auto idleBefore = sampleStats("idle before any load");
+
+        // Send a bulk upload directly via the raw EvUploadRowsRequest protocol,
+        // bypassing KQP/TxProxy entirely -- this is what triggers TTxUploadRows.
+        // Each TTxUploadRows commit is very cheap (no query engine, no locks,
+        // no distributed transaction machinery), so a large number of rows,
+        // split into many separate requests/commits, is needed for its keyed
+        // CPU to reliably stand out above the constant-rate keyless background
+        // bookkeeping tick (see TDataShard::CollectCpuUsage) accumulated over
+        // the same sampling window.
+        const ui32 totalRows = 50'000;
+        const ui32 rowsPerRequest = 1000;
+        for (ui32 chunkStart = 1; chunkStart <= totalRows; chunkStart += rowsPerRequest) {
+            auto request = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+            auto& record = request->Record;
+            record.SetTableId(userTable.GetPathId());
+
+            auto& rowScheme = *record.MutableRowScheme();
+            for (const auto& column : description.GetColumns()) {
+                if (!keyColumnIds.contains(column.GetId())) {
+                    rowScheme.AddValueColumnIds(column.GetId());
+                }
+            }
+            for (auto columnId : keyColumnIds) {
+                rowScheme.AddKeyColumnIds(columnId);
+            }
+
+            const ui32 chunkEnd = std::min(chunkStart + rowsPerRequest, totalRows + 1);
+            for (ui32 key = chunkStart; key < chunkEnd; ++key) {
+                TVector<TCell> keyCells(keyColumnIds.size(), TCell::Make(key));
+                TVector<TCell> valueCells(description.ColumnsSize() - keyColumnIds.size(), TCell::Make(key));
+
+                auto& row = *record.AddRows();
+                row.SetKeyColumns(TSerializedCellVec::Serialize(keyCells));
+                row.SetValueColumns(TSerializedCellVec::Serialize(valueCells));
+            }
+
+            runtime.SendToPipe(shardId, sender, request.release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvUploadRowsResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), 0);
+        }
+
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        auto afterBulkUpsert = sampleStats("after a BulkUpsert (TTxUploadRows)");
+
+        UNIT_ASSERT_GT(afterBulkUpsert.GetCPUWithKeys(), idleBefore.GetCPUWithKeys());
+        UNIT_ASSERT_GT(afterBulkUpsert.GetCPUWithKeys(), afterBulkUpsert.GetCPUWithoutKeys());
     }
 }
 

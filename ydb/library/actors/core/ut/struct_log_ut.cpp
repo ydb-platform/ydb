@@ -73,9 +73,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
         TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
         TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123000");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123000");
-        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123000");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
@@ -107,6 +107,19 @@ Y_UNIT_TEST_SUITE(StructLog) {
         CheckNativeExtraction<ui64, ui8, true>(1);
         CheckNativeExtraction<ui8, TString, false>(1);
         CheckNativeExtraction<TString, ui8, false>("1");
+
+        CheckNativeExtraction<float, i32, true>(1.5f);
+        CheckNativeExtraction<float, i32, true>(-128.0f);
+        CheckNativeExtraction<double, ui8, true>(255.9);
+        CheckNativeExtraction<double, ui8, true>(-0.5);
+        CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::infinity());
+        CheckNativeExtraction<float, i32, false>(-std::numeric_limits<float>::infinity());
+        CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::quiet_NaN());
+        CheckNativeExtraction<float, i32, false>(1e20f);
+        CheckNativeExtraction<double, ui8, false>(256.0);
+        CheckNativeExtraction<double, ui8, false>(-1.0);
+        CheckNativeExtraction<float, ui32, false>(-1.0f);
+        CheckNativeExtraction<float, i64, false>(std::ldexp(1.0f, 63));
     }
 
     Y_UNIT_TEST(TestKeyName) {
@@ -269,7 +282,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(CreateMessageNativeTypes) {
         // Native type values
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), "value=1");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", 'a'}), "value=a");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), "value=1");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "value=4");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "value=5");
@@ -279,9 +292,9 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), "value=true");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "value=abc");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "value=abc");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123000");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123000");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "value=2026-09-12T17:15:27.128336Z");
 
         int i = 0;

@@ -75,7 +75,14 @@ struct TNativeTypeCodeMapping {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
+        bool ok {false};
+        if (!Invoke(code, data, length,
+            TOverloaded{
+                [&value, &ok](const T& v) { value = v; ok = true;},
+                [](const auto&) {}})) {
+            return false;
+        }
+        return ok;
     }
 
     template <typename T>
@@ -137,7 +144,14 @@ struct TNativeTypeCodeMapping<TPair> {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
+        bool ok {false};
+        if (!Invoke(code, data, length,
+            TOverloaded{
+                [&value, &ok](const T& v) { value = v; ok = true;},
+                [](const auto&) {}})) {
+            return false;
+        }
+        return ok;
     }
 
     template <typename T>

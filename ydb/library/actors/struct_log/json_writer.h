@@ -104,11 +104,23 @@ protected:
         } else if constexpr (std::is_same_v<T, bool>) {
             JsonWriter.WriteBool(value);
         } else if constexpr (std::is_same_v<T, float>) {
-            JsonWriter.WriteFloat(value);
+            if (!std::isfinite(value)) {
+                JsonWriter.WriteString(TNativeTypeSupport<float>::ToString(value));
+            } else {
+                JsonWriter.WriteFloat(value);
+            }
         } else if constexpr (std::is_same_v<T, double>) {
-            JsonWriter.WriteDouble(value);
+            if (!std::isfinite(value)) {
+                JsonWriter.WriteString(TNativeTypeSupport<double>::ToString(value));
+            } else {
+                JsonWriter.WriteDouble(value);
+            }
         } else if constexpr (std::is_same_v<T, long double> ) {
-            JsonWriter.WriteDouble(static_cast<double>(value));
+            if (!std::isfinite(value)) {
+                JsonWriter.WriteString(TNativeTypeSupport<long double>::ToString(value));
+            } else {
+                JsonWriter.WriteDouble(static_cast<double>(value));
+            }
         } else if constexpr (std::is_same_v<T, TInstant> ) {
             JsonWriter.WriteString(TNativeTypeSupport<TInstant>::ToString(value));
         } else {

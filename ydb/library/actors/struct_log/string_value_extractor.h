@@ -9,6 +9,10 @@ namespace NActors::NStructuredLog {
 class TStringValueExtractor {
 public:
     TStringValueExtractor() = default;
+    TStringValueExtractor(const TStringValueExtractor&) = delete;
+    TStringValueExtractor(const TStringValueExtractor&&) = delete;
+    TStringValueExtractor& operator=(const TStringValueExtractor&) = delete;
+    TStringValueExtractor& operator=(const TStringValueExtractor&&) = delete;
 
     const std::optional<TString>& ExtractValue(const TStructuredMessage& message, std::size_t index) {
         ExtractedValue.reset();

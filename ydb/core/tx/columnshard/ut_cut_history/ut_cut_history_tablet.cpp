@@ -3,7 +3,9 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
@@ -189,6 +191,162 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         for (const ui32 channel : written.DataChannels) {
             UNIT_ASSERT_C(
                 !cutChannels.contains(channel), "a data channel with live compacted portions was incorrectly cut, channel " << channel);
+        }
+    }
+
+    // After a reboot the seeded portionKeyCount equals the number of committed portions in memory.
+    Y_UNIT_TEST(SeededCountersMatchInMemoryPortionCount) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        class TCountingController: public TCutHistoryTabletController {
+        public:
+            std::atomic<size_t> InMemoryPortionCount{ 0 };
+            std::atomic<size_t> SeedingPortionKeyCount{ static_cast<size_t>(-1) };
+
+            void DoOnTabletInitCompleted(const TColumnShard& shard) override {
+                size_t count = 0;
+                if (shard.HasIndex()) {
+                    const auto& idx = shard.GetIndexAs<NOlap::TColumnEngineForLogs>();
+                    for (const auto& [pathId, granule] : idx.GetTables()) {
+                        count += granule->GetPortions().size();
+                    }
+                }
+                InMemoryPortionCount.store(count);
+            }
+
+            void OnCutHistorySeedingCompleted(const size_t portionKeyCount) override {
+                SeedingPortionKeyCount.store(portionKeyCount);
+            }
+        };
+
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCountingController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        TWrittenBlobs written;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                const TLogoBlobID& id = ev->Get()->Id;
+                if (id.TabletID() == TTestTxConfig::TxTablet0) {
+                    written.Generation = Max(written.Generation, id.Generation());
+                    if (id.Channel() >= 2) {
+                        written.DataChannels.insert(id.Channel());
+                    }
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+            TestTableDescription table;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 1, TableId, MakeTestBlob({ 0, 1000 }, table.Schema), table.Schema, &writeIds));
+            const auto planStep = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 1, writeIds);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, TSet<ui64>{ 1 });
+            for (int i = 0; i < 10; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            }
+        }
+        UNIT_ASSERT_C(!written.DataChannels.empty(), "the write must put portion blobs into data channels");
+
+        RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
+
+        const size_t inMemoryCount = guard->InMemoryPortionCount.load();
+        UNIT_ASSERT_C(inMemoryCount > 0, "in-memory portion count must be > 0 after writing rows");
+
+        // Register cut observer before any wakeups so no cut slips by unnoticed.
+        THashSet<ui32> cutChannels;
+        auto cutObserver = runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetFromGeneration() == 0) {
+                cutChannels.insert(ev->Get()->Record.GetChannel());
+            }
+        });
+
+        // Drive until seeding completes, then a few more rounds to check for spurious cuts.
+        const bool neverStop = false;
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+        const size_t seedingCount = guard->SeedingPortionKeyCount.load();
+        UNIT_ASSERT_C(seedingCount != static_cast<size_t>(-1), "seeding must have completed");
+        UNIT_ASSERT_VALUES_EQUAL_C(seedingCount, inMemoryCount, "seeded portionKeyCount must equal the in-memory portion count");
+
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20, neverStop);
+        for (const ui32 channel : written.DataChannels) {
+            UNIT_ASSERT_C(!cutChannels.contains(channel), "an old entry holding live portion blobs must not be cut, channel " << channel);
+        }
+    }
+
+    // With a tiny SeedBatchPortions override the seeding splits into many batches but still completes.
+    Y_UNIT_TEST(SeedingCompletesWithSmallBatchSize) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        class TSmallBatchController: public TCutHistoryTabletController {
+        public:
+            std::atomic<size_t> SeedingPortionKeyCount{ static_cast<size_t>(-1) };
+
+            ui64 GetSeedBatchPortions(const ui64 /*defaultValue*/) const override {
+                return 1;
+            }
+
+            void OnCutHistorySeedingCompleted(const size_t portionKeyCount) override {
+                SeedingPortionKeyCount.store(portionKeyCount);
+            }
+        };
+
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSmallBatchController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        TWrittenBlobs written;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                const TLogoBlobID& id = ev->Get()->Id;
+                if (id.TabletID() == TTestTxConfig::TxTablet0) {
+                    written.Generation = Max(written.Generation, id.Generation());
+                    if (id.Channel() >= 2) {
+                        written.DataChannels.insert(id.Channel());
+                    }
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+            TestTableDescription table;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 1, TableId, MakeTestBlob({ 0, 1000 }, table.Schema), table.Schema, &writeIds));
+            const auto planStep = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 1, writeIds);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, TSet<ui64>{ 1 });
+            for (int i = 0; i < 10; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            }
+        }
+        UNIT_ASSERT_C(!written.DataChannels.empty(), "the write must put portion blobs into data channels");
+
+        RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
+
+        // Register cut observer before any wakeups so no cut slips by unnoticed.
+        THashSet<ui32> cutChannels;
+        auto cutObserver = runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetFromGeneration() == 0) {
+                cutChannels.insert(ev->Get()->Record.GetChannel());
+            }
+        });
+
+        // Drive until seeding completes (many small batches → more iterations needed).
+        const bool neverStop = false;
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, neverStop);
+        const size_t seedingCount = guard->SeedingPortionKeyCount.load();
+        UNIT_ASSERT_C(seedingCount != static_cast<size_t>(-1), "seeding must complete even with SeedBatchPortions=1");
+        UNIT_ASSERT_C(seedingCount > 0, "seeded portionKeyCount must be > 0 after writing rows");
+
+        // Old entry must not be cut (seeding found all portions across the many small batches).
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20, neverStop);
+        for (const ui32 channel : written.DataChannels) {
+            UNIT_ASSERT_C(!cutChannels.contains(channel), "an old entry with seeded live portions must not be cut, channel " << channel);
         }
     }
 

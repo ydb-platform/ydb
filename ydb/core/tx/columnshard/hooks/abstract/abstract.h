@@ -437,6 +437,19 @@ public:
 
     virtual void OnHistoryEntryCut(const ui32 /*channel*/, const ui32 /*fromGeneration*/) {
     }
+
+    // Overridable seed-batch sizing for tests; production defaults are defined in the tx.
+    virtual ui64 GetSeedBatchPortions(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+
+    virtual ui64 GetSeedBatchBytes(const ui64 defaultValue) const {
+        return defaultValue;
+    }
+
+    // Called when a seeding run completes successfully; portionKeyCount is the number of live portions found.
+    virtual void OnCutHistorySeedingCompleted(const size_t /*portionKeyCount*/) {
+    }
 };
 
 class IKqpController {

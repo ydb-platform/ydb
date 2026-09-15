@@ -373,6 +373,7 @@ void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrT
 TSeedingBatchResult TDbWrapper::LoadPortionsSeeding(std::pair<TInternalPathId, ui64> startKey, ui64 maxRows, ui64 bytesLimit,
     const std::function<bool(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback)
 {
+    AFL_VERIFY(bytesLimit > 0)("event", "seeding loader called with zero bytesLimit");
     using IndexPortions = NColumnShard::Schema::IndexPortions;
     static const auto& kTagIds = IndexPortions::Columns<IndexPortions::TColumns>::GetColumnIds();
     NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
@@ -392,12 +393,14 @@ TSeedingBatchResult TDbWrapper::LoadPortionsSeeding(std::pair<TInternalPathId, u
     auto it = Database.IterateRange(IndexPortions::TableId, range, tags);
     ui64 rowsRead = 0;
     std::optional<std::pair<TInternalPathId, ui64>> lastKey;
+    bool endOfRange = false;
     while (rowsRead < maxRows) {
         auto ready = it->Next(NTable::ENext::Data);
         if (ready == NTable::EReady::Page) {
             return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
         }
         if (ready == NTable::EReady::Gone) {
+            endOfRange = true;
             break;
         }
         TRawRowAdapter adapter(it->Row(), tags);
@@ -410,12 +413,15 @@ TSeedingBatchResult TDbWrapper::LoadPortionsSeeding(std::pair<TInternalPathId, u
             break;
         }
     }
-    return TSeedingBatchResult{ true, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+    TSeedingBatchResult result{ true, precharge.BytesPrecharged, TConclusionStatus::Success(), lastKey };
+    result.EndOfRange = endOfRange;
+    return result;
 }
 
 TSeedingBatchResult TDbWrapper::LoadColumnsSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey,
     ui64 bytesLimit, const std::function<void(TColumnChunkLoadContextV2&&)>& callback)
 {
+    AFL_VERIFY(bytesLimit > 0)("event", "seeding loader called with zero bytesLimit");
     using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
     static const auto& kTagIds = IndexColumnsV2::Columns<IndexColumnsV2::TColumns>::GetColumnIds();
     NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
@@ -468,6 +474,7 @@ TSeedingBatchResult TDbWrapper::LoadColumnsSeeding(std::pair<TInternalPathId, ui
 TSeedingBatchResult TDbWrapper::LoadIndexesSeeding(std::pair<TInternalPathId, ui64> startKey, std::pair<TInternalPathId, ui64> endKey,
     ui64 bytesLimit, const std::function<void(const TInternalPathId, const ui64, TIndexChunkLoadContext&&)>& callback)
 {
+    AFL_VERIFY(bytesLimit > 0)("event", "seeding loader called with zero bytesLimit");
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     static const auto& kTagIds = IndexIndexes::Columns<IndexIndexes::TColumns>::GetColumnIds();
     NTable::TTagsRef tags(kTagIds.data(), kTagIds.size());
@@ -475,16 +482,25 @@ TSeedingBatchResult TDbWrapper::LoadIndexesSeeding(std::pair<TInternalPathId, ui
     ui64 startPortionId = startKey.second;
     ui64 endPathId = endKey.first.GetRawValue();
     ui64 endPortionId = endKey.second;
-    const NKikimr::TRawTypeValue minKeyArr[2] = {
+    // IndexIndexes key has 4 columns; provide all 4 to avoid "incomplete MinKey" VERIFY.
+    ui32 minIndexId = 0;
+    ui32 minChunkIdx = 0;
+    ui32 maxIndexId = std::numeric_limits<ui32>::max();
+    ui32 maxChunkIdx = std::numeric_limits<ui32>::max();
+    const NKikimr::TRawTypeValue minKeyArr[4] = {
         { &startPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
         { &startPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &minIndexId, sizeof(ui32), NScheme::NTypeIds::Uint32 },
+        { &minChunkIdx, sizeof(ui32), NScheme::NTypeIds::Uint32 },
     };
-    const NKikimr::TRawTypeValue maxKeyArr[2] = {
+    const NKikimr::TRawTypeValue maxKeyArr[4] = {
         { &endPathId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
         { &endPortionId, sizeof(ui64), NScheme::NTypeIds::Uint64 },
+        { &maxIndexId, sizeof(ui32), NScheme::NTypeIds::Uint32 },
+        { &maxChunkIdx, sizeof(ui32), NScheme::NTypeIds::Uint32 },
     };
-    NTable::TRawVals minKey(minKeyArr, 2);
-    NTable::TRawVals maxKey(maxKeyArr, 2);
+    NTable::TRawVals minKey(minKeyArr, 4);
+    NTable::TRawVals maxKey(maxKeyArr, 4);
     auto precharge = Database.Precharge(IndexIndexes::TableId, minKey, maxKey, tags, 0, 0, bytesLimit);
     if (!precharge.Ready) {
         return TSeedingBatchResult{ false, precharge.BytesPrecharged, TConclusionStatus::Success(), {} };

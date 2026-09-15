@@ -172,6 +172,14 @@ public:
         return SweepRound;
     }
 
+    ui64 GetSeedRun() const {
+        return SeedRun;
+    }
+
+    const NColumnShard::THistoryCutterCounters& GetSignals() const {
+        return Signals;
+    }
+
     bool IsEnabled() const;
 
     bool IsSweepInFlight() const {

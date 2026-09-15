@@ -253,6 +253,7 @@ void THistoryCutterWrapper::BeginSeeding() {
     SeedingState = ESeedState::Seeding;
     PublishLevels(0);
     PublishSeedLevels();
+    Signals.OnSeedingStarted();
 }
 
 void THistoryCutterWrapper::ApplySeedBatch(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {
@@ -296,6 +297,8 @@ void THistoryCutterWrapper::FinishSeeding() {
     SeedTombstones.clear();
     SeedingState = ESeedState::Seeded;
     PublishSeedLevels();
+    Signals.OnSeedingCompleted();
+    NYDBTest::TControllers::GetColumnShardController()->OnCutHistorySeedingCompleted(PortionKeys.size());
 }
 
 void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, const TString& reason) {
@@ -303,6 +306,7 @@ void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, 
         "reason", reason);
     SeedingState = ESeedState::Failed;
     PublishSeedLevels();
+    Signals.OnSeedingFailed();
 }
 
 void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {

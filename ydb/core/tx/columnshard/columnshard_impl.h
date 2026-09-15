@@ -282,6 +282,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     class TTxProgressTx;
     class TTxProposeCancel;
+    class TTxCutHistorySeed;
     // proto
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
@@ -613,6 +614,7 @@ private:
     void SetupCleanupSchemas();
     void SetupGC();
     void SetupCutHistory();
+    void BeginCutHistorySeeding(const NActors::TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, const TActorContext& ctx);

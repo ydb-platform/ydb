@@ -135,9 +135,9 @@ void TColumnShard::SetupCutHistory() {
         auto observer = std::make_shared<TCutHistoryPortionsObserver>(cutter);
         TablesManager.SetPortionsObserver(observer);
     }
-    // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
+    // Seed the counters from the local DB before allowing nominations.
     cutter->BeginSeeding();
-    cutter->FinishSeeding();
+    BeginCutHistorySeeding(NActors::TActivationContext::AsActorContext());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, const TActorContext& ctx) {

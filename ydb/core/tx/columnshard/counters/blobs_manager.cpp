@@ -33,6 +33,14 @@ THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameA
     , PortionKeysCount(TBase::GetValue("PortionKeys/Count"))
     , Tombstones(TBase::GetValue("Seed/Tombstones"))
     , Underflows(TBase::GetDeriviative("Underflows/Count"))
+    , SeedingsStarted(TBase::GetDeriviative("Seed/Tx/Started/Count"))
+    , SeedingsCompleted(TBase::GetDeriviative("Seed/Tx/Completed/Count"))
+    , SeedingsFailed(TBase::GetDeriviative("Seed/Tx/Failed/Count"))
+    , SeedingBatches(TBase::GetDeriviative("Seed/Batches/Count"))
+    , SeedingExecuteRetries(TBase::GetDeriviative("Seed/Execute/Retries/Count"))
+    , SeedingPortionsTotal(TBase::GetDeriviative("Seed/Portions/Total"))
+    , SeedingBytesCharged(TBase::GetDeriviative("Seed/Bytes/Charged"))
+    , SeedingDurationMs(TBase::GetDeriviative("Seed/Duration/Ms"))
 {
 }
 

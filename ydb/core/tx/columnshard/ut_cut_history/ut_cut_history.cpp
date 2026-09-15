@@ -1163,6 +1163,55 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetTombstoneCountForTest(), 0u);
     }
 
+    // FailSeeding puts the cutter in Failed state and blocks nominations; positive control: re-seed succeeds.
+    Y_UNIT_TEST(FailSeedingTerminatesWithFailedState) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 6060;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 ActiveFromGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, ActiveFromGen, /*nChannels=*/3, { { OldFromGen, 100 }, { ActiveFromGen, 200 } });
+        CommitFirstGcRound(bm, ActiveFromGen, shared);
+        TTestableHistoryCutter cutter(info, ActiveFromGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+
+        cutter.BeginSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeding);
+
+        cutter.FailSeeding(NOlap::TInternalPathId{}, 99, "injected test error");
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Failed);
+
+        // In Failed state TryNominate must refuse.
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(!nominated, "TryNominate must return false when seeding Failed");
+        UNIT_ASSERT_C(guard->GetNominated().empty(), "no nomination must fire in Failed state");
+
+        // Positive control: after a new seeding run the cutter becomes Seeded and nominations work.
+        cutter.BeginSeeding();
+        cutter.FinishSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeded);
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(nominated, "TryNominate must succeed after re-seeding to Seeded");
+        UNIT_ASSERT_C(!guard->GetNominated().empty(), "nomination must fire after successful re-seed");
+    }
+
     // OnBatchComplete aborts the cut when ReseedEpoch changes between nomination and completion.
     Y_UNIT_TEST(StaleNominationAbortedOnReseed) {
         TActorSystemStub actorSystemStub;

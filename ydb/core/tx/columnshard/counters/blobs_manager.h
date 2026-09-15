@@ -58,6 +58,14 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionKeysCount;
     NMonitoring::TDynamicCounters::TCounterPtr Tombstones;
     NMonitoring::TDynamicCounters::TCounterPtr Underflows;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingsStarted;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingsCompleted;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingsFailed;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingBatches;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingExecuteRetries;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingPortionsTotal;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingBytesCharged;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingDurationMs;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -95,6 +103,32 @@ public:
 
     void OnUnderflow() const {
         Underflows->Add(1);
+    }
+
+    void OnSeedingStarted() const {
+        SeedingsStarted->Add(1);
+    }
+
+    void OnSeedingCompleted() const {
+        SeedingsCompleted->Add(1);
+    }
+
+    void OnSeedingFailed() const {
+        SeedingsFailed->Add(1);
+    }
+
+    void OnSeedingBatch(const ui64 portionCount, const ui64 bytesCharged) const {
+        SeedingBatches->Add(1);
+        SeedingPortionsTotal->Add(portionCount);
+        SeedingBytesCharged->Add(bytesCharged);
+    }
+
+    void OnSeedingExecuteRetry() const {
+        SeedingExecuteRetries->Add(1);
+    }
+
+    void OnSeedingDurationMs(const ui64 ms) const {
+        SeedingDurationMs->Add(ms);
     }
 };
 

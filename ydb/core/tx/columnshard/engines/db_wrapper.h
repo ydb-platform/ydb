@@ -24,6 +24,7 @@ struct TSeedingBatchResult {
     ui64 BytesPrecharged;
     TConclusionStatus Error = TConclusionStatus::Success();
     std::optional<std::pair<TInternalPathId, ui64>> LastKey;
+    bool EndOfRange = false;   // true when the iterator reported end of range (Gone)
 };
 
 class TColumnChunkLoadContextV2;

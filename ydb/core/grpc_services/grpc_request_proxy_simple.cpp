@@ -110,6 +110,11 @@ private:
 
         LogRequest(event);
 
+        if (!ResolveRequestDatabase(event->Get(), RootDatabase, AppConfig.GetGRpcConfig().GetIgnoreRoot())) {
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            return;
+        }
+
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
             return;
@@ -152,11 +157,16 @@ private:
     }
 
     const NKikimrConfig::TAppConfig AppConfig;
+    TString RootDatabase;
     std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
+    if (AppConfig.GetGRpcConfig().GetIgnoreRoot()) {
+        RootDatabase = DatabaseFromDomain(AppData());
+    }
+
     auto nodeID = SelfId().NodeId();
 
     YDB_LOG_NOTICE_CTX(ctx, "Grpc simple request proxy started",

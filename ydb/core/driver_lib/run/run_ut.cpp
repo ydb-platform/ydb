@@ -1,9 +1,45 @@
 #include "run.h"
 #include "config_helpers.h"
+#include "config_parser.h"
 
 #include <ydb/library/actors/util/affinity.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/stream/file.h>
+#include <util/system/tempfile.h>
+
+Y_UNIT_TEST_SUITE(LegacyRunOptions) {
+    Y_UNIT_TEST(IgnoreRoot) {
+        for (bool configured : {false, true}) {
+            for (bool commandLine : {false, true}) {
+                TTempFileHandle domains;
+                TTempFileHandle channels;
+                TTempFileHandle grpc;
+                TFileOutput(domains.Name()).Finish();
+                TFileOutput(channels.Name()).Finish();
+                {
+                    TFileOutput output(grpc.Name());
+                    output << "IgnoreRoot: " << (configured ? "true" : "false");
+                }
+                NKikimrConfig::TAppConfig appConfig;
+                NKikimr::TKikimrRunConfig config(appConfig);
+                NKikimr::TRunCommandConfigParser parser(config);
+                NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+                parser.SetupLastGetOptForConfigFiles(opts);
+                opts.AddLongOption("bootstrap-file").OptionalArgument("PATH");
+                opts.AddLongOption("feature-flags-file").OptionalArgument("PATH");
+                TVector<const char*> args = {"kikimr", "--domains-file", domains.Name().c_str(),
+                    "--channels-file", channels.Name().c_str(), "--grpc-file", grpc.Name().c_str()};
+                if (commandLine) {
+                    args.push_back("--ignore-root");
+                }
+                NLastGetopt::TOptsParseResult res(&opts, args.size(), args.data());
+                parser.ParseConfigFiles(res);
+                UNIT_ASSERT_VALUES_EQUAL(config.AppConfig.GetGRpcConfig().GetIgnoreRoot(), configured || commandLine);
+            }
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(XdsBootstrapConfigInitializer) {
 

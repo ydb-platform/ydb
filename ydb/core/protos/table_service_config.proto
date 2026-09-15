@@ -596,5 +596,5 @@ message TTableServiceConfig {
     optional bool EnableWindowFunctionsV2 = 148 [default = false, (InvalidateCompileCache) = true];
 
     // When true, block hash join keys use IS NOT DISTINCT FROM (NULL matches NULL).
-    optional bool EnableBlockHashJoinEqualNulls = 148 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableBlockHashJoinEqualNulls = 149 [default = false, (InvalidateCompileCache) = true];
 };

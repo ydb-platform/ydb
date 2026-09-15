@@ -9,6 +9,9 @@ from ydb.tests.stress.sqs_topic.workload import Workload
 MIN_SUPPORTED_VERSION = "stable-26-2"
 ITERATION_DURATION_SECONDS = 10
 COUNT_GROWTH_TIMEOUT = 120
+# Few workers: a large inflight tail becomes a contig gap on the next roll().
+WRITE_WORKERS = 2
+READ_WORKERS = 2
 
 
 def skip_if_unsupported(versions):
@@ -34,19 +37,19 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
             },
         )
 
-    def _wait_count_growth(self, get_current, prev, what, timeout=COUNT_GROWTH_TIMEOUT, on_stall=None):
+    def _wait_count(self, get_current, done, what, timeout=COUNT_GROWTH_TIMEOUT, on_stall=None):
         deadline = time.time() + timeout
-        last = prev
+        last = None
         last_error = None
         while time.time() < deadline:
             try:
                 current = get_current()
                 last = current
                 last_error = None
-                if current > prev:
-                    logger.info("%s grew: %s -> %s", what, prev, current)
+                if done(current):
+                    logger.info("%s: %s", what, current)
                     return current
-                logger.info("%s has not grown yet: prev=%s current=%s", what, prev, current)
+                logger.info("%s not reached yet: current=%s", what, current)
             except Exception as e:
                 last_error = e
                 logger.warning("Failed to get %s: %r", what, e)
@@ -55,7 +58,7 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
             else:
                 time.sleep(1)
         raise AssertionError(
-            f"{what} did not grow within {timeout}s: prev={prev}, last={last}, error={last_error!r}"
+            f"{what} was not reached within {timeout}s: last={last}, error={last_error!r}"
         )
 
     def test_write_and_read(self):
@@ -66,33 +69,34 @@ class TestTopicSqsRollingUpdate(RollingUpgradeAndDowngradeFixture):
             self.database_path,
             ITERATION_DURATION_SECONDS,
             self.http_proxy_endpoint + self.database_path,
+            write_workers=WRITE_WORKERS,
+            read_workers=READ_WORKERS,
         )
 
         with utils:
-            # keep_messages_order=False: otherwise committed offset stalls mid-rolling
-            # once a gap appears in the shared consumer contig.
+            # keep_messages_order=False: otherwise a message-group lock from a
+            # killed node can block later reads of that group during rolling.
             utils.create_topics(keep_messages_order=False)
 
             prev_written = 0
-            prev_committed = 0
 
             for iteration, _ in enumerate(self.roll()):
                 logger.info("Running SQS workload after roll iteration #%d", iteration)
                 utils.endpoint = self.endpoint
                 utils.sqs_endpoint = self.http_proxy_endpoint + self.database_path
 
-                # Write first, then read: verifies each side independently and avoids
-                # reader starvation / connection flakes during mixed-version rolling.
+                # Write first, then drain: committed_offset is the MLP contig
+                # watermark, so a leftover gap stalls the next mixed-version step.
                 utils.write_to_topic()
-                prev_written = self._wait_count_growth(
+                written = self._wait_count(
                     lambda: utils.get_written_messages_count(self.driver),
-                    prev_written,
-                    "written messages count",
+                    lambda current: current > prev_written,
+                    f"written messages count > {prev_written}",
                 )
-
-                prev_committed = self._wait_count_growth(
+                self._wait_count(
                     lambda: utils.get_committed_messages_count(self.driver),
-                    prev_committed,
-                    "committed messages count",
+                    lambda current: current >= written,
+                    f"committed messages count >= {written}",
                     on_stall=utils.read_from_topic,
                 )
+                prev_written = written

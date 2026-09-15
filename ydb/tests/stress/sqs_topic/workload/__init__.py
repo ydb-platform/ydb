@@ -14,12 +14,14 @@ import stat
 class Workload:
     CONSUMER = "shared_consumer"
 
-    def __init__(self, endpoint, database, duration, sqs_endpoint):
+    def __init__(self, endpoint, database, duration, sqs_endpoint, *, write_workers=20, read_workers=50):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.database = database
         self.endpoint = endpoint
         self.sqs_endpoint = sqs_endpoint
         self.duration = duration
+        self.write_workers = write_workers
+        self.read_workers = read_workers
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.topic_name = f"topic_{self.id}"
         self.dlq_topic_name = f"dlq_topic_{self.id}"
@@ -117,7 +119,7 @@ class Workload:
             'write',
             '-s', str(self.duration),
             '--warmup', '0',
-            '--workers', '20',
+            '--workers', str(self.write_workers),
             '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', self.CONSUMER,
@@ -133,7 +135,7 @@ class Workload:
             'read',
             '-s', str(self.duration),
             '--warmup', '0',
-            '--workers', '50',
+            '--workers', str(self.read_workers),
             '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', self.CONSUMER,

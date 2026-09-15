@@ -477,18 +477,6 @@ message TLogConfig {
     optional bool IgnoreUnknownComponents = 15 [default = true];
     optional string TenantName = 16;
     optional bool EnableStructuredLogInJson = 17 [default = false];
-
-    message TSchematizedLog {
-        required bytes Kind = 1;
-        required uint32 StoreTimeout = 2 [default = 1000];
-        required uint32 FlushTimeout = 3 [default = 1000];
-
-        optional bool LocalDatabase = 4 [default = false];
-        optional uint32 StoreShardCount = 5 [default = 4];
-        optional uint32 TableShardCount = 6 [default = 3];
-    }
-
-    repeated TSchematizedLog Sinks = 18;
 }
 
 message TInterconnectConfig {

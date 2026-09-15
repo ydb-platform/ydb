@@ -223,7 +223,6 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         return;
     }
 
-    TGuard<TMutex> guard = wrapper->Guard();
     if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
         return;
     }
@@ -232,6 +231,7 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         wrapper->IsDisabled.store(true, std::memory_order_release);
     }
 
+    TGuard<TMutex> guard = wrapper->Guard();
     for (auto& [_, server] : wrapper->Servers) {
         if (!server) {
             continue;
@@ -341,10 +341,10 @@ public:
         if (!wrapper) {
             return;
         }
-        TGuard<TMutex> guard = wrapper->Guard();
         if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
             return;
         }
+        TGuard<TMutex> guard = wrapper->Guard();
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
             if (!server) {

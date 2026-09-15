@@ -3295,7 +3295,6 @@ public:
 class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     const ui64 LocalReadId;
 
-    bool KeyedOperation = false;
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
     std::unique_ptr<IBlockBuilder> BlockBuilder;
     TShortTableInfo TableInfo;
@@ -3310,7 +3309,9 @@ public:
 
     // note that intentionally the same as TEvRead
     TTxType GetTxType() const override { return TXTYPE_READ; }
-    bool IsKeyedOperation() const override { return KeyedOperation; }
+
+    // Continuation of an already validated per-key table read.
+    bool IsKeyedOperation() const override { return true; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // note that we don't need to check shard state here:
@@ -3329,8 +3330,6 @@ public:
                 {"iterator", LocalReadId});
             return true;
         }
-
-        KeyedOperation = it->second->PathId.OwnerId != Self->TabletID();
 
         if (Self->SplitStarted) {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,

@@ -594,7 +594,8 @@ bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, con
     }
     const auto inRange = [&](const auto& blob) {
         const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
-        return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;
+        return logoBlobId.TabletID() == (ui64)SelfTabletId && logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen &&
+               logoBlobId.Generation() < nextFromGen;
     };
     return !AnyOf(BlobsToDelete, inRange) && !AnyOf(BlobsToDeleteDelayed, inRange) &&
            BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);

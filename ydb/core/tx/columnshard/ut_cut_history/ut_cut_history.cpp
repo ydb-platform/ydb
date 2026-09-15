@@ -376,6 +376,35 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(cutterOtherChannel.IsDrained(key), "a blob on another channel must not pin the entry");
     }
 
+    // A blob of another tablet in our delete queue must not pin our history entry.
+    Y_UNIT_TEST(ForeignBlobInDeleteQueueDoesNotPin) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 OurTabletId = 1111;
+        static constexpr ui64 ForeignTabletId = 2222;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 ActiveFromGen = 5;
+        static constexpr ui32 GenInOldRange = 1;
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        auto info = MakeTabletInfo(OurTabletId, 3, { { OldFromGen, 100 }, { ActiveFromGen, 200 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, ActiveFromGen, NOlap::TTabletId(OurTabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(OurTabletId));
+        TTestableHistoryCutter cutter(info, ActiveFromGen, bm, shared, TActorId(), TestSignals());
+
+        UNIT_ASSERT_C(cutter.IsDrained(key), "empty queues: old entry starts drained");
+
+        // A foreign tablet's blob in our delete queue must not pin our entry.
+        bm->DeleteBlobOnComplete(NOlap::TTabletId(ForeignTabletId), MakeUnifiedBlob(MakeBlob(ForeignTabletId, DataChannel, GenInOldRange)));
+        UNIT_ASSERT_C(cutter.IsDrained(key), "a foreign blob in our delete queue must not pin our history entry");
+
+        // Our own blob in the same range still does pin it.
+        bm->DeleteBlobOnComplete(NOlap::TTabletId(OurTabletId), MakeUnifiedBlob(MakeBlob(OurTabletId, DataChannel, GenInOldRange)));
+        UNIT_ASSERT_C(!cutter.IsDrained(key), "our own blob in the delete queue must pin the entry");
+    }
+
     // Underflow poisons the channel; nomination then skips it though every other gate is open.
     Y_UNIT_TEST(UnderflowPoisonsChannelAndBlocksNomination) {
         TActorSystemStub actorSystemStub;

@@ -17,12 +17,8 @@ using namespace NKikimr;
 
 namespace {
 
-IEventBase* MakePipeFailureResult(ui32 requestType, const TString& reason)
+IEventBase* MakePipeFailureResult(const TString& reason)
 {
-    Y_ABORT_UNLESS(
-        requestType ==
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType);
-
     auto result = std::make_unique<
         TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>();
     result->Record.SetStatus(TBscProxy::PipeFailureStatus);
@@ -70,18 +66,31 @@ void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
 {
     THolder<IEventBase> request = std::move(ev->Get()->Request);
     Y_ABORT_UNLESS(request);
-    const ui32 requestType = request->Type();
     Y_ABORT_UNLESS(
-        requestType ==
+        request->Type() ==
         TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType);
     const ui64 cookie = ev->Cookie;
-    Y_ABORT_UNLESS(InFlight.find(cookie) == InFlight.end());
 
-    InFlight[cookie] = requestType;
-    if (!PipeClient) {
-        PipeClient = ctx.Register(
-            NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
+    if (InFlightCookie) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s BSC request rejected cookie=%lu already inflight cookie=%lu",
+            LogTitle.GetWithTime().c_str(),
+            cookie,
+            *InFlightCookie);
+        ctx.Send(
+            Owner,
+            MakePipeFailureResult("BSC request already in flight"),
+            0,
+            cookie);
+        return;
     }
+
+    Y_ABORT_UNLESS(!PipeClient);
+    InFlightCookie = cookie;
+    PipeClient = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
     NTabletPipe::SendData(ctx, PipeClient, request.Release(), cookie);
 
     LOG_INFO(
@@ -96,7 +105,18 @@ void TBscProxy::HandleAllocateResult(
     TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const TActorContext& ctx)
 {
-    InFlight.erase(ev->Cookie);
+    if (!InFlightCookie || *InFlightCookie != ev->Cookie) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Ignore BSC result for untracked cookie=%lu",
+            LogTitle.GetWithTime().c_str(),
+            ev->Cookie);
+        return;
+    }
+
+    InFlightCookie.reset();
+    ClosePipe(ctx);
     ctx.Send(ev->Forward(Owner));
 }
 
@@ -133,7 +153,7 @@ void TBscProxy::HandleDisconnect(
         return;
     }
 
-    if (InFlight.empty()) {
+    if (!InFlightCookie) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
@@ -154,10 +174,11 @@ void TBscProxy::HandleDisconnect(
 
 void TBscProxy::FailInFlight(const TActorContext& ctx, const TString& reason)
 {
-    auto inflight = std::move(InFlight);
+    const std::optional<ui64> cookie = InFlightCookie;
+    InFlightCookie.reset();
     ClosePipe(ctx);
-    for (const auto& [cookie, requestType]: inflight) {
-        ctx.Send(Owner, MakePipeFailureResult(requestType, reason), 0, cookie);
+    if (cookie) {
+        ctx.Send(Owner, MakePipeFailureResult(reason), 0, *cookie);
     }
 }
 
@@ -172,7 +193,7 @@ void TBscProxy::ClosePipe(const TActorContext& ctx)
 
 void TBscProxy::PassAway()
 {
-    InFlight.clear();
+    InFlightCookie.reset();
     ClosePipe(TActivationContext::AsActorContext());
     TActor::PassAway();
 }

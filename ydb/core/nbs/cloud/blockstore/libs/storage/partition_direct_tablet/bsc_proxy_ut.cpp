@@ -12,8 +12,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/hash_set.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -120,6 +118,30 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(LastSendCookie, cookie);
     }
 
+    // A second TEvSend while one request is inflight must not hit BSC.
+    void SendAllocateWhileInFlight(ui64 cookie)
+    {
+        const ui32 before = SendCount;
+        Runtime.Send(new IEventHandle(
+            Proxy,
+            Edge,
+            new TBscProxy::TEvSend(THolder<IEventBase>(
+                new TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup())),
+            0,
+            cookie));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* result = GrabAllocateResult(handle, TDuration::Max());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBscProxy::PipeFailureStatus,
+            result->Record.GetStatus());
+        UNIT_ASSERT(
+            result->Record.GetErrorReason().Contains("already in flight"));
+        UNIT_ASSERT_VALUES_EQUAL(cookie, handle->Cookie);
+        UNIT_ASSERT_VALUES_EQUAL(before, SendCount);
+    }
+
     void StopProxy()
     {
         Runtime.Send(
@@ -180,13 +202,18 @@ public:
 
 Y_UNIT_TEST_SUITE(TBscProxyTest)
 {
-    Y_UNIT_TEST(ShouldReusePipeOnSecondSend)
+    Y_UNIT_TEST(ShouldOpenNewPipeOnSecondSend)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(1);
         const TActorId firstPipe = env.PipeClient;
+        env.InjectAllocateResult(1, NKikimrProto::OK);
+
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(env.GrabAllocateResult(handle, TDuration::Max()));
+
         env.SendAllocate(2);
-        UNIT_ASSERT_VALUES_EQUAL(firstPipe, env.PipeClient);
+        UNIT_ASSERT(env.PipeClient != firstPipe);
         UNIT_ASSERT_VALUES_EQUAL(2u, env.SendCount);
     }
 
@@ -266,25 +293,60 @@ Y_UNIT_TEST_SUITE(TBscProxyTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, handle->Cookie);
     }
 
-    Y_UNIT_TEST(ShouldSynthesizeErrorForEachInflightCookie)
+    Y_UNIT_TEST(ShouldRejectConcurrentSendWithTryLater)
     {
         TBscProxyTestEnv env;
         env.SendAllocate(1);
-        env.SendAllocate(2);
+        env.SendAllocateWhileInFlight(2);
+        env.SendAllocateWhileInFlight(1);
+        env.InjectAllocateResult(1, NKikimrProto::OK);
+
+        TAutoPtr<IEventHandle> handle;
+        auto* result = env.GrabAllocateResult(handle, TDuration::Max());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, result->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(1u, handle->Cookie);
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreStaleResultAfterPipeFailure)
+    {
+        TBscProxyTestEnv env;
+        env.SendAllocate(3);
         env.InjectDestroy(env.PipeClient);
 
-        THashSet<ui64> cookies;
-        for (int i = 0; i < 2; ++i) {
-            TAutoPtr<IEventHandle> handle;
-            auto* result = env.GrabAllocateResult(handle, TDuration::Max());
-            UNIT_ASSERT(result);
-            UNIT_ASSERT_VALUES_EQUAL(
-                TBscProxy::PipeFailureStatus,
-                result->Record.GetStatus());
-            cookies.insert(handle->Cookie);
-        }
-        UNIT_ASSERT(cookies.contains(1));
-        UNIT_ASSERT(cookies.contains(2));
+        TAutoPtr<IEventHandle> failureHandle;
+        auto* failure = env.GrabAllocateResult(failureHandle, TDuration::Max());
+        UNIT_ASSERT(failure);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBscProxy::PipeFailureStatus,
+            failure->Record.GetStatus());
+
+        env.InjectAllocateResult(3, NKikimrProto::OK);
+        TAutoPtr<IEventHandle> staleHandle;
+        UNIT_ASSERT(!env.GrabAllocateResult(staleHandle, NoEventTimeout));
+    }
+
+    Y_UNIT_TEST(ShouldIgnoreStaleResultAfterNewSend)
+    {
+        TBscProxyTestEnv env;
+        env.SendAllocate(1);
+        env.InjectDestroy(env.PipeClient);
+
+        TAutoPtr<IEventHandle> failureHandle;
+        UNIT_ASSERT(env.GrabAllocateResult(failureHandle, TDuration::Max()));
+
+        env.SendAllocate(2);
+        env.InjectAllocateResult(1, NKikimrProto::OK);
+
+        TAutoPtr<IEventHandle> staleHandle;
+        UNIT_ASSERT(!env.GrabAllocateResult(staleHandle, NoEventTimeout));
+
+        env.InjectAllocateResult(2, NKikimrProto::OK);
+        TAutoPtr<IEventHandle> okHandle;
+        auto* result = env.GrabAllocateResult(okHandle, TDuration::Max());
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::OK, result->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(2u, okHandle->Cookie);
     }
 
     Y_UNIT_TEST(ShouldOpenNewPipeAfterFailure)

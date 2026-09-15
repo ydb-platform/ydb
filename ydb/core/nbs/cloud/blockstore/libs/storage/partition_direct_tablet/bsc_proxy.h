@@ -10,17 +10,20 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
+
+#include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Long-lived BSController pipe owned by a child actor: the parent sends TEvSend
-// and gets the native allocate result (or a synthesized pipe-failure result)
-// on its mailbox with the same cookie. One reused pipe, inflight keyed by
-// cookie. Poison closes the pipe and drops inflight without synthesizing.
+// BSController pipe owned by a child actor: the parent sends TEvSend and gets
+// the native allocate result (or a synthesized pipe-failure / already-in-flight
+// result) on its mailbox with the same cookie. One pipe per inflight request,
+// closed when that request finishes. A second TEvSend while inflight is not
+// sent to BSC; the owner gets TRYLATER for that cookie. Poison closes the pipe
+// and drops inflight without synthesizing.
 class TBscProxy final: public NActors::TActor<TBscProxy>
 {
 public:
@@ -32,8 +35,10 @@ public:
         EvEnd
     };
 
-    // Forwards Request through the reused BSC pipe. Cookie on the handle
-    // identifies this inflight for the matching result.
+    // Forwards Request through a new BSC pipe that is closed when the result
+    // arrives. Cookie on the handle identifies the single inflight. A second
+    // send while that slot is taken gets a synthesized TRYLATER with this
+    // cookie.
     struct TEvSend: NActors::TEventLocal<TEvSend, EvSend>
     {
         THolder<NActors::IEventBase> Request;
@@ -41,8 +46,9 @@ public:
         explicit TEvSend(THolder<NActors::IEventBase> request);
     };
 
-    // Status on a synthesized result when the BSC pipe fails with inflight
-    // requests. Not a BSController application error; the caller should retry.
+    // Status on a synthesized result when the BSC pipe fails with an inflight
+    // request, or a second request arrives while one is inflight. Not a
+    // BSController application error; the caller should retry.
     static constexpr NKikimrProto::EReplyStatus PipeFailureStatus =
         NKikimrProto::TRYLATER;
 
@@ -73,8 +79,8 @@ private:
     const NActors::TActorId Owner;
     const TLogTitle LogTitle;
     NActors::TActorId PipeClient;
-    // cookie -> request event type (to build the matching *Result on failure).
-    THashMap<ui64, ui32> InFlight;
+    // Cookie of the one request waiting for a BSC result. Empty when idle.
+    std::optional<ui64> InFlightCookie;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

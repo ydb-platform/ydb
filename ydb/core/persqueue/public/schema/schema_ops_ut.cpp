@@ -962,56 +962,6 @@ Y_UNIT_TEST(AlterRejectsNegativeSpeedsAndHugePartitions) {
     }
 }
 
-Y_UNIT_TEST(AlterSharedConsumerDeadLetterPolicyRejected) {
-    auto setup = CreateSetup("CoreAlterSharedDlqPolicy");
-    auto& runtime = setup->GetRuntime();
-    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest("/Root/dlq_policy")), Ydb::StatusIds::SUCCESS);
-    const TString path = "/Root/topic_dlq_policy";
-
-    {
-        auto request = MakeCreateTopicRequest(path);
-        request.clear_consumers();
-        auto* consumer = request.add_consumers();
-        consumer->set_name("shared_c");
-        consumer->mutable_shared_consumer_type();
-        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
-    }
-
-    {
-        Ydb::Topic::AlterTopicRequest request;
-        request.set_path(path);
-        auto* alter = request.add_alter_consumers();
-        alter->set_name("shared_c");
-        alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
-            ->mutable_alter_condition()->set_set_max_processing_attempts(5);
-        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST,
-            "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'");
-    }
-
-    {
-        Ydb::Topic::AlterTopicRequest request;
-        request.set_path(path);
-        auto* alter = request.add_alter_consumers();
-        alter->set_name("shared_c");
-        alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
-            ->mutable_set_move_action()->set_dead_letter_queue("dlq_policy");
-        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST,
-            "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
-    }
-
-    {
-        Ydb::Topic::AlterTopicRequest request;
-        request.set_path(path);
-        auto* alter = request.add_alter_consumers();
-        alter->set_name("shared_c");
-        auto* policy = alter->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
-        policy->set_set_enabled(false);
-        policy->mutable_set_move_action()->set_dead_letter_queue("dlq_policy");
-        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST,
-            "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
-    }
-}
-
 Y_UNIT_TEST(AlterDlqMoveActionRequiresExistingMove) {
     auto setup = CreateSetup("CoreAlterDlqMoveReq");
     auto& runtime = setup->GetRuntime();

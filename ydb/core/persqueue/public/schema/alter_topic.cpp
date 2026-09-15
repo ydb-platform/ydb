@@ -66,28 +66,8 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
         if (alterType.has_alter_dead_letter_policy()) {
             auto& alterPolicy = alterType.alter_dead_letter_policy();
             auto* policy = type->mutable_dead_letter_policy();
-            const bool disabling = alterPolicy.has_set_enabled() && !alterPolicy.set_enabled();
-            if (disabling) {
-                if (alterPolicy.has_alter_condition()) {
-                    return {Ydb::StatusIds::BAD_REQUEST,
-                        "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'"};
-                }
-                if (alterPolicy.has_alter_move_action() || alterPolicy.has_set_move_action()) {
-                    return {Ydb::StatusIds::BAD_REQUEST,
-                        "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'"};
-                }
-                if (alterPolicy.has_set_delete_action()) {
-                    return {Ydb::StatusIds::BAD_REQUEST,
-                        "delete_action is not supported for shared consumers with dead letter policy 'none'"};
-                }
-            }
-
             if (alterPolicy.has_set_enabled()) {
                 policy->set_enabled(alterPolicy.set_enabled());
-                if (!alterPolicy.set_enabled()) {
-                    policy->clear_action();
-                    policy->clear_condition();
-                }
             }
 
             if (alterPolicy.has_alter_condition()) {
@@ -113,14 +93,6 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
             } else if (alterPolicy.has_set_delete_action()) {
                 policy->clear_action();
                 policy->mutable_delete_action();
-            }
-
-            if (auto r = ValidateSharedConsumerDeadLetterPolicy(
-                    policy->enabled(),
-                    policy->has_condition(),
-                    policy->has_move_action(),
-                    policy->has_delete_action()); !r) {
-                return r;
             }
         }
     }

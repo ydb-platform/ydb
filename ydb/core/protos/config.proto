@@ -3481,6 +3481,9 @@ message TNbsConfig {
     optional bool Enabled = 1;
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
     optional TNbsFrontendConfig NbsFrontendConfig = 3;
+    // Startup-only level for NBS2 console logs.
+    // 0=EMERG, 1=ALERT, 2=CRIT, 3=ERROR, 4=WARN, 5=NOTICE, 6=INFO, 7=DEBUG, 8=TRACE.
+    optional uint32 ConsoleLogLevel = 4 [default = 5];
 }
 
 message TTliConfig {
@@ -3501,6 +3504,29 @@ message TUdfStoreConfig {
     optional string UnsafeNativeUdfDir = 4;
     optional bool EnableWasmUdf = 5 [default = false];
     optional string WasmCpuSpecOverride = 6;
+
+    // AOT compiles are always orchestrated by the per-tenant
+    // WasmCompileController tablet. Whether a database has one at all is
+    // FeatureFlags.EnableWasmCompileController.
+    reserved 7;
+    optional uint32 WasmCompileMaxPerDinode = 8 [default = 1];
+    optional uint32 WasmCompileMaxPerCpuSpec = 9 [default = 1];
+    // 0 means no tenant-wide ceiling: different cpu_spec produce different
+    // artifacts and have no reason to serialize against each other.
+    optional uint32 WasmCompileMaxPerTenant = 10 [default = 1];
+    optional uint32 WasmCompileAssignmentTimeoutSeconds = 11 [default = 900];
+    optional uint32 WasmCompileHeartbeatTimeoutSeconds = 12 [default = 60];
+    optional uint32 WasmMaxCompileAttempts = 13 [default = 3];
+    // How long an assignment is protected from being reclaimed as "not claimed
+    // by the worker": a heartbeat already on the wire when it was issued cannot
+    // possibly mention it yet.
+    optional uint32 WasmCompileAssignGraceSeconds = 14 [default = 30];
+    // How often the controller re-reads artifacts/{cpu_spec} of every platform
+    // it knows. Each pass is a full scan, so this is the leader's main load knob.
+    optional uint32 WasmCompileReconcileIntervalSeconds = 15 [default = 30];
+    // When a node that stopped registering is forgotten, together with the
+    // platform it was the last representative of.
+    optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
 message TAppConfig {

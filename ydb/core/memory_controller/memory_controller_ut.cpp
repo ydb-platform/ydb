@@ -36,6 +36,7 @@ void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 ke
     ExecSQL(server, sender, query);
 }
 
+// Bare-runtime tests need a provider they can drive without a whole server
 struct TFixedProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
     TProcessMemoryInfo Get() const override {
         return ProcessMemoryInfo;
@@ -834,6 +835,71 @@ Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
     UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Used, 42);
     UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Demand, 42);
     UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Reclaimable, 0);
+}
+
+Y_UNIT_TEST(ConsumerTakeoverRebindsKind) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId first = fixture.Runtime.AllocateEdgeActor();
+    auto firstConsumer = fixture.Register(first, EMemoryConsumerKind::SharedCache);
+    firstConsumer->SetConsumption(30_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 30_MB);
+
+    // A restarted registrant takes the kind over instead of aborting the node
+    const TActorId second = fixture.Runtime.AllocateEdgeActor();
+    auto secondConsumer = fixture.Register(second, EMemoryConsumerKind::SharedCache);
+    // A fresh object: the predecessor keeps its pointer, and writes through it must not reach MC
+    UNIT_ASSERT(firstConsumer.Get() != secondConsumer.Get());
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumerTakeovers", true), 1);
+
+    // The number of the replaced registrant is not inherited
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+
+    // Limits now go to the new registrant
+    secondConsumer->SetConsumption(10_MB);
+    fixture.Tick();
+    UNIT_ASSERT(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(second) != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
+
+    // The replaced registrant writes into an object MC no longer reads
+    firstConsumer->SetConsumption(0);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 10_MB);
+}
+
+Y_UNIT_TEST(ConsumerUnregisterDropsAccounting) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId owner = fixture.Runtime.AllocateEdgeActor();
+    auto consumer = fixture.Register(owner, EMemoryConsumerKind::SharedCache);
+    consumer->SetConsumption(30_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+
+    // A stale unregister from an actor that no longer owns the kind changes nothing
+    const TActorId stranger = fixture.Runtime.AllocateEdgeActor();
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, stranger, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 30_MB);
+
+    // The owner's unregister takes its bytes out of the accounting and zeroes the gauges of the removed kind
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, owner, new TEvConsumerUnregister(EMemoryConsumerKind::SharedCache)));
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+
+    // Writes through the unregistered object no longer reach MC
+    consumer->SetConsumption(5_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersConsumption"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 0);
 }
 }
 

@@ -42,6 +42,8 @@ enum EEvMemory {
     EvMemTableCompacted,
     EvMemTableUnregister,
 
+    EvConsumerUnregister,
+
     EvEnd
 };
 
@@ -51,6 +53,15 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
     const EMemoryConsumerKind Kind;
 
     TEvConsumerRegister(EMemoryConsumerKind kind)
+        : Kind(kind)
+    {}
+};
+
+// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
+    const EMemoryConsumerKind Kind;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind)
         : Kind(kind)
     {}
 };

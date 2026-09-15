@@ -61,6 +61,7 @@ ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration);
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
 std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);
+TResult ValidateTopicPartitionCount(i64 count, TStringBuf what);
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(
     const google::protobuf::Duration& duration,
     std::string_view consumerName
@@ -88,6 +89,13 @@ TResult AddConsumer(
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
 
+TResult ValidateSharedConsumerDeadLetterPolicy(
+    bool enabled,
+    bool hasCondition,
+    bool hasMoveAction,
+    bool hasDeleteAction
+);
+
 TResult ProcessConsumerType(
     NKikimrPQ::TPQTabletConfig::TConsumer* consumer,
     const auto& consumerConfig
@@ -100,6 +108,14 @@ TResult ProcessConsumerType(
 
         const auto& type = consumerConfig.shared_consumer_type();
         const auto& deadLetterPolicy = type.dead_letter_policy();
+
+        if (auto r = ValidateSharedConsumerDeadLetterPolicy(
+                deadLetterPolicy.enabled(),
+                deadLetterPolicy.has_condition(),
+                deadLetterPolicy.has_move_action(),
+                deadLetterPolicy.has_delete_action()); !r) {
+            return r;
+        }
 
         consumer->SetKeepMessageOrder(type.keep_messages_order());
 

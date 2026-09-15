@@ -901,6 +901,10 @@ Y_UNIT_TEST(TopicBadRequests) {
                 ALTER CONSUMER consumer3 SET (availability_period = false);
         )", /*expectOk=*/false,
               {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
+    TestQuery(R"(
+            CREATE TOPIC topic1 WITH (min_active_partitions = 18446744073709551616);
+        )", /*expectOk=*/false,
+              {"number limit overflow"});
 }
 
 Y_UNIT_TEST(TopicWithPrefix) {

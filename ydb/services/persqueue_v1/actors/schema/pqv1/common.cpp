@@ -231,6 +231,15 @@ TResult ApplyChangesInt( // create and alter
         error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
+    if (auto r = ValidateTopicPartitionCount(minParts, "Partitions count"); !r) {
+        return r;
+    }
+    if (settings.has_auto_partitioning_settings()) {
+        const auto maxParts = settings.auto_partitioning_settings().max_active_partitions();
+        if (auto r = ValidateTopicPartitionCount(maxParts, "Max active partitions"); !r) {
+            return r;
+        }
+    }
     pqDescr->SetTotalGroupCount(minParts);
     pqTabletConfig->SetRequireAuthWrite(true);
     pqTabletConfig->SetRequireAuthRead(true);

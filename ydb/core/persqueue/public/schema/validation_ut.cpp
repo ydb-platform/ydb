@@ -93,6 +93,29 @@ Y_UNIT_TEST(CheckRetentionPeriod) {
     }
 }
 
+Y_UNIT_TEST(ValidateTopicPartitionCount) {
+    {
+        auto r = ValidateTopicPartitionCount(0, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS + 1, "Partitions count");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), ToString(MAX_TOPIC_PARTITIONS));
+    }
+    {
+        auto r = ValidateTopicPartitionCount(static_cast<i64>(Max<ui32>()), "Max active partitions");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Max active partitions");
+    }
+}
+
 Y_UNIT_TEST(ConvertPositiveDuration) {
     {
         google::protobuf::Duration d;
@@ -792,6 +815,53 @@ Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
         UNIT_ASSERT(!r);
         UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "can't be negative");
     }
+    });
+}
+
+Y_UNIT_TEST(AddConsumerDeadLetterPolicyValidation) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
+    auto& pq = runtime.GetAppData().PQConfig;
+    pq.SetTopicsAreFirstClassCitizen(true);
+    pq.MutableDefaultClientServiceType()->SetName("data-streams");
+    pq.MutableDefaultClientServiceType()->SetMaxReadRulesCountPerTopic(10);
+    pq.MutableDefaultClientServiceType()->ClearPasswordHashes();
+    pq.ClearClientServiceType();
+
+    RunInActor(runtime, [&] {
+        auto types = GetSupportedClientServiceTypes();
+        NKikimrPQ::TPQTabletConfig config;
+
+        auto expectBad = [&](auto mutate, const TString& needle) {
+            Ydb::Topic::Consumer consumer;
+            consumer.set_name("shared_c");
+            mutate(*consumer.mutable_shared_consumer_type());
+            auto r = AddConsumer(&config, consumer, types, true, nullptr);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), needle);
+        };
+
+        expectBad([](auto& type) {
+            type.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(5);
+        }, "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'");
+
+        expectBad([](auto& type) {
+            type.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue("dlq");
+        }, "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
+
+        expectBad([](auto& type) {
+            type.mutable_dead_letter_policy()->mutable_delete_action();
+        }, "delete_action is not supported for shared consumers with dead letter policy 'none'");
+
+        {
+            Ydb::Topic::Consumer consumer;
+            consumer.set_name("shared_ok");
+            auto* type = consumer.mutable_shared_consumer_type();
+            type->mutable_dead_letter_policy()->set_enabled(true);
+            type->mutable_dead_letter_policy()->mutable_delete_action();
+            UNIT_ASSERT(AddConsumer(&config, consumer, types, true, nullptr));
+        }
     });
 }
 

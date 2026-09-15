@@ -134,6 +134,32 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(c->GetDeadLetterQueue(), "dlq");
 }
 
+Y_UNIT_TEST(CreateSharedConsumerDeadLetterPolicyRejected) {
+    auto setup = CreateSetup("CoreCreateSharedDlqPolicy");
+    auto& runtime = setup->GetRuntime();
+
+    auto expectBad = [&](const TString& path, auto mutate, const TString& needle) {
+        auto request = MakeCreateTopicRequest(path);
+        request.clear_consumers();
+        auto* consumer = request.add_consumers();
+        consumer->set_name("shared_c1");
+        mutate(*consumer->mutable_shared_consumer_type());
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, needle);
+    };
+
+    expectBad("/Root/topic_dlq_none_attempts", [](auto& type) {
+        type.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(5);
+    }, "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'");
+
+    expectBad("/Root/topic_dlq_none_queue", [](auto& type) {
+        type.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue("dlq");
+    }, "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
+
+    expectBad("/Root/topic_dlq_none_delete", [](auto& type) {
+        type.mutable_dead_letter_policy()->mutable_delete_action();
+    }, "delete_action is not supported for shared consumers with dead letter policy 'none'");
+}
+
 Y_UNIT_TEST(CreateSharedConsumerEmptyDlqRejected) {
     auto setup = CreateSetup("CoreCreateSharedEmptyDlq");
     auto& runtime = setup->GetRuntime();

@@ -244,6 +244,7 @@ public:
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->GetDatabaseRelativePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
@@ -272,7 +273,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -370,6 +371,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    const TString TablePath;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -384,6 +386,7 @@ public:
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->GetDatabaseRelativePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
@@ -423,7 +426,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return TablePath;
     }
 
     const TString& GetSourceData() const override {
@@ -641,6 +644,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    const TString TablePath;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

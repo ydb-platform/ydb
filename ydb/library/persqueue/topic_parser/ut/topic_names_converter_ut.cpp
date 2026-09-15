@@ -225,6 +225,28 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         wrapper.SetConverter("/somedb2/account/stream", "", "");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetPrimaryPath(), "/somedb2/account/stream");
     }
+
+    Y_UNIT_TEST(FirstClassFullAndRelativePaths) {
+        TConverterTestWrapper wrapper(true, "", "");
+        for (const auto& database : {TString("/Root/db"), TString("Root/db")}) {
+            for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+                {"dir/topic", "/Root/db/dir/topic"},
+                {"Root/db/dir/topic", "/Root/db/dir/topic"},
+                {"/Root/db/dir/topic", "/Root/db/dir/topic"},
+                {"Root/other/topic", "/Root/other/topic"},
+                {"/Root/other/topic", "/Root/other/topic"},
+                {"Root/db2/topic", "/Root/db2/topic"},
+                {"/Root/db2/topic", "/Root/db2/topic"},
+                {"Root2/topic", "/Root/db/Root2/topic"},
+                {"root/topic", "/Root/db/root/topic"},
+                {"db/topic", "/Root/db/db/topic"},
+            }) {
+                wrapper.SetConverter(path, "", database);
+                wrapper.BasicFirstClassChecks();
+                UNIT_ASSERT_VALUES_EQUAL_C(wrapper.DiscoveryConverter->GetPrimaryPath(), expected, path);
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TopicNameConverterTest) {

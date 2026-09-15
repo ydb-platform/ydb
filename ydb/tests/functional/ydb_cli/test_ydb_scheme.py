@@ -82,6 +82,16 @@ def alter_secret(session, secret_name, value):
     )
 
 
+def test_relative_database_and_resource_paths(ydb_cluster, ydb_database):
+    tenant_node = next(iter(ydb_cluster.slots.values()))
+    relative_database = ydb_database.rsplit("/", 1)[1]
+    path = "relative_directory"
+
+    execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "mkdir", path])
+    output = execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "describe", path])
+    assert f"<dir> {path}" in output
+
+
 class TestSchemeDescribe:
     @pytest.fixture(autouse=True, scope="function")
     def init_test(self, tmp_path):

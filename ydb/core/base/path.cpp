@@ -189,6 +189,28 @@ TString NormalizePath(const TString& database, const TString& path) {
     return NormalizePathJoin(database, path);
 }
 
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf rootDatabase) {
+    if (path.empty() || path.StartsWith('/')) {
+        return TString{path};
+    }
+    bool explicitlyRelative = false;
+    while (!database.empty() && path.SkipPrefix("./")) {
+        explicitlyRelative = true;
+    }
+    if (path == "." && !database.empty()) {
+        return CanonizePath(TString{database});
+    }
+    if (explicitlyRelative) {
+        return NormalizePathJoin(database, path);
+    }
+    const TString rootPath = CanonizePath(TString{rootDatabase.empty() ? database : rootDatabase});
+    const auto root = ExtractDomain(rootPath);
+    if (!root.empty() && path.Before('/') == root) {
+        return CanonizePath(TString{path});
+    }
+    return NormalizePathJoin(database, path);
+}
+
 ui32 CanonizedPathLen(const TVector<TString>& path) {
     ui32 ret = path.size();
     for (auto &x : path)

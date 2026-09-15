@@ -1,11 +1,14 @@
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <expected>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NKikimr::NPQ::NNameResolver;
@@ -206,10 +209,64 @@ Y_UNIT_TEST_F(ModernPathNormalizedWithDatabase, TNameResolverFixture) {
         "/Root/Db/account/topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/account/topic", "dc1", "")),
-        "/Root/Db/account/topic");
+        "/account/topic");
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/Root/Db/account/topic", "dc1", "")),
         "/Root/Db/account/topic");
+}
+
+Y_UNIT_TEST_F(FccResourcePathsUseDatabaseAndRoot, TNameResolverFixture) {
+    for (const TString database : {"/Root/Db", "Root/Db", "/Root/team/Db", "/Root/Root/Db"}) {
+        const TString canonicalDatabase = CanonizePath(database);
+        const std::pair<TString, TString> cases[] = {
+            {"topic", canonicalDatabase + "/topic"},
+            {"Db/topic", canonicalDatabase + "/Db/topic"},
+            {"Root2/topic", canonicalDatabase + "/Root2/topic"},
+            {"Root/Db/topic", "/Root/Db/topic"},
+            {"Root/Root/Db/topic", "/Root/Root/Db/topic"},
+            {"Root/other/topic", "/Root/other/topic"},
+            {"/Root/other/topic", "/Root/other/topic"},
+            {"/Root2/topic", "/Root2/topic"},
+            {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
+            {".", canonicalDatabase},
+        };
+        for (const auto& [name, expected] : cases) {
+            const auto resolved = OkFull(ResolveName(database, name));
+            UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, database << ": " << name);
+            UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, canonicalDatabase);
+        }
+    }
+}
+
+Y_UNIT_TEST_F(FccUsesConfiguredRoot, TNameResolverFixture) {
+    auto& domains = ActorSystemStub.AppData.DomainsInfo;
+    domains = new TDomainsInfo;
+    domains->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Get());
+    const std::pair<TStringBuf, TStringBuf> cases[] = {
+        {"Root/other/topic", "/Root/other/topic"},
+        {"Other/topic", "/Other/Db/Other/topic"},
+        {"Root2/topic", "/Other/Db/Root2/topic"},
+    };
+    for (const auto& [name, expected] : cases) {
+        const auto resolved = OkFull(ResolveName("/Other/Db", name));
+        UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, name);
+        UNIT_ASSERT_VALUES_EQUAL(resolved.NavigateDatabase, "/Other/Db");
+    }
+}
+
+Y_UNIT_TEST_F(FccWithoutDatabaseKeepsAbsoluteTopicAndEmptyNavigation, TNameResolverFixture) {
+    const std::pair<TStringBuf, TStringBuf> cases[] = {
+        {"topic", "/topic"},
+        {"Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/Db/topic", "/Root/Db/topic"},
+        {"/Root/LbCommunal/account/topic", "/Root/LbCommunal/account/topic"},
+        {"", ""},
+    };
+    for (const auto& [name, expected] : cases) {
+        const auto resolved = OkFull(ResolveName("", name));
+        UNIT_ASSERT_VALUES_EQUAL_C(resolved.Path, expected, name);
+        UNIT_ASSERT(resolved.NavigateDatabase.empty());
+    }
 }
 
 Y_UNIT_TEST_F(FccKeepsLiteralRt3, TNameResolverFixture) {
@@ -334,10 +391,10 @@ Y_UNIT_TEST_F(FccNormalizesDoubleSlashInLegacyLookingName, TNameResolverFixture)
         "/Root/Db/account--a/b");
 }
 
-Y_UNIT_TEST_F(FccStripsLeadingSlashOnLiteralRt3, TNameResolverFixture) {
+Y_UNIT_TEST_F(FccKeepsLeadingSlashOnLiteralRt3, TNameResolverFixture) {
     UNIT_ASSERT_VALUES_EQUAL(
         Ok(ResolveName(TString{Database}, "/rt3.dc1--account--topic", "dc1", "")),
-        "/Root/Db/rt3.dc1--account--topic");
+        "/rt3.dc1--account--topic");
 }
 
 Y_UNIT_TEST_F(FccDoesNotMirrorLegacyLookingName, TNameResolverFixture) {

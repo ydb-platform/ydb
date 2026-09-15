@@ -26,12 +26,25 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
     }
 
     Y_UNIT_TEST(TestAdjustment) {
-        UNIT_ASSERT(AdjustPath("abc", FakeConfig("/root/db")) == "/root/db/abc");
-        UNIT_ASSERT(AdjustPath("./abc", FakeConfig("/root/db")) == "/root/db/abc");
-        UNIT_ASSERT(AdjustPath("/root/db/abc", FakeConfig("/root/db")) == "/root/db/abc");
+        for (const TString database : {"/Root/mydb", "Root/mydb", "mydb"}) {
+            const auto config = FakeConfig(database);
+            for (const TString path : {"table", "Root/mydb/table", "Root/Root/mydb/table",
+                "Root2/table", "mydb/table", "/Root/mydb/table", "/Root2/table", "."}) {
+                UNIT_ASSERT_VALUES_EQUAL_C(AdjustPath(path, config), path, database << ": " << path);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath("./table", config), "table");
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath("./Root//mydb/./table/", config), "Root/mydb/table");
+        }
+    }
 
-        UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMisuseException);
-        UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMisuseException);
+    Y_UNIT_TEST(TestAdjustmentWithExplicitDirectory) {
+        for (const TString database : {"/Root/mydb", "Root/mydb", "mydb"}) {
+            auto config = FakeConfig(database);
+            config.Path = "current";
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath("./table", config), "current/table");
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath("/Root/mydb/table", config), "/Root/mydb/table");
+            config.Path = "/Root/mydb/current";
+            UNIT_ASSERT_VALUES_EQUAL(AdjustPath("table", config), "/Root/mydb/current/table");
+        }
     }
 }
-

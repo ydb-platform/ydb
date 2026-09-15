@@ -101,9 +101,10 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
-
-        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
+        const auto databaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+        const auto coordinationNodePath = CanonizePath(GetCoordinationNodePath());
+        if (!databaseName.empty() && coordinationNodePath != databaseName
+            && !coordinationNodePath.StartsWith(databaseName + '/')) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()
@@ -115,8 +116,9 @@ public:
     }
 
 protected:
-    const TString& GetCoordinationNodePath() const {
-        return this->GetProtoRequest()->coordination_node_path();
+    TString GetCoordinationNodePath() const {
+        return this->Request_->GetDatabaseRelativePath(
+            this->GetProtoRequest()->coordination_node_path());
     }
 };
 
@@ -459,7 +461,7 @@ public:
     // Always race when "cancel after" time is not set.
     // If "cancel after" is not set, quoter service can spend resource and say "OK", but we here reply with TIMEOUT.
     void OnOperationTimeout(const TActorContext& ctx) {
-        Send(MakeQuoterServiceID(), new TEvQuota::TEvRpcTimeout(GetProtoRequest()->coordination_node_path(), GetProtoRequest()->resource_path()), 0, 0);
+        Send(MakeQuoterServiceID(), new TEvQuota::TEvRpcTimeout(GetCoordinationNodePath(), GetProtoRequest()->resource_path()), 0, 0);
         TBase::OnOperationTimeout(ctx);
     }
 
@@ -494,7 +496,7 @@ public:
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(
                 TEvQuota::TResourceLeaf(database,
-                                        GetProtoRequest()->coordination_node_path(),
+                                        GetCoordinationNodePath(),
                                         GetProtoRequest()->resource_path(),
                                         GetProtoRequest()->required()));
             return;
@@ -502,7 +504,7 @@ public:
 
         SendLeaf(
             TEvQuota::TResourceLeaf(database,
-                                    GetProtoRequest()->coordination_node_path(),
+                                    GetCoordinationNodePath(),
                                     GetProtoRequest()->resource_path(),
                                     GetProtoRequest()->used(),
                                     true));

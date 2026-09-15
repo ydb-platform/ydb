@@ -25,7 +25,8 @@ struct TResolvedName {
  *   - Otherwise: request database (absolute), or empty if request database is empty
  *
  * First-class citizen (FCC / non-federation) mode:
- *   Names are joined with the request database as-is. Legacy forms (rt3.*, --, @)
+ *   Relative paths are joined with the request database; absolute paths and paths
+ *   starting with the configured root segment keep their root. Legacy forms (rt3.*, --, @)
  *   are not converted: a leaf like TestSchemeList--test-topic-1 is a literal name.
  *
  * Federation mode (!TopicsAreFirstClassCitizen):

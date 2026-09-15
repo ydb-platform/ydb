@@ -5,6 +5,7 @@ RECURSE(
     bulk_upsert
     key_conflict
     metrics
+    relative_database
     server_restart
     sessions
     sessions_pool

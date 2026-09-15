@@ -71,30 +71,65 @@ TString GetMemoryMapsString() {
 template <typename T, bool SysAlign>
 class TGlobalPools;
 
+template <typename T>
+concept TMadviseProvider = requires(T& provider, void* addr, size_t size, bool needed) {
+    provider.Madvise(addr, size, needed);
+};
+
 template <typename T, bool SysAlign>
 class TGlobalPagePool {
     friend class TGlobalPools<T, SysAlign>;
 
+    /**
+        Whenever the provider is able to drop the content of a region without unmapping it, the pages
+        evicted from the cache are not returned to the OS by `Munmap()` but only advised away and kept
+        in the reserved list. Their memory is released, while their address space is reused by the
+        following allocations.
+
+        Constantly mapping and unmapping page-sized regions fragments the address space of a long running
+        process: both the number of memory maps and the size of the page table (VmPTE) grow without bound,
+        the latter also being accounted in RSS.
+     */
+    static constexpr bool ReserveFreedPages = TMadviseProvider<T>;
+
 public:
-    TGlobalPagePool(T& provider, size_t pageSize)
+    TGlobalPagePool(T& provider, size_t pageSize, std::atomic<i64>& totalMmappedBytes)
         : Provider_(provider)
         , PageSize_(pageSize)
+        , TotalMmappedBytes_(totalMmappedBytes)
     {
     }
 
     ~TGlobalPagePool() {
         void* addr = nullptr;
         while (Pages_.Dequeue(&addr)) {
-            FreePage(addr);
+            UnmapPage(addr);
+        }
+        while (ReservedPages_.Dequeue(&addr)) {
+            UnmapPage(addr);
         }
     }
 
     void* GetPage() {
-        void* page = nullptr;
-        if (Pages_.Dequeue(&page)) {
-            --Count_;
-            NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
+        // The cached pages are still backed by the memory, so prefer them to the reserved ones,
+        // which have to be brought back by an extra syscall and the following page faults.
+        if (void* page = PopPage()) {
             return page;
+        }
+
+        if constexpr (ReserveFreedPages) {
+            void* page = nullptr;
+            if (ReservedPages_.Dequeue(&page)) {
+                if (Y_LIKELY(0 == Provider_.Madvise(page, PageSize_, /*needed=*/true))) {
+                    TotalMmappedBytes_ += PageSize_;
+                    NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
+                    return page;
+                }
+
+                // The region is still reserved, but the OS refused to back it with the memory
+                // right now. Keep it for the further attempts and let the caller map a new one.
+                ReservedPages_.Enqueue(page);
+            }
         }
 
         return nullptr;
@@ -115,7 +150,7 @@ public:
 private:
     size_t PushPage(void* addr) {
         if (Y_UNLIKELY(TAlignedPagePool::IsDefaultAllocatorUsed())) {
-            FreePage(addr);
+            UnmapPage(addr);
             return GetPageSize();
         }
         NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
@@ -124,16 +159,50 @@ private:
         return 0;
     }
 
+    void* PopPage() {
+        void* page = nullptr;
+        if (Pages_.Dequeue(&page)) {
+            --Count_;
+            NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
+            return page;
+        }
+
+        return nullptr;
+    }
+
+    // Evicts the page from the cache: its memory is given back to the OS, but the address space
+    // may be kept reserved for the further reuse - see `ReserveFreedPages`.
     void FreePage(void* addr) noexcept {
+        if constexpr (ReserveFreedPages) {
+            NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
+            if (Y_LIKELY(0 == Provider_.Madvise(addr, PageSize_, /*needed=*/false))) {
+                ReservedPages_.Enqueue(addr);
+            } else {
+                // The memory of the region is still held by the process, so there is no point
+                // in keeping its address space reserved - drop the whole mapping.
+                UnmapPage(addr);
+            }
+        } else {
+            UnmapPage(addr);
+        }
+
+        i64 prev = TotalMmappedBytes_.fetch_sub(PageSize_);
+        Y_DEBUG_ABORT_UNLESS(prev >= i64(PageSize_));
+    }
+
+    void UnmapPage(void* addr) noexcept {
         NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
         auto res = Provider_.Munmap(addr, PageSize_);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
     }
 
     T& Provider_;
     const size_t PageSize_;
+    std::atomic<i64>& TotalMmappedBytes_;
     std::atomic<ui64> Count_ = 0;
     TLockFreeStack<void*> Pages_;
+    // Mapped, but advised away regions - their address space is reserved for the further reuse.
+    TLockFreeStack<void*> ReservedPages_;
 };
 
 template <typename T, bool SysAlign>
@@ -169,18 +238,16 @@ public:
     void DoCleanupFreeList(ui64 targetSize) {
         for (ui32 level = 0; level <= MidLevels; ++level) {
             auto& p = Get(level);
-            const size_t pageSize = p.GetPageSize();
 
             while (p.GetSize() >= targetSize) {
-                void* page = p.GetPage();
+                // NOTE: take the page from the cache only - the reserved ones are already freed.
+                void* page = p.PopPage();
 
                 if (!page) {
                     break;
                 }
 
                 p.FreePage(page);
-                i64 prev = TotalMmappedBytes_.fetch_sub(pageSize);
-                Y_DEBUG_ABORT_UNLESS(prev >= 0);
             }
         }
     }
@@ -229,7 +296,7 @@ public:
         Pools_.clear();
         Pools_.reserve(MidLevels + 1);
         for (ui32 i = 0; i <= MidLevels; ++i) {
-            Pools_.emplace_back(MakeHolder<TGlobalPagePool<T, SysAlign>>(Provider_, TAlignedPagePool::POOL_PAGE_SIZE << i));
+            Pools_.emplace_back(MakeHolder<TGlobalPagePool<T, SysAlign>>(Provider_, TAlignedPagePool::POOL_PAGE_SIZE << i, TotalMmappedBytes_));
         }
     }
 
@@ -257,6 +324,18 @@ inline int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
     Y_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
     return !::VirtualFree(addr, size, MEM_DECOMMIT);
 }
+
+inline int TSystemMmap::Madvise(void* addr, size_t size, bool needed) noexcept {
+    Y_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
+    Y_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+
+    if (needed) {
+        // The region is still reserved, so it's enough to commit it back.
+        return ::VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE) ? 0 : -1;
+    }
+
+    return !::VirtualFree(addr, size, MEM_DECOMMIT);
+}
 #else
 inline void* TSystemMmap::Mmap(size_t size)
 {
@@ -267,8 +346,15 @@ inline int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
 
-    if (size > MaxMidSize) {
-        return ::munmap(addr, size);
+    return ::munmap(addr, size);
+}
+
+inline int TSystemMmap::Madvise(void* addr, size_t size, bool needed) noexcept {
+    Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
+    Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
+
+    if (needed) {
+        return ::madvise(addr, size, MADV_WILLNEED);
     }
 
     // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
@@ -331,6 +417,15 @@ int TFakeMmap::Munmap(void* addr, size_t size) noexcept {
         }
         return 0;
     }, "TFakeMmap::Munmap");
+}
+
+int TFakeMmap::Madvise(void* addr, size_t size, bool needed) noexcept {
+    return NYql::WithAbortOnException([&] {
+        if (OnMadvise) {
+            OnMadvise(addr, size, needed);
+        }
+        return 0;
+    }, "TFakeMmap::Madvise");
 }
 
 TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {

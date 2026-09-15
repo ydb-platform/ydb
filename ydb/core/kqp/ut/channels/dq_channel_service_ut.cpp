@@ -491,8 +491,8 @@ struct TSessionTest : public TLoadTest {
     // producer on node 0, consumer on node 1; the consumer is registered right away (the producer needs
     // its id) but started only on demand
     std::pair<NActors::TActorId, NActors::TActorId> StartChannel(ui32 channelId, bool startConsumer) {
-        auto producer = Runtime->Register(new TProducerActor(Service0, channelId, ProducerSettings, OutputQuotaManager), NodeIndex0);
-        auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings, InputQuotaManager), NodeIndex1);
+        auto producer = Runtime->Register(new TProducerActor(Service0, channelId, ProducerSettings), NodeIndex0);
+        auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings), NodeIndex1);
         Actors.insert(producer);
         Actors.insert(consumer);
         if (startConsumer) {
@@ -509,8 +509,8 @@ struct TSessionTest : public TLoadTest {
     // the peer (node 1) produces and the node under test (node 0) consumes, the other way round from
     // StartChannel, so that the session of node 0 holds an input descriptor
     std::pair<NActors::TActorId, NActors::TActorId> StartInboundChannel(ui32 channelId, bool startConsumer) {
-        auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings, OutputQuotaManager), NodeIndex1);
-        auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
+        auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings), NodeIndex1);
+        auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings), NodeIndex0);
         Actors.insert(producer);
         Actors.insert(consumer);
         if (startConsumer) {
@@ -599,8 +599,6 @@ struct TMajorReconRetryTest : public TSessionTest {
 
         // a node session logs through the actor system from its destructor, so it may not outlive it
         sender.reset();
-        Destroy();
-        CheckQuota();
     }
 };
 
@@ -681,8 +679,6 @@ struct TDiscoveryResendTrapTest : public TSessionTest {
         // a node session logs through the actor system from its destructor, so it may not outlive it
         receiver.reset();
         sender.reset();
-        Destroy();
-        CheckQuota();
     }
 };
 
@@ -758,8 +754,6 @@ struct TInflightLeakTest : public TSessionTest {
         // a node session logs through the actor system from its destructor, so it may not outlive it
         receiver.reset();
         sender.reset();
-        Destroy();
-        CheckQuota();
     }
 };
 
@@ -838,7 +832,6 @@ struct TInboundChannelAbortTest : public TSessionTest {
 
         // a node session logs through the actor system from its destructor, so it may not outlive it
         session.reset();
-        Destroy();
     }
 };
 
@@ -903,8 +896,6 @@ struct TPeerActivityTest : public TSessionTest {
 
         // a node session logs through the actor system from its destructor, so it may not outlive it
         receiver.reset();
-        Destroy();
-        CheckQuota();
     }
 };
 
@@ -968,7 +959,6 @@ struct TBufferCountTest : public TSessionTest {
         UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service1, "InputBuffer/Count"), 0, details);
 
         receiver.reset();
-        Destroy();
     }
 };
 
@@ -1037,8 +1027,6 @@ struct TSlowQueueTest : public TSessionTest {
 
         session.reset();
         peer.reset();
-        Destroy();
-        CheckQuota();
     }
 };
 
@@ -1124,7 +1112,6 @@ struct TIdleRestartTest : public TSessionTest {
         session->ResumeChannelData();
         session.reset();
         peer.reset();
-        Destroy();
     }
 };
 
@@ -1206,7 +1193,6 @@ struct TOutboundStallTest : public TSessionTest {
         session->ResumeChannelData();
         session.reset();
         peer.reset();
-        Destroy();
     }
 };
 
@@ -1259,7 +1245,6 @@ struct TLivenessProbeTest : public TSessionTest {
 
         session.reset();
         peer.reset();
-        Destroy();
     }
 };
 

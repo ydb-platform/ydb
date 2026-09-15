@@ -1514,7 +1514,11 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         << ", F=" << record.GetFinished() << ", CF=" << record.GetConfirmFinish()
         << ", Log=" << GetReconciliationLog();
         LOG_W(LogPrefix << errorMessage);
-        if (!record.GetConfirmFinish()) {
+        if (record.GetConfirmFinish()) {
+            // the consumer has let go of the channel already, nobody waits for the confirmation; it is
+            // still confirmed, or the sender holds it in its queue
+            SendAckOk(info, ev->Cookie);
+        } else {
             SendAckWithError(ev->Cookie, errorMessage);
         }
         return;
@@ -1601,6 +1605,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         UpdateProgress(descriptor);
     }
 
+    SendAckOk(info, ev->Cookie);
+}
+
+void TNodeState::SendAckOk(const TChannelInfo& info, ui64 cookie) {
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
     evAck->Record.SetGenMajor(OutputNodeGenMajor.load());
@@ -1613,7 +1621,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     evAck->Record.SetChannelId(info.ChannelId);
 
     // no EarlyFinished and PopBytes here, see HandleAck: progress goes with TEvChannelUpdateV2
-    SendAck(evAck, ev->Cookie);
+    SendAck(evAck, cookie);
 }
 
 void TNodeState::HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {

@@ -151,11 +151,9 @@ struct TConsumerLastTest : public TSessionTest {
 };
 
 // The consumer lets go of its buffer as soon as it popped the finish chunk, before the confirmation
-// of the producer comes back. The confirmation finds no descriptor and is not answered at all, and
-// the session which sent it has no descriptors left, so HandleCleanup does not watch its queue: the
-// confirmation stays in the queue, on the sensors, until the traffic of the next channel confirms it
-// (or the session is destroyed while idle). The receiver is a debug session which holds the
-// confirmation until the consumer is gone for sure.
+// of the producer comes back. The confirmation finds no descriptor and is confirmed all the same, so
+// that the session of the sender, which has no descriptors left to watch its queue for, does not keep
+// it. The receiver is a debug session which holds the confirmation until the consumer is gone for sure.
 struct TConfirmToGoneTest : public TSessionTest {
 
     void Prepare() override {
@@ -185,26 +183,17 @@ struct TConfirmToGoneTest : public TSessionTest {
         UNIT_ASSERT_C(!producer.Error, producer.Reason);
         UNIT_ASSERT_C(WaitFor([&]() { return Debug1->PendingDataCount.load() >= 1; }, TDuration::Seconds(10)), "no confirmation arrived");
         UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(Debug1) == 0; }, TDuration::Seconds(5)), "the input descriptor is still there");
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSize(Debug0), 1);
 
         Debug1->ResumeChannelData();
         auto details = [&]() {
             return TStringBuilder() << "queue=" << GetQueueSize(Debug0) << ", InflightMessages=" << GetCounter(Service0, "OutputBuffer/InflightMessages")
                 << ", log=" << GetReconciliationLog(Debug0);
         };
-        // no ack for it, no ping for it: it stays for several ping periods
-        Sleep(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(Debug0), 1, details());
-        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueBytes(Debug0), 0, details());
-        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service0, "OutputBuffer/InflightMessages"), 1, details());
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(Debug0) == 0; }, TDuration::Seconds(5)),
+            TStringBuilder() << "the confirmation was not confirmed, " << details());
         UNIT_ASSERT_VALUES_EQUAL_C(CountPings(Debug0), 0, details());
         UNIT_ASSERT_VALUES_EQUAL_C(AbortCount, 0, ErrorDetails());
-
-        // the ack of the next message confirms the prefix with it
-        ConsumerSettings.LeaveAfterFinishChunk = false;
-        StartChannel(2, true);
-        WaitChannel(details);
-        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(Debug0) == 0; }, TDuration::Seconds(5)), details());
-        UNIT_ASSERT_VALUES_EQUAL_C(CountPings(Debug0), 0, details());
 
         CheckSensors();
         Destroy();

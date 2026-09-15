@@ -43,6 +43,7 @@ RECURSE(
     tpcc
     tenants
     ttl
+    type_support_consistency
     udf_store
     wardens
     ydb_cli

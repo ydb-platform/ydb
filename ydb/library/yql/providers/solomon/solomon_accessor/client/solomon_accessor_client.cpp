@@ -590,7 +590,7 @@ public:
                     context.get()
                 );
             } catch(std::exception& ex) {
-                resultPromise.SetValue(TGetDataResponse(ex.what()));
+                resultPromise.SetValue(TGetDataResponse(TStringBuilder() << "Couldn't get auth info: " << ex.what()));
             }
         });
 

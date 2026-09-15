@@ -782,7 +782,6 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
-    // Configuration state: publish it before starting the gRPC manager actor.
     const auto& appConfig = runConfig.AppConfig;
     EnabledGrpcService = appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy();
 

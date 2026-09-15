@@ -284,6 +284,7 @@ public:
         try {
             switch(ev->GetTypeRewrite()) {
                 hFunc(TEvKqp::TEvAbortExecution, HandleFinalize);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvKqpBuffer::TEvResult, HandleFinalize);
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
@@ -394,6 +395,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
@@ -939,6 +941,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
@@ -1104,6 +1107,7 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
+            IgnoreFunc(TEvStreamingQueryNodesManager::TEvAbortQuery);
             default:
                 YDB_LOG_ERROR("Unexpected event while waiting for shutdown",
                     {"marker", "KQPDATA"},
@@ -1318,8 +1322,8 @@ private:
                     Database,
                     context->StreamingQueryPath,
                     graphParams.GetTasks(),
-                    TDuration::Seconds(10),
-                    TDuration::Seconds(10),
+                    TDuration::Seconds(300),
+                    TDuration::Seconds(120),
                     Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetMaxTasksPerStage()));
             YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
                 {"marker", "KQPDATA"},

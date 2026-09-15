@@ -1,5 +1,6 @@
 #include "streaming_query_nodes_manager.h"
 
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -11,7 +12,9 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/string/cast.h>
 #include <util/string/join.h>
+#include <util/system/env.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -27,6 +30,14 @@ namespace {
 
 // Tag for periodic wakeup timer.
 constexpr ui64 WakeupTag = 1;
+
+TDuration GetDurationFromEnv(const char* name, TDuration defaultValue) {
+    ui64 ms = 0;
+    if (TryFromString<ui64>(GetEnv(name), ms) && ms) {
+        return TDuration::MilliSeconds(ms);
+    }
+    return defaultValue;
+}
 
 bool IsTopicSourceTask(const NYql::NDqProto::TDqTask& task) {
     for (const auto& input : task.GetInputs()) {
@@ -103,8 +114,8 @@ public:
         : RunActorId(runActorId)
         , TenantName(std::move(tenantName))
         , QueryId(std::move(queryId))
-        , CheckPeriod(checkPeriod)
-        , StartDelay(startDelay)
+        , CheckPeriod(GetDurationFromEnv("YDB_TEST_NODES_MANAGER_CHECK_PERIOD_MS", checkPeriod))
+        , StartDelay(GetDurationFromEnv("YDB_TEST_NODES_MANAGER_START_DELAY_MS", startDelay))
         , MaxTasksPerStage(maxTasksPerStage)
     {
         for (const auto& task : tasks) {
@@ -129,13 +140,11 @@ public:
             PassAway();
             return;
         }
-        // Give all compute actors time to report their initial state first.
-        Schedule(StartDelay, new TEvents::TEvWakeup(WakeupTag));
         Become(&TThis::StateWork);
     }
 
     STRICT_STFUNC(StateWork,
-        hFunc(NYql::NDq::TEvDqCompute::TEvState, Handle);
+        hFunc(NFq::TEvCheckpointCoordinator::TEvReadyState, Handle);
         hFunc(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         hFunc(TEvents::TEvWakeup, Handle);
@@ -146,24 +155,28 @@ private:
     // Handlers
     // -------------------------------------------------------------------------
 
-    void Handle(NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
-        const ui64 taskId = ev->Get()->Record.GetTaskId();
-        auto topicSourceTask = TopicSourceTaskNodes.find(taskId);
-        if (topicSourceTask == TopicSourceTaskNodes.end()) {
+    void Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
+        if (Ready) {
             return;
         }
-        const ui32 nodeId = ev->Sender.NodeId();
-        if (!topicSourceTask->second) {
+        for (const auto& task : ev->Get()->Tasks) {
+            auto topicSourceTask = TopicSourceTaskNodes.find(task.Id);
+            if (topicSourceTask == TopicSourceTaskNodes.end()) {
+                continue;
+            }
+            const ui32 nodeId = task.ActorId.NodeId();
             topicSourceTask->second = nodeId;
             QueryNodes.insert(nodeId);
+            LOG_D("Task node updated",
+                {"taskId", task.Id},
+                {"nodeId", nodeId});
         }
-        LOG_D("Task node updated",
-            {"taskId", taskId},
-            {"nodeId", nodeId});
+        Ready = true;
+        Schedule(StartDelay, new TEvents::TEvWakeup(WakeupTag));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        if (ev->Get()->Tag != WakeupTag) {
+        if (!Ready || ev->Get()->Tag != WakeupTag) {
             return;
         }
         ScheduleWakeup();
@@ -191,6 +204,9 @@ private:
     // -------------------------------------------------------------------------
 
     void CheckNodes(const TVector<ui32>& nodes) {
+        if (!Ready) {
+            return;
+        }
         const ui64 totalNodes = nodes.size();
 
         LOG_D("Received tenant node list",
@@ -252,12 +268,13 @@ private:
     const TDuration StartDelay;
     const ui64 MaxTasksPerStage;
 
-    // Contains topic-source tasks and their latest known node, when reported.
+    // Contains topic-source tasks and their node from the ready-state snapshot.
     THashMap<ui64, TMaybe<ui32>> TopicSourceTaskNodes;
-    // Nodes that have reported a topic-source task state.
+    // Nodes hosting topic-source tasks in the ready-state snapshot.
     THashSet<ui32> QueryNodes;
     ui64 TopicPartitionsCount = 0;
 
+    bool Ready = false;
     bool LookupInFlight = false;
     bool AlreadyAborted = false;
 };

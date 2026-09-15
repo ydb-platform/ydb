@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -6,7 +7,6 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -31,13 +31,15 @@ void InjectLookupFailure(TTestActorRuntime& runtime, TActorId target) {
         new NKikimr::TEvTenantNodeEnumerator::TEvLookupResult("/Root/test", /* success */ false)));
 }
 
-void InjectTaskStates(TTestActorRuntime& runtime, TActorId target, const TVector<ui32>& nodeIds) {
+void InjectReadyState(TTestActorRuntime& runtime, TActorId target, const TVector<ui32>& nodeIds) {
+    auto event = MakeHolder<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (ui64 taskId = 0; taskId < nodeIds.size(); ++taskId) {
-        auto state = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
-        state->Record.SetTaskId(taskId);
-        state->Record.SetState(NYql::NDqProto::COMPUTE_STATE_EXECUTING);
-        runtime.Send(new IEventHandle(target, TActorId(nodeIds[taskId], "compute"), state.Release()));
+        event->Tasks.push_back({
+            .Id = taskId,
+            .ActorId = TActorId(nodeIds[taskId], "compute"),
+        });
     }
+    runtime.Send(new IEventHandle(target, TActorId{}, event.Release()));
 }
 
 google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeTopicSourceTasks(ui64 taskCount, ui64 topicPartitionsCount) {
@@ -102,7 +104,7 @@ Y_UNIT_TEST(AbortWhenNotAllNodesRunQueryAndNodesDoNotExceedExpectedTasks) {
 
     // 10 partitions require 2 tasks. With 2 tenant nodes, both must run query tasks.
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
-    InjectTaskStates(runtime, manager, {1, 1});
+    InjectReadyState(runtime, manager, {1, 1});
     TriggerCheck(runtime, manager, edgeActor, {1, 2});
 
     TAutoPtr<IEventHandle> handle;
@@ -116,7 +118,7 @@ Y_UNIT_TEST(NoAbortWhenAllNodesRunQueryAndNodesDoNotExceedExpectedTasks) {
 
     // 10 partitions require 2 tasks. With 2 tenant nodes, both run query tasks.
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
-    InjectTaskStates(runtime, manager, {1, 2});
+    InjectReadyState(runtime, manager, {1, 2});
     TriggerCheck(runtime, manager, edgeActor, {1, 2});
 
     TAutoPtr<IEventHandle> handle;
@@ -130,7 +132,7 @@ Y_UNIT_TEST(AbortWhenNodesExceedExpectedTasksAndQueryUsesTooFewNodes) {
 
     // 10 partitions require 2 tasks. With 4 tenant nodes, the query needs 2 nodes.
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
-    InjectTaskStates(runtime, manager, {1, 1});
+    InjectReadyState(runtime, manager, {1, 1});
     TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
 
     TAutoPtr<IEventHandle> handle;
@@ -144,7 +146,7 @@ Y_UNIT_TEST(NoAbortWhenNodesExceedExpectedTasksAndQueryUsesExpectedNodes) {
 
     // 10 partitions require 2 tasks. With 4 tenant nodes, two query nodes suffice.
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
-    InjectTaskStates(runtime, manager, {1, 2});
+    InjectReadyState(runtime, manager, {1, 2});
     TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
 
     TAutoPtr<IEventHandle> handle;
@@ -158,7 +160,7 @@ Y_UNIT_TEST(NoAbortWhenMaxTasksPerStageLimitsTopicReaderTasks) {
 
     // 100 partitions would require 20 tasks, but MaxTasksPerStage limits the query to one task.
     const TActorId manager = CreateManager(runtime, edgeActor, 1, 100, 1);
-    InjectTaskStates(runtime, manager, {1});
+    InjectReadyState(runtime, manager, {1});
     TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
 
     TAutoPtr<IEventHandle> handle;
@@ -170,6 +172,7 @@ Y_UNIT_TEST(FailedLookupDoesNotAbort) {
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
     const TActorId edgeActor = runtime.AllocateEdgeActor();
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
+    InjectReadyState(runtime, manager, {1, 1});
 
     runtime.Send(new IEventHandle(manager, edgeActor, new TEvents::TEvWakeup(/* tag */ 1)));
     runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
@@ -185,7 +188,7 @@ Y_UNIT_TEST(AbortIsSentOnlyOnce) {
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
     const TActorId edgeActor = runtime.AllocateEdgeActor();
     const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
-    InjectTaskStates(runtime, manager, {1, 1});
+    InjectReadyState(runtime, manager, {1, 1});
 
     TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
     TriggerCheck(runtime, manager, edgeActor, {1, 2, 3, 4});
@@ -196,6 +199,35 @@ Y_UNIT_TEST(AbortIsSentOnlyOnce) {
         ++abortCount;
     }
     UNIT_ASSERT_VALUES_EQUAL(abortCount, 1);
+}
+
+Y_UNIT_TEST(NoAbortBeforeReadyState) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    const TActorId edgeActor = runtime.AllocateEdgeActor();
+    const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
+
+    TriggerCheck(runtime, manager, edgeActor, {1, 2});
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(!GrabAbort(runtime, handle));
+
+    InjectReadyState(runtime, manager, {1, 1});
+    TriggerCheck(runtime, manager, edgeActor, {1, 2});
+    UNIT_ASSERT(GrabAbort(runtime, handle));
+}
+
+Y_UNIT_TEST(ReadyStateIgnoresNonTopicTasks) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    const TActorId edgeActor = runtime.AllocateEdgeActor();
+    const TActorId manager = CreateManager(runtime, edgeActor, 2, 10);
+
+    // Only tasks 0 and 1 read topics; task 2 must not contribute a query node.
+    InjectReadyState(runtime, manager, {1, 1, 2});
+    TriggerCheck(runtime, manager, edgeActor, {1, 2});
+
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(GrabAbort(runtime, handle));
 }
 
 } // Y_UNIT_TEST_SUITE

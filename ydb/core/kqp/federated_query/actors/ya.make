@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
+    ydb/core/fq/libs/checkpointing/events
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/base

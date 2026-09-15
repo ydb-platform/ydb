@@ -6,6 +6,7 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/fq/libs/checkpointing/events
     ydb/core/mind
     ydb/core/testlib/default
     ydb/library/actors/testlib

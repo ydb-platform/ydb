@@ -1005,13 +1005,6 @@ protected:
             return;
         }
 
-        if (StreamingQueryNodesManagerId) {
-            auto stateEvent = MakeHolder<NYql::NDq::TEvDqCompute::TEvState>();
-            stateEvent->Record = state;
-            TlsActivationContext->Send(new IEventHandle(
-                StreamingQueryNodesManagerId, computeActor, stateEvent.Release()));
-        }
-
         if (CheckpointCoordinatorId) {
             TlsActivationContext->Send(ev->Forward(CheckpointCoordinatorId));
         }
@@ -1621,6 +1614,7 @@ protected:
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = EnableWatermarks,
+            .StreamingQueryNodesManager = StreamingQueryNodesManagerId,
         });
 
         auto err = Planner->PlanExecution();

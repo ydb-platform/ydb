@@ -218,10 +218,10 @@ struct TWaitersAfterReconciliationTest : public TOutboundTest {
 };
 
 // The pop progress of the receiver is carried by updates alone; with them lost the producer stays cold
-// and blocked. The idle ping of the sender makes the receiver answer with an update for every input
-// descriptor - and only the sender's: the receiver's own ping is answered with an ack. That ping also
-// refreshes the activity of the sender and can keep it from ever asking (see TLivenessProbeTest), so
-// the receiver's discoveries are dropped here until the producer is unblocked.
+// and blocked. An idle ping brings them again, whichever side asks: the receiver answers the ping of
+// the sender with them, and sends them with a ping of its own. The pings of the two sides refresh each
+// other's activity, so either may be the only one to happen; each is staged here by making the
+// discoveries of the other side go unanswered.
 struct TLostUpdateTest : public TOutboundTest {
 
     void Prepare() override {
@@ -239,8 +239,10 @@ struct TLostUpdateTest : public TOutboundTest {
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 50000, .MaxMessageSize = 50000 };
         ConsumerSettings = ProducerSettings;
 
+        // the side which is to ping ignores the discoveries of the other, so that they cannot refresh it
+        auto& pinger = ReceiverPings ? Debug1 : Debug0;
         Debug0->DropUpdateCount.store(1000000);
-        Debug0->DropDiscoveryCount.store(1000000);
+        pinger->DropDiscoveryCount.store(1000000);
         StartOutbound(1);
 
         // the producer fills the cold window and the consumer drains all of it, the updates saying so lost
@@ -255,21 +257,23 @@ struct TLostUpdateTest : public TOutboundTest {
                 && GetInputPopBytes(Debug1) == descriptor->PushBytes.load();
         }, TDuration::Seconds(10)), TStringBuilder() << "the producer did not fill the cold window, " << SessionDetails());
         UNIT_ASSERT_VALUES_EQUAL_C(descriptor->RemotePopBytes.load(), 0, "an update got through");
-        auto pingsBefore = CountPings(Debug0);
+        auto pingsBefore = CountPings(pinger);
 
         Debug0->DropUpdateCount.store(0);
         UNIT_ASSERT_C(WaitFor([&]() { return descriptor->RemotePopBytes.load() > 0; }, TDuration::Seconds(10)),
             TStringBuilder() << "the producer was not unblocked, " << SessionDetails());
-        // the receiver has a reconciliation of its own open by now, its next retry gets through
-        Debug0->DropDiscoveryCount.store(0);
+        // the other side has a reconciliation of its own open by now, its next retry gets through
+        pinger->DropDiscoveryCount.store(0);
 
         WaitOutbound(1);
-        auto details = TStringBuilder() << "pings " << pingsBefore << " -> " << CountPings(Debug0) << ", " << SessionDetails();
-        UNIT_ASSERT_C(CountPings(Debug0) > pingsBefore, TStringBuilder() << "the producer was not unblocked by the idle ping, " << details);
+        auto details = TStringBuilder() << "pings " << pingsBefore << " -> " << CountPings(pinger) << ", " << SessionDetails();
+        UNIT_ASSERT_C(CountPings(pinger) > pingsBefore, TStringBuilder() << "the producer was not unblocked by the idle ping, " << details);
         CheckSensors();
         Destroy();
         CheckQuota();
     }
+
+    bool ReceiverPings = false;
 };
 
 // A discovery lost on the way is retried by the timer of the reconciliation, once per attempt
@@ -586,9 +590,17 @@ Y_UNIT_TEST_SUITE(Channels20Failure) {
         test.Run();
     }
 
-    Y_UNIT_TEST(LostUpdateRecoveredByPing2n) {
+    Y_UNIT_TEST(LostUpdateRecoveredBySenderPing2n) {
         TLostUpdateTest test;
         test.Local = false;
+        test.ReceiverPings = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(LostUpdateRecoveredByReceiverPing2n) {
+        TLostUpdateTest test;
+        test.Local = false;
+        test.ReceiverPings = true;
         test.Run();
     }
 

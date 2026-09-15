@@ -227,7 +227,6 @@ void TPartitionActor::HandleAddHostAllocationResult(
     // the new host takes the position after the last entry.
     const auto newHostIndex =
         static_cast<THostIndex>(dbgConnections.ConnectionsSize());
-    NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
     if (auto error = AddConnection(
@@ -399,10 +398,6 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     const ui64 regionCount =
         CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
 
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
-
     // NumDDisks is the desired final state in live hosts (dead slots have no
     // resources in BSC), so a re-sent request is idempotent.
     const ui32 numDDisks = static_cast<ui32>(
@@ -419,7 +414,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumChunksPerDDisk(regionCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

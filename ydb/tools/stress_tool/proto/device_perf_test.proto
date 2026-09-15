@@ -42,9 +42,6 @@ message TDDiskTest {
 
 message TPersistentBufferTest {
     repeated NKikimr.TEvLoadTestRequest PersistentBufferTestList = 1;
-    optional uint32 Chunks = 2;
-    optional bool EnableWritesBatching = 3 [default = true];
-    optional bool SweepMeasureTypes = 4 [default = true];
 }
 
 message TDriveEstimatorTest {

@@ -1690,8 +1690,12 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         }();
         UNIT_ASSERT_C(actualUniqueId != 0, "PersistentBufferUniqueId must not be zero");
 
-        // Rewrite the independently stored record A as a valid version-0 legacy record. Its
-        // payload remains readable after restore, but it intentionally has no payload checksums.
+        // Rewrite the independently stored record A as a valid version-0 record (no
+        // HAS_PAYLOAD_CHECKSUMS flag, i.e. sender supplied no payload checksums for it). Its
+        // payload remains readable after restore. The header checksum below is recomputed with
+        // the current on-disk formula (CalculateRawChecksum(sector, HeaderDataSize) ^ uniqueId);
+        // this fixture does not model the pre-this-PR on-disk format, since backward
+        // compatibility with data written by older binaries is not maintained.
         {
             TString& chunk = chunkBufs[rawA->Get()->ChunkIdx];
             char* sector = chunk.Detach() + rawA->Get()->Offset;

@@ -3,7 +3,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+#include "meta.h"
 
 namespace NKikimr::NOlap::NIndexes {
 

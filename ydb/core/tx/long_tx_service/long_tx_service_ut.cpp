@@ -13,6 +13,12 @@
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <algorithm>
+#include <cerrno>
+#include <csignal>
+
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace NKikimr {
 namespace NLongTxService {
@@ -62,6 +68,29 @@ namespace NLongTxService {
                 TActorId schemeCacheId = runtime.Register(schemeCache, nodeIndex);
                 runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId, nodeIndex);
             }
+        }
+
+        TLongTxId BeginTransactionWithWrites(TTestActorRuntime& runtime) {
+            auto sender = runtime.AllocateEdgeActor(0);
+            auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+            runtime.Send(new IEventHandle(service, sender,
+                new TEvLongTxService::TEvBeginTx("/dc-1",
+                    NKikimrLongTxService::TEvBeginTx::MODE_WRITE_ONLY)), 0, true);
+            auto begin = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvBeginTxResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(begin->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            auto txId = begin->Get()->GetLongTxId();
+
+            // Exercise forwarding to the owner and a repeated nonempty attach.
+            auto remoteSender = runtime.AllocateEdgeActor(1);
+            auto remoteService = MakeLongTxServiceID(runtime.GetNodeId(1));
+            for (ui32 attempt = 0; attempt < 2; ++attempt) {
+                auto request = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(txId);
+                request->AddWrite(72075186224037889ULL, 42);
+                runtime.Send(new IEventHandle(remoteService, remoteSender, request.Release()), 1, true);
+                auto attach = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAttachColumnShardWritesResult>(remoteSender);
+                UNIT_ASSERT_VALUES_EQUAL(attach->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            }
+            return txId;
         }
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
@@ -174,6 +203,102 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::UNAVAILABLE);
         }
+    }
+
+    Y_UNIT_TEST(RollbackWithColumnShardWrites) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(true));
+        auto txId = BeginTransactionWithWrites(runtime);
+        auto sender = runtime.AllocateEdgeActor(1);
+        auto service = MakeLongTxServiceID(runtime.GetNodeId(1));
+
+        for (auto expected : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::BAD_SESSION}) {
+            runtime.Send(new IEventHandle(service, sender,
+                new TEvLongTxService::TEvRollbackTx(txId)), 1, true);
+            auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvRollbackTxResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), expected);
+        }
+
+        auto attach = MakeHolder<TEvLongTxService::TEvAttachColumnShardWrites>(txId);
+        attach->AddWrite(72075186224037889ULL, 43);
+        runtime.Send(new IEventHandle(service, sender, attach.Release()), 1, true);
+        auto attached = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAttachColumnShardWritesResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_SESSION);
+
+        runtime.Send(new IEventHandle(service, sender,
+            new TEvLongTxService::TEvCommitTx(txId)), 1, true);
+        auto committed = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvCommitTxResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(committed->Get()->Record.GetStatus(), Ydb::StatusIds::BAD_SESSION);
+    }
+
+    Y_UNIT_TEST(LegacyCommitWithColumnShardWritesRemainsDisabled) {
+        // The baseline TCommitActor explicitly aborts (its TODO removes it after
+        // 25.3). Moving the public protocol must not enable that legacy path or
+        // silently turn a nonempty commit into a successful empty transaction.
+        int output[2];
+        UNIT_ASSERT_VALUES_EQUAL(pipe(output), 0);
+        const pid_t child = fork();
+        if (child < 0) {
+            close(output[0]);
+            close(output[1]);
+            UNIT_FAIL("fork failed");
+        }
+        if (child == 0) {
+            close(output[0]);
+            if (dup2(output[1], STDERR_FILENO) < 0) {
+                _exit(2);
+            }
+            close(output[1]);
+            const rlimit noCore = {0, 0};
+            if (setrlimit(RLIMIT_CORE, &noCore) != 0) {
+                _exit(2);
+            }
+            std::signal(SIGABRT, SIG_DFL);
+            std::signal(SIGALRM, SIG_DFL);
+            alarm(60); // Also bounds runtime setup and the parent's pipe read.
+            try {
+                TTenantTestRuntime runtime(MakeTenantTestConfig(true));
+                auto txId = BeginTransactionWithWrites(runtime);
+                auto sender = runtime.AllocateEdgeActor(0);
+                auto service = MakeLongTxServiceID(runtime.GetNodeId(0));
+                Cerr << "nonempty legacy commit starts" << Endl;
+                runtime.Send(new IEventHandle(service, sender,
+                    new TEvLongTxService::TEvCommitTx(txId)), 0, true);
+                runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvCommitTxResult>(sender);
+            } catch (...) {
+                _exit(2);
+            }
+            _exit(0);
+        }
+
+        close(output[1]);
+        TString diagnostic;
+        char buffer[4096];
+        ssize_t count;
+        while ((count = read(output[0], buffer, sizeof(buffer))) != 0) {
+            if (count < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                kill(child, SIGKILL);
+                break;
+            }
+            // Keep draining even if an unexpected failure floods stderr.
+            if (diagnostic.size() < 1024 * 1024) {
+                diagnostic.append(buffer, count);
+            }
+        }
+        close(output[0]);
+        int status = 0;
+        pid_t waited;
+        do {
+            waited = waitpid(child, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        UNIT_ASSERT_VALUES_EQUAL(waited, child);
+        UNIT_ASSERT_C(WIFSIGNALED(status), diagnostic);
+        UNIT_ASSERT_VALUES_EQUAL_C(WTERMSIG(status), SIGABRT, diagnostic);
+        UNIT_ASSERT_C(diagnostic.Contains("nonempty legacy commit starts"), diagnostic);
+        UNIT_ASSERT_C(diagnostic.Contains("commit_impl.cpp"), diagnostic);
+        UNIT_ASSERT_C(diagnostic.Contains("verification=false"), diagnostic);
     }
 
     Y_UNIT_TEST(AcquireSnapshot) {

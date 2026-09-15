@@ -290,8 +290,7 @@ void TPartition::RequestResetOffsetBlobs(TEvPQ::TEvResetOffsetRequest::TPtr& ev,
         .BlobKeyTokens = std::move(tokens),
     };
 
-    YDB_LOG_DEBUG("Request blobs for ResetOffset FROM_WRITTEN_AT",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("Request blobs for ResetOffset FROM_WRITTEN_AT",
         {"timestampMs", timestamp.MilliSeconds()},
         {"blobCount", blobs.size()});
 
@@ -363,15 +362,13 @@ void TPartition::BeginResetOffset(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("HandleOnInit TEvPQ::TEvResetOffsetRequest",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("HandleOnInit TEvPQ::TEvResetOffsetRequest",
         {"ev", ev->Get()->Record.ShortDebugString()});
     ResetOffsetPendingEvents.emplace_back(std::move(ev));
 }
 
 void TPartition::Handle(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvResetOffsetRequest",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("Handle TEvPQ::TEvResetOffsetRequest",
         {"ev", ev->Get()->Record.ShortDebugString()});
 
     if (ResetOffsetBlobRead) {
@@ -382,8 +379,7 @@ void TPartition::Handle(TEvPQ::TEvResetOffsetRequest::TPtr& ev) {
 }
 
 void TPartition::ProcessResetOffsetPendingEvents() {
-    YDB_LOG_DEBUG("Process ResetOffset pending events. Count",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("Process ResetOffset pending events. Count",
         {"count", ResetOffsetPendingEvents.size()});
 
     while (!ResetOffsetPendingEvents.empty() && !ResetOffsetBlobRead) {

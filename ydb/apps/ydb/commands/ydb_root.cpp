@@ -27,6 +27,9 @@ void TClientCommandRoot::FillConfig(TConfig& config) {
 
 void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
     config.CredentialsGetter = [](const TClientCommand::TConfig& config) {
+        if (config.OidcConfigFile) {
+            return CreateCliOidcCredentialsProviderFactory(config.OidcConfigFile);
+        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }

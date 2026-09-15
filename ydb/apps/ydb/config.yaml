@@ -1,0 +1,7 @@
+issuer: https://keycloak.ydb-cluster.com:8443
+
+device_authorization_grant:
+  client_id: ydb-cli
+  scope:
+    - openid
+    - user-context

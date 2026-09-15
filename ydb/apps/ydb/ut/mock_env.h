@@ -486,6 +486,10 @@ public:
     }
 
     TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
+        return RunCliWithStderr(std::move(args), env, profileFileContent, nullptr);
+    }
+
+    TString RunCliWithStderr(TList<TString> args, const THashMap<TString, TString>& env, const TString& profileFileContent, TString* stderrOutput) {
         ClearFailures();
 
         if (profileFileContent) {
@@ -493,13 +497,14 @@ public:
             args.emplace_front(profileFile);
             args.emplace_front("--profile-file");
         }
-        TString output = RunYdb(
+        TString output = RunYdbWithStderr(
             args,
             {},
             true,
             false,
             GetEndEnv(env),
-            ExpectedExitCode
+            ExpectedExitCode,
+            stderrOutput
         );
         CheckExpectations();
         // reset

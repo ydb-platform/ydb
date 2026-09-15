@@ -326,6 +326,9 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
 // Default CredentialsGetter that can be overridden in different CLI versions
 void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
     config.CredentialsGetter = [](const TClientCommand::TConfig& config) {
+        if (config.OidcConfigFile) {
+            return CreateCliOidcCredentialsProviderFactory(config.OidcConfigFile);
+        }
         if (config.SecurityToken) {
             return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
         }
@@ -642,6 +645,15 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .ProfileParam("iam-endpoint")
             .DefaultValue(config.IamEndpoint);
     }
+
+    opts.AddAuthMethodOption("oidc-config", "OIDC credentials YAML configuration file")
+        .AuthMethod("oidc-config")
+        .SimpleProfileDataParam("oidc-config", true)
+        .LogToConnectionParams("oidc-config")
+        .FileName("OIDC configuration")
+        .RequiredArgument("PATH")
+        .StoreFilePath(&config.OidcConfigFile)
+        .Handler([](const TString&) {});
 
     // Special auth method that is not parsed from command line,
     // but is parsed from profile

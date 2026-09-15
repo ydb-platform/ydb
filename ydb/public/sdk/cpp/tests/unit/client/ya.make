@@ -9,6 +9,8 @@ RECURSE(
     iam
     iam_private
     oauth2_token_exchange
+    oidc
+    oidc_file
     observability
     params
     query

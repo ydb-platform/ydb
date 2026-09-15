@@ -2986,6 +2986,8 @@ message TColumnShardConfig {
     }
 
     optional TFlowControlConfig FlowControl = 74;
+    optional string ScanDefaultPool = 75;
+    optional string CompactionDefaultPool = 76;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

@@ -250,6 +250,16 @@ TString TThreadsCountInfo::DebugString() const {
     return sb;
 }
 
+TConclusion<EActorSystemPool> ParseActorSystemPool(const TString& name) {
+    if (name == "User") {
+        return EActorSystemPool::User;
+    }
+    if (name == "Batch") {
+        return EActorSystemPool::Batch;
+    }
+    return TConclusionStatus::Fail("unknown actor system pool name '" + name + "', expected User or Batch");
+}
+
 }   // namespace NKikimr::NConveyorComposite::NConfig
 
 namespace NKikimr::NConveyorComposite {

@@ -502,4 +502,22 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     Y_UNIT_TEST(TestUniformDistribution) {
         TTestingExecutorUniformDistribution().Execute();
     }
+
+    Y_UNIT_TEST(ParseActorSystemPool) {
+        {
+            auto parsed = NConfig::ParseActorSystemPool("User");
+            UNIT_ASSERT(parsed.IsSuccess());
+            UNIT_ASSERT(*parsed == EActorSystemPool::User);
+        }
+        {
+            auto parsed = NConfig::ParseActorSystemPool("Batch");
+            UNIT_ASSERT(parsed.IsSuccess());
+            UNIT_ASSERT(*parsed == EActorSystemPool::Batch);
+        }
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("user").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("USER").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("batch").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("System").IsFail());
+        UNIT_ASSERT(NConfig::ParseActorSystemPool("").IsFail());
+    }
 }

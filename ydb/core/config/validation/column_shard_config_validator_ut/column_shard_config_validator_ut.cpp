@@ -94,4 +94,42 @@ Y_UNIT_TEST_SUITE(ColumnShardConfigValidation) {
         UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
         UNIT_ASSERT_STRINGS_EQUAL(error.front(), "ColumnShardConfig: compression `zstd` does not support compression level = 100");
     }
+
+    Y_UNIT_TEST(AcceptDefaultPoolsUnset) {
+        NKikimrConfig::TColumnShardConfig CSConfig;
+        std::vector<TString> error;
+        EValidationResult result = ValidateColumnShardConfig(CSConfig, error);
+        UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
+        UNIT_ASSERT_C(error.empty(), "Should not be errors");
+    }
+
+    Y_UNIT_TEST(AcceptDefaultPoolsUserBatch) {
+        NKikimrConfig::TColumnShardConfig CSConfig;
+        std::vector<TString> error;
+        CSConfig.SetScanDefaultPool("Batch");
+        CSConfig.SetCompactionDefaultPool("User");
+        EValidationResult result = ValidateColumnShardConfig(CSConfig, error);
+        UNIT_ASSERT_EQUAL(result, EValidationResult::Ok);
+        UNIT_ASSERT_C(error.empty(), "Should not be errors");
+    }
+
+    Y_UNIT_TEST(RejectInvalidScanDefaultPool) {
+        NKikimrConfig::TColumnShardConfig CSConfig;
+        std::vector<TString> error;
+        CSConfig.SetScanDefaultPool("user");
+        EValidationResult result = ValidateColumnShardConfig(CSConfig, error);
+        UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+        UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(error.front(), "ColumnShardConfig: scan_default_pool must be User or Batch, got 'user'");
+    }
+
+    Y_UNIT_TEST(RejectInvalidCompactionDefaultPool) {
+        NKikimrConfig::TColumnShardConfig CSConfig;
+        std::vector<TString> error;
+        CSConfig.SetCompactionDefaultPool("System");
+        EValidationResult result = ValidateColumnShardConfig(CSConfig, error);
+        UNIT_ASSERT_EQUAL(result, EValidationResult::Error);
+        UNIT_ASSERT_VALUES_EQUAL(error.size(), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(error.front(), "ColumnShardConfig: compaction_default_pool must be User or Batch, got 'System'");
+    }
 }

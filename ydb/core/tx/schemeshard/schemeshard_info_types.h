@@ -2177,6 +2177,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetGraphShard());
     }
 
+    TTabletId GetTenantWasmCompileControllerID() const {
+        if (!ProcessingParams.HasWasmCompileController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetWasmCompileController());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -2569,6 +2576,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_ENSURE(graphs.size() <= 1, "size was: " << graphs.size());
         if (graphs.size()) {
             ProcessingParams.SetGraphShard(ui64(graphs.front()));
+        }
+
+        ProcessingParams.ClearWasmCompileController();
+        TVector<TTabletId> wasmCompileControllers = FilterPrivateTablets(ETabletType::WasmCompileController, allShards);
+        Y_ENSURE(wasmCompileControllers.size() <= 1, "size was: " << wasmCompileControllers.size());
+        if (wasmCompileControllers.size()) {
+            ProcessingParams.SetWasmCompileController(ui64(wasmCompileControllers.front()));
         }
     }
 

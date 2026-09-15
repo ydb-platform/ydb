@@ -435,6 +435,15 @@ public:
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
 
+    void Handle(IActorOps* ops, TEvService::TEvSchemaChangeReport::TPtr& ev) {
+        const auto id = GetWorkerId(ev->Sender);
+        if (!Workers.contains(id)) {
+            return;
+        }
+        id.Serialize(*ev->Get()->Record.MutableWorker());
+        ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+    }
+
     void Shutdown(IActorOps* ops) const {
         for (const auto& [_, actorId] : Workers) {
             ops->Send(actorId, new TEvents::TEvPoison());
@@ -837,6 +846,35 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         session->Handle(this, ev);
     }
 
+    void Handle(TEvService::TEvSchemaChangeReport::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        auto* session = SessionFromWorker(ev->Sender);
+        if (!session || !session->HasWorker(ev->Sender)) {
+            return;
+        }
+        session->Handle(this, ev);
+    }
+
+    void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        const auto& record = ev->Get()->Record;
+        if (!record.HasWorker() || !record.HasController()) {
+            return;
+        }
+        const auto& controller = record.GetController();
+        const auto session = Sessions.find(controller.GetTabletId());
+        if (session != Sessions.end() && session->second.GetGeneration() == controller.GetGeneration()) {
+            const auto id = TWorkerId::Parse(record.GetWorker());
+            if (session->second.HasWorker(id)) {
+                Send(session->second.GetWorkerActorId(id), ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
+            }
+        }
+    }
+
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
@@ -992,6 +1030,8 @@ public:
             hFunc(TEvService::TEvGetTxId, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Handle);
+            hFunc(TEvService::TEvSchemaChangeReport, Handle);
+            hFunc(TEvService::TEvSchemaChangeResult, Handle);
             hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvStatsWakeup, Handle)
             hFunc(TEvWorker::TEvGone, Handle);

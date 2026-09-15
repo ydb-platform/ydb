@@ -588,6 +588,11 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             hasChanges = true;
         }
 
+        if (!tenantLink.TenantWasmCompileController && subDomain->GetTenantWasmCompileControllerID()) {
+            message->SetTenantWasmCompileController(ui64(subDomain->GetTenantWasmCompileControllerID()));
+            hasChanges = true;
+        }
+
         if (!hasChanges) {
             YDB_LOG_DEBUG_CTX(ctx, "DoUpdateTenant no hasChanges",
                 {"pathId", pathId},

@@ -178,6 +178,19 @@ TEvPrivate::TEvRemoveWorker::TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid)
 {
 }
 
+TEvPrivate::TEvCompleteWorkerSet::TEvCompleteWorkerSet(ui64 rid, ui64 tid)
+    : ReplicationId(rid)
+    , TargetId(tid)
+{
+}
+
+TString TEvPrivate::TEvCompleteWorkerSet::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " TargetId: " << TargetId
+    << " }";
+}
+
 TString TEvPrivate::TEvRemoveWorker::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Id: " << Id

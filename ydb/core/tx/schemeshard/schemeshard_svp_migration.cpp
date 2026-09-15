@@ -73,6 +73,9 @@ private:
         if (Current.CreateBCT) {
             modifySubDomain.SetExternalBackupController(true);
         }
+        if (Current.CreateWCC) {
+            modifySubDomain.SetExternalWasmCompileController(true);
+        }
 
         YDB_LOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction",
             {"workingDir", Current.WorkingDir},

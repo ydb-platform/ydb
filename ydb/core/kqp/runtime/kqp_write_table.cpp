@@ -1122,24 +1122,27 @@ public:
             prefixCells[i] = row[Indexes[i]];
         }
         ui64 docId = (ui64)row[Indexes[PrefixSize+1]].AsValue<TDocId>();
-        auto text = row[Indexes[PrefixSize]].AsBuf();
         TVector<TString> tokens;
-        switch (TextTypeId) {
-            case NScheme::NTypeIds::String:
-            case NScheme::NTypeIds::Utf8:
-                tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
-                break;
-            case NScheme::NTypeIds::Json: {
-                TString error;
-                tokens = NJsonIndex::TokenizeJson(text, error);
-                // Ignore errors, JSON is already validated
-                break;
+        const auto& textCell = row[Indexes[PrefixSize]];
+        if (!textCell.IsNull()) {
+            const auto text = textCell.AsBuf();
+            switch (TextTypeId) {
+                case NScheme::NTypeIds::String:
+                case NScheme::NTypeIds::Utf8:
+                    tokens = NKikimr::NFulltext::Analyze(text, Analyzers);
+                    break;
+                case NScheme::NTypeIds::Json: {
+                    TString error;
+                    tokens = NJsonIndex::TokenizeJson(text, error);
+                    YQL_ENSURE(error.empty(), "TokenizeJson error: " << error);
+                    break;
+                }
+                case NScheme::NTypeIds::JsonDocument:
+                    tokens = NJsonIndex::TokenizeBinaryJson(text);
+                    break;
+                default:
+                    YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
             }
-            case NScheme::NTypeIds::JsonDocument:
-                tokens = NJsonIndex::TokenizeBinaryJson(text);
-                break;
-            default:
-                YQL_ENSURE(false, "Invalid FulltextAnalyzeActor input column type: " << TextTypeId);
         }
         auto& prefix = PrefixBuffers[TSerializedCellVec::Serialize(prefixCells)];
         ui32 docLength = 0;
@@ -1593,6 +1596,7 @@ struct TBatchWithMetadata {
     // MvccSnapshot of the operation whose data this batch carries. Covering
     // (empty) batches have no snapshot.
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+    ui64 WriteSeqNum = 0;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1721,11 +1725,19 @@ public:
             return HasReadInBatch;
         }
 
+        // Next 1-based uncommitted write seq num in this shard's chain, assigned when
+        // batches are formed and carried by the batch itself on resend.
+        ui64 AllocateWriteSeqNum() {
+            return ++WriteSeqNum;
+        }
+
     private:
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
         bool HasReadInBatch = false;
+
+        ui64 WriteSeqNum = 0;
 
         ui64& NextCookie;
         ui64 Cookie;
@@ -1762,6 +1774,22 @@ public:
         return ShardsInfo.contains(shardId);
     }
 
+    std::vector<TBatchWithMetadata> ExtractShard(ui64 shardId) {
+        auto it = ShardsInfo.find(shardId);
+        if (it == std::end(ShardsInfo)) {
+            return {};
+        }
+        std::vector<TBatchWithMetadata> batches;
+        batches.reserve(it->second.Batches.size());
+        for (auto& batch : it->second.Batches) {
+            Memory -= batch.GetMemory();
+            --PendingBatches;
+            batches.push_back(std::move(batch));
+        }
+        ShardsInfo.erase(it);
+        return batches;
+    }
+
     bool IsEmpty() const {
         return PendingBatches == 0;
     }
@@ -1796,6 +1824,12 @@ public:
 
     void Close() {
         Closed = true;
+    }
+
+    bool Reopen() {
+        const auto wasClosed = Closed;
+        Closed = false;
+        return wasClosed;
     }
 
 private:
@@ -1838,9 +1872,6 @@ public:
     }
 
     void BeforePartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
-        }
         for (auto& [token, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer) {
                 if (!writeInfo.Closed) {
@@ -1853,17 +1884,23 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (!Settings.Inconsistent) {
-            return;
-        }
-        if (!WriteInfos.empty()) {
-            ShardsInfo.Close();
-            ReshardData();
-            ShardsInfo.Clear();
-            for (const auto& [token, writeInfo] : WriteInfos) {
-                if (writeInfo.Closed) {
-                    Close(token);
+        if (Settings.Inconsistent) {
+            if (!WriteInfos.empty()) {
+                // A changed shard set means split/merge: only the removed shards are
+                // affected. Re-route their pending batches to the new shards (which
+                // cover exactly the removed shards' key ranges); shards whose tablet id
+                // survived keep their in-flight batches untouched and are never re-sent.
+                auto deletedShards = GetDeletedShards();
+                if (!deletedShards.empty()) {
+                    ReRouteShardsData(std::move(deletedShards));
                 }
+            }
+        }
+
+        for (const auto& [token, writeInfo] : WriteInfos) {
+            if (writeInfo.Closed) {
+                // Close recreated serializers. If they must be closed.
+                Close(token);
             }
         }
     }
@@ -2053,7 +2090,7 @@ public:
         return meta;
     }
 
-    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) override {
+    TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
         const auto& shardInfo = ShardsInfo.GetShard(shardId);
@@ -2078,6 +2115,11 @@ public:
                     writeInfo.Metadata.DefaultColumnsCount);
                 if (inFlightBatch.QuerySpanId != 0) {
                     operation.SetQuerySpanId(inFlightBatch.QuerySpanId);
+                }
+                if (Settings.EnableWriteSeqNum && !isFinalPrepareOrCommit) {
+                    auto* writeSeqNum = operation.MutableWriteSeqNum();
+                    writeSeqNum->SetWriterIndex(Settings.WriterIndex);
+                    writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
                 }
             } else {
                 AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
@@ -2184,18 +2226,23 @@ private:
     void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
         for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            auto& shardInfo = ShardsInfo.GetShard(shardId);
             for (auto& batch : batches) {
                 if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
                             || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
+                    TBatchWithMetadata batchWithMetadata {
                         .Token = token,
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),
                         .HasRead = hasRead,
                         .QuerySpanId = writeInfo.QuerySpanId,
                         .MvccSnapshot = writeInfo.MvccSnapshot,
-                    });
+                        // Every non-empty batch gets a write seq num; whether it is attached
+                        // to the resulting operations is decided at serialization.
+                        .WriteSeqNum = shardInfo.AllocateWriteSeqNum(),
+                    };
+                    shardInfo.PushBatch(std::move(batchWithMetadata));
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
                         .ShardId = shardId,
                         .HasRead = hasRead,
@@ -2218,17 +2265,56 @@ private:
         }
     }
 
-    void ReshardData() {
-        AFL_ENSURE(Settings.Inconsistent);
-        for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
-            for (size_t index = 0; index < shardInfo.Size(); ++index) {
-                auto& batch = shardInfo.GetBatch(index);
-                const auto& writeInfo = WriteInfos.at(batch.Token);
-                // Resharding supported only for inconsistent write,
-                // so convering empty batches don't exist in this case.
-                AFL_ENSURE(batch.Data);
-                writeInfo.Serializer->AddBatch(std::move(batch.Data));
+    // Shards present in ShardsInfo but absent from the current Partitioning. Their
+    // tablet ids were removed by a split/merge, so their pending batches must be
+    // re-routed to the shards that now cover their key ranges.
+    TVector<ui64> GetDeletedShards() const {
+        if (IsOlap.value_or(false)) {
+            return {};
+        }
+        AFL_ENSURE(Partitioning);
+        THashSet<ui64> resolvedShards;
+        resolvedShards.reserve(Partitioning->Size());
+        for (const auto& partition : Partitioning->GetTablePartitioning()) {
+            resolvedShards.insert(partition.ShardId);
+        }
+        TVector<ui64> deletedShards;
+        for (const auto& [shardId, _] : ShardsInfo.GetShards()) {
+            if (!resolvedShards.contains(shardId)) {
+                deletedShards.push_back(shardId);
             }
+        }
+        return deletedShards;
+    }
+
+    // Re-route the pending batches of shards removed by a split/merge to the new
+    // shards. Only the removed shards are affected: the batches are re-partitioned
+    // through the (new) payload serializers, which map them to the new shards that
+    // cover exactly the removed shards' key ranges. Surviving shards keep their
+    // in-flight batches untouched. Resharding is supported only for inconsistent
+    // writes, so covering empty batches don't exist here.
+    void ReRouteShardsData(TVector<ui64>&& deletedShards) {
+        AFL_ENSURE(Settings.Inconsistent);
+        THashSet<TWriteToken> affectedTokens;
+        for (const ui64 shardId : deletedShards) {
+            auto batches = ShardsInfo.ExtractShard(shardId);
+            for (auto& batch : batches) {
+                AFL_ENSURE(batch.Data);
+                WriteInfos.at(batch.Token).Serializer->AddBatch(std::move(batch.Data));
+                affectedTokens.insert(batch.Token);
+            }
+        }
+        // Push the re-partitioned batches into ShardsInfo under the new shard ids
+        // so the actor's next FlushToShards() delivers them without touching the
+        // in-flight batches of the surviving shards. The controller may already be
+        // closed (the sink finished producing before the split was observed), so
+        // temporarily re-open it for the pushes, then close it again right after.
+        const auto wasClosed = ShardsInfo.Reopen();
+        for (const auto token : affectedTokens) {
+            FlushSerializer(token);
+        }
+        if (wasClosed) {
+            ShardsInfo.Close();
         }
     }
 

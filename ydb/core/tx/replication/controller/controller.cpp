@@ -90,6 +90,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
+        HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
         HFunc(TEvPrivate::TEvRequestDropStream, Handle);
@@ -177,6 +178,7 @@ void TController::Reset() {
     Workers.clear();
     WorkersWithHeartbeat.clear();
     WorkersByHeartbeat.clear();
+    CompleteWorkerSets.clear();
 }
 
 void TController::Handle(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
@@ -574,30 +576,6 @@ void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorker
     target->WorkerStatusChanged(id.WorkerId(), status);
 }
 
-void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_TRACE_CTX(ctx, "Handle",
-        {"ev", ev->Get()->ToString()});
-
-    auto& record = ev->Get()->Record;
-    const auto id = TWorkerId::Parse(record.GetWorker());
-    auto* cmd = record.MutableCommand();
-
-    if (!IsValidWorker(id)) {
-        return;
-    }
-
-    auto* worker = GetOrCreateWorker(id, cmd);
-    if (!worker->HasCommand()) {
-        worker->SetCommand(cmd);
-    }
-
-    if (!worker->HasSession()) {
-        BootQueue.insert(id);
-    }
-
-    ScheduleProcessQueues();
-}
-
 void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
@@ -836,23 +814,7 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
         {"workerId", id});
 
     Y_ABORT_UNLESS(RemoveQueue.contains(id));
-
-    RemoveQueue.erase(id);
-    Workers.erase(id);
-    TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
-
-    auto replication = Find(id.ReplicationId());
-    if (!replication) {
-        return;
-    }
-
-    auto* target = replication->FindTarget(id.TargetId());
-    if (!target) {
-        return;
-    }
-
-    target->RemoveWorker(id.WorkerId());
-    target->Progress(ctx);
+    RunTxRemoveWorker(id, ctx);
 }
 
 bool TController::MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx) {

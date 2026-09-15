@@ -5,6 +5,8 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
@@ -128,6 +130,7 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
 
 void TPartitionActor::CleanupResources(const TActorContext& ctx)
 {
+    UnregisterFrontendVolume(ctx);
     if (LoadActorAdapter) {
         ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
         LoadActorAdapter = {};
@@ -195,6 +198,24 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     } else {
         failUpdateRequests();
     }
+}
+
+void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
+{
+    FrontendRegistrationClosed = true;
+    if (FrontendRegistrationId.empty()) {
+        return;
+    }
+    if (auto& frontend = GetNbsService()->Frontend; frontend) {
+        frontend->UnregisterVolume(FrontendRegistrationId);
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Frontend unregister requested: registrationId=%s",
+            LogTitle.GetWithTime().c_str(),
+            FrontendRegistrationId.c_str());
+    }
+    FrontendRegistrationId.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -314,6 +335,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
     Y_ABORT_UNLESS(nbsService->Timer);
 
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+    auto arenaAllocator = CreateArenaAllocator();
     directBlockGroups.reserve(DirectBlockGroupsCount);
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
     chaosInjectorControls.reserve(DirectBlockGroupsCount);
@@ -343,6 +365,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        // Temporarily preserving original behavior
+        TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
@@ -361,6 +385,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         transport = std::move(chaosInjector);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
+            arenaAllocator,
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],
@@ -369,6 +394,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            std::move(hostHealths),
             conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
@@ -514,6 +540,29 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
+    if (auto& frontend = GetNbsService()->Frontend;
+        frontend && !FrontendRegistrationClosed)
+    {
+        auto registration = frontend->RegisterVolume(VolumeConfig);
+        Y_ABORT_UNLESS(
+            !HasError(registration),
+            "%s Could not publish frontend metadata: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(registration.GetError()).c_str());
+
+        FrontendRegistrationId = registration.ExtractResult();
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Frontend metadata published: registrationId=%s "
+            "blockSize=%u blocksCount=%llu",
+            LogTitle.GetWithTime().c_str(),
+            FrontendRegistrationId.c_str(),
+            VolumeConfig.GetBlockSize(),
+            static_cast<unsigned long long>(
+                VolumeConfig.GetPartitions(0).GetBlockCount()));
+    }
+
     {
         auto service = GetNbsService();
 
@@ -547,6 +596,8 @@ void TPartitionActor::HandleFastPathServiceShutdown(
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ev);
+
+    UnregisterFrontendVolume(ctx);
 
     if (!FastPathService) {
         LOG_INFO(
@@ -738,29 +789,25 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         msg->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        // The config is already applied and the partition cannot be
-        // reconfigured while it serves IO. Schemeshard aborts on any status
-        // other than OK or ERROR_UPDATE_IN_PROGRESS, so answer a repeated
-        // delivery of the applied config idempotently and report a newer one
-        // as not applied yet.
+        // The config is already applied. SchemeShard aborts on any status
+        // other than OK or ERROR_UPDATE_IN_PROGRESS. Answer a repeated
+        // delivery of the applied config and a newer alter (resize) with OK.
+        // Capacity is not grown yet: do not persist or reallocate, so IO
+        // bounds stay at the original size until grow is implemented.
         const ui64 appliedVersion = VolumeConfig.GetVersion();
         const ui64 requestedVersion =
             msg->Record.GetVolumeConfig().GetVersion();
-        const auto status = requestedVersion <= appliedVersion
-                                ? NKikimrBlockStore::OK
-                                : NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS;
 
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Already has ddisk connections, applied version %lu, "
-            "requested version %lu, status %s",
+            "requested version %lu, status OK",
             LogTitle.GetWithTime().c_str(),
             appliedVersion,
-            requestedVersion,
-            NKikimrBlockStore::EStatus_Name(status).c_str());
+            requestedVersion);
 
-        ReplyUpdateVolumeConfig(ctx, ev, status);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 

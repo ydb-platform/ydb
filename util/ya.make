@@ -349,9 +349,9 @@ IF (OS_WINDOWS)
 ELSEIF (OS_CYGWIN OR OS_IOS)
     # no asm context switching on cygwin or iOS
 ELSE()
-    IF (ARCH_X86_64 OR ARCH_I386)
+    IF (ARCH_X86_64)
         SRCS(
-            system/context_x86.asm
+            system/context_x86.S
         )
     ENDIF()
     IF (ARCH_AARCH64 OR ARCH_ARM64)

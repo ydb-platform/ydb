@@ -766,7 +766,8 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         constexpr ui64 N = 16;
         for (ui64 i = 0; i < N; ++i) {
-            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echoId, collectorId, new TEvTest(i)));
+            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+                echoId, collectorId, new TEvTest(i), IEventHandle::FlagTrackDelivery, i));
         }
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= N; },
             "actor-system replies received over v2 fallback path");
@@ -816,13 +817,13 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         const TActorId echo1 = cluster->RegisterActor(new TEchoActor, 1);
         const TActorId echo2 = cluster->RegisterActor(new TEchoActor, 2);
 
-        // establish a v2 session in each direction
+        // Retry definite nondelivery if an initial handshake fails.
         auto* c1 = new TResponseCollectorActor;
         auto* c2 = new TResponseCollectorActor;
         const TActorId c1Id = cluster->RegisterActor(c1, 1);
         const TActorId c2Id = cluster->RegisterActor(c2, 2);
-        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echo2, c1Id, new TEvTest(0)));
-        cluster->GetNode(2)->GetActorSystem()->Send(new IEventHandle(echo1, c2Id, new TEvTest(0)));
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echo2, c1Id, new TEvTest(0), IEventHandle::FlagTrackDelivery, 0));
+        cluster->GetNode(2)->GetActorSystem()->Send(new IEventHandle(echo1, c2Id, new TEvTest(0), IEventHandle::FlagTrackDelivery, 0));
         WaitFor(TDuration::Seconds(20), [&] { return c1->GetCount() >= 1 && c2->GetCount() >= 1; },
             "v2 sessions established both ways");
         AssertV2InUse(*cluster, 1, 2);
@@ -870,13 +871,15 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         // trigger the connection and wait until it is up
         auto* collector = new TResponseCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 1);
-        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echoId, collectorId, new TEvTest(0)));
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+            echoId, collectorId, new TEvTest(0), IEventHandle::FlagTrackDelivery, 0));
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1 && monitor->Connects() >= 1; },
             "v2 session established and observed by monitor");
 
+        const size_t disconnectsBeforeStop = monitor->Disconnects();
         cluster->StopNode(2);
 
-        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() >= 1; },
+        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() > disconnectsBeforeStop; },
             "local side observes disconnect after peer stop");
     }
 
@@ -1044,6 +1047,44 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
     ui64 SessionHtmlCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
         const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
         return FromString<ui64>(ExtractPattern(cluster, me, peer, TString(start), "<"));
+    }
+
+    Y_UNIT_TEST(ReadBufferShrinksAfterBulkTraffic) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Enable = true;
+            settings.V2.ChecksumEvents = true;
+            settings.EnableExternalDataChannel = false;
+            settings.V2.EnableProvidedBuffers = false;
+            settings.V2.MaxReadBufferSize = 64 * 1024;
+        };
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::EMPTY,
+            {}, TDuration::Seconds(10), TNode::DefaultInflight(), customizer);
+        UNIT_ASSERT(GrabDirectSession(cluster, 1, 2));
+        auto* collector = new TPayloadCollectorActor;
+        const TActorId recipient = cluster.RegisterActor(collector, 2);
+        const TActorId sender(1, 0, 0xBEEF, 0);
+        const TString payload = MakeLoadPayload(1, 1024 * 1024);
+        cluster.GetNode(1)->GetActorSystem()->Send(
+            new IEventHandle(recipient, sender, new TEvTest(0, payload)));
+        WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == 1; }, "bulk event received");
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), payload);
+        UNIT_ASSERT_GT(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+
+        // Wait for each event to arrive before sending the next one so these are
+        // separate short reads, irrespective of TCP's packet coalescing.
+        for (size_t i = 1; i <= 32; ++i) {
+            cluster.GetNode(1)->GetActorSystem()->Send(
+                new IEventHandle(recipient, sender, new TEvTest(i, "small")));
+            WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == i + 1; },
+                "small event received");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+        UNIT_ASSERT_LE(SessionHtmlCounter(cluster, 2, 1, "ReadBuffer size"), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), "small");
     }
 
     Y_UNIT_TEST(XdcPayloadRoundTrip) {

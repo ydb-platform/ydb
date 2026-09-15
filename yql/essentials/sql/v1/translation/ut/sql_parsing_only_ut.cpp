@@ -972,6 +972,40 @@ Y_UNIT_TEST(JoinStreamLookupStrategyHint) {
     }
 }
 
+Y_UNIT_TEST(UnusedHintProducesWarning) {
+    NYql::TAstParseResult res = SqlToYql(
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:50: Warning: Hint merge will not be used, code: 4534\n");
+}
+
+Y_UNIT_TEST(UnusedHintErrorWithoutFlag) {
+    NYql::TAstParseResult res = SqlToYql(
+        "PRAGMA Warning(\"error\", \"*\"); "
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:80: Error: Hint merge will not be used, code: 4534\n");
+}
+
+Y_UNIT_TEST(UnusedHintErrorWithFlag) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Flags.emplace("RespectWarnPolicyForUnusedSqlHints");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(
+        "PRAGMA Warning(\"error\", \"*\"); "
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);",
+        settings);
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:80: Error: Hint merge will not be used, code: 4534\n");
+}
+
 Y_UNIT_TEST(JoinConflictingStrategyHint) {
     {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");

@@ -36,6 +36,7 @@ THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> TParentDomainLink::MakeSyncMsg
         .TenantSysViewProcessor = ui64(rootSubdomain->GetTenantSysViewProcessorID()),
         .TenantStatisticsAggregator = ui64(rootSubdomain->GetTenantStatisticsAggregatorID()),
         .TenantGraphShard = ui64(rootSubdomain->GetTenantGraphShardID()),
+        .TenantWasmCompileController = ui64(rootSubdomain->GetTenantWasmCompileControllerID()),
         .RootACL = rootPath->ACL
     });
     return THolder<TEvSchemeShard::TEvSyncTenantSchemeShard>(ptr);
@@ -119,6 +120,7 @@ void TSubDomainsLinks::TLink::Out(IOutputStream& stream) const {
            << ", TenantSysViewProcessor: " << TenantSysViewProcessor
            << ", TenantStatisticsAggregator: " << TenantStatisticsAggregator
            << ", TenantGraphShard: " << TenantGraphShard
+           << ", TenantWasmCompileController: " << TenantWasmCompileController
            << ", TenantRootACL: " << TenantRootACL
            << "}";
 }
@@ -137,6 +139,8 @@ TSubDomainsLinks::TLink::TLink(const NKikimrScheme::TEvSyncTenantSchemeShard &re
         TTabletId(record.GetTenantStatisticsAggregator()) : InvalidTabletId)
     , TenantGraphShard(record.HasTenantGraphShard() ?
         TTabletId(record.GetTenantGraphShard()) : InvalidTabletId)
+    , TenantWasmCompileController(record.HasTenantWasmCompileController() ?
+        TTabletId(record.GetTenantWasmCompileController()) : InvalidTabletId)
     , TenantRootACL(record.GetTenantRootACL())
 {}
 

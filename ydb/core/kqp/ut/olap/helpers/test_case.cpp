@@ -1,4 +1,4 @@
-#include "aggregation.h"
+#include "test_case.h"
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -14,7 +14,7 @@ bool CheckOperatorPresentInAst(const std::string_view ast, const std::string_vie
         });
 }
 
-void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
+void TestOlapTableBase(const std::vector<TOlapTestCase>& cases) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("SIMPLE");
     TKikimrRunner kikimr(settings);
 
@@ -46,7 +46,7 @@ void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases) {
     }
 }
 
-void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
+void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases) {
     TPortManager tp;
     ui16 mbusport = tp.GetPort(2134);
     auto settings = Tests::TServerSettings(mbusport)
@@ -69,7 +69,7 @@ void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases) {
         TLocalHelper(*server).SendDataViaActorSystem("/Root/olapStore/olapTable", 0, 1000000 + i * 1000000, iterationPackSize);
     }
 
-    TAggregationTestCase currentTest;
+    TOlapTestCase currentTest;
     auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
             case NKqp::TKqpComputeEvents::EvScanData:
@@ -107,7 +107,7 @@ void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable) {
     lHelper.SendDataViaActorSystem(testTable, batch);
 }
 
-void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bool genericQuery /*= false*/) {
+void TestTableWithNulls(const std::vector<TOlapTestCase>& cases, const bool genericQuery /*= false*/) {
     auto settings = TKikimrSettings()
         .SetWithSampleTables(false);
     TKikimrRunner kikimr(settings);
@@ -137,9 +137,9 @@ void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bo
     }
 }
 
-void TestAggregations(const std::vector<TAggregationTestCase>& cases) {
-    TestAggregationsBase(cases);
-    TestAggregationsInternal(cases);
+void TestOlapTable(const std::vector<TOlapTestCase>& cases) {
+    TestOlapTableBase(cases);
+    TestOlapTableInternal(cases);
 }
 
 }

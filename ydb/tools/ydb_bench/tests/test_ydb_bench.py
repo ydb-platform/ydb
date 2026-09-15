@@ -2842,7 +2842,7 @@ const profileByKey=()=>null;
         summary_finish = web._JS.index("function localElapsed", summary_start)
         context_start = web._JS.index("function localComparisonContext")
         context_finish = web._JS.index("function localComparisonBuild", context_start)
-        mount_start = web._JS.index("function mountLocalYdbComparison(container")
+        mount_start = web._JS.index("function localComparisonSections(item)")
         mount_finish = web._JS.index("const localPhaseLabels", mount_start)
         script = (
             """
@@ -2866,6 +2866,7 @@ const profileByKey=()=>null;
             const localResultSchema=()=>({schema_id:'test',throughput_unit:'items/s'});
             const localDisplayedMetrics=()=>[];
             const localComparisonConfig=()=>({});
+            const configurationLabel=value=>value;
             const localComparisonBuild=()=>({});
             const localComparisonSemantic=()=>({same:true});
             const localMetricLabel=()=>'';
@@ -2913,8 +2914,60 @@ const profileByKey=()=>null;
         self.assertIn("data-comparison-profile", result["comparison"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the comparison UI test")
+    def test_comparison_configuration_sections_and_missing_values(self):
+        script = web._JS[
+            web._JS.index("function localComparisonSections(item)") : web._JS.index(
+                "function mountLocalYdbComparison(container"
+            )
+        ]
+        script += r"""
+const assert=require('assert');
+const esc=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
+const configurationLabel=value=>value;
+const localComparisonContext=()=>({}),localComparisonBuild=()=>({});
+const localComparisonConfig=item=>item.parameters;
+function localComparisonStable(value){
+  return Array.isArray(value)?value.map(localComparisonStable):value&&typeof value==='object'?
+    Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,localComparisonStable(v)])):value;
+}
+const base={parameters:{distributed:{template:{id:'old-id',revision:1,nodes:[
+  {name:'node-1',role:'dynamic',host_id:'host-a',affinity:{mode:'none'}}],tenants:[{path:'/Root/db'}]},
+  cli_nodes:{'cli-1':{client:{threads:4},load:{allow_errors:false,values:[4]}}},search_cli:null},
+  actor_system:{static_nodes:{cpu_count:8},tenants:{'/Root/db':{dynamic_nodes:{cpu_count:4}}}},measurement:{duration:30}}};
+const candidate=JSON.parse(JSON.stringify(base));
+candidate.parameters.distributed.template.id='new-id';candidate.parameters.distributed.template.revision=2;
+assert.equal(localComparisonConfiguration([base,candidate],base,false).differenceCount,0);
+candidate.parameters.actor_system.tenants['/Root/db'].dynamic_nodes.cpu_count=8;
+candidate.parameters.distributed.cli_nodes['cli-1'].client.threads=16;
+candidate.parameters.distributed.cli_nodes['cli-2']={client:{threads:2}};
+candidate.parameters.distributed.template.nodes.push({name:'<node-2>',role:'cli',host_id:'host-b'});
+const diff=localComparisonConfiguration([base,candidate],base,false);
+assert.equal(diff.differenceCount,5);
+for(const text of ['Tenant · /Root/db','dynamic_nodes / cpu_count','CLI · cli-1','client / threads',
+  'CLI · cli-2','Placement · &lt;node-2>','Not applicable (object absent)'])assert(diff.rows.includes(text),text);
+assert(!diff.rows.includes('Storage'));assert(!diff.rows.includes('[object Object]'));
+assert(!diff.rows.includes('{"'));assert(!diff.rows.includes('<node-2>'));
+assert(localComparisonConfiguration([base,candidate],base,true).rows.includes('Storage'));
+const reversed=localComparisonConfiguration([candidate,base],candidate,false);
+assert.equal(reversed.differenceCount,diff.differenceCount);
+assert(reversed.rows.includes('class=comparison-config-changed><span title="Not applicable (object absent)"'));
+candidate.parameters.distributed.template.nodes.reverse();
+assert.equal(localComparisonConfiguration([base,candidate],base,false).differenceCount,diff.differenceCount);
+const missing={parameters:{flag:false}},unset={parameters:{}};
+assert(localComparisonConfiguration([missing,unset],missing,false).rows.includes('Not set'));
+assert.equal(localComparisonConfiguration([{parameters:{flag:null}},missing],missing,false).differenceCount,1);
+assert.equal(localComparisonConfiguration([{parameters:{flag:'false'}},missing],missing,false).differenceCount,1);
+const ordered={parameters:{nested:{b:2,a:1}}},other={parameters:{nested:{a:1,b:2}}};
+assert.equal(localComparisonConfiguration([ordered,other],ordered,false).differenceCount,0);
+const legacy=JSON.parse(JSON.stringify(base));delete legacy.parameters.distributed.cli_nodes;
+legacy.parameters.client={threads:7};
+assert(localComparisonConfiguration([legacy],legacy,true).rows.includes('client / threads'));
+"""
+        subprocess.run([shutil.which("node"), "-e", script], check=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the comparison UI test")
     def test_comparison_profile_selection_and_slo(self):
-        start = web._JS.index("function mountLocalYdbComparison(container")
+        start = web._JS.index("function localComparisonSections(item)")
         finish = web._JS.index("const localPhaseLabels", start)
         script = (
             """
@@ -2927,6 +2980,7 @@ const profileByKey=()=>null;
         const localPreferredSlo=(schema,objective)=>[objective.percentile,objective.percentile+'_ms'];
         const localSearchAxisLabel=()=> 'YDB CLI threads';
         const localComparisonConfig=x=>({threads:x.parameters.client.threads});
+        const configurationLabel=value=>value;
         const localComparisonContext=()=>({}),localComparisonBuild=()=>({});
         const localComparisonStable=x=>x;
         const localComparisonDelta=(value,base)=>'DELTA:'+((value/base-1)*100).toFixed(1);
@@ -8324,18 +8378,19 @@ class WebTest(unittest.TestCase):
         let pending=null,calls=0,connected=true;
         global.setTimeout=callback=>{pending=callback;return 1};
         global.clearTimeout=()=>{pending=null};
-        const fields=[{value:''},{value:''}],reset={hidden:false};
+        const fields=[{value:''},{value:''},{type:'checkbox',checked:false}],reset={style:{}};
         bindAutomaticFilters(fields,reset,()=>calls++,()=>connected);
-        assert.equal(reset.hidden,true);
+        assert.equal(reset.style.visibility,'hidden');assert.equal(reset.disabled,true);
         fields[0].value='   ';fields[0].oninput();
-        assert.equal(reset.hidden,true);
+        assert.equal(reset.style.visibility,'hidden');
         fields[0].value='main';fields[0].oninput();
-        assert.equal(reset.hidden,false);assert.equal(calls,0);
+        assert.equal(reset.style.visibility,'visible');assert.equal(reset.disabled,false);assert.equal(calls,0);
         pending();assert.equal(calls,1);
         fields[1].value='2026-09-11';fields[1].onchange();
         assert.equal(calls,2);assert.equal(pending,null);
-        reset.onclick();assert.deepEqual(fields.map(f=>f.value),['','']);
-        assert.equal(reset.hidden,true);assert.equal(calls,3);
+        fields[2].checked=true;reset.onclick();assert.deepEqual(fields.slice(0,2).map(f=>f.value),['','']);
+        assert.equal(fields[2].checked,false);
+        assert.equal(reset.style.visibility,'hidden');assert.equal(calls,3);
         fields[0].value='x';fields[0].oninput();connected=false;
         pending();assert.equal(calls,3);
         """
@@ -8882,7 +8937,7 @@ const renderTopology=()=>{rendered='topology'};
                 self.assertIn(b"reference===0", script)
                 self.assertIn(b"value===null", script)
                 self.assertIn(b"Load values", script)
-                self.assertIn(b"values.flatMap(Object.keys)", script)
+                self.assertIn(b"function localComparisonConfiguration", script)
                 self.assertIn(b"item.benchmark!=='local-ydb'", script)
                 self.assertIn(b"data-apply-profiles", script)
                 self.assertIn(b"data-comparison-cpu", script)

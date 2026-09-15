@@ -342,6 +342,8 @@ public:
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    // drops everything spilled and loading, the blobs stay in the storage; must be called under FlowControlMutex
+    void DiscardSpilled();
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
     // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a

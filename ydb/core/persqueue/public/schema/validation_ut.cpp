@@ -818,53 +818,6 @@ Y_UNIT_TEST(AddConsumerServiceTypeAndCodecs) {
     });
 }
 
-Y_UNIT_TEST(AddConsumerDeadLetterPolicyValidation) {
-    NActors::TTestBasicRuntime runtime(1, false);
-    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
-    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
-    auto& pq = runtime.GetAppData().PQConfig;
-    pq.SetTopicsAreFirstClassCitizen(true);
-    pq.MutableDefaultClientServiceType()->SetName("data-streams");
-    pq.MutableDefaultClientServiceType()->SetMaxReadRulesCountPerTopic(10);
-    pq.MutableDefaultClientServiceType()->ClearPasswordHashes();
-    pq.ClearClientServiceType();
-
-    RunInActor(runtime, [&] {
-        auto types = GetSupportedClientServiceTypes();
-        NKikimrPQ::TPQTabletConfig config;
-
-        auto expectBad = [&](auto mutate, const TString& needle) {
-            Ydb::Topic::Consumer consumer;
-            consumer.set_name("shared_c");
-            mutate(*consumer.mutable_shared_consumer_type());
-            auto r = AddConsumer(&config, consumer, types, true, nullptr);
-            UNIT_ASSERT(!r);
-            UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), needle);
-        };
-
-        expectBad([](auto& type) {
-            type.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(5);
-        }, "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'");
-
-        expectBad([](auto& type) {
-            type.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue("dlq");
-        }, "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
-
-        expectBad([](auto& type) {
-            type.mutable_dead_letter_policy()->mutable_delete_action();
-        }, "delete_action is not supported for shared consumers with dead letter policy 'none'");
-
-        {
-            Ydb::Topic::Consumer consumer;
-            consumer.set_name("shared_ok");
-            auto* type = consumer.mutable_shared_consumer_type();
-            type->mutable_dead_letter_policy()->set_enabled(true);
-            type->mutable_dead_letter_policy()->mutable_delete_action();
-            UNIT_ASSERT(AddConsumer(&config, consumer, types, true, nullptr));
-        }
-    });
-}
-
 Y_UNIT_TEST(ProcessTopicAttributesInvalidValues) {
     NActors::TTestBasicRuntime runtime(1, false);
     runtime.Initialize(NKikimr::TAppPrepare().Unwrap());

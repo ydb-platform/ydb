@@ -89,13 +89,6 @@ TResult AddConsumer(
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 );
 
-TResult ValidateSharedConsumerDeadLetterPolicy(
-    bool enabled,
-    bool hasCondition,
-    bool hasMoveAction,
-    bool hasDeleteAction
-);
-
 TResult ProcessConsumerType(
     NKikimrPQ::TPQTabletConfig::TConsumer* consumer,
     const auto& consumerConfig
@@ -108,14 +101,6 @@ TResult ProcessConsumerType(
 
         const auto& type = consumerConfig.shared_consumer_type();
         const auto& deadLetterPolicy = type.dead_letter_policy();
-
-        if (auto r = ValidateSharedConsumerDeadLetterPolicy(
-                deadLetterPolicy.enabled(),
-                deadLetterPolicy.has_condition(),
-                deadLetterPolicy.has_move_action(),
-                deadLetterPolicy.has_delete_action()); !r) {
-            return r;
-        }
 
         consumer->SetKeepMessageOrder(type.keep_messages_order());
 

@@ -251,34 +251,6 @@ Y_UNIT_TEST(AddSharedReadRuleAndRemove) {
     }
 }
 
-Y_UNIT_TEST(SharedConsumerDeadLetterPolicyRejected) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    runtime.GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
-
-    auto expectBad = [&](const TString& path, auto mutate, const TString& needle) {
-        auto request = MakeCreateTopicRequest(path);
-        auto rule = MakeSharedReadRule("shared_c1");
-        mutate(*rule.mutable_shared_consumer_type());
-        *request.mutable_settings()->add_read_rules() = rule;
-        auto result = DoActorRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
-            runtime, request, CreateCreateTopicActor, path);
-        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, needle);
-    };
-
-    expectBad("/Root/topic_dlq_none_attempts", [](auto& type) {
-        type.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(5);
-    }, "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'");
-
-    expectBad("/Root/topic_dlq_none_queue", [](auto& type) {
-        type.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue("dlq");
-    }, "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'");
-
-    expectBad("/Root/topic_dlq_none_delete", [](auto& type) {
-        type.mutable_dead_letter_policy()->mutable_delete_action();
-    }, "delete_action is not supported for shared consumers with dead letter policy 'none'");
-}
-
 Y_UNIT_TEST(SharedConsumersDisabledRejected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

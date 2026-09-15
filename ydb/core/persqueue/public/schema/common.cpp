@@ -346,30 +346,6 @@ TClientServiceTypes GetSupportedClientServiceTypes() {
     return serviceTypes;
 }
 
-TResult ValidateSharedConsumerDeadLetterPolicy(
-    bool enabled,
-    bool hasCondition,
-    bool hasMoveAction,
-    bool hasDeleteAction
-) {
-    if (enabled) {
-        return {};
-    }
-    if (hasCondition) {
-        return {Ydb::StatusIds::BAD_REQUEST,
-            "max_processing_attempts is not supported for shared consumers with dead letter policy 'none'"};
-    }
-    if (hasMoveAction) {
-        return {Ydb::StatusIds::BAD_REQUEST,
-            "dead_letter_queue is not supported for shared consumers with dead letter policy 'none'"};
-    }
-    if (hasDeleteAction) {
-        return {Ydb::StatusIds::BAD_REQUEST,
-            "delete_action is not supported for shared consumers with dead letter policy 'none'"};
-    }
-    return {};
-}
-
 TResult AddConsumer(
     NKikimrPQ::TPQTabletConfig* config,
     const Ydb::Topic::Consumer& consumerConfig,

@@ -336,12 +336,18 @@ public:
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
             {"sender", ev->Sender},
+            {"sourceType", ev->Get()->SourceType},
             {"traceId", TraceId()});
 
-        if (Request.LocksOp == ELocksOp::Rollback) {
-            // Cleanup must complete even if the buffer has already finished.
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
-                NYql::TIssue("Cannot deliver rollback to the transaction buffer actor"));
+        switch (ev->Get()->SourceType) {
+            case TEvKqpBuffer::TEvCommit::EventType:
+            case TEvKqpBuffer::TEvRollback::EventType:
+            case TEvKqpBuffer::TEvFlush::EventType:
+                // No result will arrive from the missing buffer. Cleanup has no
+                // deadline, and write finalization may have ignored CancelAfter.
+                ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                    NYql::TIssue("Cannot deliver finalization request to the transaction buffer actor"));
+                break;
         }
     }
 

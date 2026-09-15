@@ -1707,30 +1707,29 @@ private:
         return MakeKqpProxyID(*nodeId);
     }
 
-    void RemoveSession(const TString& sessionId, const TActorId& workerId) {
-        if (!sessionId.empty()) {
-            auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
-            KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
-            if (ShutdownRequested) {
-                ShutdownState->Update(LocalSessions->size());
+    void RemoveSession(TString sessionId, const TActorId& workerId) {
+        if (sessionId.empty()) {
+            const auto* sessionInfo = LocalSessions->FindPtr(workerId);
+            if (!sessionInfo) {
+                return;
             }
-
-            // No more session with kqp proxy on this node
-            if (nodeId) {
-                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
-            }
-
-            if (rpcActor) {
-                Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
-            }
-
-            return;
+            // Keep the id alive after Erase removes the registry entry.
+            sessionId = sessionInfo->SessionId;
         }
 
-        LocalSessions->Erase(workerId);
+        auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
         KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
         if (ShutdownRequested) {
             ShutdownState->Update(LocalSessions->size());
+        }
+
+        // No remaining sessions are attached to an RPC actor on this node.
+        if (nodeId) {
+            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+        }
+
+        if (rpcActor) {
+            Send(rpcActor, CreateEvCloseSessionResponse(sessionId));
         }
     }
 

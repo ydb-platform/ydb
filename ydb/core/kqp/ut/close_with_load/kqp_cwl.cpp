@@ -343,6 +343,162 @@ Y_UNIT_TEST_SUITE(KqpService) {
         UNIT_ASSERT_C(afterUndelivered.IsSuccess(), afterUndelivered.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(UndeliveredCloseNotifiesAttachedSessions) {
+        TStringStream logs;
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetNodeCount(2).SetLogStream(&logs);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        const auto proxy = MakeKqpProxyID(runtime->GetNodeId(0));
+        const auto sender = runtime->AllocateEdgeActor();
+
+        TVector<TString> sessions;
+        TVector<TActorId> rpcActors;
+        for (ui32 i = 0; i < 2; ++i) {
+            auto create = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+            create->Record.MutableRequest()->SetDatabase("/Root");
+            runtime->Send(new IEventHandle(proxy, sender, create.Release()));
+            auto created = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(created->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            sessions.push_back(created->Get()->Record.GetResponse().GetSessionId());
+
+            const auto rpc = runtime->AllocateEdgeActor(1);
+            rpcActors.push_back(rpc);
+            auto ping = MakeHolder<TEvKqp::TEvPingSessionRequest>();
+            ping->Record.MutableRequest()->SetSessionId(sessions.back());
+            ActorIdToProto(rpc, ping->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+            runtime->Send(new IEventHandle(proxy, rpc, ping.Release()), 1);
+            auto attached = runtime->GrabEdgeEventRethrow<TEvKqp::TEvPingSessionResponse>(rpc);
+            UNIT_ASSERT_VALUES_EQUAL(attached->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+        }
+
+        TActorId proxyActor;
+        TActorId worker;
+        ui32 unsubscribes = 0;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqp::TEvCloseSessionRequest::EventType
+                    && ev->Sender != sender) {
+                proxyActor = ev->Sender;
+                worker = ev->GetRecipientRewrite();
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvents::TEvUnsubscribe::EventType
+                    && ev->Sender == proxyActor) {
+                ++unsubscribes;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        for (ui32 i = 0; i < sessions.size(); ++i) {
+            worker = {};
+            auto close = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
+            close->Record.MutableRequest()->SetSessionId(sessions[i]);
+            runtime->Send(new IEventHandle(proxy, sender, close.Release()));
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&](IEventHandle&) { return bool{worker}; });
+            UNIT_ASSERT(runtime->DispatchEvents(opts, TDuration::Seconds(5)));
+
+            // Exercise removal by worker id, as on an undelivered idle close.
+            runtime->Send(new IEventHandle(proxyActor, worker, new TEvents::TEvUndelivered(
+                TEvKqp::TEvCloseSessionRequest::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
+            auto closed = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCloseSessionResponse>(
+                rpcActors[i], TDuration::Seconds(5));
+            UNIT_ASSERT_C(closed, "Attached RPC did not receive the session close notification");
+            UNIT_ASSERT_VALUES_EQUAL(closed->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(closed->Get()->Record.GetResponse().GetSessionId(), sessions[i]);
+            UNIT_ASSERT(closed->Get()->Record.GetResponse().GetClosed());
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+            // The other attached session still needs the subscription after the first removal.
+            UNIT_ASSERT_VALUES_EQUAL(unsubscribes, i);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableUndeliveredFinalizeAfterCancelReleasesSession, commit) {
+        TStringStream logs;
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetLogStream(&logs);
+        settings.FeatureFlags.SetEnableForceImmediateEffectsExecution(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
+        auto kikimr = TKikimrRunner(settings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        TKqpCounters counters(runtime->GetAppData().Counters);
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto created = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto session = created.GetSession();
+
+        const ui32 finalizeType = commit ? TEvKqpBuffer::TEvCommit::EventType : TEvKqpBuffer::TEvFlush::EventType;
+        THolder<IEventHandle> heldFinalize;
+        TActorId executer;
+        TActorId buffer;
+        bool cancelled = false;
+        bool undelivered = false;
+        bool replied = false;
+        runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == finalizeType && !buffer) {
+                executer = ev->Sender;
+                buffer = ev->GetRecipientRewrite();
+                heldFinalize.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvKqp::TEvAbortExecution::EventType
+                    && ev->GetRecipientRewrite() == executer
+                    && ev->Get<TEvKqp::TEvAbortExecution>()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::CANCELLED) {
+                cancelled = true;
+            }
+            if (ev->GetTypeRewrite() == TEvents::TEvUndelivered::EventType
+                    && ev->GetRecipientRewrite() == executer
+                    && ev->Get<TEvents::TEvUndelivered>()->SourceType == finalizeType) {
+                undelivered = true;
+            }
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executer) {
+                replied = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc); };
+
+        auto txControl = TTxControl::BeginTx(TTxSettings::SerializableRW());
+        if (commit) {
+            txControl.CommitTx();
+        }
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteDataQuery(
+                "UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (100502u, \"undelivered-finalize\");",
+                txControl, TExecDataQuerySettings().CancelAfter(TDuration::Seconds(1))
+                    .OperationTimeout(TDuration::Seconds(30))).GetValueSync();
+        });
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle&) { return bool{heldFinalize}; });
+        UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+        runtime->SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_C(cancelled, "CancelAfter did not reach the finalizing executer");
+        UNIT_ASSERT_C(!replied, "Write finalization must ignore CancelAfter");
+
+        // Inject buffer death before delivery; the runtime must generate Undelivered.
+        runtime->Send(new IEventHandle(buffer, runtime->AllocateEdgeActor(), new TEvKqpBuffer::TEvTerminate));
+        runtime->Send(heldFinalize.Release());
+        runtime->SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_C(undelivered, "Commit/flush was not reported undelivered");
+        const bool repliedToUndelivered = replied;
+        if (!repliedToUndelivered) {
+            // Bound the negative control: release the SDK call even with the old handler.
+            runtime->Send(new IEventHandle(executer, runtime->AllocateEdgeActor(),
+                new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::TIMEOUT, "Test cleanup")));
+        }
+        auto result = runtime->WaitFuture(future);
+        UNIT_ASSERT_C(repliedToUndelivered, "Executer stayed in FinalizeState after undelivered commit/flush and CancelAfter");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+
+        kikimr.RunCall([&] { return session.Close().GetValueSync(); });
+        TDispatchOptions closed;
+        closed.FinalEvents.emplace_back([&](IEventHandle&) { return counters.GetActiveSessionActors()->Val() == 0; });
+        UNIT_ASSERT_C(runtime->DispatchEvents(closed, TDuration::Seconds(10)), logs.Str());
+        auto next = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
+    }
+
     // Delay the completed commit's response until timeout starts cleanup rollback.
     Y_UNIT_TEST(TableCommitTimeoutAfterBufferCompletionReleasesSession) {
         TStringStream logs;

@@ -4353,16 +4353,34 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
     }
 
-    Y_UNIT_TEST(IncrementalRestoreForgetThenDropWithoutRestart) {
+    Y_UNIT_TEST_FLAG(IncrementalRestoreForgetThenDrop, Restart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
         PrepareRestoreWithOneIncremental(runtime, env, txId);
         const ui64 restoreId = txId;
+        if (Restart) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            UNIT_ASSERT_C(response.GetBackupCollectionRestore().GetProgress()
+                == Ydb::Backup::RestoreProgress::PROGRESS_DONE, response.ShortDebugString());
+        }
         TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId);
+        TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot",
+            Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadPersistedRestoreState(runtime, restoreId), -1,
+            "IncrementalRestoreState row not deleted after FORGET");
+
         TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             R"(Name: "MyCollection1")");
-        env.TestWaitNotification(runtime, txId);
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto subscriber = CreateNotificationSubscriber(runtime, TTestTxConfig::SchemeShard);
+        runtime.Send(new IEventHandle(subscriber, sender,
+            new TEvSchemeShard::TEvNotifyTxCompletion(txId)));
+        const auto completion = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT_C(completion, "DROP BACKUP COLLECTION did not complete after incremental RESTORE and FORGET");
+        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Record.GetTxId(), txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"),
             {NLs::PathNotExist});
     }

@@ -94,15 +94,8 @@ private:
 }   // anonymous namespace
 
 void TColumnShard::SetupCutHistory() {
-    using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
     if (CutHistoryCutter) {
-        const auto ctx = NActors::TActivationContext::AsActorContext();
-        if (THistoryCutterWrapper::GetProofSource() == EProofSource::BsRange) {
-            // A GC task starting right after boot makes IsDrained refuse everything, so retry until it lands.
-            CutHistoryCutter->TryNominateAtBoot(ctx);
-        } else {
-            CutHistoryCutter->TryNominate(ctx);
-        }
+        CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
         return;
     }
     auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
@@ -119,9 +112,6 @@ void TColumnShard::SetupCutHistory() {
     CutHistoryCutter = cutter;
     // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
     cutter->OnBootComplete({});
-    if (THistoryCutterWrapper::GetProofSource() == EProofSource::BsRange) {
-        cutter->TryNominateAtBoot(NActors::TActivationContext::AsActorContext());
-    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -129,17 +119,6 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
     if (!CutHistoryCutter->IsSweepInFlight()) {
-        return;
-    }
-
-    using EProofSource = NOlap::NBlobOperations::NBlobStorage::EProofSource;
-    const auto proofSource = CutHistoryCutter->GetRoundProofSource();
-    if (proofSource != EProofSource::Portions && CutHistoryCutter->TryIssueRangeProbe()) {
-        auto probes = CutHistoryCutter->BuildRangeProbes();
-        ctx.Register(NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(
-            SelfId(), TabletID(), std::move(probes), CutHistoryCutter->GetSweepRound()));
-    }
-    if (proofSource == EProofSource::BsRange) {
         return;
     }
 
@@ -215,21 +194,6 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     }
 
     CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
-}
-
-void TColumnShard::Handle(TEvPrivate::TEvCutHistoryRangeProbeDone::TPtr& ev, const TActorContext& ctx) {
-    if (!CutHistoryCutter) {
-        return;
-    }
-    auto* msg = ev->Get();
-
-    THashSet<TEntryKey> disproved;
-    disproved.reserve(msg->Disproved.size());
-    for (const auto& [ch, fromGen] : msg->Disproved) {
-        disproved.insert(TEntryKey{ ch, fromGen });
-    }
-
-    CutHistoryCutter->OnRangeProbeComplete(msg->Round, std::move(disproved), msg->Failures, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvCutHistoryBarrierDone::TPtr& ev, const TActorContext& ctx) {

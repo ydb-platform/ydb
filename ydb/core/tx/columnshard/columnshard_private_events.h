@@ -97,7 +97,6 @@ struct TEvPrivate {
         EvStartCutHistorySweep,
         EvCutHistoryBarrierDone,
         EvCutHistorySweepBatchDone,
-        EvCutHistoryRangeProbeDone,
 
         EvEnd
     };
@@ -546,20 +545,6 @@ struct TEvPrivate {
         TEvCutHistorySweepBatchDone(TVector<std::pair<ui32, ui32>>&& disproved, bool exhausted)
             : Disproved(std::move(disproved))
             , Exhausted(exhausted)
-        {
-        }
-    };
-
-    // Disproved already includes every probe that failed or timed out, so the verdict is safe on its own.
-    struct TEvCutHistoryRangeProbeDone: public TEventLocal<TEvCutHistoryRangeProbeDone, EvCutHistoryRangeProbeDone> {
-        ui64 Round;
-        TVector<std::pair<ui32, ui32>> Disproved;
-        ui64 Failures;
-
-        TEvCutHistoryRangeProbeDone(ui64 round, TVector<std::pair<ui32, ui32>>&& disproved, ui64 failures)
-            : Round(round)
-            , Disproved(std::move(disproved))
-            , Failures(failures)
         {
         }
     };

@@ -52,24 +52,6 @@ enum class ECutState {
     Cut,
 };
 
-// Which evidence proves a candidate range empty; mirrors TColumnShardConfig.ECutHistoryProofSource.
-enum class EProofSource {
-    Portions,
-    BsRange,
-    Compare,
-};
-
-// One BlobStorage range read: "is anything of ours left in [FromGeneration, NextFromGeneration) on Channel".
-struct TRangeProbe {
-    ui32 Channel = 0;
-    ui32 FromGeneration = 0;
-    ui32 NextFromGeneration = 0;
-    ui32 Group = 0;
-};
-
-// Answers with TEvCutHistoryRangeProbeDone; every failure and timeout is reported as disproved.
-NActors::IActor* CreateCutHistoryRangeProbeActor(const TActorId& tabletActorId, ui64 tabletId, TVector<TRangeProbe>&& probes, ui64 round);
-
 // Two-tier engine for CutTabletHistory on the ColumnShard data channels.
 class THistoryCutterWrapper {
 public:
@@ -88,9 +70,6 @@ public:
     void OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds);
 
     bool TryNominate(const TActorContext& ctx);
-
-    // Boot proof: nominate every entry with a successor at once, no cadence and no portion scan.
-    bool TryNominateAtBoot(const TActorContext& ctx);
 
     std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
         static const auto empty = std::make_shared<const TVector<TEntryKey>>();
@@ -117,19 +96,13 @@ public:
 
     static TDuration GetNominateCadence();
     static ui32 GetMaxDrainChecksPerNomination();
-    static EProofSource GetProofSource();
 
     // True while the build only measures: the proof runs to the end but stops short of the barrier.
     static bool IsMeasureOnly();
 
-    // At most this many range reads are outstanding at once; a round nominates at most MaxDrainChecks entries anyway.
-    static constexpr ui32 MaxRangeProbesInFlight = 4;
-
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
         SweepInFlight = true;
-        // Same latch as the real round opener, so tests exercise the production decision path.
-        RoundProofSource = GetProofSource();
         SweepSurvivors = candidates;
         for (const auto& key : SweepSurvivors) {
             CutState[key] = ECutState::Verifying;
@@ -168,25 +141,9 @@ public:
 
     void OnBarrierResult(const TEntryKey& key, bool ok, TInstant now);
 
-    // Omits an entry whose group or successor is unresolvable: the pre-barrier re-check rejects it anyway.
-    TVector<TRangeProbe> BuildRangeProbes() const;
-
     ui64 GetSweepRound() const {
         return SweepRound;
     }
-
-    // True once per sweep, so a re-entrant TEvStartCutHistorySweep cannot issue a second set of probes.
-    bool TryIssueRangeProbe() {
-        return !std::exchange(RangeProbeIssued, true);
-    }
-
-    // The source this round opened with; every decision in the round must use it, not the live knob.
-    EProofSource GetRoundProofSource() const {
-        return RoundProofSource;
-    }
-
-    // Drives the barrier decision in BsRange mode; in Compare mode it only records the verdict for comparison.
-    void OnRangeProbeComplete(ui64 round, THashSet<TEntryKey>&& disproved, ui64 failures, const TActorContext& ctx);
 
     bool IsEnabled() const;
 
@@ -263,15 +220,7 @@ private:
     TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;
     size_t SweepPortionOffset = 0;
 
-    // Compare mode: the two verdicts arrive in either order, so both are held until the round is complete.
-    void CompareVerdicts();
-
     ui64 SweepRound = 0;
-    bool RangeProbeIssued = false;
-    // Latched at round open: a knob flip mid-round would otherwise change how the round decides.
-    EProofSource RoundProofSource = EProofSource::Portions;
-    std::optional<THashSet<TEntryKey>> PortionVerdict;
-    std::optional<THashSet<TEntryKey>> RangeVerdict;
 };
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

@@ -149,105 +149,6 @@ public:
     }
 };
 
-TEvBlobStorage::TEvRangeResult::TResponse MakeResponse(const TLogoBlobID& id, const bool keep = false, const bool doNotKeep = false) {
-    return TEvBlobStorage::TEvRangeResult::TResponse(id, /*buffer=*/TString(), keep, doNotKeep);
-}
-
-// One candidate entry probed against one group, with an edge actor standing in for the BS proxy.
-struct TRangeProbeEnv {
-    static constexpr ui64 TabletId = 5150;
-    static constexpr ui32 DataChannel = 2;
-    static constexpr ui32 OldFromGen = 0;
-    static constexpr ui32 OldGroup = 100;
-    static constexpr ui32 NextFromGen = 5;
-
-    TTestBasicRuntime Runtime;
-    TAppPrepare App;
-    NYDBTest::TControllers::TGuard<TCutHistoryController> Guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
-    TCutterEnv Env;
-    std::optional<TTestableHistoryCutter> CutterHolder;
-    TActorId EdgeTablet;
-    TActorId EdgeBs;
-    TActorId Runner;
-    TEntryKey Key{ DataChannel, OldFromGen };
-    TEvBlobStorage::TEvRange::TPtr RequestHandle;
-
-    TRangeProbeEnv()
-        : Env(MakeCutterEnv(TabletId, NextFromGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { NextFromGen, 200 } }))
-    {
-        Runtime.Initialize(App.Unwrap());
-        // The runtime drops scheduled events by default, and the probe deadline is one.
-        Runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) {
-            return false;
-        });
-        EdgeTablet = Runtime.AllocateEdgeActor();
-        EdgeBs = Runtime.AllocateEdgeActor();
-        Runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), EdgeBs);
-        Runner = Runtime.Register(new TRunnerActor());
-        CutterHolder.emplace(Env.Info, NextFromGen, Env.Bm, Env.Shared, EdgeTablet, TestSignals());
-    }
-
-    TTestableHistoryCutter& Cutter() {
-        return *CutterHolder;
-    }
-
-    void RunInActor(std::function<void(const NActors::TActorContext&)> fn) {
-        Runtime.Send(new IEventHandle(Runner, EdgeTablet, new TEvRunInActor(std::move(fn))));
-        Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-    }
-
-    void Start() {
-        RunInActor([&](const NActors::TActorContext& ctx) {
-            TVector<NOlap::NBlobOperations::NBlobStorage::TRangeProbe> probes{ { DataChannel, OldFromGen, NextFromGen, OldGroup } };
-            ctx.Register(
-                NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(EdgeTablet, TabletId, std::move(probes), /*round=*/0));
-        });
-    }
-
-    const TEvBlobStorage::TEvRange* GrabRequest() {
-        if (!RequestHandle) {
-            RequestHandle = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(EdgeBs, TDuration::Seconds(5));
-        }
-        return RequestHandle ? RequestHandle->Get() : nullptr;
-    }
-
-    void Run(const TVector<TEvBlobStorage::TEvRangeResult::TResponse>& responses, const NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
-        Start();
-        const auto* request = GrabRequest();
-        UNIT_ASSERT(request);
-        auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(status, request->From, request->To, OldGroup);
-        result->Responses.assign(responses.begin(), responses.end());
-        Runtime.Send(new IEventHandle(RequestHandle->Sender, EdgeBs, result.release(), 0, RequestHandle->Cookie));
-    }
-
-    THashSet<TEntryKey> GrabVerdict(ui64& failures) {
-        auto done = Runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvCutHistoryRangeProbeDone>(EdgeTablet, TDuration::Seconds(10));
-        UNIT_ASSERT_C(done, "the probe must always answer, so a missing verdict is a stuck sweep");
-        failures = done->Get()->Failures;
-        THashSet<TEntryKey> disproved;
-        for (const auto& [ch, fromGen] : done->Get()->Disproved) {
-            disproved.insert(TEntryKey{ ch, fromGen });
-        }
-        return disproved;
-    }
-
-    THashSet<TEntryKey> AssertDisproved(const ui64 expectedFailures) {
-        ui64 failures = 0;
-        auto disproved = GrabVerdict(failures);
-        UNIT_ASSERT_VALUES_EQUAL(disproved.size(), 1);
-        UNIT_ASSERT(disproved.contains(Key));
-        UNIT_ASSERT_VALUES_EQUAL(failures, expectedFailures);
-        return disproved;
-    }
-
-    void AssertNotDisproved() {
-        ui64 failures = 0;
-        const auto disproved = GrabVerdict(failures);
-        UNIT_ASSERT_C(disproved.empty(), "the range held nothing of ours in the window");
-        UNIT_ASSERT_VALUES_EQUAL(failures, 0);
-    }
-};
-
 // Stands in for Local: observers see an edge actor's events zero or several times, so a real actor counts them.
 class TCutRequestCounter: public NActors::TActor<TCutRequestCounter> {
 public:
@@ -962,7 +863,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(bm->HasNoBlobsInRange(DataChannel, 0, 5), "the orphaned mark left the delete queue with the task");
     }
 
-    // A live portion in the range blocks nomination; the portion erase from MoveData opens the gate.
+    // A live portion in the range blocks nomination; cleanup's erase opens the gate.
     Y_UNIT_TEST(LivePortionBlocksNomination) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
@@ -994,251 +895,33 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
     }
 
-    // The range probe reports our own live blob in the window, and the bounds address exactly that channel.
-    Y_UNIT_TEST(RangeProbeOurBlobDisproves) {
-        TRangeProbeEnv env;
-        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3)) });
+    // A round blocked only by an in-flight GC task sets no disproval cooldown, so the next round can nominate.
+    Y_UNIT_TEST(GcBlockedRoundDoesNotStartBackoff) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 3232;
+        static constexpr ui32 CurrentGen = 5;
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { 0, 100 }, { CurrentGen, 200 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ 2, 0 };
+        const auto ctx = NActors::TActivationContext::AsActorContext();
 
-        const auto request = env.GrabRequest();
-        // A blob id sorts channel before generation, so a channel-bounded request is an exact window, not a superset.
-        UNIT_ASSERT_VALUES_EQUAL(request->From.Generation(), TRangeProbeEnv::OldFromGen);
-        UNIT_ASSERT_VALUES_EQUAL(request->To.Generation(), TRangeProbeEnv::NextFromGen - 1);
-        UNIT_ASSERT_VALUES_EQUAL(request->From.Channel(), TRangeProbeEnv::DataChannel);
-        UNIT_ASSERT_VALUES_EQUAL(request->To.Channel(), TRangeProbeEnv::DataChannel);
-        UNIT_ASSERT(request->IsIndexOnly);
-        UNIT_ASSERT(!request->MustRestoreFirst);
+        auto storageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto gcCounters =
+            std::make_shared<NOlap::NBlobOperations::TRemoveGCCounters>(NOlap::NBlobOperations::TConsumerCounters("GC", *storageCounters));
+        auto task = bm->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, bm, shared, gcCounters);
+        UNIT_ASSERT_C(task, "first GC round carries the barrier even with empty queues");
+        UNIT_ASSERT_C(!cutter.IsDrained(key), "GC task in flight pins every entry");
 
-        env.AssertDisproved(/*failures=*/0);
-    }
+        cutter.StartSweepForTest({ key });
+        cutter.SetPortionSnapshot({});
+        cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
 
-    // Edge generations: the window includes fromGen and excludes nextFromGen.
-    Y_UNIT_TEST(RangeProbeWindowEdges) {
-        {
-            TRangeProbeEnv env;
-            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen)) });
-            env.AssertDisproved(/*failures=*/0);
-        }
-        {
-            TRangeProbeEnv env;
-            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::NextFromGen - 1)) });
-            env.AssertDisproved(/*failures=*/0);
-        }
-        {
-            TRangeProbeEnv env;
-            env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::NextFromGen)) });
-            env.AssertNotDisproved();
-        }
-    }
-
-    // Blobs of another tablet, or of another channel sharing the group, say nothing about this entry.
-    Y_UNIT_TEST(RangeProbeIgnoresForeignAndOtherChannel) {
-        TRangeProbeEnv env;
-        env.Run({ MakeResponse(MakeBlob(/*foreign*/ 999999, TRangeProbeEnv::DataChannel, 3)),
-            MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, /*otherChannel*/ 1, 3)) });
-        env.AssertNotDisproved();
-    }
-
-    // A blob released by GC or declared DoNotKeep by this tablet cannot pin the window.
-    Y_UNIT_TEST(RangeProbeIgnoresCollectedGarbage) {
-        TRangeProbeEnv env;
-        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3), /*keep=*/false, /*doNotKeep=*/true) });
-        env.AssertNotDisproved();
-    }
-
-    // An error answer is ambiguous, and ambiguity must never authorise an irreversible hard barrier.
-    Y_UNIT_TEST(RangeProbeErrorFailsClosed) {
-        TRangeProbeEnv env;
-        env.Run({}, NKikimrProto::ERROR);
-        env.AssertDisproved(/*failures=*/1);
-    }
-
-    // Silence is ambiguous too: the probe deadline disproves whatever never answered.
-    Y_UNIT_TEST(RangeProbeTimeoutFailsClosed) {
-        TRangeProbeEnv env;
-        env.Start();
-        UNIT_ASSERT(env.GrabRequest());
-        // Simulated sleep, not AdvanceCurrentTime: the probe deadline arrives as a scheduled event.
-        env.Runtime.SimulateSleep(TDuration::Minutes(2));
-        env.AssertDisproved(/*failures=*/1);
-    }
-
-    // A probe queued behind slow ones gets a full deadline of its own instead of their leftover time.
-    Y_UNIT_TEST(RangeProbeQueuedBehindSlowProbesGetsItsOwnDeadline) {
-        TRangeProbeEnv env;
-        static constexpr ui32 Window = 10;
-        const ui32 probesCount = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper::MaxRangeProbesInFlight + 1;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            TVector<NOlap::NBlobOperations::NBlobStorage::TRangeProbe> probes;
-            for (ui32 i = 0; i < probesCount; ++i) {
-                probes.push_back({ TRangeProbeEnv::DataChannel, i * Window, (i + 1) * Window, TRangeProbeEnv::OldGroup });
-            }
-            ctx.Register(NOlap::NBlobOperations::NBlobStorage::CreateCutHistoryRangeProbeActor(
-                env.EdgeTablet, TRangeProbeEnv::TabletId, std::move(probes), /*round=*/0));
-        });
-        auto reply = [&](const TEvBlobStorage::TEvRange::TPtr& request, const TVector<TEvBlobStorage::TEvRangeResult::TResponse>& responses) {
-            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(
-                NKikimrProto::OK, request->Get()->From, request->Get()->To, TRangeProbeEnv::OldGroup);
-            result->Responses.assign(responses.begin(), responses.end());
-            env.Runtime.Send(new IEventHandle(request->Sender, env.EdgeBs, result.release(), 0, request->Cookie));
-        };
-
-        // The probes in flight answer after 40 s, each finding a live blob; only then does the queued probe start.
-        TVector<TEvBlobStorage::TEvRange::TPtr> slow;
-        for (ui32 i = 0; i + 1 < probesCount; ++i) {
-            slow.push_back(env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(env.EdgeBs, TDuration::Seconds(5)));
-            UNIT_ASSERT(slow.back());
-        }
-        env.Runtime.SimulateSleep(TDuration::Seconds(40));
-        for (const auto& request : slow) {
-            reply(request,
-                { MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, request->Get()->From.Generation() + 1)) });
-        }
-        auto queued = env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvRange>(env.EdgeBs, TDuration::Seconds(5));
-        UNIT_ASSERT(queued);
-
-        // It also takes 40 s: 80 s after the batch started, but well inside its own deadline.
-        env.Runtime.SimulateSleep(TDuration::Seconds(40));
-        reply(queued, {});
-        ui64 failures = 0;
-        const auto disproved = env.GrabVerdict(failures);
-        UNIT_ASSERT_VALUES_EQUAL_C(failures, 0, "the queued probe timed out on time the slow probes had used up");
-        UNIT_ASSERT_VALUES_EQUAL(disproved.size(), probesCount - 1);
-        UNIT_ASSERT_C(
-            !disproved.contains(TEntryKey{ TRangeProbeEnv::DataChannel, (probesCount - 1) * Window }), "the empty queued range was disproved");
-    }
-
-    // The verdict feeds the ordinary sweep completion, so a disproved entry gets no barrier and stays uncut.
-    Y_UNIT_TEST(RangeProbeVerdictLeavesEntryUncut) {
-        TRangeProbeEnv env;
-        env.Run({ MakeResponse(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, 3)) });
-        const auto disproved = env.AssertDisproved(/*failures=*/0);
-
-        env.Cutter().StartSweepForTest({ env.Key });
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Cutter().OnBatchComplete(disproved, /*exhausted=*/true, ctx);
-        });
-
-        UNIT_ASSERT(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None);
-        UNIT_ASSERT_C(!env.Runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(env.EdgeBs, TDuration::Seconds(1)),
-            "a disproved entry must not reach the barrier");
-    }
-
-    // A Compare round cuts on the portion verdict, so a knob flip mid-round must not resolve it early.
-    Y_UNIT_TEST(ProofSourceLatchedForTheRound) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_COMPARE);
-        env.Cutter().StartSweepForTest({ env.Key });
-        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
-
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Cutter().OnRangeProbeComplete(env.Cutter().GetSweepRound(), {}, /*failures=*/0, ctx);
-        });
-
-        UNIT_ASSERT_C(env.Cutter().IsSweepInFlight(), "a Compare round must still wait for the portion verdict after the knob flips");
-        UNIT_ASSERT_C(
-            env.Cutter().GetCutStateForTest(env.Key) == ECutState::Verifying, "the range verdict alone may not resolve a Compare round");
-    }
-
-    // A delete owed to the range would be stranded by the cut, so the boot proof defers that entry.
-    Y_UNIT_TEST(BootProbeDefersEntryWithPendingDeletes) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-
-        bool nominated = true;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Env.Bm->DeleteBlobOnComplete(NOlap::TTabletId(TRangeProbeEnv::TabletId),
-                MakeUnifiedBlob(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen + 1)));
-            nominated = env.Cutter().TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT_C(!nominated, "an entry with a pending delete in range must not be nominated at boot");
-        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None, "the entry stays untouched for the next boot");
-        UNIT_ASSERT_C(!env.Cutter().IsSweepInFlight(), "nothing may be in flight when every candidate is deferred");
-    }
-
-    // With the range clean the same boot pass nominates the entry without any cadence or portion scan.
-    Y_UNIT_TEST(BootProbeNominatesCleanEntry) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-
-        bool nominated = false;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            nominated = env.Cutter().TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT_C(nominated, "a clean range must be nominated straight from boot");
-        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::Verifying, "the entry enters the round");
-        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
-    }
-
-    // A GC-blocked round is not a disproval: IsDrained refuses without starting a backoff, so a later pass may retry.
-    Y_UNIT_TEST(BootProbeRetriesAfterGcBlockedRound) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-
-        bool first = false;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            first = env.Cutter().TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT_C(first, "the clean range must be nominated at boot");
-
-        // A delete owed to the range lands mid-round, so the pre-barrier IsDrained refuses the survivor.
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Env.Bm->DeleteBlobOnComplete(NOlap::TTabletId(TRangeProbeEnv::TabletId),
-                MakeUnifiedBlob(MakeBlob(TRangeProbeEnv::TabletId, TRangeProbeEnv::DataChannel, TRangeProbeEnv::OldFromGen + 1)));
-            env.Cutter().OnBatchComplete({}, /*exhausted=*/true, ctx);
-        });
-        UNIT_ASSERT_C(!env.Cutter().IsSweepInFlight(), "the blocked round must finish");
-        UNIT_ASSERT_C(env.Cutter().GetCutStateForTest(env.Key) == ECutState::None, "the entry returns to None");
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Cutter().GetDisprovalAttemptsForTest(env.Key), 0, "a GC-blocked round must not start the backoff");
-    }
-
-    // A range the probe disproved is not re-probed on every background pass; it waits out its backoff first.
-    Y_UNIT_TEST(BootProbeRespectsDisprovalCooldown) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-        auto nominate = [&]() {
-            bool nominated = false;
-            env.RunInActor([&](const NActors::TActorContext& ctx) {
-                nominated = env.Cutter().TryNominateAtBoot(ctx);
-            });
-            return nominated;
-        };
-
-        UNIT_ASSERT_C(nominate(), "the clean range must be nominated at boot");
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            env.Cutter().OnBatchComplete({ env.Key }, /*exhausted=*/true, ctx);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(env.Cutter().GetDisprovalAttemptsForTest(env.Key), 1);
-
-        UNIT_ASSERT_C(!nominate(), "a disproved range must not be re-probed before its cooldown ends");
-        env.Runtime.AdvanceCurrentTime(TDuration::Minutes(11));
-        UNIT_ASSERT_C(nominate(), "after the cooldown the range is probed again");
-    }
-
-    // Repeated passes must not re-nominate an entry whose round is still running.
-    Y_UNIT_TEST(BootProbeSkipsEntryAlreadyInFlight) {
-        TRangeProbeEnv env;
-        auto& csConfig = env.Runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
-
-        bool nominated = false;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            nominated = env.Cutter().TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT(nominated);
-        UNIT_ASSERT(env.Cutter().IsSweepInFlight());
-
-        bool second = true;
-        env.RunInActor([&](const NActors::TActorContext& ctx) {
-            second = env.Cutter().TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT_C(!second, "a pass while a round is in flight must nominate nothing");
+        UNIT_ASSERT_C(!cutter.IsSweepInFlight(), "the blocked round must finish");
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::None);
+        UNIT_ASSERT_VALUES_EQUAL_C(cutter.GetDisprovalAttemptsForTest(key), 0, "GC-blocked round must not start the backoff");
     }
 
     // Hive erases a cut entry wherever it sits, and the lookup then hands its generations to the previous entry.
@@ -1326,14 +1009,12 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(collectsPerGroup[GroupG2].size(), 0u);
     }
 
-    // After the middle cut the G0 entry's window grows to [1, 9); its live portion keeps it uncut even if the range read is empty.
+    // After the middle cut the G0 entry's window grows to [1, 9); its live portion keeps it uncut.
     Y_UNIT_TEST(EarlierEntryStaysPinnedAfterMiddleCut) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
-        auto& csConfig = runtime.GetAppData().ColumnShardConfig;
-        csConfig.SetCutHistoryMeasureOnly(false);
-        csConfig.SetCutHistoryProofSource(NKikimrConfig::TColumnShardConfig::CUT_HISTORY_PROOF_BS_RANGE);
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4141;
@@ -1365,21 +1046,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // The counter counts live portions, not blobs: P6 with both g1 and g2 is one.
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(earlier), 1);
 
-        bool nominated = false;
-        runInActor([&](const NActors::TActorContext& ctx) {
-            nominated = cutter.TryNominateAtBoot(ctx);
-        });
-        UNIT_ASSERT_C(nominated, "boot nomination does not look at portions; the proof and the counter gate decide");
-
-        const auto probes = cutter.BuildRangeProbes();
-        const auto probe = std::find_if(probes.begin(), probes.end(), [](const auto& p) {
-            return p.Channel == Channel;
-        });
-        UNIT_ASSERT(probe != probes.end());
-        UNIT_ASSERT_VALUES_EQUAL(probe->FromGeneration, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(probe->NextFromGeneration, 9u);
-        UNIT_ASSERT_VALUES_EQUAL(probe->Group, GroupG0);
-
         ui32 collectsToG0 = 0;
         auto observer = runtime.AddObserver<TEvBlobStorage::TEvCollectGarbage>([&](TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
             if (ev->Recipient == MakeBlobStorageProxyID(GroupG0) || ev->GetRecipientRewrite() == edgeG0) {
@@ -1387,9 +1053,11 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             }
         });
 
-        // Worst case: the range read wrongly reports nothing, and the live-portion counter alone must refuse the barrier.
+        // Inject the entry into the sweep directly to exercise the final re-check, then complete the sweep.
+        cutter.StartSweepForTest({ earlier });
+        cutter.SetPortionSnapshot({});
         runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnRangeProbeComplete(cutter.GetSweepRound(), {}, /*failures=*/0, ctx);
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(earlier) == ECutState::None);
         UNIT_ASSERT_VALUES_EQUAL_C(collectsToG0, 0u, "a G0 entry pinned by a live portion must never get a hard barrier");

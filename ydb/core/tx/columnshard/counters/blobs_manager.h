@@ -54,13 +54,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
-    NMonitoring::TDynamicCounters::TCounterPtr RangeProbesCompleted;
-    NMonitoring::TDynamicCounters::TCounterPtr RangeProbeFailures;
-    NMonitoring::TDynamicCounters::TCounterPtr RangeOnlyDisproved;
-    NMonitoring::TDynamicCounters::TCounterPtr PortionsOnlyDisproved;
-    NMonitoring::TDynamicCounters::TCounterPtr BootProbesDeferred;
-    NMonitoring::TDynamicCounters::TCounterPtr BootProbesNominated;
-    NMonitoring::TDynamicCounters::TCounterPtr BootEntriesDeferred;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesProven;
 
 public:
@@ -87,27 +80,6 @@ public:
         SweepCandidates->Add(sweepCandidates);
         ChannelsPoisoned->Add(channelsPoisoned);
         EntriesDisproved->Add(entriesDisproved);
-    }
-
-    void OnRangeProbeCompleted(const ui64 failures) const {
-        RangeProbesCompleted->Add(1);
-        RangeProbeFailures->Add(failures);
-    }
-
-    // PortionsOnly is the dangerous direction: BlobStorage called a range empty that the index still pins.
-    void OnRangeProbeDisagreement(const ui64 rangeOnly, const ui64 portionsOnly) const {
-        RangeOnlyDisproved->Add(rangeOnly);
-        PortionsOnlyDisproved->Add(portionsOnly);
-    }
-
-    // Decommission is stuck on this entry until a later boot finds the range clean.
-    void OnBootProbeDeferred(const ui64 count) const {
-        BootProbesDeferred->Add(count);
-        BootEntriesDeferred->Set(count);
-    }
-
-    void OnBootProbeNominated(const ui64 count) const {
-        BootProbesNominated->Add(count);
     }
 
     // Passed every gate and the final re-check; in measure-only mode this is where the entry stops.

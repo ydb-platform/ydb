@@ -15,15 +15,45 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
 struct TDDiskDataCopier::TCopyRangeRequestState
 {
     TBlockRange64 Range;
+=======
+namespace {
+
+constexpr auto MinBackoff = TDuration::MilliSeconds(100);
+constexpr auto MaxBackoff = TDuration::Seconds(10);
+
+TBlockRange16 TrimRange(TBlockRange16 range, ui16 maxBlockCount)
+{
+    if (range.Size() > maxBlockCount) {
+        return TBlockRange16::WithLength(range.Start, maxBlockCount);
+    }
+    return range;
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDDiskDataCopier::TCopyRangeRequestState
+{
+    ui64 SyncId;
+    TBlockRange16 Range;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     TRangeLock Lock;
     TString Data;
     NWilson::TSpan Span;
 
     TCopyRangeRequestState(
+<<<<<<< HEAD
         TBlockRange64 range,
+=======
+        ui64 syncId,
+        TBlockRange16 range,
+        ui32 blockSize,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         TRangeLock lock,
         NWilson::TSpan span)
         : Range(range)
@@ -110,7 +140,28 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
+<<<<<<< HEAD
     auto span = PartitionDirectService->CreteRootSpan("CopyRange");
+=======
+    return BytesCopied;
+}
+
+std::optional<TBlockRange16> TDDiskDataCopier::GetFreshRange() const
+{
+    auto freshRange = Client->GetFreshRange(Destination);
+    if (!freshRange) {
+        return std::nullopt;
+    }
+
+    return TrimRange(
+        *freshRange,
+        IntegerCast<ui16>(CopyRangeSize / VolumeConfig->BlockSize));
+}
+
+NWilson::TSpan TDDiskDataCopier::CreateSpan(TBlockRange16 range) const
+{
+    auto span = TraceService->CreateRootSpan("CopyRange");
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));
@@ -137,10 +188,53 @@ void TDDiskDataCopier::StartCopyRange()
         DirtyMap->GetFreshWatermark(Destination) &&
         FreshWatermark == DirtyMap->GetFreshWatermark(Destination));
 
+<<<<<<< HEAD
     const ui64 futureWatermark = FreshWatermark + CopyRangeSize;
     auto range = TBlockRange64::WithLength(
         FreshWatermark / VolumeConfig->BlockSize,
         CopyRangeSize / VolumeConfig->BlockSize);
+=======
+            if (auto self = weakSelf.lock()) {
+                self->CopyRange(willStartAt - TInstant::Now(), syncId, range);
+            }
+        });
+}
+
+void TDDiskDataCopier::CopyRange(
+    TDuration timeWaitBeforeExecution,
+    ui64 syncId,
+    TBlockRange16 range)
+{
+    if (timeWaitBeforeExecution) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s %lu %s Schedule copy range %s",
+            LogTitle.GetWithTime().c_str(),
+            syncId,
+            range.Print().c_str(),
+            FormatDuration(timeWaitBeforeExecution).c_str());
+
+        DirectBlockGroup->Schedule(
+            timeWaitBeforeExecution,
+            [weakSelf = weak_from_this(), syncId, range]()
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->CopyRange({}, syncId, range);
+                }
+            });
+
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %lu %s Copy range",
+        LogTitle.GetWithTime().c_str(),
+        syncId,
+        range.Print().c_str());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         range,
@@ -157,7 +251,7 @@ void TDDiskDataCopier::StartCopyRange()
         std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
             .VolumeConfig = VolumeConfig,
             .RequestId = requestId,
-            .Range = range,
+            .Range = TBlockRange64::WithLength(0, range.Size()),
             .Timestamp = TInstant::Now()});
     readRequest->Sglist = copyRangeState->GetSgList();
     auto callContext = MakeIntrusive<TCallContext>(requestId);

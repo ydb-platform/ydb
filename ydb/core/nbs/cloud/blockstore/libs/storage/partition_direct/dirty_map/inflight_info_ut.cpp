@@ -10,8 +10,20 @@ namespace {
 
 struct TTestReadyQueue: public IReadyQueue
 {
+<<<<<<< HEAD
     void Register(ui64 lsn, EQueueType queueType) override
+=======
+    [[nodiscard]] TPBufferKey GetPBufferKey(
+        const TInflightInfo& inflight) const override
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     {
+        Y_UNUSED(inflight);
+        return MakeKey(123);
+    }
+
+    void Register(const TInflightInfo& inflight, EQueueType queueType) override
+    {
+        const auto pBufferKey = GetPBufferKey(inflight);
         switch (queueType) {
             case IReadyQueue::EQueueType::Clone: {
                 ReadyToClone.insert(lsn);
@@ -37,6 +49,7 @@ struct TTestReadyQueue: public IReadyQueue
         }
     }
 
+<<<<<<< HEAD
     void UnRegister(ui64 lsn) override
     {
 <<<<<<< HEAD
@@ -44,6 +57,13 @@ struct TTestReadyQueue: public IReadyQueue
         ReadyToClone.erase(lsn);
         ReadyToFlush.erase(lsn);
 =======
+=======
+    void UnRegister(
+        const TInflightInfo& inflight,
+        EQueueType queueType) override
+    {
+        const auto pBufferKey = GetPBufferKey(inflight);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         switch (queueType) {
             case IReadyQueue::EQueueType::Clone: {
                 ReadyToClone.erase(pBufferKey);
@@ -60,33 +80,41 @@ struct TTestReadyQueue: public IReadyQueue
         }
     }
 
-    void InflightFlushFinished(TPBufferKey pBufferKey, THostIndex host) override
+    void InflightFlushFinished(
+        const TInflightInfo& inflight,
+        THostIndex host) override
     {
+        const auto pBufferKey = GetPBufferKey(inflight);
         ++InflightFlushFinishedCalls[pBufferKey];
         InflightFlushFinishedHosts[pBufferKey].Set(host);
     }
 
-    void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override
+    void FlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks) override
     {
+        const auto pBufferKey = GetPBufferKey(inflight);
         ++FlushCompletedCalls[pBufferKey];
         FlushCompletions[pBufferKey] = ddisks;
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
 
     void DataToPBufferAdded(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t size) override
+        EPBufferCounter counter) override
     {
-        PBufferCounters[host][counter] += size;
+        Y_UNUSED(inflight);
+        PBufferCounters[host][counter] += ByteCount;
     }
 
     void DataFromPBufferReleased(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t size) override
+        EPBufferCounter counter) override
     {
-        PBufferCounters[host][counter] -= size;
+        Y_UNUSED(inflight);
+        PBufferCounters[host][counter] -= ByteCount;
     }
 
     size_t GetTotalBytes(THostIndex host)
@@ -151,6 +179,8 @@ struct TTestReadyQueue: public IReadyQueue
     THashMap<TPBufferKey, THostMask> InflightFlushFinishedHosts;
 >>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
     TMap<THostIndex, TMap<EPBufferCounter, size_t>> PBufferCounters;
+
+    static constexpr size_t ByteCount = 4096;
 };
 
 THostMask MakePrimaryHosts()
@@ -210,9 +240,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.RestorePBuffer(THostIndex{0});
         UNIT_ASSERT_VALUES_EQUAL(
             true,
@@ -233,7 +261,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleConfirmedWrite)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
@@ -285,7 +320,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleLock)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
@@ -327,7 +369,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldPutToReadyQueueOnFail)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush started
@@ -395,9 +444,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeMask({THostIndex{2}}),
-            MakeKey(123),
-            4096);
+            THostMask::MakeMask({THostIndex{2}}));
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush to a disabled host is refused.
@@ -433,9 +480,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             TInflightInfo inflightInfo(
                 &readyQueue,
                 MakeDDisks(),
-                THostMask::MakeEmpty(),
-                MakeKey(123),
-                4096);
+                THostMask::MakeEmpty());
             inflightInfo.RestorePBuffer(THostIndex{0});
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
             inflightInfo.RestorePBuffer(THostIndex{1});
@@ -450,7 +495,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
@@ -460,7 +518,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     {
         TTestReadyQueue readyQueue;
         {
+<<<<<<< HEAD
             TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                MakeDDisks(),
+                THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
             UNIT_ASSERT_VALUES_EQUAL(
@@ -472,7 +537,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
@@ -481,7 +559,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldTrackGetEraseNeeded)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Start and confirm flushes to all 3 hosts.
@@ -539,7 +624,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldReturnEraseNeededAfterEraseFailed)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush all hosts.
@@ -574,7 +666,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldReturnDDiskReadMaskForPendingWrite)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         // In PBufferPendingWrite state, ReadMask should return DDisk with all
         // hosts enabled (Lsn=0 means DDisk read).
@@ -609,9 +708,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.RestorePBuffer(THostIndex{0});
 
         // Incomplete write is invisible to reads until the quorum is reached.
@@ -644,9 +741,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         FlushAll(inflightInfo);
@@ -668,7 +763,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldQuorumReadyFutureForPendingWrite)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         auto future = inflightInfo.GetQuorumReadyFuture();
         UNIT_ASSERT_VALUES_EQUAL(false, future.IsReady());
@@ -691,10 +793,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
+<<<<<<< HEAD
             THostMask::MakeEmpty(),
             MakeKey(123),
             4096);
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         inflightInfo.RestorePBuffer(THostIndex{0});
         auto future = inflightInfo.GetQuorumReadyFuture();
@@ -712,7 +818,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     {
         TTestReadyQueue readyQueue;
         {
+<<<<<<< HEAD
             TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                MakeDDisks(),
+                THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
             // Pending write should not account any bytes.
             UNIT_ASSERT_VALUES_EQUAL(
@@ -736,8 +849,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
-        // After destruction, bytes should be released.
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
@@ -746,7 +871,14 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsNoOpWhenNoOverlap)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+=======
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Hosts 3 and 4 were never written to — RemoveHosts should be a no-op.
@@ -892,7 +1024,70 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetLockedBytes(THostIndex{2}));
 
+<<<<<<< HEAD
         // Hosts 0 and 1 should be unaffected.
+=======
+    Y_UNIT_TEST(ShouldRegisterEraseAfterUnlockInFlushedState)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        // Lock before flushing completes.
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{1}));
+        Y_UNUSED(inflightInfo.RequestFlush(THostIndex{2}));
+        inflightInfo.LockPBuffer();
+
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+
+        // Flush completed but erase must not be registered while locked.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeKey(123)));
+
+        // Unlocking in the flushed state registers the erase.
+        inflightInfo.UnlockPBuffer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeKey(123)));
+
+        EraseAll(inflightInfo);
+    }
+
+    // UpdateHosts requires every removed host to also be disabled
+    // (removed is a subset of disabled). Removing an already-disabled host must
+    // not touch the byte counters and, for a written inflight, must not change
+    // the state.
+    Y_UNIT_TEST(ShouldUpdateHostsRemoveDisabledInWrittenState)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+
+        UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{2}));
+
+        // Remove host 2. It must also be reported as disabled.
+        auto removed = THostMask::MakeMask({THostIndex{2}});
+        auto disabled = THostMask::MakeMask({THostIndex{2}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), removed, disabled);
+
+        // State stays PBufferWritten; per-host byte accounting is unchanged.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferWritten,
+            inflightInfo.GetState());
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         UNIT_ASSERT_VALUES_EQUAL(4096, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
             4096,
@@ -909,8 +1104,17 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsNotRegisterEraseWhenLocked)
     {
         TTestReadyQueue readyQueue;
+<<<<<<< HEAD
         TInflightInfo inflightInfo(&readyQueue, 123, 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
+=======
+        // 4 desired DDisks so that after disabling one, 3 remain (== quorum).
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty());
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
         // Request and confirm flush for hosts 0 and 1.
         auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
@@ -960,9 +1164,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(4),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
@@ -995,9 +1197,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(4),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
@@ -1034,9 +1234,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         FlushAll(inflightInfo);
@@ -1067,9 +1265,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
@@ -1096,9 +1292,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
         UNIT_ASSERT_VALUES_EQUAL(
             true,
@@ -1143,9 +1337,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             TInflightInfo inflightInfo(
                 &readyQueue,
                 MakeDDisks(),
-                THostMask::MakeEmpty(),
-                MakeKey(123),
-                4096);
+                THostMask::MakeEmpty());
             inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
             FlushAll(inflightInfo);
 
@@ -1173,9 +1365,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             TInflightInfo source(
                 &readyQueue,
                 MakeDDisks(),
-                THostMask::MakeEmpty(),
-                MakeKey(123),
-                4096);
+                THostMask::MakeEmpty());
             source.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
@@ -1208,9 +1398,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // No notification before the flush completes.
@@ -1243,9 +1431,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(4),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
 
         Y_UNUSED(inflightInfo.RequestFlush(THostIndex{0}));
@@ -1294,9 +1480,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(4),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
@@ -1334,9 +1518,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(4),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
 
         for (THostIndex host: MakeDDisks(4)) {
@@ -1378,9 +1560,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Lock before flushing completes.
@@ -1426,9 +1606,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Lock/unlock while still in the written state: no flush happened, so
@@ -1455,9 +1633,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         FlushAll(inflightInfo);
@@ -1491,9 +1667,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
         inflightInfo.RestorePBuffer(THostIndex{0});
         inflightInfo.RestorePBuffer(THostIndex{1});
         inflightInfo.RestorePBuffer(THostIndex{2});
@@ -1534,9 +1708,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         TInflightInfo inflightInfo(
             &readyQueue,
             MakeDDisks(),
-            THostMask::MakeEmpty(),
-            MakeKey(123),
-            4096);
+            THostMask::MakeEmpty());
 
         UNIT_ASSERT_VALUES_EQUAL(0u, inflightInfo.GetPersistGeneration());
         inflightInfo.SetPersistGeneration(42);

@@ -73,8 +73,13 @@ TRangeLock::TRangeLock(ILockableRanges* lockableRanges, ui64 lsn)
 {}
 
 TRangeLock::TRangeLock(
+<<<<<<< HEAD
     ILockableRanges* lockableRanges,
     TBlockRange64 range,
+=======
+    ILockableRangesWeakPtr lockableRanges,
+    TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     THostMask mask)
     : LockableRanges(lockableRanges)
     , Range(range)

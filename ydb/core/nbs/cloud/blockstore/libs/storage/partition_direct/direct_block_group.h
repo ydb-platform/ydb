@@ -7,7 +7,11 @@
 <<<<<<< HEAD
 =======
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
@@ -65,8 +69,13 @@ struct TDBGRestoreResponse
 {
     struct TRestoreMeta
     {
+<<<<<<< HEAD
         ui64 Lsn = 0;
         TBlockRange64 Range;
+=======
+        TPBufferKey PBufferKey;
+        TBlockRange16 Range;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         THostIndex HostIndex = InvalidHostIndex;
     };
 
@@ -77,8 +86,13 @@ struct TDBGRestoreResponse
 struct TListPBufferMeta
 {
     ui32 VChunkIndex = 0;
+<<<<<<< HEAD
     ui64 Lsn = 0;
     TBlockRange64 Range;
+=======
+    TPBufferKey PBufferKey;
+    TBlockRange16 Range;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 };
 
 using TListPBufferMetaVector = TVector<TListPBufferMeta>;
@@ -121,6 +135,19 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
+<<<<<<< HEAD
+=======
+    virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
+    {
+        return {};
+    }
+
+    // The tablet generation this DBG was created with. New records are
+    // minted under it; restored records keep the generation they were
+    // written in.
+    virtual ui32 GetTabletGeneration() const = 0;
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     virtual IOraclePtr GetOracle() = 0;
 
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
@@ -137,30 +164,40 @@ public:
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
@@ -171,8 +208,13 @@ public:
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
+<<<<<<< HEAD
         ui64 lsn,
         TBlockRange64 range,
+=======
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,

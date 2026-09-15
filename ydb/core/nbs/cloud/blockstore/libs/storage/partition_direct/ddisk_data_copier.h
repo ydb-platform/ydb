@@ -12,7 +12,26 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
 class TBlocksDirtyMap;
+=======
+struct IRangeSyncClient
+{
+    virtual ~IRangeSyncClient() = default;
+
+    [[nodiscard]] virtual std::optional<TBlockRange16> GetFreshRange(
+        THostIndex host) const = 0;
+    [[nodiscard]] virtual TReadHint MakeReadHint(TBlockRange16 range) = 0;
+    [[nodiscard]] virtual TRangeLock MakeDDiskRangeLock(
+        TBlockRange16 range,
+        THostMask mask) = 0;
+    virtual TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range) = 0;
+    virtual void EndRangeSync(ui64 syncId, bool success) = 0;
+    virtual void OnCopyProgress(ui64 totalBytes) = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
 class TDDiskDataCopier: public std::enable_shared_from_this<TDDiskDataCopier>
 {
@@ -49,8 +68,18 @@ private:
     struct TCopyRangeRequestState;
     using TCopyRangeRequestStatePtr = std::shared_ptr<TCopyRangeRequestState>;
 
+<<<<<<< HEAD
     NWilson::TSpan CreateSpan() const;
     void StartCopyRange();
+=======
+    std::optional<TBlockRange16> GetFreshRange() const;
+    NWilson::TSpan CreateSpan(TBlockRange16 range) const;
+    void StartCopyRange();
+    void CopyRange(
+        TDuration timeWaitBeforeExecution,
+        ui64 syncId,
+        TBlockRange16 range);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
         const IReadRequestExecutor::TResponse& response);

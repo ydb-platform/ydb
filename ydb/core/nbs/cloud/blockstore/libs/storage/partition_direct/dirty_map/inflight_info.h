@@ -1,7 +1,12 @@
 #pragma once
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+#include "public.h"
+
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
@@ -36,39 +41,59 @@ struct IReadyQueue
 
     virtual ~IReadyQueue() = default;
 
+<<<<<<< HEAD
     // Registers an Lsn ready for cloning, flushing, or erasing.
     // An Lsn can only be registered in one queue. The new registration deletes
     // the old one.
     virtual void Register(ui64 lsn, EQueueType queueType) = 0;
+=======
+    [[nodiscard]] virtual TPBufferKey GetPBufferKey(
+        const TInflightInfo& inflight) const = 0;
+
+    // Registers a record ready for cloning, flushing, or erasing.
+    // A record can only be registered in one queue. The new registration
+    // deletes the old one.
+    virtual void Register(
+        const TInflightInfo& inflight,
+        EQueueType queueType) = 0;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
 <<<<<<< HEAD
     // Removes all registrations from Lsn.
     virtual void UnRegister(ui64 lsn) = 0;
 =======
     // Removes the record's registration from the given queue.
-    virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
+    virtual void UnRegister(
+        const TInflightInfo& inflight,
+        EQueueType queueType) = 0;
 
     // Notifies that a flush request to the specified host stopped being
     // in-flight. The request may have completed successfully, failed, or been
     // dropped because the host was disabled.
     virtual void InflightFlushFinished(
-        TPBufferKey pBufferKey,
+        const TInflightInfo& inflight,
         THostIndex host) = 0;
 
     // Notifies of flushes completion to DDisks.
+<<<<<<< HEAD
     virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
 >>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
+=======
+    virtual void FlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks) = 0;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) = 0;
+        EPBufferCounter counter) = 0;
     // Notification about the change of byte counters in PBuffer
     virtual void DataFromPBufferReleased(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) = 0;
+        EPBufferCounter counter) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,7 +120,7 @@ struct TReadSource
 class TInflightInfo: public TDisableCopy
 {
 public:
-    enum class EState
+    enum class EState: ui8
     {
         // The lsn is generated but the write has not been acknowledged yet.
         // Tracked only to hold the cleanup watermark; invisible to reads (a
@@ -142,10 +167,14 @@ public:
 =======
         IReadyQueue* readyQueue,
         THostMask desiredDDisks,
+<<<<<<< HEAD
         THostMask disabled,
         TPBufferKey pBufferKey,
         size_t byteCount);
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+        THostMask disabled);
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -209,14 +238,36 @@ private:
     void SetState(EState newState);
     void CheckInvariants() const;
 
+<<<<<<< HEAD
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
     ui64 Lsn = 0;
     size_t ByteCount = 0;
+=======
+    void MaybeAdvanceToFlushed();
+    void MaybeAdvanceToErased();
+    void MaybeQueryErase();
+
+    [[nodiscard]] TPBufferKey GetPBufferKey() const;
+
+    // EState has 7 values, so 3 bits are enough to store it. The rest of the
+    // ui32 word is given to PBuffersLockCount to maximize its capacity.
+    static constexpr ui32 StateBits = 3;
+    static_assert(
+        static_cast<ui32>(EState::PBufferErased) < (1U << StateBits),
+        "EState values do not fit into the State bit width");
+
+    IReadyQueue* ReadyQueue = nullptr;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     TInstant StartAt;
-    size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
+<<<<<<< HEAD
+=======
+    ui32 PersistGeneration = 0;
+    ui32 PBuffersLockCount : 32 - StateBits = 0;
+    EState State: StateBits = EState::PBufferPendingWrite;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     THostMask WriteRequested;
     THostMask WriteConfirmed;

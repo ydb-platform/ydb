@@ -41,7 +41,7 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         const NWilson::TTraceId& traceId,
         TCallContextPtr callContext,
-        TBlockRange64 vchunkRange);
+        TBlockRange16 vchunkRange);
 
     // Respond via WriteClient to VChunk.
     void Reply(
@@ -57,9 +57,15 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
     TBlockRange64 GetRange() const;
+<<<<<<< HEAD
     TBlockRange64 GetVChunkRange() const;
     void SetLsn(ui64 lsn);
     ui64 GetLsn() const;
+=======
+    TBlockRange16 GetVChunkRange() const;
+    void SetPBufferKey(TPBufferKey pBufferKey);
+    TPBufferKey GetPBufferKey() const;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     TGuardedSgList& GetSgList();
 
 private:
@@ -67,8 +73,13 @@ private:
     std::shared_ptr<TWriteBlocksLocalRequest> Request;
     NWilson::TSpan Span;
     TCallContextPtr CallContext;
+<<<<<<< HEAD
     TBlockRange64 VChunkRange;
     ui64 Lsn = 0;
+=======
+    TBlockRange16 VChunkRange;
+    TPBufferKey PBufferKey;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     NThreading::TPromise<TWriteBlocksLocalResponse> Promise;
 };

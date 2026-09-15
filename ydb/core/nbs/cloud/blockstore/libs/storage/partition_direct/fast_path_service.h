@@ -35,8 +35,13 @@ private:
     const TString DiskId;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
-    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
+<<<<<<< HEAD
+=======
+    const IArenaAllocatorPtr ArenaAllocator;
+    // Chaos controllers are indexed by DirectBlockGroup index.
+    const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;

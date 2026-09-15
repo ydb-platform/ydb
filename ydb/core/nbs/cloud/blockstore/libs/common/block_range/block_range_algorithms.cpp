@@ -11,8 +11,13 @@ namespace {
 
 struct TBoundary
 {
+<<<<<<< HEAD
     ui64 Offset{};
     ui64 Key{};
+=======
+    ui32 Offset{};
+    TPBufferKey Key{};
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
     bool Open{};
 
     bool operator<(const TBoundary& rhs) const;
@@ -36,7 +41,7 @@ bool TBoundary::operator<(const TBoundary& rhs) const
 // lsn
 
 TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
-    TBlockRange64 fullRange,
+    TBlockRange16 fullRange,
     std::span<const TWeightedRange> overlappingRanges)
 {
     TVector<TWeightedRange> result;
@@ -49,24 +54,39 @@ TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
     TStackVec<TBoundary> boundaries;
     boundaries.push_back({.Offset = fullRange.Start, .Key = 0, .Open = true});
     boundaries.push_back(
+<<<<<<< HEAD
         {.Offset = fullRange.End + 1, .Key = 0, .Open = false});
+=======
+        {.Offset = fullRange.Start, .Key = TPBufferKey{}, .Open = true});
+    boundaries.push_back(
+        {.Offset = static_cast<ui32>(fullRange.End) + 1,
+         .Key = TPBufferKey{},
+         .Open = false});
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
     for (const auto& item: overlappingRanges) {
         auto intersect = fullRange.Intersect(item.Range);
         boundaries.push_back(
             {.Offset = intersect.Start, .Key = item.Key, .Open = true});
         boundaries.push_back(
-            {.Offset = intersect.End + 1, .Key = item.Key, .Open = false});
+            {.Offset = static_cast<ui32>(intersect.End) + 1,
+             .Key = item.Key,
+             .Open = false});
     }
     Sort(boundaries.begin(), boundaries.end());
 
     // main algorithm's part
     TSet<ui64, std::greater<>> activeKeys;
     activeKeys.insert(boundaries[0].Key);
+<<<<<<< HEAD
     ui64 segmentStart = boundaries[0].Offset;
     ui64 currentBestKey = *activeKeys.begin();
+=======
+    ui32 segmentStart = boundaries[0].Offset;
+    TPBufferKey currentBestKey = *activeKeys.begin();
+>>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
 
-    for (ui64 i = 1; i < boundaries.size(); ++i) {
+    for (size_t i = 1; i < boundaries.size(); ++i) {
         if (boundaries[i].Open) {
             activeKeys.insert(boundaries[i].Key);
         } else {
@@ -80,12 +100,12 @@ TVector<TWeightedRange> SplitOnNonOverlappingContinuousRanges(
         }
         if (newBestKey != currentBestKey || isLast) {
             if (boundaries[i].Offset > segmentStart) {
-                ui64 segmentEnd = boundaries[i].Offset - 1;
+                const ui32 segmentEnd = boundaries[i].Offset - 1;
                 result.push_back(
                     {.Key = currentBestKey,
-                     .Range = TBlockRange64::MakeClosedInterval(
-                         segmentStart,
-                         segmentEnd)});
+                     .Range = TBlockRange16::MakeClosedInterval(
+                         IntegerCast<ui16>(segmentStart),
+                         IntegerCast<ui16>(segmentEnd))});
             }
             segmentStart = boundaries[i].Offset;
             currentBestKey = newBestKey;

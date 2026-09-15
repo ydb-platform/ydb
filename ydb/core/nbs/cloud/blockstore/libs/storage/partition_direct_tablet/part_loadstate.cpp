@@ -24,8 +24,9 @@ using TDirectBlockGroupConnections =
 // Whether the vchunk belongs to this DirectBlockGroup.
 bool BelongsToDirectBlockGroup(ui32 vChunkIndex, size_t dbgId)
 {
-    return GetDirectBlockGroupIndex(vChunkIndex, DirectBlockGroupsCount) ==
-           dbgId;
+    return GetDirectBlockGroupIndex(
+               vChunkIndex,
+               DefaultVolumeDirectBlockGroupCount) == dbgId;
 }
 
 // The slots the last run marked Removed.

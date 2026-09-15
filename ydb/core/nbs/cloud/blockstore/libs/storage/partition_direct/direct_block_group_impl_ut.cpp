@@ -1302,7 +1302,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     Y_UNIT_TEST_F(ShouldCatchUpHostsOnStartup, TDBGFixture)
     {
         constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
-        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+        constexpr ui64 vChunkSize = MaxVChunkSize;
 
         auto executor = MakeExecutor();
 
@@ -1396,7 +1396,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     Y_UNIT_TEST_F(ShouldQueryRemoveHostThroughService, TDBGFixture)
     {
         constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
-        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+        constexpr ui64 vChunkSize = MaxVChunkSize;
 
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(
@@ -1454,7 +1454,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
     Y_UNIT_TEST_F(ShouldRejectRemoveHostBelowHealthyDDiskQuorum, TDBGFixture)
     {
         constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
-        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+        constexpr ui64 vChunkSize = MaxVChunkSize;
 
         auto executor = MakeExecutor();
         auto dbg = MakeDirectBlockGroup(

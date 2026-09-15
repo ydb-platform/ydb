@@ -60,8 +60,8 @@ struct TTabletInfo
     ui32 Generation = 0;
     ui32 BlockSize = 0;
     ui64 BlockCount = 0;
-    ui64 VChunkBlockCount = 0;
-    ui64 RegionBlockCount = 0;
+    ui64 VChunkSize = 0;
+    ui32 VolumeDirectBlockGroupCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
@@ -77,8 +77,6 @@ struct TFastPathServiceInfo
     // Minimum safe barrier across all DBGs from the last finished cleanup
     // round; 0 until the first round finishes.
     ui64 LastSafeBarrier = 0;
-    size_t TotalVChunks = 0;
-    size_t DbgCount = 0;
 
     TArenaMemoryUsage ArenaMemoryUsage;
 };

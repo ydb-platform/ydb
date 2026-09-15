@@ -3,6 +3,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -395,9 +396,13 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
 {
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionCount =
-        CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
+    const ui64 regionCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionCount,
+        DefaultVolumeDirectBlockGroupCount);
 
     const auto pipe = ctx.Register(
         NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
@@ -416,7 +421,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     op->SetDirectBlockGroupId(dbgId);
     auto* define = op->MutableDefineDirectBlockGroup();
     define->SetNumDDisks(numDDisks);
-    define->SetNumChunksPerDDisk(regionCount);
+    define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
     NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);

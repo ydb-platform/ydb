@@ -319,6 +319,44 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
+    @pytest.mark.parametrize("with_escape", [False, True])
+    @pytest.mark.parametrize("icase", [False, True])
+    def test_like_pushdown(self, kikimr, client, icase: bool, with_escape: bool):
+        self.init(client, f"test_like{icase!s:.1}{with_escape!s:.1}")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT event FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, event String NOT NULL))
+                WHERE time > 100 AND event {"I" if icase else ""}LIKE "%foobar%"{' ESCAPE "!"' if with_escape else ""};'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 100, "event": "bazfoobarber"}',
+            '{"time": 101, "event": "xyzfoobarbaz"}',
+            '{"time": 102, "event": "bazfooxbarber"}',
+            '{"time": 104, "event": "foobarbaz"}',
+        ]
+
+        self.write_stream(data)
+        expected = [
+            'xyzfoobarbaz',
+            'foobarbaz'
+        ]
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
+        # TODO: verify complete pushdown after YQ-4054 implemented
+        # for now, just ensure partial pushdown is not broken
+        # assert "foobar" in issues
+
+    @yq_v1
     def test_nested_types_without_predicate(self, kikimr, client):
         self.init(client, "test_nested_types_without_predicate")
 

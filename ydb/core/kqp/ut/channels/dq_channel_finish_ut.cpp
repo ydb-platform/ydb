@@ -263,15 +263,13 @@ struct TPressureFlipTest : public TSessionTest {
 
 Y_UNIT_TEST_SUITE(Channels20Finish) {
 
-    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings,
-        bool releaseSessionsBeforeSensors = false) {
+    void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings) {
         TLoadTest test;
 
         test.Count = count;
         test.Local = local;
         test.ProducerSettings = producerSettings;
         test.ConsumerSettings = consumerSettings;
-        test.ReleaseSessionsBeforeSensors = releaseSessionsBeforeSensors;
 
         test.Run();
     }
@@ -338,16 +336,12 @@ Y_UNIT_TEST_SUITE(Channels20Finish) {
             TWorkerSettings{ .MessageCount = 200, .CheckpointEvery = 10, .WatermarkEvery = 7 });
     }
 
-    // A checkpoint may follow the finish and is still delivered. Its pop is one more pop after the finish
-    // chunk, which sends one more Finishing update, which TOutputDescriptor::HandleUpdate answers with one
-    // more ConfirmFinish: when that one reaches the receiver after the consumer let go of its buffer it is
-    // never acked and stays on the queue of a session without descriptors (see TConfirmToGoneTest), so
-    // the sessions are let go of before the sensors are checked.
+    // a checkpoint may follow the finish and is still delivered; its pop is one more pop after the finish
+    // chunk, which reports Finishing once more
     Y_UNIT_TEST(CheckpointAfterFinish2n) {
         LoadTest(10, false,
             TWorkerSettings{ .MessageCount = 20, .CheckpointAfterFinish = true },
-            TWorkerSettings{ .MessageCount = 20, .CheckpointAfterFinish = true },
-            true);
+            TWorkerSettings{ .MessageCount = 20, .CheckpointAfterFinish = true });
     }
 
     Y_UNIT_TEST(CheckpointAfterFinish1n) {

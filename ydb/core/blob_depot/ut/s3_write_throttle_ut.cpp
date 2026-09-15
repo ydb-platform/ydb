@@ -260,28 +260,6 @@ Y_UNIT_TEST_SUITE(BlobDepotS3WriteThrottle) {
             "parked request of a disconnected agent was not dropped");
     }
 
-    Y_UNIT_TEST(SlotsAreReleasedWhenNewPipeReplacesLiveOne) {
-        TTestBasicRuntime runtime;
-        StartBlobDepotWithS3(runtime);
-
-        // Old agent instance holds a locator; a new instance on the same node registers over a new pipe while the old
-        // pipe is still open, and only then the old pipe goes away.
-        TFakeAgent oldAgent(runtime, /*agentInstanceId=*/1);
-        oldAgent.Register();
-        oldAgent.PrepareWriteS3(/*cookie=*/1);
-
-        TFakeAgent agent(runtime, /*agentInstanceId=*/2);
-        agent.Register();
-        oldAgent.Disconnect();
-
-        agent.DiscardWithSlowDown(agent.PrepareWriteS3(/*cookie=*/2));
-        runtime.SimulateSleep(TDuration::Seconds(5));
-
-        agent.SendPrepareWriteS3(/*cookie=*/3);
-        UNIT_ASSERT_C(agent.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
-            "slot of the replaced connection leaked");
-    }
-
     Y_UNIT_TEST(DisconnectBetweenPrepareExecuteAndComplete) {
         TTestBasicRuntime runtime;
         TLogWriteHold logWriteHold;

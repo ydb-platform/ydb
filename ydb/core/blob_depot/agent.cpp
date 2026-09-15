@@ -65,17 +65,6 @@ namespace NKikimr::NBlobDepot {
         auto& agent = Agents[nodeId];
         if (!agent.Connection) {
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] += 1;
-        } else if (agent.Connection->PipeServerId != pipeServerId) {
-            // new pipe registered before TEvServerDisconnected of the previous one has been processed; the old
-            // connection is dead for the agent, so clean it up now -- its own disconnect will not do it anymore
-            YDB_LOG_WARN("TEvRegisterAgent replaces live connection",
-                {"marker", "BDT94"},
-                {"id", GetLogId()},
-                {"nodeId", nodeId},
-                {"oldPipeServerId", agent.Connection->PipeServerId},
-                {"pipeServerId", pipeServerId},
-                {"s3WritesInFlight", agent.S3WritesInFlight.size()});
-            OnAgentDisconnect(agent);
         }
         agent.Connection = {
             .PipeServerId = pipeServerId,

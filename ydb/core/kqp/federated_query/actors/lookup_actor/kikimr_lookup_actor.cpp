@@ -220,7 +220,7 @@ namespace {
             , SelectWithKeys(MakeSelectWithKeys())
         {
             switch(statsLevel) {
-                // Shift prorities by one level (minumum level is Basic)
+                // Shift priorities by one level (minimum level is Basic)
 #define TRANSLATE(DQ, PROTO) \
                 case TCollectStatsLevel::DQ: \
                     StatsMode = Ydb::Query::STATS_MODE_##PROTO; \

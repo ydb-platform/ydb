@@ -90,7 +90,8 @@ public:
     ~TInputTransformStreamLookupCommonBase() override {
         if (TaskCountersGroup && TaskCountersRoot)  {
             // XXX Group will be removed by each task of query (repeatedly);
-            // Should be mostly harmless (as all of them removed at once);
+            // Should be mostly harmless (as all of them removed approximately at once,
+            // even though not completely synchronously);
             // Though, there are some racing potential on query restart;
             // This is common problem with solomon sink, pq source, pq sink and this actor
             TaskCountersRoot->RemoveSubgroup(TaskCountersGroup->first, TaskCountersGroup->second);

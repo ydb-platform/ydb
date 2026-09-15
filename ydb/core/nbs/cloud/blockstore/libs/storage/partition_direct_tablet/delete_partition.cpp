@@ -145,7 +145,7 @@ void TPartitionActor::StartCleanupActor(
         .DDiskPoolName = StorageConfig->GetDDiskPoolName(),
         .PersistentBufferDDiskPoolName =
             StorageConfig->GetPersistentBufferDDiskPoolName(),
-        .DirectBlockGroupsCount = DirectBlockGroupsCount,
+        .DirectBlockGroupsCount = DefaultVolumeDirectBlockGroupCount,
     }));
 }
 

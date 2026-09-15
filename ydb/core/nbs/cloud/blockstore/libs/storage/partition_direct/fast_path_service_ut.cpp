@@ -91,13 +91,13 @@ struct TFixture: public NUnitTest::TBaseFixture
         storageServiceConfig.SetCopyRangeBandwidthMbs(copyRangeBandwidthMbs);
 
         TVector<IDirectBlockGroupPtr> directBlockGroups;
-        directBlockGroups.reserve(DirectBlockGroupsCount);
+        directBlockGroups.reserve(VChunkPerRegionCount);
         TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
-        chaosInjectorControls.reserve(DirectBlockGroupsCount);
+        chaosInjectorControls.reserve(VChunkPerRegionCount);
         ChaosInjectorControls.clear();
-        ChaosInjectorControls.reserve(DirectBlockGroupsCount);
+        ChaosInjectorControls.reserve(VChunkPerRegionCount);
 
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             directBlockGroups.push_back(
                 std::make_shared<TDirectBlockGroupMock>());
             auto control = std::make_shared<TChaosInjectorControlMock>();
@@ -213,15 +213,15 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
 
         service->SetNodeChaosMode(42, std::nullopt, EChaosMode::Disabled);
         UNIT_ASSERT_VALUES_EQUAL(
-            DirectBlockGroupsCount,
+            VChunkPerRegionCount,
             service->GetChaosConfig().NodeConfigs.size());
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             AssertChaosMode(*service, 42, i, EChaosMode::Disabled);
             UNIT_ASSERT(ChaosInjectorControls[i]->IsNodeDisabled(42));
         }
 
         service->SetNodeChaosMode(42, std::nullopt, EChaosMode::Enabled);
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             AssertChaosMode(*service, 42, i, EChaosMode::Enabled);
             UNIT_ASSERT(!ChaosInjectorControls[i]->IsNodeDisabled(42));
         }
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
 
         service->SetNodeChaosMode(
             42,
-            DirectBlockGroupsCount,
+            VChunkPerRegionCount,
             EChaosMode::Disabled);
 
         UNIT_ASSERT(service->GetChaosConfig().NodeConfigs.empty());
@@ -246,10 +246,10 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
     {
         auto service = MakeService(0);
 
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             UNIT_ASSERT(service->GetDirectBlockGroup(i));
         }
-        UNIT_ASSERT(!service->GetDirectBlockGroup(DirectBlockGroupsCount));
+        UNIT_ASSERT(!service->GetDirectBlockGroup(VChunkPerRegionCount));
     }
 }
 

@@ -12,6 +12,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -42,7 +43,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static constexpr ui32 FixtureVChunkIndex = 100;
 
     const ui32 BlockSize = DefaultBlockSize;
-    const ui64 VChunkBlockCount = DefaultVChunkSize / BlockSize;
+    const ui64 VChunkBlockCount =
+        GetVChunkBlockCount(BlockSize, DefaultVChunkSize);
     const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
     const THostIndex FreshDDisk = 1;
     TVChunkConfig VChunkConfig = TVChunkConfig::MakeDefault(

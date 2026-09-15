@@ -738,13 +738,19 @@ namespace {
         for (const auto& setting : topicSettings) {
             auto name = setting.Name().Value();
             if (name == "setMinPartitions") {
-                request->mutable_partitioning_settings()->set_min_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "min_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_partitioning_settings()->set_min_active_partitions(value);
             } else if (name == "setMaxPartitions") {
-                request->mutable_partitioning_settings()->set_max_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "max_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_partitioning_settings()->set_max_active_partitions(value);
             } else if (name == "setRetentionPeriod") {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_retention_period()->set_seconds(
@@ -814,13 +820,19 @@ namespace {
         for (const auto& setting : topicSettings) {
             auto name = setting.Name().Value();
             if (name == "setMinPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "min_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_alter_partitioning_settings()->set_set_min_active_partitions(value);
             } else if (name == "setMaxPartitions") {
-                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(
-                        FromString<ui32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
-                );
+                ui32 value = 0;
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+                if (!TryFromString<ui32>(literal, value)) {
+                    ythrow yexception() << "max_active_partitions value is out of Uint32 range: " << literal;
+                }
+                request->mutable_alter_partitioning_settings()->set_set_max_active_partitions(value);
             } else if (name == "setRetentionPeriod") {
                 auto microValue = FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value());
                 request->mutable_set_retention_period()->set_seconds(

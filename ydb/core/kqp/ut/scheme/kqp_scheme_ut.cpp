@@ -13126,6 +13126,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateTopicRejectsHugePartitionCount, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        {
+            const auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_over_ui32` WITH (min_active_partitions = )"
+                << (ui64(Max<ui32>()) + 1) << ")";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Uint32", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_over_ui64` WITH (min_active_partitions = 18446744073709551616)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "overflow", result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(DisableMetadataObjectsOnServerless) {
         auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)

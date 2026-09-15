@@ -2675,22 +2675,27 @@ private:
                                         TStringBuilder() << "unknown metering_mode: " << val));
                 }
 
-            } else if (name == "setMinPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                minParts = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setMaxPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                maxPartitions = value;
+            } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
+                ui32 value = 0;
+                if (!TryFromString<ui32>(literal, value)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << (name == "setMinPartitions" ? "min_active_partitions" : "max_active_partitions")
+                            << " value is out of Uint32 range: " << literal));
+                    return false;
+                }
+                if (name == "setMinPartitions") {
+                    minParts = value;
+                } else {
+                    maxPartitions = value;
+                }
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
             } else if (name == "setContentBasedDeduplication") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return false;
                 }
+            } else if (name == "resetMetricsLevel") {
+                // ALTER TOPIC RESET (metrics_level) is encoded in TopicSettings.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
                         errorPos,
@@ -2739,7 +2744,7 @@ private:
     }
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2815,7 +2820,7 @@ private:
     }
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;

@@ -93,7 +93,6 @@ ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
 }
 
 TVector<TRegionPtr> CreateRegions(
-    IArenaAllocatorPtr arenaAllocator,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -109,7 +108,6 @@ TVector<TRegionPtr> CreateRegions(
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         regions[i] = std::make_shared<TRegion>(
-            arenaAllocator,
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
@@ -150,11 +148,11 @@ TFastPathService::TFastPathService(
     , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
-    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ArenaAllocator(
+          DirectBlockGroups.front()->GetArenaAllocatorPool()->GetAllocator())
     , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
-          ArenaAllocator,
           this,
           this,
           DiskDescription,
@@ -188,6 +186,7 @@ TFastPathService::TFastPathService(
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
     Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+    Y_ABORT_UNLESS(ArenaAllocator);
 
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
@@ -540,7 +539,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
-        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
 

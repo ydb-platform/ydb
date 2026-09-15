@@ -38,7 +38,12 @@ public:
         return 0;
     }
 
-    TVector<TArenaAllocatorStats> GetStats() const override
+    size_t UsedSize() const override
+    {
+        return 0;
+    }
+
+    TArenaAllocatorStats GetDetailedStat() const override
     {
         return {};
     }
@@ -71,18 +76,18 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldBitMaskTest)
         auto allocator = CreateArenaAllocator();
         TBlockRangeFieldBitMask field(allocator, MaskSize * 8);
 
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
 
         bool changed = false;
         UNIT_ASSERT(field.TryAdd(TBlockRange16::MakeOneBlock(3), &changed));
         UNIT_ASSERT(changed);
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
 
         field.Clear();
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
     }
 
     Y_UNIT_TEST(ShouldAddSingleBlock)
@@ -526,6 +531,31 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldBitMaskTest)
         UNIT_ASSERT(range.has_value());
         UNIT_ASSERT_VALUES_EQUAL(5, range->Start);
         UNIT_ASSERT_VALUES_EQUAL(9, range->End);
+    }
+
+    Y_UNIT_TEST(ShouldPrintAllRanges)
+    {
+        auto allocator = CreateArenaAllocator();
+        TBlockRangeFieldBitMask field(allocator, 256 * 8);
+
+        bool changed = false;
+        UNIT_ASSERT(
+            field.TryAdd(TBlockRange16::MakeClosedInterval(2, 5), &changed));
+        UNIT_ASSERT(
+            field.TryAdd(TBlockRange16::MakeClosedInterval(63, 66), &changed));
+        UNIT_ASSERT(field.TryAdd(
+            TBlockRange16::MakeClosedInterval(2040, 2047),
+            &changed));
+
+        UNIT_ASSERT_VALUES_EQUAL("[2..5][63..66][2040..2047]", field.Print());
+    }
+
+    Y_UNIT_TEST(ShouldPrintEmptyField)
+    {
+        auto allocator = CreateArenaAllocator();
+        TBlockRangeFieldBitMask field(allocator, 256 * 8);
+
+        UNIT_ASSERT(field.Print().empty());
     }
 
     Y_UNIT_TEST(ShouldReleaseMaskMemoryOnDestruction)

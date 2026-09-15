@@ -73,9 +73,11 @@ TListPBufferResponse MakeListPBufferResponse(
             .Generation = segment.GetGeneration(),
             .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
-        auto range = TBlockRange64::WithLength(
-            segment.GetSelector().GetOffsetInBytes() / blockSize,
-            segment.GetSelector().GetSize() / blockSize);
+        const ui16 rangeStart =
+            segment.GetSelector().GetOffsetInBytes() / blockSize;
+        const ui16 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        Y_ABORT_UNLESS(rangeSize);
+        const auto range = TBlockRange16::WithLength(rangeStart, rangeSize);
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex,
              .PBufferKey = pBufferKey,
@@ -161,6 +163,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
@@ -173,7 +176,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
-    : ActorSystem(actorSystem)
+    : ArenaAllocatorPool(
+          std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
+    , ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(diskDescription.TabletId)
@@ -217,6 +222,11 @@ TDirectBlockGroup::~TDirectBlockGroup()
         NKikimrServices::NBS_PARTITION,
         "%s ~TDirectBlockGroup",
         LogTitle.GetWithTime().c_str());
+}
+
+TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
@@ -293,7 +303,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -421,7 +431,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -495,7 +505,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -623,7 +633,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -700,7 +710,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -2151,20 +2161,18 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
-    size_t allocatedMemorySize = 0;
-    size_t usedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
+
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                auto& stat = hostsStat[host];
-                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
-                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
+                hostsStat[host].DirtyMapStats.Aggregate(
+                    vChunk->GetDirtyMapHostStats(host));
             }
-            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
-            usedMemorySize += vChunk->GetUsedMemorySize();
+            dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
     }
 
@@ -2174,8 +2182,9 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
-        .AllocatedMemorySize = allocatedMemorySize,
-        .UsedMemorySize = usedMemorySize,
+        .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
+        .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
+        .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

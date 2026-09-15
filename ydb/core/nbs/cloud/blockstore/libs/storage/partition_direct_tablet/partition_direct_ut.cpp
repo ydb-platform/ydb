@@ -2011,7 +2011,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
-    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    Y_UNIT_TEST(ShouldReplyOkToNewerVolumeConfig)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -2024,9 +2024,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto volumeConfig = CreateVolumeConfig(32768);
         volumeConfig.SetVersion(1);
         const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
-        UNIT_ASSERT(
-            response.GetStatus() ==
-            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
@@ -2648,8 +2646,14 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const TString& html = response->Get()->Html;
         UNIT_ASSERT(!html.empty());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            TStringBuilder() << "<td>TabletId</td><td>" << tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region count");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)

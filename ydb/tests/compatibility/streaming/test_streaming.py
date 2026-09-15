@@ -4,7 +4,7 @@ import os
 import pytest
 import time
 
-from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints, read_and_check_data
+from ydb.tests.fq.streaming_common.common import wait_completed_checkpoints, read_and_check_data, MessageAcceptor
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
@@ -368,15 +368,15 @@ class StreamingTestBase:
             assert time.time() < deadline, f"multi_output_table expected {expected_count} rows, got {count}"
             time.sleep(1)
 
-    def do_write_read(self, input, expected_output):
+    def do_write_read(self, input, acceptor: MessageAcceptor):
         logger.debug("do_write_read")
         endpoint = f"localhost:{self.cluster.nodes[1].port}"
         time.sleep(2)
         logger.debug("write data to stream")
         write_stream(path=self.input_topic, data=input, database=self.database_path, endpoint=endpoint)
-        read_and_check_data(self, f"/Root/{self.query_name}", expected_output, endpoint, self.database_path, self.consumer_name, self.output_topic)
+        read_and_check_data(self, f"/Root/{self.query_name}", acceptor, endpoint, self.database_path, self.consumer_name, self.output_topic)
 
-    def do_test_part1(self, extra_suffix=''):
+    def do_test_part1(self, extra_suffix='') -> MessageAcceptor:
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix
         input = [
             '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}',
@@ -384,21 +384,21 @@ class StreamingTestBase:
             '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}']
-        expected_data = sorted([
-            '{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix,
-            '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix])
-        self.do_write_read(input, expected_data)
+        acceptor = MessageAcceptor()
+        acceptor.accept(['{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}' + suffix], ordered_group=2)
+        acceptor.accept(['{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix], ordered_group=1)
+        self.do_write_read(input, acceptor)
+        return acceptor
 
-    def do_test_part2(self, extra_suffix=''):
+    def do_test_part2(self, acceptor: MessageAcceptor, extra_suffix=''):
         suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix
         input = [
             '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}']
-        expected_data = sorted([
-            '{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix,
-            '{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix])
-        self.do_write_read(input, expected_data)
+        acceptor.accept(['{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}' + suffix], ordered_group=2)
+        acceptor.accept(['{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}' + suffix], ordered_group=1)
+        self.do_write_read(input, acceptor)
 
 
 class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
@@ -411,8 +411,8 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
     def test_mixed_cluster(self, external):
         self.create_objects(external)
         self.create_streaming_query()
-        self.do_test_part1()
-        self.do_test_part2()
+        acceptor = self.do_test_part1()
+        self.do_test_part2(acceptor)
 
     @link_test_case("#46772")
     @pytest.mark.parametrize("external", [True, False])
@@ -420,17 +420,17 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
         self.create_objects(external, with_precompute=False)
         self.create_join_objects()
         self.create_streaming_query_with_join()
-        self.do_test_part1(extra_suffix='-row-col')
-        self.do_test_part2(extra_suffix='-row-col')
+        acceptor = self.do_test_part1(extra_suffix='-row-col')
+        self.do_test_part2(acceptor, extra_suffix='-row-col')
 
     @link_test_case("#48465")
     @pytest.mark.parametrize("external", [True, False])
     def test_mixed_cluster_multi_output(self, external):
         self.create_multi_output_objects(external)
         self.create_streaming_query_with_multi_output()
-        self.do_test_part1()
+        acceptor = self.do_test_part1()
         self.check_multi_output_table(2)
-        self.do_test_part2()
+        self.do_test_part2(acceptor)
         self.check_multi_output_table(4)
 
 
@@ -444,10 +444,11 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
     def test_restart_to_another_version(self, external):
         self.create_objects(external)
         self.create_streaming_query()
-        self.do_test_part1()
         wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        acceptor = self.do_test_part1()
         self.change_cluster_version()
-        self.do_test_part2()
+        acceptor.reset()
+        self.do_test_part2(acceptor)
 
     @link_test_case("#46772")
     @pytest.mark.parametrize("external", [True, False])
@@ -455,21 +456,23 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.create_objects(external, with_precompute=False)
         self.create_join_objects()
         self.create_streaming_query_with_join()
-        self.do_test_part1(extra_suffix='-row-col')
         wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        acceptor = self.do_test_part1(extra_suffix='-row-col')
         self.change_cluster_version()
-        self.do_test_part2(extra_suffix='-row-col')
+        acceptor.reset()
+        self.do_test_part2(acceptor, extra_suffix='-row-col')
 
     @link_test_case("#48465")
     @pytest.mark.parametrize("external", [True, False])
     def test_restart_to_another_version_multi_output(self, external):
         self.create_multi_output_objects(external)
         self.create_streaming_query_with_multi_output()
-        self.do_test_part1()
-        self.check_multi_output_table(2)
         wait_completed_checkpoints(self.cluster, f"/Root/{self.query_name}", checkpoints_count=1, wait_delta=False)
+        acceptor = self.do_test_part1()
+        self.check_multi_output_table(2)
         self.change_cluster_version()
-        self.do_test_part2()
+        acceptor.reset()
+        self.do_test_part2(acceptor)
         self.check_multi_output_table(4)
 
 
@@ -484,14 +487,16 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         self.create_objects(external)
         self.create_simple_streaming_query()
         suffix = 'value1' if self.test_precompute_queries else ''
+        acceptor = MessageAcceptor()
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
-            self.do_write_read(input, expected_data)
+            acceptor.reset()
+            acceptor.accept([f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}'])
+            self.do_write_read(input, acceptor)
             time.sleep(0.5)
 
     @link_test_case("#46772")
@@ -501,14 +506,16 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         self.create_join_objects()
         self.create_simple_streaming_query_with_join()
         suffix = '-row-col'
+        acceptor = MessageAcceptor()
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct during rolling upgrade
             #
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
-            self.do_write_read(input, expected_data)
+            acceptor.reset()
+            acceptor.accept([f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}'])
+            self.do_write_read(input, acceptor)
             time.sleep(0.5)
 
     @link_test_case("#48465")
@@ -516,13 +523,15 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
     def test_rolling_upgrade_multi_output(self, external):
         self.create_multi_output_objects(external)
         self.create_simple_streaming_query_with_multi_output()
+        acceptor = MessageAcceptor()
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #
             # 2. check written data is correct in both outputs during rolling upgrade
             #
             input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
-            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}']
-            self.do_write_read(input, expected_data)
+            acceptor.reset()
+            acceptor.accept([f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}'])
+            self.do_write_read(input, acceptor)
             self.check_multi_output_table(i + 1)
             time.sleep(0.5)

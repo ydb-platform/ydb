@@ -27,6 +27,7 @@ RECURSE_FOR_TESTS(
     ut/column_table
     ut/functional
     ut/large
+    ut/purecalc
     ut/row_table
     ut/transfer_metrics
 )

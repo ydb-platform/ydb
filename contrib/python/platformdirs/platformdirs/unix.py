@@ -227,8 +227,8 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
         return self._first_item_as_path_if_multipath(self.site_cache_dir)
 
     def _iter_config_dirs(self) -> Iterator[str]:
-        # Under multipath the user dir is an os.pathsep-joined string that equals no single site entry, so the
-        # deduplication in iter_config_dirs cannot drop it. Skip it here instead.
+        # Under multipath the user dir is an os.pathsep-joined string that no single site entry matches, so the
+        # dedupe in iter_config_dirs cannot drop it. Skip it here instead.
         if not self._use_site:
             yield self.user_config_dir
         yield from self._site_config_dirs

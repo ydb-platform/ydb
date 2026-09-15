@@ -1217,8 +1217,7 @@ private:
         }
 
         // Map connections produced by either optimization need partition-preserving task layout.
-        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
-            || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
+        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination());
         txProto.SetEnableShuffleElimination(enableShuffleElimination);
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetHasPqSources(hasPqSources);
@@ -1636,6 +1635,21 @@ private:
                 auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
                 if (inner.Maybe<TCoParameter>()) {
                     prefixProto->MutableValue()->MutableParamValue()->SetParamName(inner.Cast<TCoParameter>().Name().StringValue());
+                } else if (auto member = inner.Maybe<TCoMember>()) {
+                    auto parameter = member.Cast().Struct().Maybe<TCoParameter>();
+                    YQL_ENSURE(parameter, "Unexpected fulltext prefix value callable '" << inner.Ref().Content() << "'");
+
+                    const auto parameterType = parameter.Cast().Ref().GetTypeAnn();
+                    YQL_ENSURE(parameterType->GetKind() == ETypeAnnotationKind::Struct,
+                        "Expected a struct parameter for fulltext prefix member");
+
+                    const auto memberIndex = parameterType->Cast<TStructExprType>()->FindItem(member.Cast().Name().Value());
+                    YQL_ENSURE(memberIndex, "Fulltext prefix parameter member '" << member.Cast().Name().Value()
+                        << "' is missing from its struct type");
+
+                    auto* paramElement = prefixProto->MutableValue()->MutableParamElementValue();
+                    paramElement->SetParamName(parameter.Cast().Name().StringValue());
+                    paramElement->SetElementIndex(*memberIndex);
                 } else {
                     FillLiteralProto(inner.Cast<TCoDataCtor>(), *prefixProto->MutableValue()->MutableLiteralValue());
                 }

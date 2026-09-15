@@ -12,173 +12,171 @@ using NTabletFlatExecutor::TExecutorCounters;
 
 namespace {
 
-const TString DATABASE_PATH = "/Root/db";
-const TString RELATIVE_TABLE_PATH = "Table";
-const TString TABLE_PATH = DATABASE_PATH + "/" + RELATIVE_TABLE_PATH;
-const TInstant NOW = TInstant::Seconds(100);
-constexpr auto TABLET_TYPE = TTabletTypes::DataShard;
-constexpr auto DB_UNIQUE_ROWS_TOTAL = TExecutorCounters::DB_UNIQUE_ROWS_TOTAL;
-constexpr auto CONSUMED_CPU = TExecutorCounters::CONSUMED_CPU;
+    const TString DATABASE_PATH = "/Root/db";
+    const TString RELATIVE_TABLE_PATH = "Table";
+    const TString TABLE_PATH = DATABASE_PATH + "/" + RELATIVE_TABLE_PATH;
+    const TInstant NOW = TInstant::Seconds(100);
+    constexpr auto TABLET_TYPE = TTabletTypes::DataShard;
+    constexpr auto DB_UNIQUE_ROWS_TOTAL = TExecutorCounters::DB_UNIQUE_ROWS_TOTAL;
+    constexpr auto CONSUMED_CPU = TExecutorCounters::CONSUMED_CPU;
 
-// Use the production positional layouts for both source categories.
-struct TFakeTablet {
-    const ui64 TabletId;
-    const ui32 FollowerId;
-    TExecutorCounters Executor;
-    THolder<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
-    TTabletCountersBase ExecutorBaseline;
-    TTabletCountersBase AppBaseline;
+    // Use the production positional layouts for both source categories.
+    struct TFakeTablet {
+        const ui64 TabletId;
+        const ui32 FollowerId;
+        TExecutorCounters Executor;
+        THolder<TTabletCountersBase> App = CreateAppCountersByTabletType(TABLET_TYPE);
+        TTabletCountersBase ExecutorBaseline;
+        TTabletCountersBase AppBaseline;
 
-    TFakeTablet(ui64 tabletId, ui32 followerId)
-        : TabletId(tabletId), FollowerId(followerId)
-    {}
+        TFakeTablet(ui64 tabletId, ui32 followerId)
+            : TabletId(tabletId)
+            , FollowerId(followerId)
+        {
+        }
 
-    TFakeTablet& SetSimple(ui32 counter, ui64 value) {
-        Executor.Simple()[counter] = value;
-        return *this;
+        TFakeTablet& SetSimple(ui32 counter, ui64 value) {
+            Executor.Simple()[counter] = value;
+            return *this;
+        }
+
+        TFakeTablet& AddCumulative(ui32 counter, ui64 value) {
+            Executor.Cumulative()[counter] += value;
+            return *this;
+        }
+
+        TFakeTablet& AddAppCumulative(ui32 counter, ui64 value) {
+            App->Cumulative()[counter] += value;
+            return *this;
+        }
+
+        void Report(const TNodeDatabaseMetricsAggregatorPtr& node, EDetailedMetricsLevel level,
+                    TInstant now, const TString& path = TABLE_PATH)
+        {
+            auto executorDiff = Executor.MakeDiffForAggr(ExecutorBaseline);
+            auto appDiff = App->MakeDiffForAggr(AppBaseline);
+            node->AddCounters(path, level, TabletId, FollowerId, TABLET_TYPE, *executorDiff, *appDiff, now);
+            Executor.RememberCurrentStateAsBaseline(ExecutorBaseline);
+            App->RememberCurrentStateAsBaseline(AppBaseline);
+        }
+    };
+
+    struct TSimulatedNode {
+        NMonitoring::TDynamicCounterPtr Root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TNodeDatabaseMetricsAggregatorPtr Leaders = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, false);
+        TNodeDatabaseMetricsAggregatorPtr Followers = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, true);
+    };
+
+    struct TProcessorFixture {
+        NMonitoring::TDynamicCounterPtr RawRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        NMonitoring::TDynamicCounterPtr PublicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProcessorDatabaseMetricsAggregatorPtr Processor = CreateProcessorDatabaseMetricsAggregator(
+            RawRoot, PublicRoot, DATABASE_PATH, MakeHolder<TExecutorCounters>());
+
+        void ApplyNode(ui32 nodeId, TSimulatedNode& node) {
+            NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
+            node.Leaders->Pack(tables);
+            Processor->ApplyFromNode(nodeId, false, tables);
+            tables.Clear();
+            node.Followers->Pack(tables);
+            Processor->ApplyFromNode(nodeId, true, tables);
+        }
+    };
+
+    ui64 GetMappedCounterValue(NMonitoring::TDynamicCounterPtr group, const TString& name) {
+        UNIT_ASSERT_C(group, "no counter group for " << name);
+        auto counter = group->FindNamedCounter("name", name);
+        UNIT_ASSERT_C(counter, "no mapped counter " << name);
+        return counter->Val();
     }
 
-    TFakeTablet& AddCumulative(ui32 counter, ui64 value) {
-        Executor.Cumulative()[counter] += value;
-        return *this;
+    NMonitoring::TDynamicCounterPtr FindPublicTableGroup(
+        NMonitoring::TDynamicCounterPtr publicRoot,
+        const TString& relativeTablePath = RELATIVE_TABLE_PATH) {
+        return publicRoot->FindSubgroup("table", relativeTablePath);
     }
 
-    TFakeTablet& AddAppCumulative(ui32 counter, ui64 value) {
-        App->Cumulative()[counter] += value;
-        return *this;
+    NMonitoring::TDynamicCounterPtr FindPublicLeafGroup(
+        NMonitoring::TDynamicCounterPtr publicRoot,
+        ui64 tabletId,
+        ui32 followerId,
+        const TString& relativeTablePath = RELATIVE_TABLE_PATH) {
+        auto tableGroup = FindPublicTableGroup(publicRoot, relativeTablePath);
+        if (!tableGroup) {
+            return nullptr;
+        }
+        auto tabletGroup = tableGroup->FindSubgroup("tablet_id", ToString(tabletId));
+        if (!tabletGroup) {
+            return nullptr;
+        }
+        return tabletGroup->FindSubgroup("follower_id", ToString(followerId));
     }
 
-    void Report(const TNodeDatabaseMetricsAggregatorPtr& node, EDetailedMetricsLevel level,
-        TInstant now, const TString& path = TABLE_PATH)
+    NMonitoring::TDynamicCounterPtr FindRawTableGroup(
+        NMonitoring::TDynamicCounterPtr rawRoot,
+        const TString& relativeTablePath = RELATIVE_TABLE_PATH) {
+        return rawRoot->FindSubgroup("table", relativeTablePath);
+    }
+
+    NMonitoring::TDynamicCounterPtr FindRawExecutorCountersGroup(NMonitoring::TDynamicCounterPtr bucketGroup) {
+        if (!bucketGroup) {
+            return nullptr;
+        }
+        auto typeGroup = bucketGroup->FindSubgroup("type", TTabletTypes::TypeToStr(TABLET_TYPE));
+        if (!typeGroup) {
+            return nullptr;
+        }
+        return typeGroup->FindSubgroup("category", "executor");
+    }
+
+    NMonitoring::TDynamicCounterPtr FindRawLeafExecutorCounters(
+        NMonitoring::TDynamicCounterPtr rawRoot,
+        ui64 tabletId,
+        ui32 followerId,
+        const TString& relativeTablePath = RELATIVE_TABLE_PATH) {
+        auto tableGroup = FindRawTableGroup(rawRoot, relativeTablePath);
+        if (!tableGroup) {
+            return nullptr;
+        }
+        auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
+        if (!perPartitionGroup) {
+            return nullptr;
+        }
+        auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
+        if (!tabletGroup) {
+            return nullptr;
+        }
+        return FindRawExecutorCountersGroup(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
+    }
+
+    ui64 GetCounterValue(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name) {
+        UNIT_ASSERT_C(countersGroup, "no counter group for the counter " << name);
+        auto counter = countersGroup->FindNamedCounter("sensor", name);
+        UNIT_ASSERT_C(counter, "no counter " << name);
+        return counter->Val();
+    }
+
+    ui64 GetHistogramTotal(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name,
+                           const TString& label = "sensor")
     {
-        auto executorDiff = Executor.MakeDiffForAggr(ExecutorBaseline);
-        auto appDiff = App->MakeDiffForAggr(AppBaseline);
-        node->AddCounters(path, level, TabletId, FollowerId, TABLET_TYPE, *executorDiff, *appDiff, now);
-        Executor.RememberCurrentStateAsBaseline(ExecutorBaseline);
-        App->RememberCurrentStateAsBaseline(AppBaseline);
+        UNIT_ASSERT_C(countersGroup, "no counter group for the histogram " << name);
+        auto histogram = countersGroup->FindNamedHistogram(label, name);
+        UNIT_ASSERT_C(histogram, "no histogram " << name);
+
+        auto snapshot = histogram->Snapshot();
+        ui64 total = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            total += snapshot->Value(i);
+        }
+        return total;
     }
-};
 
-struct TSimulatedNode {
-    NMonitoring::TDynamicCounterPtr Root = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    TNodeDatabaseMetricsAggregatorPtr Leaders = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, false);
-    TNodeDatabaseMetricsAggregatorPtr Followers = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, true);
-};
-
-struct TProcessorFixture {
-    NMonitoring::TDynamicCounterPtr RawRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    NMonitoring::TDynamicCounterPtr PublicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
-    TProcessorDatabaseMetricsAggregatorPtr Processor = CreateProcessorDatabaseMetricsAggregator(
-        RawRoot, PublicRoot, DATABASE_PATH, MakeHolder<TExecutorCounters>());
-
-    void ApplyNode(ui32 nodeId, TSimulatedNode& node) {
-        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
-        node.Leaders->Pack(tables);
-        Processor->ApplyFromNode(nodeId, false, tables);
-        tables.Clear();
-        node.Followers->Pack(tables);
-        Processor->ApplyFromNode(nodeId, true, tables);
+    void AssertCpuHistogram(NMonitoring::TDynamicCounterPtr rawExecutor,
+                            NMonitoring::TDynamicCounterPtr publicGroup, ui64 expectedTotal)
+    {
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(rawExecutor, "HIST(ConsumedCPU)"), expectedTotal);
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(publicGroup, "table.datashard.used_core_percents", "name"), expectedTotal);
     }
-};
-
-ui64 GetMappedCounterValue(NMonitoring::TDynamicCounterPtr group, const TString& name) {
-    UNIT_ASSERT_C(group, "no counter group for " << name);
-    auto counter = group->FindNamedCounter("name", name);
-    UNIT_ASSERT_C(counter, "no mapped counter " << name);
-    return counter->Val();
-}
-
-NMonitoring::TDynamicCounterPtr FindPublicTableGroup(
-    NMonitoring::TDynamicCounterPtr publicRoot,
-    const TString& relativeTablePath = RELATIVE_TABLE_PATH
-) {
-    return publicRoot->FindSubgroup("table", relativeTablePath);
-}
-
-NMonitoring::TDynamicCounterPtr FindPublicLeafGroup(
-    NMonitoring::TDynamicCounterPtr publicRoot,
-    ui64 tabletId,
-    ui32 followerId,
-    const TString& relativeTablePath = RELATIVE_TABLE_PATH
-) {
-    auto tableGroup = FindPublicTableGroup(publicRoot, relativeTablePath);
-    if (!tableGroup) {
-        return nullptr;
-    }
-    auto tabletGroup = tableGroup->FindSubgroup("tablet_id", ToString(tabletId));
-    if (!tabletGroup) {
-        return nullptr;
-    }
-    return tabletGroup->FindSubgroup("follower_id", ToString(followerId));
-}
-
-NMonitoring::TDynamicCounterPtr FindRawTableGroup(
-    NMonitoring::TDynamicCounterPtr rawRoot,
-    const TString& relativeTablePath = RELATIVE_TABLE_PATH
-) {
-    return rawRoot->FindSubgroup("table", relativeTablePath);
-}
-
-NMonitoring::TDynamicCounterPtr FindRawExecutorCountersGroup(NMonitoring::TDynamicCounterPtr bucketGroup) {
-    if (!bucketGroup) {
-        return nullptr;
-    }
-    auto typeGroup = bucketGroup->FindSubgroup("type", TTabletTypes::TypeToStr(TABLET_TYPE));
-    if (!typeGroup) {
-        return nullptr;
-    }
-    return typeGroup->FindSubgroup("category", "executor");
-}
-
-NMonitoring::TDynamicCounterPtr FindRawLeafExecutorCounters(
-    NMonitoring::TDynamicCounterPtr rawRoot,
-    ui64 tabletId,
-    ui32 followerId,
-    const TString& relativeTablePath = RELATIVE_TABLE_PATH
-) {
-    auto tableGroup = FindRawTableGroup(rawRoot, relativeTablePath);
-    if (!tableGroup) {
-        return nullptr;
-    }
-    auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-    if (!perPartitionGroup) {
-        return nullptr;
-    }
-    auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
-    if (!tabletGroup) {
-        return nullptr;
-    }
-    return FindRawExecutorCountersGroup(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
-}
-
-ui64 GetCounterValue(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name) {
-    UNIT_ASSERT_C(countersGroup, "no counter group for the counter " << name);
-    auto counter = countersGroup->FindNamedCounter("sensor", name);
-    UNIT_ASSERT_C(counter, "no counter " << name);
-    return counter->Val();
-}
-
-ui64 GetHistogramTotal(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name,
-    const TString& label = "sensor")
-{
-    UNIT_ASSERT_C(countersGroup, "no counter group for the histogram " << name);
-    auto histogram = countersGroup->FindNamedHistogram(label, name);
-    UNIT_ASSERT_C(histogram, "no histogram " << name);
-
-    auto snapshot = histogram->Snapshot();
-    ui64 total = 0;
-    for (ui32 i = 0; i < snapshot->Count(); ++i) {
-        total += snapshot->Value(i);
-    }
-    return total;
-}
-
-void AssertCpuHistogram(NMonitoring::TDynamicCounterPtr rawExecutor,
-    NMonitoring::TDynamicCounterPtr publicGroup, ui64 expectedTotal)
-{
-    UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(rawExecutor, "HIST(ConsumedCPU)"), expectedTotal);
-    UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(publicGroup, "table.datashard.used_core_percents", "name"), expectedTotal);
-}
 
 } // namespace
 
@@ -189,20 +187,11 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         TSimulatedNode node2;
         TProcessorFixture fixture;
         TFakeTablet leader1(1000, 0);
-        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 4)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 6)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 4).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 6).Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
         TFakeTablet leader2(2000, 0);
-        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 6)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 5)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 7)
-               .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 6).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 5).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 7).Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
         TFakeTablet follower1(1000, 1);
-        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999).AddCumulative(CONSUMED_CPU, 7)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 999)
-               .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 11)
-               .Report(node2.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999).AddCumulative(CONSUMED_CPU, 7).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 999).AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 11).Report(node2.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.ApplyNode(2, node2);
@@ -256,12 +245,10 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         TProcessorFixture fixture;
 
         TFakeTablet leader1(1000, 0);
-        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
 
         TFakeTablet leader2(2000, 0);
-        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 6)
-               .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 6).Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.ApplyNode(2, node2);
@@ -276,8 +263,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!tableGroup->FindSubgroup("follower_id", "replicas_only"));
         TSimulatedNode rejectedNode;
         TFakeTablet rejectedTablet(3000, 0);
-        rejectedTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999999).AddCumulative(CONSUMED_CPU, 999)
-            .Report(rejectedNode.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+        rejectedTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999999).AddCumulative(CONSUMED_CPU, 999).Report(rejectedNode.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> rejected;
         rejectedNode.Leaders->Pack(rejected);
 
@@ -293,7 +279,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         TFakeTablet leader1(1000, 0);
         leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 42)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
@@ -301,7 +287,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 42u);
         leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 0)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
 
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
@@ -314,8 +300,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         TProcessorFixture fixture;
 
         TFakeTablet leader1(1000, 0);
-        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
@@ -340,8 +325,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!fixture.RawRoot->FindSubgroup("table", RELATIVE_TABLE_PATH));
 
         TFakeTablet recreated(1000, 0);
-        recreated.SetSimple(DB_UNIQUE_ROWS_TOTAL, 4).AddCumulative(CONSUMED_CPU, 2)
-            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(10));
+        recreated.SetSimple(DB_UNIQUE_ROWS_TOTAL, 4).AddCumulative(CONSUMED_CPU, 2).Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(10));
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
         auto newTable = FindPublicTableGroup(fixture.PublicRoot);
@@ -359,7 +343,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         TFakeTablet leader1(1000, 0);
         leader1.AddCumulative(CONSUMED_CPU, 50)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
@@ -368,7 +352,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafExecutorCounters, "MAX(ConsumedCPU)"), 0u);
 
         leader1.AddCumulative(CONSUMED_CPU, 100)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
 
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
@@ -415,12 +399,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         TFakeTablet leader1(1000, 0);
 
         leader1.AddCumulative(CONSUMED_CPU, 50)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
 
         leader1.AddCumulative(CONSUMED_CPU, 80)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
 
@@ -448,11 +432,11 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         TFakeTablet leaderOnNode1(1000, 0);
         leaderOnNode1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 55)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         TFakeTablet leaderOnNode2(1000, 0);
         leaderOnNode2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 55)
-               .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.ApplyNode(2, node2);
@@ -489,11 +473,11 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         TFakeTablet leader1(1000, 0);
         leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 77)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
 
         TFakeTablet leader2(2000, 0);
         leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999)
-               .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
 
         fixture.ApplyNode(1, node1);
         fixture.ApplyNode(2, node2);
@@ -504,7 +488,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 77u + 999u);
         UNIT_ASSERT(tableGroup->FindSubgroup("tablet_id", "2000"));
         leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 90)
-               .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(5));
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(5));
         leader2.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
 
         fixture.ApplyNode(1, node1);
@@ -514,18 +498,16 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 90u + 999u);
     }
 
-
     Y_UNIT_TEST(GradualLevelChangesKeepOneTableAndAcceptEveryReport) {
         for (auto initial : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             const auto next = initial == TDetailedMetricsSettings::MetricsLevelTable
-                ? TDetailedMetricsSettings::MetricsLevelPartition : TDetailedMetricsSettings::MetricsLevelTable;
+                                  ? TDetailedMetricsSettings::MetricsLevelPartition
+                                  : TDetailedMetricsSettings::MetricsLevelTable;
             TSimulatedNode node;
             TProcessorFixture fixture;
             TFakeTablet first(1000, 0), second(2000, 0);
-            first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-                .Report(node.Leaders, initial, NOW);
-            second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7)
-                .Report(node.Leaders, initial, NOW);
+            first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node.Leaders, initial, NOW);
+            second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7).Report(node.Leaders, initial, NOW);
             fixture.ApplyNode(1, node);
             fixture.Processor->RecalculateAllCounters();
             auto table = FindPublicTableGroup(fixture.PublicRoot);
@@ -553,7 +535,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 19);
             UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(table, "table.datashard.used_core_percents", "name"), 2);
             UNIT_ASSERT_VALUES_EQUAL(bool(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0)),
-                next == TDetailedMetricsSettings::MetricsLevelPartition);
+                                     next == TDetailedMetricsSettings::MetricsLevelPartition);
             fixture.Processor->ApplyFromNode(1, false, {});
             UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
             UNIT_ASSERT(!FindRawTableGroup(fixture.RawRoot));
@@ -566,17 +548,15 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             TSimulatedNode node1, node2;
             TProcessorFixture fixture;
             TFakeTablet first(1000, 0), second(tableLevel ? 2000 : 1000, 0);
-            first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-                .Report(node1.Leaders, level, NOW);
-            second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7)
-                .Report(node2.Leaders, level, NOW);
+            first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node1.Leaders, level, NOW);
+            second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7).Report(node2.Leaders, level, NOW);
             fixture.ApplyNode(1, node1);
             fixture.ApplyNode(2, node2);
             fixture.Processor->RecalculateAllCounters();
             auto table = FindPublicTableGroup(fixture.PublicRoot);
             auto rawExecutor = tableLevel
-                ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
-                : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+                                   ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
+                                   : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
             AssertCpuHistogram(rawExecutor, publicBucket, 2);
 
@@ -618,8 +598,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> tables;
         node1.Leaders->Pack(tables);
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
-        auto* histogram = tables.Mutable(0)->MutableTableCounters()->MutableExecutorCounters()
-            ->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+        auto* histogram = tables.Mutable(0)->MutableTableCounters()->MutableExecutorCounters()->MutableHistogram(TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
         const auto knownBucketCount = histogram->GetBucketsCount();
         histogram->SetBucketsCount(knownBucketCount + 1);
         histogram->AddBuckets(knownBucketCount);
@@ -651,8 +630,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             fixture.Processor->RecalculateAllCounters();
             auto table = FindPublicTableGroup(fixture.PublicRoot);
             auto rawExecutor = tableLevel
-                ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
-                : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+                                   ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
+                                   : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
             AssertCpuHistogram(rawExecutor, publicBucket, 2);
 
@@ -674,10 +653,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         TSimulatedNode node;
         TProcessorFixture fixture;
         TFakeTablet first(1000, 0), second(2000, 0);
-        first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
-            .Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
-        second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7)
-            .Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5).Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 7).Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
         fixture.ApplyNode(1, node);
         fixture.Processor->RecalculateAllCounters();
         auto table = FindPublicTableGroup(fixture.PublicRoot);
@@ -748,7 +725,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         fixture.ApplyNode(1, node1);
         fixture.ApplyNode(2, node2);
         first.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition,
-            NOW + TDuration::Seconds(5), DATABASE_PATH + "/Renamed");
+                     NOW + TDuration::Seconds(5), DATABASE_PATH + "/Renamed");
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
         UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
@@ -757,10 +734,10 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         fixture.ApplyNode(1, node1);
         fixture.Processor->RecalculateAllCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot),
-            "table.datashard.row_count"), 10);
+                                                       "table.datashard.row_count"), 10);
 
         second.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition,
-            NOW + TDuration::Seconds(5), DATABASE_PATH + "/Renamed");
+                      NOW + TDuration::Seconds(5), DATABASE_PATH + "/Renamed");
         fixture.ApplyNode(2, node2);
         fixture.Processor->RecalculateAllCounters();
         auto retiredTable = FindPublicTableGroup(fixture.PublicRoot);
@@ -772,6 +749,6 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
         UNIT_ASSERT(!FindRawTableGroup(fixture.RawRoot));
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot, "Renamed"),
-            "table.datashard.row_count"), 10);
+                                                       "table.datashard.row_count"), 10);
     }
-}
+} // Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest)

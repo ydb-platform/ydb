@@ -2023,7 +2023,8 @@ void TKikimrRunner::RecordEmptyDomainSensor() {
 
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
     const TKikimrRunConfig& runConfig,
-    const TBasicKikimrServicesMask& serviceMask) {
+    const TBasicKikimrServicesMask& serviceMask,
+    const TServiceInitializerFactories& tabletServices) {
 
     using namespace NKikimrServicesInitializers;
     TIntrusivePtr<TServiceInitializersList> sil(new TServiceInitializersList);
@@ -2051,13 +2052,15 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TStateStorageServiceInitializer(runConfig));
     }
     if (serviceMask.EnableLocalService) {
-        sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.LocalService);
+        sil->AddServiceInitializer(tabletServices.LocalService(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
         sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
     }
     if (serviceMask.EnableBlobCache) {
-        sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.BlobCache);
+        sil->AddServiceInitializer(tabletServices.BlobCache(runConfig));
     }
     if (serviceMask.EnableLogger) {
         sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend));
@@ -2196,19 +2199,23 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableCompPriorities) {
-        sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.CompPriorities);
+        sil->AddServiceInitializer(tabletServices.CompPriorities(runConfig));
     }
 
     if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
-        sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.CompositeConveyor);
+        sil->AddServiceInitializer(tabletServices.CompositeConveyor(runConfig));
     }
 
     if (serviceMask.EnableGeneralCachePortionsMetadata) {
-        sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.GeneralCachePortionsMetadata);
+        sil->AddServiceInitializer(tabletServices.GeneralCachePortionsMetadata(runConfig));
     }
 
     if (serviceMask.EnableGeneralCacheColumnData) {
-        sil->AddServiceInitializer(new TGeneralCacheColumnDataInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.GeneralCacheColumnData);
+        sil->AddServiceInitializer(tabletServices.GeneralCacheColumnData(runConfig));
     }
 
     if (serviceMask.EnableCms) {
@@ -2297,11 +2304,13 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableOverloadManager) {
-        sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.OverloadManager);
+        sil->AddServiceInitializer(tabletServices.OverloadManager(runConfig));
     }
 
     if (serviceMask.EnableCsFlowControlManager) {
-        sil->AddServiceInitializer(new TFlowControlManagerInitializer(runConfig));
+        Y_ABORT_UNLESS(tabletServices.FlowControlManager);
+        sil->AddServiceInitializer(tabletServices.FlowControlManager(runConfig));
     }
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
@@ -2561,50 +2570,6 @@ void TKikimrRunner::InitializePlugins(const TKikimrRunConfig& runConfig) {
             Plugins.push_back(plugin);
         }
     }
-}
-
-TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
-        const TKikimrRunConfig& runConfig,
-        std::shared_ptr<TModuleFactories> factories) {
-    TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
-    runner->InitializeXdsBootstrapConfig(runConfig);
-    runner->InitializeAllocator(runConfig);
-    runner->InitializeRegistries(runConfig);
-    runner->InitializeMonitoring(runConfig);
-    runner->InitializeControlBoard(runConfig);
-    runner->InitializeAppData(runConfig);
-    runner->InitializeLogSettings(runConfig);
-    runner->RecordEmptyDomainSensor();
-    TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));
-    runner->InitializeActorSystem(runConfig, sil, runConfig.ServicesMask);
-    runner->InitializeMonitoringLogin(runConfig);
-    runner->InitializeKqpController(runConfig);
-    runner->InitializeGracefulShutdown(runConfig);
-    runner->InitializeGRpc(runConfig);
-    runner->InitializePlugins(runConfig);
-    return runner;
-}
-
-int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
-#ifdef _win32_
-    WSADATA dummy;
-    WSAStartup(MAKEWORD(2, 2), &dummy);
-#endif
-
-    TKikimrRunner::SetSignalHandlers();
-    Cout << "Starting YDB server" << Endl;
-    Cout << Strip(GetProgramSvnVersion()) << Endl;
-
-    TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
-    if (runner) {
-        runner->KikimrStart();
-        runner->BusyLoop();
-        // exit busy loop by a signal
-        Cout << "Shutting YDB server down" << Endl;
-        runner->KikimrStop(false);
-    }
-
-    return 0;
 }
 
 } // namespace NKikimr

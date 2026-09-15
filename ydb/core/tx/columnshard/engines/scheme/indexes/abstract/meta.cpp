@@ -1,4 +1,3 @@
-#include "fetcher.h"
 #include "meta.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
@@ -44,11 +43,6 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TString& iChunk, const T
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("data", DoSerializeDataToJson(iChunk, indexInfo));
     return result;
-}
-
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-    const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const {
-    return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
 std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {

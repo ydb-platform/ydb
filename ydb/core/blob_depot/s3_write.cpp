@@ -12,7 +12,6 @@ namespace NKikimr::NBlobDepot {
         const ui64 AgentInstanceId;
         std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> Request;
         std::unique_ptr<IEventHandle> Response;
-        ui32 AllocatedLocatorCount = 0;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
@@ -25,8 +24,6 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            AllocatedLocatorCount = 0;
-
             TAgent& agent = Self->GetAgent(NodeId);
             if (!agent.Connection || agent.AgentInstanceId != AgentInstanceId) {
                 // agent has been disconnected while transaction was in queue -- do nothing
@@ -43,6 +40,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvPrepareWriteS3Result *responseRecord;
             std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
 
+            ui32 allocatedLocatorCount = 0;
             for (const auto& record = Request->Get()->Record; const auto& item : record.GetItems()) {
                 auto *responseItem = responseRecord->AddItems();
 
@@ -63,8 +61,14 @@ namespace NKikimr::NBlobDepot {
 
                     const bool inserted = agent.S3WritesInFlight.insert(locator).second;
                     Y_ABORT_UNLESS(inserted);
-                    ++AllocatedLocatorCount;
+                    ++allocatedLocatorCount;
                 }
+            }
+
+            // account the slots right here, together with agent.S3WritesInFlight: the agent may disconnect before this
+            // transaction completes, and OnAgentDisconnect must see a consistent pair (set, counter)
+            if (allocatedLocatorCount) {
+                Self->S3Manager->OnS3WriteInFlightAdded(allocatedLocatorCount);
             }
 
             return true;
@@ -99,9 +103,6 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            if (AllocatedLocatorCount) {
-                Self->S3Manager->OnS3WriteInFlightAdded(AllocatedLocatorCount);
-            }
             if (Response) {
                 TActivationContext::Send(Response.release());
             }

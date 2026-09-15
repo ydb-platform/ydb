@@ -120,11 +120,29 @@ namespace {
         }
     };
 
-    void StartBlobDepotWithS3(TTestBasicRuntime& runtime) {
+    // While Active, every TEvPut issued by the tablet (redo log writes) is parked here instead of reaching the group,
+    // so transactions get stuck between Execute and Complete until Release().
+    struct TLogWriteHold {
+        bool Active = false;
+        std::vector<THolder<IEventHandle>> Held;
+
+        void Release(TTestBasicRuntime& runtime) {
+            Active = false;
+            for (auto& ev : std::exchange(Held, {})) {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
+    };
+
+    void StartBlobDepotWithS3(TTestBasicRuntime& runtime, TLogWriteHold *logWriteHold = nullptr) {
         SetupTabletServices(runtime);
 
-        runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([logWriteHold](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenAcquireBlobDepotS3Router) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (logWriteHold && logWriteHold->Active && ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                logWriteHold->Held.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -240,5 +258,56 @@ Y_UNIT_TEST_SUITE(BlobDepotS3WriteThrottle) {
         agentA.SendPrepareWriteS3(/*cookie=*/4);
         UNIT_ASSERT_C(agentA.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
             "parked request of a disconnected agent was not dropped");
+    }
+
+    Y_UNIT_TEST(SlotsAreReleasedWhenNewPipeReplacesLiveOne) {
+        TTestBasicRuntime runtime;
+        StartBlobDepotWithS3(runtime);
+
+        // Old agent instance holds a locator; a new instance on the same node registers over a new pipe while the old
+        // pipe is still open, and only then the old pipe goes away.
+        TFakeAgent oldAgent(runtime, /*agentInstanceId=*/1);
+        oldAgent.Register();
+        oldAgent.PrepareWriteS3(/*cookie=*/1);
+
+        TFakeAgent agent(runtime, /*agentInstanceId=*/2);
+        agent.Register();
+        oldAgent.Disconnect();
+
+        agent.DiscardWithSlowDown(agent.PrepareWriteS3(/*cookie=*/2));
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        agent.SendPrepareWriteS3(/*cookie=*/3);
+        UNIT_ASSERT_C(agent.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
+            "slot of the replaced connection leaked");
+    }
+
+    Y_UNIT_TEST(DisconnectBetweenPrepareExecuteAndComplete) {
+        TTestBasicRuntime runtime;
+        TLogWriteHold logWriteHold;
+        StartBlobDepotWithS3(runtime, &logWriteHold);
+
+        // Agent #1 sends a prepare; the tablet runs TTxPrepareWriteS3::Execute, but the redo log write is held so
+        // Complete does not happen. The agent disconnects in this window, and only then the log write is let through.
+        {
+            TFakeAgent agent(runtime, /*agentInstanceId=*/1);
+            agent.Register();
+            logWriteHold.Active = true;
+            agent.SendPrepareWriteS3(/*cookie=*/1);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            agent.Disconnect();
+            logWriteHold.Release(runtime);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Agent #2 must find the counter consistent: after SlowDown brings the gate to 1 its write still goes through.
+        TFakeAgent agent(runtime, /*agentInstanceId=*/2);
+        agent.Register();
+        agent.DiscardWithSlowDown(agent.PrepareWriteS3(/*cookie=*/2));
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        agent.SendPrepareWriteS3(/*cookie=*/3);
+        UNIT_ASSERT_C(agent.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
+            "S3WritesInFlight got out of sync with agent.S3WritesInFlight across disconnect");
     }
 }

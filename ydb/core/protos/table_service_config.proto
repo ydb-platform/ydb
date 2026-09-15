@@ -572,6 +572,7 @@ message TTableServiceConfig {
         // visits the channels which have something for it, and a compute actor checks its output channels for
         // finish only once one of them has. Kill switch: off, the channels are polled as before
         optional bool EnableChannelNotifications = 10 [default = true];
+        optional uint64 UnboundWaitPeriodMs = 11 [default = 600000];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];

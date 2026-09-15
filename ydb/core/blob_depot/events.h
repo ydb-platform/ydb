@@ -30,6 +30,7 @@ namespace NKikimr {
             EvPushMetrics,
             EvPrepareWriteS3,
             EvPrepareWriteS3Result,
+            EvPushS3RouterMetrics, // Retired wire event; keep its number for mixed-version clusters.
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,

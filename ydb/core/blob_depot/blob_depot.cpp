@@ -138,6 +138,11 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
 
+                case TEvBlobDepot::EvPushS3RouterMetrics:
+                    // Older S3 routers still push these metrics during rolling upgrades.
+                    // Metrics are now collected locally; discard the obsolete wire payload.
+                    break;
+
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
 

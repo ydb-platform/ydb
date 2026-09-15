@@ -380,19 +380,12 @@ Y_UNIT_TEST_SUITE(Channels20Spilling) {
         test.Run();
     }
 
-    // Disabled while the defect it reproduces is open. The early finish of the consumer makes the sender
-    // push a finish chunk, which is spilled behind everything already in the storage
-    // (TOutputDescriptor::PushDataChunk keeps spilling while SpilledBytes > 0). The receiver queues what
-    // arrives after its early finish without reporting it popped (TInputDescriptor::PushDataChunk), so
-    // the window never reopens past it, the finish chunk never leaves the storage and the producer waits
-    // for it for good. The local variant passes: TLocalBuffer::EarlyFinish finishes the buffer directly.
-    /*
+    // the finish of the early finish must not queue behind the spilled backlog nobody reads
     Y_UNIT_TEST(SpillThenEarlyFinish2n) {
         TSpillEarlyFinishTest test;
         test.Local = false;
         test.Run();
     }
-    */
 
     Y_UNIT_TEST(SpillThenEarlyFinish1n) {
         TSpillEarlyFinishTest test;

@@ -466,13 +466,15 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
-    if (FinishPushed.load() && !data.ConfirmFinish &&
+    auto finished = data.Finished;
+    const bool earlyFinish = finished && EarlyFinished.load();
+
+    if (FinishPushed.load() && !data.ConfirmFinish && !earlyFinish &&
         !data.Checkpoint // Checkpoint traffic should be handled after finish
     ) {
         return;
     }
 
-    auto finished = data.Finished;
     bool spilled = false;
     const ui64 chunkBytes = data.Bytes;
 
@@ -483,7 +485,17 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         auto maxInflightBytes = GetMaxInflightBytes();
 
         if (Storage) {
-            if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
+            if (earlyFinish) {
+                // The peer reads no more: what is spilled is never wanted, and it must not hold back the
+                // finish the peer waits for to let the channel go. A finish of the producer already in the
+                // storage goes with the rest and this one takes its place.
+                if (SpilledBytes.load() > 0 || !LoadingQueue.empty()) {
+                    DiscardSpilled();
+                } else if (FinishPushed.load()) {
+                    return; // the finish is on its way already
+                }
+                PushBytes += data.Bytes;
+            } else if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
                 if (SpilledChunkBytes.empty()) {
                     LOG_D("START SPILLING, ChannelId=" << Info.ChannelId << ", PushBytes=" << PushBytes.load()
                         << ", PopBytes=" << RemotePopBytes.load() << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
@@ -523,6 +535,24 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     if (!spilled) {
         nodeState->PushDataChunk(std::move(data), self);
     }
+}
+
+void TOutputDescriptor::DiscardSpilled() {
+    if (SpilledChunkBytes.empty() && LoadingQueue.empty()) {
+        return;
+    }
+    LOG_D("DISCARD SPILLED, ChannelId=" << Info.ChannelId << ", SpilledBytes=" << SpilledBytes.load()
+        << ", SpilledChunks=" << SpilledChunkBytes.size() << ", Loading=" << LoadingQueue.size());
+    while (!SpilledChunkBytes.empty()) {
+        SpilledChunkBytes.pop();
+    }
+    // a loading chunk is already counted as pushed, see UpdatePopBytes
+    while (!LoadingQueue.empty()) {
+        PushBytes -= LoadingQueue.front().Bytes;
+        LoadingQueue.pop();
+    }
+    SpilledBytes.store(0);
+    TailBlobId = HeadBlobId;
 }
 
 void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {

@@ -112,6 +112,7 @@ namespace NKikimr::NKqp {
         connector.SetUseSsl(false);
         connector.MutableEndpoint()->set_host("localhost");
         connector.MutableEndpoint()->set_port(1234);
+        connector.AddDatabaseNames(DEFAULT_DATABASE);
 
         config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
         config.SetAllExternalDataSourcesAreAvailable(false);

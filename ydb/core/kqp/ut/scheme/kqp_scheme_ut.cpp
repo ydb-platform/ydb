@@ -13391,6 +13391,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableStreamingQueryDisposition(true);
         config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
+        // Configure DatabaseNames for YDB connector routing. Use a dummy value
+        // so YDB EDS is routed to PQ provider (topic access) instead of the connector.
+        config.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->AddDatabaseNames("__connector_only__");
+
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
             .SetEnableStreamingQueries(enableStreamingQueries)
             .SetEnableExternalDataSources(true)

@@ -857,6 +857,10 @@ message TGenericConnectorConfig {
     // Default = empty
     repeated EGenericDataSourceKind ForKinds = 8;
 
+    // List of database names that this connector handles.
+    // Default = empty (connector handles all YDB databases)
+    repeated string DatabaseNames = 9;
+
     reserved 1, 2;
 }
 

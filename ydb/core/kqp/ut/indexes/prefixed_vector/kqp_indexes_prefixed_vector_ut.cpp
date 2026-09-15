@@ -1248,14 +1248,14 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3u);
     }
 
-    Y_UNIT_TEST(LegacyLeadingSubPrefixScalesFirstLevelBudgetByRootGroups) {
+    Y_UNIT_TEST_TWIN(LeadingSubPrefixScalesFirstLevelBudgetByRootGroups, EnableVectorSearchActor) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetUseRealThreads(false)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(false);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
 
         TKikimrRunner kikimr(serverSettings);
         auto* runtime = kikimr.GetTestServer().GetRuntime();
@@ -1263,9 +1263,18 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         auto session = kikimr.RunCall([&] { return DoCreateTableForPrefixedVectorIndex(db); });
 
         kikimr.RunCall([&] {
+            // Each prefix group has three exact matches and two distant vectors
             for (const auto& query : {
-                TString(Q_(R"(UPDATE `/Root/TestTable` SET data="group_1" WHERE user="user_a" AND pk < 50;)")),
-                TString(Q_(R"(UPDATE `/Root/TestTable` SET data="group_2" WHERE user="user_a" AND pk >= 50;)")),
+                TString(Q_(R"(
+                    UPDATE `/Root/TestTable`
+                    SET data="group_1", emb=IF(pk < 30, "\x67\x68\x02", "\x03\x30\x02")
+                    WHERE user="user_a" AND pk < 50;
+                )")),
+                TString(Q_(R"(
+                    UPDATE `/Root/TestTable`
+                    SET data="group_2", emb=IF(pk < 80, "\x67\x68\x02", "\x03\x30\x02")
+                    WHERE user="user_a" AND pk >= 50;
+                )")),
             }) {
                 auto result = session.ExecuteDataQuery(
                     query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -1316,6 +1325,13 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         });
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        std::vector<i64> keys;
+        TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            keys.push_back(parser.ColumnParser("pk").GetInt64());
+        }
+        absl::c_sort(keys);
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<i64>{1, 11, 21, 51, 61, 71}), keys);
         UNIT_ASSERT_C(!firstLevelLimits.empty(), "expected a first-level vector TopK read");
         for (const ui64 limit : firstLevelLimits) {
             UNIT_ASSERT_VALUES_EQUAL(limit, 2u);

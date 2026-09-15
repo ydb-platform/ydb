@@ -562,12 +562,9 @@ struct TLoadTest {
             NodeIndex1 = NodeIndex0;
         }
         if (Failures.Any()) {
-            ReleaseSessionsBeforeSensors = true;
-        }
-        if (ReleaseSessionsBeforeSensors) {
-            // see ReleaseSessions; the idle destroy is checked at the cleanup tick
-            Limits.IdleDestroyPeriod = TDuration::MilliSeconds(300);
+            // a lost last ack of a session is recovered by the idle ping, within the wait for the sensors
             Limits.CleanupPeriod = Min(Limits.CleanupPeriod, TDuration::MilliSeconds(50));
+            Limits.IdlePingPeriod = Min(Limits.IdlePingPeriod, TDuration::MilliSeconds(200));
         }
         auto& tableService = *settings.AppConfig.MutableTableServiceConfig();
         tableService.SetEnableSpillingChannelBackpressure(Limits.EnableSpillingChannelBackpressure);
@@ -618,21 +615,6 @@ struct TLoadTest {
         auto actor = nodeIndex == NodeIndex0 ? Callback0 : Callback1;
         auto control = nodeIndex == NodeIndex0 ? Control0 : Control1;
         Runtime->Send(actor, control, new TCallbackActor::TEvCallback(std::move(callback)), nodeIndex, true);
-    }
-
-    // With losses the last ack of a session may be lost after its channels are gone, and a session
-    // without descriptors does not watch its queue (HandleCleanup): the item stays until the session is
-    // destroyed. Loss runs use a short idle destroy period and wait for the sessions to go before the
-    // sensors are checked, which is when the destructor of the session accounts for the item.
-    void ReleaseSessions() {
-        Debug0.reset();
-        Debug1.reset();
-        for (auto& service : {Service0, Service1}) {
-            UNIT_ASSERT_C(WaitFor([&]() {
-                std::lock_guard lock(service->Mutex);
-                return service->NodeStates.empty();
-            }, TDuration::Seconds(5)), TStringBuilder() << "the sessions of node " << service->NodeId << " were not destroyed while idle");
-        }
     }
 
     // Both sessions are debug ones, registered before either discovers its peer (a discovery makes the
@@ -819,9 +801,6 @@ struct TLoadTest {
         Start();
         Wait();
         Check();
-        if (ReleaseSessionsBeforeSensors) {
-            ReleaseSessions();
-        }
         CheckSensors();
         Destroy();
         CheckQuota();
@@ -843,8 +822,6 @@ struct TLoadTest {
     TFailureSettings Failures;
     bool UseDebugSessions = false;
     bool ExpectReconciliation = false;
-    // a run which may leave an unacked ConfirmFinish on a session without descriptors, see ReleaseSessions
-    bool ReleaseSessionsBeforeSensors = false;
     TDuration WaitTimeout = TDuration::Seconds(10);
     std::unique_ptr<TKikimrRunner> Runner;
     NActors::TTestActorRuntime* Runtime;

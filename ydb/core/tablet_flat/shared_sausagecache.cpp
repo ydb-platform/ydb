@@ -879,6 +879,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TPage* page = collection.PageSet.FindPage(location.Offset);
 
         if (!page) {
+            Y_ENSURE(collection.PageSet.size() < collection.TotalPages);
             page = new TPage(location.Offset, location.Size, location.Type, location.Crc32, &collection);
             Y_ENSURE(collection.PageSet.emplace(page).second);
             page->CacheMode = initialMode;
@@ -1286,13 +1287,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
-        for (const auto& pageId : xrange(pageCollection->Total())) {
-            auto location = pageCollection->GetLocation(pageId);
-            auto* page = collection.PageSet.FindPage(location.Offset);
-            if (!page) {
-                pagesToLoad.emplace(location);
-                continue;
-            }
+        auto skipBTreeIndexV1Shadow = pageCollection->SkipBTreeIndexV1Shadow();
+
+        auto skipPageType = [skipBTreeIndexV1Shadow](NTable::NPage::EPage type) {
+            return type == NTable::NPage::EPage::Skip ||
+                (skipBTreeIndexV1Shadow && type == NTable::NPage::EPage::BTreeIndex);
+        };
+
+        auto processPage = [&](TPage* page) {
             TryChangeCacheMode(page, ECacheMode::TryKeepInMemory);
 
             switch (page->State) {
@@ -1304,6 +1306,39 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 loadedPages.push_back(page);
                 break;
             }
+        };
+
+        auto processMetaPages = [&](bool processKnownPages) {
+            for (const auto& pageId : xrange(pageCollection->MetaPages())) {
+                auto type = static_cast<NTable::NPage::EPage>(pageCollection->Page(pageId).Type);
+                if (skipPageType(type)) {
+                    continue;
+                }
+
+                auto location = pageCollection->GetLocation(pageId);
+                if (auto* page = collection.PageSet.FindPage(location.Offset)) {
+                    if (processKnownPages) {
+                        processPage(page);
+                    }
+                } else {
+                    pagesToLoad.emplace(location);
+                }
+            }
+        };
+
+        if (pageCollection->Total() == pageCollection->MetaPages()) {
+            // V1 and dual-root collections: preserve the original single pass.
+            processMetaPages(true);
+        } else {
+            // V2-only pages may be absent from MetaPages. Change tiers for all
+            // known pages, then queue structural pages that are not known yet.
+            for (const auto& ptr : collection.PageSet) {
+                auto* page = ptr.Get();
+                if (!skipPageType(page->Type)) {
+                    processPage(page);
+                }
+            }
+            processMetaPages(false);
         }
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Try move collection " << collection.Id
@@ -1351,6 +1386,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto* page = EnsurePage(*collection, *locationIt, ECacheMode::TryKeepInMemory);
                 if (page->State == PageStateNo) {
                     if (TPageTraits::GetSize(page) > remainBytes) {
+                        RemoveAlivePage(page);
                         collection->PageSet.ErasePage(page->Offset);
                         break;
                     }

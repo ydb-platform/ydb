@@ -122,7 +122,7 @@ namespace {
                 conf.Group(2).PageRows = 1;
             }
             // TODO: rewrite tests when we deprecate flat index
-            conf.WriteBTreeIndex = false;
+            conf.WriteBTreeIndexV1 = false;
             conf.WriteFlatIndex = true;
 
             NTest::TPartCook cook(Mass.Model->Scheme, conf);

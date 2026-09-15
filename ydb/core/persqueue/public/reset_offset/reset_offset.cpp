@@ -21,8 +21,7 @@ void TResetOffsetActor::Bootstrap() {
 }
 
 void TResetOffsetActor::DoDescribe() {
-    YDB_LOG_DEBUG("Start describe",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start describe");
     Become(&TResetOffsetActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -34,8 +33,7 @@ void TResetOffsetActor::DoDescribe() {
 }
 
 void TResetOffsetActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -82,8 +80,7 @@ STFUNC(TResetOffsetActor::DescribeState) {
 }
 
 void TResetOffsetActor::DoReset() {
-    YDB_LOG_DEBUG("Start reset",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start reset");
     Become(&TResetOffsetActor::ResetState);
 
     for (auto& partition : TopicInfo.Info->Description.GetPartitions()) {
@@ -98,8 +95,7 @@ void TResetOffsetActor::DoReset() {
 }
 
 void TResetOffsetActor::Handle(TEvPQ::TEvResetOffsetResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvResetOffsetResponse",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("Handle TEvPQ::TEvResetOffsetResponse",
         {"ev", ev->Get()->Record.ShortDebugString()});
 
     const ui32 partitionId = ev->Get()->GetPartitionId();
@@ -170,8 +166,7 @@ void TResetOffsetActor::MarkPartitionSuccess(TPartitionStatus& partitionStatus) 
 }
 
 void TResetOffsetActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
 
     auto tabletId = ev->Get()->TabletId;
     auto cookieIt = TabletCookies.find(tabletId);
@@ -196,8 +191,7 @@ void TResetOffsetActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
 }
 
 void TResetOffsetActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvents::TEvWakeup");
 
     auto partitionId = ev->Get()->Tag;
     auto it = Partitions.find(partitionId);
@@ -246,8 +240,7 @@ void TResetOffsetActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionSta
 }
 
 void TResetOffsetActor::ReplyIfPossible() {
-    YDB_LOG_DEBUG("ReplyIfPossible: PendingPartitions PendingRetries",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_D("ReplyIfPossible: PendingPartitions PendingRetries",
         {"pendingPartitions", PendingPartitions},
         {"pendingRetries", PendingRetries});
     if (PendingPartitions > 0 || PendingRetries > 0) {
@@ -264,8 +257,7 @@ void TResetOffsetActor::SendToTablet(ui64 tabletId, IEventBase* ev, ui64 cookie)
 }
 
 void TResetOffsetActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    YDB_LOG_INFO("Reply error",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_I("Reply error",
         {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
     Send(ParentId, new TEvResetOffsetResult(errorCode, std::move(errorMessage)));
     PassAway();

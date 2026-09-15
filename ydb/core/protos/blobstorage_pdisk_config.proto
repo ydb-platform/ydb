@@ -92,7 +92,7 @@ message TPDiskConfig {
     // When ExpectedSlotSize is set, MaxSlots is required as an upper bound for inferred ExpectedSlotCount.
     optional uint64 ExpectedSlotCount = 2001; // Number of slots to calculate per-vdisk disk space limit.
 
-    optional uint32 ChunkBaseLimit = 2002; // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    optional uint32 ChunkBaseLimit = 2002; // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13. EnableTightPDiskSpaceColors uses 30 with per-color chunk floors.
 
     optional uint32 CompletionThreadsCount = 2003;
     optional bool UseNoopScheduler = 2004;

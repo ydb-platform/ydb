@@ -159,12 +159,13 @@ private:
                 {"request", ev->Get()->GetRequest()});
         }
 
+        const auto& request = ctx->PrepareRequest(ev);
         {
             std::unique_lock guard(RunningQueriesMutex);
             ++RunningQueriesCount;
         }
 
-        func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
+        func(Client.Get(), request, callback, ctx);
     }
 
 public:

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_idempotency.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <util/generic/ptr.h>
@@ -57,7 +57,7 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     // Full-backup control op ids to flush on Apply(); same shape as IncrementalBackups.
     TDeque<ui64> FullBackups;
-    TDeque<TBackupOperationUidKey> BackupOperationUidKeys;
+    TDeque<TOperationUidKey> SchemeOperationUidKeys;
 
     TDeque<TPathId> StreamingQueries;
 
@@ -191,8 +191,8 @@ public:
         FullBackups.emplace_back(id);
     }
 
-    void PersistBackupOperationUidKey(const TBackupOperationUidKey& key) {
-        BackupOperationUidKeys.emplace_back(key);
+    void PersistSchemeOperationUidKey(const TOperationUidKey& key) {
+        SchemeOperationUidKeys.emplace_back(key);
     }
 
     void PersistStreamingQuery(const TPathId& pathId) {

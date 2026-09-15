@@ -7,6 +7,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/map.h>
+
 namespace NKikimr::NSchemeShard {
 
 Y_UNIT_TEST_SUITE(OperationUidSupport) {
@@ -50,6 +52,7 @@ Y_UNIT_TEST_SUITE(OperationUidSupport) {
             UNIT_ASSERT(SupportsOperationUid(test.Kind));
             UNIT_ASSERT(SupportsSqlOperationIdempotency(test.Kind));
             UNIT_ASSERT(SupportsOperationIdempotency(test.Type));
+            UNIT_ASSERT(*GetOperationUidKind(test.Type) == test.Kind);
             UNIT_ASSERT(SupportsSqlOperationIdempotency(test.SqlWriteMode));
 
             TKqpOperation operation;
@@ -76,6 +79,87 @@ Y_UNIT_TEST_SUITE(OperationUidSupport) {
         UNIT_ASSERT(!SupportsOperationIdempotency(NKikimrSchemeOp::ESchemeOpCreateTable));
         UNIT_ASSERT(!SupportsSqlOperationIdempotency("create"));
         UNIT_ASSERT(!GetSchemeOperationForIdempotency(NKqpProto::TKqpSchemeOperation{}));
+    }
+}
+
+Y_UNIT_TEST_SUITE(OperationUidAdmission) {
+    using TAdmission = TOperationUidAdmission;
+    using EDecision = TAdmission::EDecision;
+    using EPolicy = TAdmission::EDuplicatePolicy;
+
+    Y_UNIT_TEST(MissingUidDoesNotLookupButStillPersistsOperation) {
+        bool persisted = false;
+        auto admission = TAdmission::Prepare({Ydb::TOperationId::EXPORT, {}}, EPolicy::Replay,
+            [](const auto&) -> TMaybe<TOperationUidRecord> {
+                UNIT_FAIL("An empty legacy UID must not be looked up");
+                return Nothing();
+            });
+        UNIT_ASSERT(admission.Commit(true, [&] { persisted = true; }));
+        UNIT_ASSERT(persisted);
+    }
+
+    Y_UNIT_TEST(FailedAdmissionDoesNotBindUid) {
+        auto admission = TAdmission::Prepare({Ydb::TOperationId::FULL_BACKUP, "uid"}, EPolicy::Replay,
+            [](const auto&) -> TMaybe<TOperationUidRecord> { return Nothing(); });
+        UNIT_ASSERT(admission.GetDecision() == EDecision::Proceed);
+        UNIT_ASSERT(!admission.Commit(false, [] { UNIT_FAIL("Failed work must not persist a UID"); }));
+    }
+
+    Y_UNIT_TEST(LegacyRecordsKeepTheirDuplicatePolicy) {
+        for (auto kind : {Ydb::TOperationId::EXPORT, Ydb::TOperationId::IMPORT,
+                Ydb::TOperationId::BUILD_INDEX, Ydb::TOperationId::SET_NOT_NULL}) {
+            const bool replay = kind == Ydb::TOperationId::EXPORT || kind == Ydb::TOperationId::IMPORT;
+            // Existing records have no original request identity. New code must
+            // neither require one nor attach the retry's body to that record.
+            const TOperationUidRecord legacy{42, TPathId(1, 2), {}, {}};
+            auto admission = TAdmission::Prepare({kind, "legacy UID / ключ"}, replay ? EPolicy::Replay : EPolicy::Reject,
+                [&](const auto&) -> TMaybe<TOperationUidRecord> { return legacy; },
+                [&](const auto& stored) {
+                    UNIT_ASSERT(replay); // Reject policy must not invoke identity checks.
+                    return CompareOperationUid({stored.DomainPathId, {}, {}}, {TPathId(1, 2), {}, {}});
+                });
+            UNIT_ASSERT(admission.GetDecision() == (replay ? EDecision::Replay : EDecision::AlreadyExists));
+            UNIT_ASSERT_VALUES_EQUAL(admission.GetOperationId(), 42);
+            UNIT_ASSERT(!admission.Commit(true, [] { UNIT_FAIL("Duplicates must not create new records"); }));
+        }
+    }
+
+    Y_UNIT_TEST(IdentityChecksKeepOwnerBeforeBodyAndPreserveDomainConflicts) {
+        const TOperationUidRecord stored{42, TPathId(1, 2), "owner", "original"};
+        const auto check = [&](const TOperationUidIdentity& requested, EDecision expected) {
+            auto admission = TAdmission::Prepare({Ydb::TOperationId::RESTORE, "uid"}, EPolicy::Replay,
+                [&](const auto&) -> TMaybe<TOperationUidRecord> { return stored; },
+                [&](const auto& receipt) {
+                    return CompareOperationUid(
+                        {receipt.DomainPathId, TStringBuf(receipt.UserSID), TStringBuf(receipt.RequestBody)}, requested);
+                });
+            UNIT_ASSERT(admission.GetDecision() == expected);
+            UNIT_ASSERT(!admission.Commit(true, [] { UNIT_FAIL("Existing UID must not be rebound"); }));
+        };
+        check({{}, "other", "different"}, EDecision::OwnerMismatch);
+        check({{}, "owner", "different"}, EDecision::RequestMismatch);
+        check({{}, "owner", "original"}, EDecision::Replay);
+        check({TPathId(1, 3), {}, {}}, EDecision::DomainMismatch);
+    }
+
+    Y_UNIT_TEST(OperationKindsKeepIndependentNamespaces) {
+        TMap<TOperationUidKey, TOperationUidRecord> records;
+        for (auto kind : {Ydb::TOperationId::EXPORT, Ydb::TOperationId::IMPORT,
+                Ydb::TOperationId::BUILD_INDEX, Ydb::TOperationId::SET_NOT_NULL,
+                Ydb::TOperationId::FULL_BACKUP, Ydb::TOperationId::INCREMENTAL_BACKUP, Ydb::TOperationId::RESTORE}) {
+            const TOperationUidKey key{kind, "same uid"};
+            auto admission = TAdmission::Prepare(key, EPolicy::Reject,
+                [&](const auto& uid) -> TMaybe<TOperationUidRecord> {
+                    if (const auto* record = FindOperationByUid(records, uid)) {
+                        return *record;
+                    }
+                    return Nothing();
+                });
+            UNIT_ASSERT(admission.Commit(true, [&] {
+                UNIT_ASSERT(records.emplace(key, TOperationUidRecord{42, {}, {}, {}}).second);
+            }));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(records.size(), 7);
     }
 }
 

@@ -6,7 +6,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard_audit_log.h"
-#include "schemeshard_idempotency.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_operation_factory.h"
 #include "schemeshard_operation_registry.h"
@@ -410,7 +409,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
     // Returns false when validation or an existing receipt has answered the
     // request. This runs before IgniteOperation can rewrite or stage any work.
-    bool PrepareIdempotency(TMaybe<TBackupOperationUidKey>& key) {
+    bool PrepareIdempotency(TMaybe<TOperationUidKey>& key, TOperationUidAdmission& admission) {
         const auto& record = Request->Get()->Record;
         const auto reject = [&](NKikimrScheme::EStatus status, const TString& reason) {
             Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(status, record.GetTxId(), Self->TabletID(), reason);
@@ -424,7 +423,8 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                 return reject(NKikimrScheme::StatusInvalidParameter,
                     "IDEMPOTENCY_NOT_SUPPORTED: exactly one statement supporting idempotency is required");
             }
-            if (!SupportsOperationIdempotency(tx.GetOperationType())) {
+            const auto kind = GetOperationUidKind(tx.GetOperationType());
+            if (!kind) {
                 return reject(NKikimrScheme::StatusInvalidParameter,
                     "IDEMPOTENCY_NOT_SUPPORTED: unsupported operation kind");
             }
@@ -438,24 +438,32 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                 return reject(NKikimrScheme::StatusInvalidParameter,
                     "INVALID_IDEMPOTENCY_IDENTITY: exact original DDL is required");
             }
-            key = TBackupOperationUidKey{ui32(tx.GetOperationType()), identity.GetUid()};
-            if (const auto receipt = Self->FindBackupOperationByUid(*key)) {
-                // A known key is not authority to read another user's receipt.
-                // Check this before comparing or exposing the original request.
-                const auto match = CompareOperationUid(
-                    {{}, TStringBuf(receipt->UserSID), TStringBuf(receipt->OriginalDdl)},
-                    {{}, TStringBuf(UserSID), TStringBuf(identity.GetOriginalDdl())});
-                if (match == EUidReplayMatch::OwnerMismatch) {
+            key = TOperationUidKey{*kind, identity.GetUid()};
+            admission = TOperationUidAdmission::Prepare(*key,
+                TOperationUidAdmission::EDuplicatePolicy::Replay,
+                [&](const auto& uid) { return Self->FindSchemeOperationByUid(uid); },
+                [&](const auto& receipt) {
+                    // Check ownership before comparing or exposing the request.
+                    return CompareOperationUid(
+                        {{}, TStringBuf(receipt.UserSID), TStringBuf(receipt.RequestBody)},
+                        {{}, TStringBuf(UserSID), TStringBuf(identity.GetOriginalDdl())});
+                });
+            switch (admission.GetDecision()) {
+                case TOperationUidAdmission::EDecision::Proceed:
+                    break;
+                case TOperationUidAdmission::EDecision::Replay:
+                    Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusAccepted,
+                        admission.GetOperationId(), Self->TabletID());
+                    Response->Record.SetOperationId(ToString(admission.GetOperationId()));
+                    return false;
+                case TOperationUidAdmission::EDecision::OwnerMismatch:
                     return reject(NKikimrScheme::StatusAccessDenied, "Access to the operation receipt is denied");
-                }
-                if (match == EUidReplayMatch::RequestMismatch) {
+                case TOperationUidAdmission::EDecision::RequestMismatch:
                     return reject(NKikimrScheme::StatusPreconditionFailed,
                         "UID_CONFLICT: the key belongs to a different request");
-                }
-                Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusAccepted,
-                    receipt->OperationId, Self->TabletID());
-                Response->Record.SetOperationId(ToString(receipt->OperationId));
-                return false;
+                case TOperationUidAdmission::EDecision::AlreadyExists:
+                case TOperationUidAdmission::EDecision::DomainMismatch:
+                    Y_ABORT("Unexpected scheme UID decision");
             }
             // IgniteOperation's legacy tx-id replay does not compare request
             // bodies. It cannot admit a new external identity for that work.
@@ -493,8 +501,9 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         }
         PeerName = record.GetPeerName();
 
-        TMaybe<TBackupOperationUidKey> uid;
-        if (!PrepareIdempotency(uid)) {
+        TMaybe<TOperationUidKey> uid;
+        TOperationUidAdmission admission;
+        if (!PrepareIdempotency(uid, admission)) {
             return true;
         }
         if (LookupOnly) {
@@ -514,12 +523,12 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
         Response = Self->IgniteOperation(*Request->Get(), context);
 
-        if (uid && Self->Operations.contains(txId)) {
+        admission.Commit(uid && Self->Operations.contains(txId), [&] {
             const auto& tx = record.GetTransaction(0);
-            memChanges.GrabNewBackupOperationUidKey(Self, *uid);
-            Self->BindBackupOperationUid(*uid, ui64(txId), tx, UserSID);
-            dbChanges.PersistBackupOperationUidKey(*uid);
-        }
+            memChanges.GrabNewSchemeOperationUidKey(Self, *uid);
+            Self->BindSchemeOperationUid(*uid, ui64(txId), tx, UserSID);
+            dbChanges.PersistSchemeOperationUidKey(*uid);
+        });
 
         //NOTE: Successfully created operation also must be checked for the size of this local tx.
         //

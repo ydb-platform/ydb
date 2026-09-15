@@ -1,50 +1,55 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
-TMaybe<TBackupOperationReplay> TSchemeShard::FindBackupOperationByUid(const TBackupOperationUidKey& key) const {
-    const auto* id = FindOperationByUid(BackupOperationsByUid, key);
+// Storage adapter for TModifyScheme admission. Legacy RPC handlers provide
+// their existing operation tables/indexes directly to TOperationUidAdmission.
+
+TMaybe<TOperationUidRecord> TSchemeShard::FindSchemeOperationByUid(const TOperationUidKey& key) const {
+    const auto* id = FindOperationByUid(SchemeOperationsByUid, key);
     if (!id) {
         return Nothing();
     }
     switch (key.first) {
-        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection: {
+        case Ydb::TOperationId::FULL_BACKUP: {
             const auto& info = *FullBackups.at(*id);
-            return TBackupOperationReplay{*id, info.OriginalDdl, info.UserSID.GetOrElse(TString())};
+            return TOperationUidRecord{*id, {}, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
-        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
             const auto& info = *IncrementalBackups.at(*id);
-            return TBackupOperationReplay{*id, info.OriginalDdl, info.UserSID.GetOrElse(TString())};
+            return TOperationUidRecord{*id, {}, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
-        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+        case Ydb::TOperationId::RESTORE: {
             const auto& info = IncrementalRestoreStates.at(*id);
-            return TBackupOperationReplay{*id, info.OriginalDdl, info.UserSID};
+            return TOperationUidRecord{*id, {}, info.UserSID, info.OriginalDdl};
         }
         default:
-            Y_ABORT("Unexpected backup operation type");
+            Y_ABORT("Unsupported scheme operation UID storage kind");
     }
 }
 
-void TSchemeShard::BindBackupOperationUid(const TBackupOperationUidKey& key, ui64 id,
+void TSchemeShard::BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
     const NKikimrSchemeOp::TModifyScheme& tx, const TString& userSID)
 {
     const auto& ddl = tx.GetOperationIdempotency().GetOriginalDdl();
     switch (key.first) {
-        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection: {
+        case Ydb::TOperationId::FULL_BACKUP: {
             auto& info = *FullBackups.at(id);
             info.Uid = key.second;
             info.OriginalDdl = ddl;
             info.UserSID = userSID;
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
             auto& info = *IncrementalBackups.at(id);
             info.Uid = key.second;
             info.OriginalDdl = ddl;
             info.UserSID = userSID;
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+        case Ydb::TOperationId::RESTORE: {
             Y_ABORT_UNLESS(!IncrementalRestoreStates.contains(id));
             auto& info = IncrementalRestoreStates[id];
             info.Uid = key.second;
@@ -59,29 +64,29 @@ void TSchemeShard::BindBackupOperationUid(const TBackupOperationUidKey& key, ui6
             break;
         }
         default:
-            Y_ABORT("Unexpected backup operation type");
+            Y_ABORT("Unsupported scheme operation UID storage kind");
     }
-    Y_ABORT_UNLESS(BackupOperationsByUid.emplace(key, id).second);
+    Y_ABORT_UNLESS(SchemeOperationsByUid.emplace(key, id).second);
 }
 
-void TSchemeShard::PersistBackupOperationUidKey(NIceDb::TNiceDb& db, const TBackupOperationUidKey& key) {
-    const auto id = BackupOperationsByUid.at(key);
+void TSchemeShard::PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOperationUidKey& key) {
+    const auto id = SchemeOperationsByUid.at(key);
     switch (key.first) {
-        case NKikimrSchemeOp::ESchemeOpBackupBackupCollection: {
+        case Ydb::TOperationId::FULL_BACKUP: {
             const auto& info = *FullBackups.at(id);
             db.Table<Schema::FullBackups>().Key(id).Update(
                 NIceDb::TUpdate<Schema::FullBackups::Uid>(info.Uid),
                 NIceDb::TUpdate<Schema::FullBackups::OriginalDdl>(info.OriginalDdl));
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection: {
+        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
             const auto& info = *IncrementalBackups.at(id);
             db.Table<Schema::IncrementalBackups>().Key(id).Update(
                 NIceDb::TUpdate<Schema::IncrementalBackups::Uid>(info.Uid),
                 NIceDb::TUpdate<Schema::IncrementalBackups::OriginalDdl>(info.OriginalDdl));
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection: {
+        case Ydb::TOperationId::RESTORE: {
             const auto& info = IncrementalRestoreStates.at(id);
             using T = Schema::IncrementalRestoreState;
             db.Table<T>().Key(id).Update(
@@ -96,7 +101,7 @@ void TSchemeShard::PersistBackupOperationUidKey(NIceDb::TNiceDb& db, const TBack
             break;
         }
         default:
-            Y_ABORT("Unexpected backup operation type");
+            Y_ABORT("Unsupported scheme operation UID storage kind");
     }
 }
 

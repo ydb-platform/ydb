@@ -106,6 +106,14 @@ NMonitoring::TDynamicCounterPtr PopulateDataShardPublicCounters(
     return sourceCountersGroup;
 }
 
+NMonitoring::TDynamicCounters::TCounterPtr GetPublicCounter(
+    NMonitoring::TDynamicCounterPtr group, const TString& name)
+{
+    auto counter = group->FindNamedCounter("name", name);
+    UNIT_ASSERT_C(counter, "Missing public counter " << name);
+    return counter;
+}
+
 } // namespace <anonymous>
 
 /**
@@ -960,5 +968,105 @@ R"json(
             expectedJsonAllZeros,
             "Expected JSON (all source group removed):" << Endl << expectedJsonAllZeros
         );
+    }
+
+    Y_UNIT_TEST(RetainsLatestCumulativeValuesWithoutRetainingLiveCounters) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto first = PopulateDataShardPublicCounters(runtime, "first", 1);
+        auto second = PopulateDataShardPublicCounters(runtime, "second", 2);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        aggregator->AddSourceCountersGroup("first", first);
+        aggregator->AddSourceCountersGroup("second", second);
+        aggregator->RecalculateAllTargetCounters();
+        auto cpu = GetPublicCounter(target, "table.datashard.consumed_cpu_us");
+        auto rows = GetPublicCounter(target, "table.datashard.row_count");
+        auto histogram = target->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 3030);
+
+        // Removal captures the latest source values, even without a preceding recalculation.
+        PopulateDataShardPublicCounters(runtime, "first", 3);
+        aggregator->RemoveSourceCountersGroup("first");
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 3030);
+        PopulateDataShardPublicCounters(runtime, "first", 9);
+        for (ui32 i = 0; i < 3; ++i) {
+            aggregator->RecalculateAllTargetCounters();
+            UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 5030);
+            UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 2001);
+            auto snapshot = histogram->Snapshot();
+            for (ui32 bucket = 0; bucket < snapshot->Count(); ++bucket) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(bucket), 2001 + bucket);
+            }
+        }
+
+        PopulateDataShardPublicCounters(runtime, "second", 4);
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 7030);
+        aggregator->RemoveSourceCountersGroup("second");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 7030);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 0);
+        auto snapshot = histogram->Snapshot();
+        for (ui32 bucket = 0; bucket < snapshot->Count(); ++bucket) {
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(bucket), 0);
+        }
+    }
+
+    Y_UNIT_TEST(RetainedCumulativeHistoryAllowsSourceIdReuse) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto first = PopulateDataShardPublicCounters(runtime, "first", 0);
+        auto second = PopulateDataShardPublicCounters(runtime, "second", 1);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        auto cpu = GetPublicCounter(target, "table.datashard.consumed_cpu_us");
+        aggregator->AddSourceCountersGroup("source", first);
+        aggregator->RemoveSourceCountersGroup("source");
+        aggregator->AddSourceCountersGroup("source", second);
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 1030);
+
+        PopulateDataShardPublicCounters(runtime, "second", 2);
+        aggregator->RemoveSourceCountersGroup("source");
+        for (ui32 i = 0; i < 3; ++i) {
+            aggregator->RecalculateAllTargetCounters();
+            UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 2030);
+        }
+    }
+
+    Y_UNIT_TEST(RetainedCumulativeHistoryKeepsFollowerFiltering) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto leader = PopulateDataShardPublicCounters(runtime, "leader", 1);
+        auto follower = PopulateDataShardPublicCounters(runtime, "follower", 2);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        aggregator->AddSourceCountersGroup("leader", leader);
+        aggregator->AddSourceCountersGroup("follower", follower, true);
+        aggregator->RecalculateAllTargetCounters();
+        auto writes = GetPublicCounter(target, "table.datashard.write.rows");
+        auto reads = GetPublicCounter(target, "table.datashard.read.rows");
+        auto rows = GetPublicCounter(target, "table.datashard.row_count");
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 3010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 1001);
+
+        PopulateDataShardPublicCounters(runtime, "follower", 3);
+        aggregator->RemoveSourceCountersGroup("follower");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 4010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 1001);
+
+        aggregator->RemoveSourceCountersGroup("leader");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 4010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 0);
     }
 }

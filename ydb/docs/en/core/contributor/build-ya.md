@@ -4,11 +4,11 @@
 
 **Ya Make** build configuration language is a primary one for YDB, with a `ya.make` file in each directory representing Ya Make targets.
 
-Setup the development environment as described in [Working on a change - Setup environment](suggest-change.md) arcticle to work with `Ya Make`.
+Setup the development environment as described in [Working on a change - Setup environment](suggest-change.md) article to work with `Ya Make`.
 
 ## Running Ya commands {#run_ya}
 
-There's a `ya` script in the YDB repository root to run `Ya Make` commands from the console. You can add it to the PATH evniromnet variable to enable launching without specifiying a full path. For Linux/Bash and GitHub repo cloned to `~/ydbwork/ydb` you can use the following command:
+There's a `ya` script in the YDB repository root to run `Ya Make` commands from the console. You can add it to the PATH environment variable to enable launching without specifying a full path. For Linux/Bash and GitHub repo cloned to `~/ydbwork/ydb` you can use the following command:
 
 ```bash
 echo "alias ya='~/ydbwork/ydb/ya'" >> ~/.bashrc

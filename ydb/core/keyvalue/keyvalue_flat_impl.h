@@ -701,7 +701,7 @@ protected:
                 auto requestUid = ev->Get()->RequestUid;
                 auto newBlobId = State.AllocateLogoBlobId(blobId.BlobSize(), blobId.Channel(), requestUid);
 
-                CopyBlobActorId = Register(CreateKeyValueCopyBlobActor(SelfId(), Info(), blobId, newBlobId, requestUid));
+                CopyBlobActorId = RegisterWithSameMailbox(CreateKeyValueCopyBlobActor(SelfId(), Info(), blobId, newBlobId, requestUid));
 
                 YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::COPY_BLOB",
                     {"keyValue", TabletID()},

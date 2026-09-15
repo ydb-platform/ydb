@@ -1283,7 +1283,7 @@ private:
         ResourceManager->PublishScheduled.clear();
 
         if (ResourceManager->MemoryConsumer) {
-            ResourceManager->MemoryConsumer->SetConsumption(TAlignedPagePool::GetGlobalPagePoolSize());
+            ResourceManager->MemoryConsumer->SetConsumption(Max<i64>(0, GetTotalMmapedBytes()));
         }
 
         NKikimrKqp::TKqpNodeResources payload;

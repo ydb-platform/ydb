@@ -125,36 +125,6 @@ void AddVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const
     )sql", table.c_str(), name.c_str(), metric.c_str()));
 }
 
-void AddManhattanVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
-        const TString& name = "manhattan_idx") {
-    ExecOk(db, Sprintf(R"sql(
-        ALTER TABLE `%s` ADD INDEX %s
-            GLOBAL USING vector_kmeans_tree
-            ON (Embedding)
-            WITH (distance=manhattan, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-    )sql", table.c_str(), name.c_str()));
-}
-
-void AddEuclideanVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
-        const TString& name = "euclidean_idx") {
-    ExecOk(db, Sprintf(R"sql(
-        ALTER TABLE `%s` ADD INDEX %s
-            GLOBAL USING vector_kmeans_tree
-            ON (Embedding)
-            WITH (distance=euclidean, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-    )sql", table.c_str(), name.c_str()));
-}
-
-void AddInnerProductVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
-        const TString& name = "inner_product_idx") {
-    ExecOk(db, Sprintf(R"sql(
-        ALTER TABLE `%s` ADD INDEX %s
-            GLOBAL USING vector_kmeans_tree
-            ON (Embedding)
-            WITH (similarity=inner_product, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-    )sql", table.c_str(), name.c_str()));
-}
-
 // A prefixed vector index (a prefix column before the vector column).
 void AddPrefixedVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const TString& name = "vp_idx") {
     ExecOk(db, Sprintf(R"sql(

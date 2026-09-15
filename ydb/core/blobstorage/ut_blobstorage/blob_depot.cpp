@@ -75,6 +75,39 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicPutAndGet(tenv, 11, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(IgnoreLegacyS3RouterMetrics) {
+        // Use the historical wire number independently of the current event enum.
+        // The receiver must discard the payload without requiring the retired protobuf.
+        struct TLegacyMetrics : TEventPB<TLegacyMetrics, NKikimrBlobDepot::TEvPushMetrics, 0x10810016> {};
+        static_assert(TEvBlobDepot::EvPushS3RouterMetrics == TLegacyMetrics::EventType);
+
+        TBlobDepotTestEnvironment tenv(1);
+        auto& env = *tenv.Env;
+        TestBasicPutAndGet(tenv, 10, tenv.BlobDepot);
+        const auto tabletId = TryGetBlobDepotTabletId(env, tenv.BlobDepot);
+        UNIT_ASSERT(tabletId);
+
+        bool delivered = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TLegacyMetrics::EventType) {
+                delivered = true;
+            }
+            return true;
+        };
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1);
+        auto* metrics = new TLegacyMetrics;
+        metrics->Record.SetNodeId(1);
+        env.Runtime->SendToPipe(*tabletId, sender, metrics, 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto connected = env.WaitForEdgeActorEvent<TEvTabletPipe::TEvClientConnected>(sender);
+        UNIT_ASSERT(connected);
+        UNIT_ASSERT_VALUES_EQUAL(connected->Get()->Status, NKikimrProto::OK);
+        env.Sim(TDuration::Seconds(5));
+        env.Runtime->FilterFunction = nullptr;
+        UNIT_ASSERT_C(delivered, "legacy metrics did not reach the tablet");
+
+        TestBasicPutAndGet(tenv, 11, tenv.BlobDepot);
+    }
+
     Y_UNIT_TEST(TestBlockedEvGetRequest) {
         ui32 seed;
         LoadSeed(seed);

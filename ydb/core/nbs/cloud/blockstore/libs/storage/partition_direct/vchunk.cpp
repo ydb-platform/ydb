@@ -25,6 +25,31 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD
+=======
+namespace {
+
+ui32 CheckedVChunkBlockSize(ui32 blockSize)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    return blockSize;
+}
+
+NProto::TError MakeVChunkDestroyedError()
+{
+    return MakeError(E_REJECTED, "VChunk destroyed");
+}
+
+NProto::TError MakeVChunkStoppedError()
+{
+    return MakeError(E_REJECTED, "VChunk stopped");
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 TVChunk::TVChunk(
     NActors::TActorSystem* actorSystem,
     IPartitionDirectService* partitionDirectService,
@@ -37,8 +62,13 @@ TVChunk::TVChunk(
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
+<<<<<<< HEAD
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
+=======
+    , BlockSize(CheckedVChunkBlockSize(blockSize))
+    , BlocksCount(GetVChunkBlockCount(BlockSize, vChunkSize))
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
         .DBGIndex = vChunkConfig.GetDBGIndex(),

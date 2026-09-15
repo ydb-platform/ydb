@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -12,7 +13,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 
 TVChunkConfig MakeTestVChunkConfig()
 {
@@ -69,7 +70,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         constexpr THostIndex Host = 0;
         constexpr size_t ByteCount = 4096;
@@ -107,7 +108,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
@@ -158,7 +159,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         vchunkConfig.AppendHost();
         const auto newIdx = static_cast<THostIndex>(5);
@@ -191,7 +192,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh,30,30};"
@@ -217,7 +218,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         vchunkConfig.PromoteHost(3);
         vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
@@ -250,7 +251,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768,32768};"
@@ -390,7 +391,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         dirtyMap.MarkFresh(THostIndex{0}, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(THostIndex{2}, 40 * DefaultBlockSize);
@@ -460,7 +461,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -536,7 +537,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -639,7 +640,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -792,7 +793,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -870,7 +871,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const auto range = TBlockRange16::WithLength(10, 10);
 
@@ -905,7 +906,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
@@ -942,7 +943,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const auto range = TBlockRange16::WithLength(10, 10);
         dirtyMap->RegisterInflightWrite(MakeKey(100), range);
@@ -994,7 +995,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Promote hand-off H3 to primary.
         vchunkConfig.PromoteHost(3);
@@ -1068,7 +1069,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Promote hand-off H3 to primary and make it Fresh with a low
         // watermark so tracking is enabled and writes above the watermark are
@@ -1145,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Written to two primary and one hand-off
         const THostMask requested =
@@ -1219,7 +1220,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1-{Disabled,0,0};"
@@ -1294,7 +1295,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0,0};"
             "H1*{Operational,32768,32768};"
@@ -1373,7 +1374,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         dirtyMap.SetFlushWatermark(THostIndex{2}, 100 * DefaultBlockSize);
 
@@ -1456,7 +1457,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         // Only 3 DDisks available by default. For some requests, ddisk will not
@@ -1516,7 +1517,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
@@ -1570,7 +1571,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
         const THostMask mask = MakePrimaryHosts();
 
         // Lock range on DDisk (for reading).
@@ -1624,7 +1625,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RestorePBuffer(
@@ -1679,7 +1680,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Block written to four PBuffers
 <<<<<<< HEAD
@@ -1763,7 +1764,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Block written to two primary PBuffers and one hand-off PBuffer
 <<<<<<< HEAD
@@ -1829,7 +1830,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(123, TBlockRange64::WithLength(0, 100));
@@ -1925,7 +1926,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RestorePBuffer(
@@ -2001,7 +2002,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2067,7 +2068,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
@@ -2156,7 +2157,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
@@ -2219,7 +2220,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 41));
@@ -2301,7 +2302,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2347,7 +2348,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 100));
@@ -2411,7 +2412,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const int lsnsCount = 100;
         for (int i = 1; i <= lsnsCount; ++i) {
@@ -2471,7 +2472,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 21));
@@ -2551,7 +2552,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 6));
@@ -2635,7 +2636,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         dirtyMap.RegisterInflightWrite(100, TBlockRange64::WithLength(10, 91));
@@ -2735,7 +2736,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
 <<<<<<< HEAD
         auto inflightCounterBeforeWrite = dirtyMap.GetInflightCount();
@@ -2814,7 +2815,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Register a pending write (no PBuffer acknowledgement yet).
 <<<<<<< HEAD
@@ -2876,7 +2877,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // First write completes normally.
 <<<<<<< HEAD
@@ -2955,7 +2956,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3018,7 +3019,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // No writes yet — no barrier.
         UNIT_ASSERT(!dirtyMap.GetSafeBarrierForErase().has_value());
@@ -3091,7 +3092,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3173,7 +3174,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3241,7 +3242,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3306,7 +3307,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();
         const THostMask confirmed = MakePrimaryHosts();
@@ -3378,7 +3379,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -3441,7 +3442,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakePrimaryHosts();   // {0, 1, 2}
         const THostMask confirmed = MakePrimaryHosts();   // {0, 1, 2}
@@ -3503,9 +3504,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         // A fully operational DDisk has no fresh range to sync.
         UNIT_ASSERT_EQUAL(std::nullopt, dirtyMap->GetFreshRange(THostIndex{1}));
@@ -3533,7 +3535,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldAdvanceFreshRangeAfterRangeSynced)
     {
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
@@ -3544,7 +3547,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -3605,7 +3608,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const auto range = TBlockRange16::MakeClosedInterval(0, 255);
 
@@ -3626,7 +3629,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldNotAdvanceFreshRangeWhenRangeSyncFailed)
     {
-        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+        const ui64 totalBlocks =
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize);
 
         auto vchunkConfig = MakeTestVChunkConfig();
 
@@ -3637,7 +3641,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange16::MakeClosedInterval(0, totalBlocks - 1),
@@ -3685,7 +3689,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
@@ -3752,7 +3756,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         source->RegisterInflightWrite(
@@ -3783,7 +3787,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Before load the target contains the unsynced fresh tail.
         UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
@@ -3812,7 +3816,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         const auto before = dirtyMap->DebugPrintDDiskState();
 
@@ -3835,7 +3839,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
-            DefaultVChunkSize / DefaultBlockSize);
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // Disable H3 while it stays a desired DDisk -> it starts lagging and
         // will record ranges it misses as Behind.

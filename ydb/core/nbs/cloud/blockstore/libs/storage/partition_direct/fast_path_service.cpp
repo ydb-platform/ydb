@@ -117,7 +117,13 @@ TVector<TRegionPtr> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
+<<<<<<< HEAD
     const size_t regionCount = RegionCount(blockCount, blockSize);
+=======
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
+    const size_t regionCount =
+        GetRegionCount(blockCount, blockSize, storageConfig.GetVChunkSize());
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
@@ -498,8 +504,12 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     Y_ABORT_UNLESS(vchunkSize != 0);
     return {
         .LsnCounter = SequenceGenerator.load(),
+<<<<<<< HEAD
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
+=======
+        .LastSafeBarrier = LastSafeBarrier.load(),
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
         .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
@@ -530,6 +540,89 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
         });
 }
 
+<<<<<<< HEAD
+=======
+NThreading::TFuture<std::optional<TVChunkSnapshot>>
+TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
+{
+    const auto notFound =
+        MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
+
+    const size_t regionIndex = GetRegionIndexByVChunk(vchunkIndex);
+    if (regionIndex >= Regions.size()) {
+        return notFound;
+    }
+    const size_t vChunkIndexInRegion = GetVChunkIndexInRegion(vchunkIndex);
+    auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
+    if (!vchunk) {
+        return notFound;
+    }
+
+    // The vchunk state is confined to its executor (the one of its DBG).
+    auto executor = vchunk->GetExecutor();
+    auto promise = NewPromise<std::optional<TVChunkSnapshot>>();
+    auto future = promise.GetFuture();
+    executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
+                            { promise.SetValue(vchunk->BuildMonSnapshot()); });
+    return future;
+}
+
+NThreading::TFuture<TVChunkStatsGatherResult>
+TFastPathService::GatherVChunkStats(
+    EVChunkStatsDetail detail,
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TVChunkStatsGatherResult>> futures;
+    futures.reserve(DirectBlockGroups.size());
+    for (size_t i = 0; i < DirectBlockGroups.size(); ++i) {
+        const auto dbgDetail = (detail == EVChunkStatsDetail::PerVChunk &&
+                                (!dbgIndex || *dbgIndex == i))
+                                   ? EVChunkStatsDetail::PerVChunk
+                                   : EVChunkStatsDetail::TotalOnly;
+        futures.push_back(DirectBlockGroups[i]->GatherVChunkStats(dbgDetail));
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVChunkStatsGatherResult result;
+            result.PerDbg.reserve(futures.size());
+            for (const auto& future: futures) {
+                const auto& part = future.GetValue();
+                result.Total.Accumulate(part.Total);
+                result.PerDbg.push_back(TVChunkDbgStats{
+                    .DbgIndex = part.DbgIndex,
+                    .Stats = part.Total,
+                });
+                result.PerVChunk.insert(
+                    result.PerVChunk.end(),
+                    part.PerVChunk.begin(),
+                    part.PerVChunk.end());
+            }
+            return result;
+        });
+}
+
+void TFastPathService::OnRegionStopped(size_t regionIndex)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRegionStopped %zu",
+        LogTitle.GetWithTime().c_str(),
+        regionIndex);
+}
+
+void TFastPathService::OnAllRegionsStopped()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnAllRegionsStopped",
+        LogTitle.GetWithTime().c_str());
+}
+
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
@@ -661,6 +754,45 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     ++DumpCount;
 }
 
+<<<<<<< HEAD
+=======
+void TFastPathService::ScheduleVChunkCountersUpdate()
+{
+    auto delay = StorageConfig->GetVChunkCountersUpdateInterval();
+    if (!delay || !Scheduler) {
+        return;
+    }
+
+    ScheduleAfterDelay(
+        nullptr,
+        delay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->QueryVChunkStats();
+            }
+        });
+}
+
+void TFastPathService::QueryVChunkStats()
+{
+    GatherVChunkStats(EVChunkStatsDetail::TotalOnly)
+        .Subscribe(
+            [weakSelf = weak_from_this()](const auto& future)
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->OnVChunkStats(future.GetValue());
+                }
+            });
+}
+
+void TFastPathService::OnVChunkStats(const TVChunkStatsGatherResult& result)
+{
+    VChunkCounters.Publish(result.Total);
+    ScheduleVChunkCountersUpdate();
+}
+
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

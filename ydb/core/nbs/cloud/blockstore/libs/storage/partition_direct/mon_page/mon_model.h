@@ -52,9 +52,14 @@ struct TTabletInfo
 =======
     ui32 BlockSize = 0;
     ui64 BlockCount = 0;
+<<<<<<< HEAD
     ui64 VChunkBlockCount = 0;
     ui64 RegionBlockCount = 0;
 >>>>>>> 68783cc737c ([NBS-7725] Optimize inflight size (#53015))
+=======
+    ui64 VChunkSize = 0;
+    ui32 VolumeDirectBlockGroupCount = 0;
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
@@ -67,8 +72,14 @@ struct TArenaMemoryUsage
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+<<<<<<< HEAD
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
+=======
+    // Minimum safe barrier across all DBGs from the last finished cleanup
+    // round; 0 until the first round finishes.
+    ui64 LastSafeBarrier = 0;
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 
     TArenaMemoryUsage ArenaMemoryUsage;
 };

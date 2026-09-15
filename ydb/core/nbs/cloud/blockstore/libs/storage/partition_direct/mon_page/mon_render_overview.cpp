@@ -3,6 +3,9 @@
 #include "mon_model.h"
 #include "mon_util.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -37,11 +40,7 @@ enum class EDbgConfigCellKind
     Total,       // An aggregate across nodes or DBGs.
 };
 
-void RenderSize(
-    IOutputStream& str,
-    TStringBuf name,
-    ui32 blockSize,
-    ui64 blockCount)
+void RenderValue(IOutputStream& str, TStringBuf name, const TString& value)
 {
     HTML (str) {
         TABLER () {
@@ -49,19 +48,10 @@ void RenderSize(
                 str << name;
             }
             TABLED () {
-                str << FormatByteSize(blockSize) << " * " << blockCount << " = "
-                    << FormatByteSize(blockSize * blockCount);
+                str << value;
             }
         }
     }
-}
-
-ui64 CalculateRegionCount(ui64 blockCount, ui64 regionBlockCount)
-{
-    if (regionBlockCount == 0) {
-        return 0;
-    }
-    return blockCount / regionBlockCount + (blockCount % regionBlockCount != 0);
 }
 
 void RenderOverviewInfo(
@@ -69,106 +59,98 @@ void RenderOverviewInfo(
     const TTabletInfo& tabletInfo,
     const std::optional<TFastPathServiceInfo>& serviceInfo)
 {
+    const ui64 regionSize = GetRegionSize(tabletInfo.VChunkSize);
+    const ui64 blocksPerVChunk =
+        GetVChunkBlockCount(tabletInfo.BlockSize, tabletInfo.VChunkSize);
+    const ui64 blocksPerRegion =
+        GetRegionBlockCount(tabletInfo.BlockSize, tabletInfo.VChunkSize);
+    const ui64 regionCount = GetRegionCount(
+        tabletInfo.BlockCount,
+        tabletInfo.BlockSize,
+        tabletInfo.VChunkSize);
+    const ui64 totalVChunkCount = GetVChunkCount(
+        tabletInfo.BlockCount,
+        tabletInfo.BlockSize,
+        tabletInfo.VChunkSize);
+
     HTML (str) {
         TAG (TH3) {
             str << "Overview";
         }
         TABLE_CLASS ("table table-condensed") {
             TABLEBODY () {
-                TABLER () {
-                    TABLED () {
-                        str << "TabletId";
-                    }
-                    TABLED () {
-                        str << tabletInfo.TabletId;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Generation";
-                    }
-                    TABLED () {
-                        str << tabletInfo.Generation;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "DiskId";
-                    }
-                    TABLED () {
-                        str << HtmlEscape(tabletInfo.DiskId);
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "State";
-                    }
-                    TABLED () {
-                        str << HtmlEscape(tabletInfo.State);
-                    }
-                }
-                RenderSize(
+                RenderValue(
                     str,
-                    "Disk size",
-                    tabletInfo.BlockSize,
-                    tabletInfo.BlockCount);
-                RenderSize(
+                    "TabletId",
+                    TStringBuilder() << tabletInfo.TabletId);
+                RenderValue(
+                    str,
+                    "Generation",
+                    TStringBuilder() << tabletInfo.Generation);
+                RenderValue(str, "DiskId", HtmlEscape(tabletInfo.DiskId));
+                RenderValue(str, "State", HtmlEscape(tabletInfo.State));
+                RenderValue(
+                    str,
+                    "Block size",
+                    FormatByteSize(tabletInfo.BlockSize));
+                RenderValue(
+                    str,
+                    "Block count",
+                    TStringBuilder() << tabletInfo.BlockCount);
+                RenderValue(
                     str,
                     "VChunk size",
-                    tabletInfo.BlockSize,
-                    tabletInfo.VChunkBlockCount);
-                RenderSize(
+                    TStringBuilder()
+                        << FormatByteSize(tabletInfo.VChunkSize) << " = "
+                        << FormatByteSize(tabletInfo.BlockSize) << " * "
+                        << blocksPerVChunk << "(block)");
+                RenderValue(
+                    str,
+                    "Volume DirectBlockGroup Count",
+                    TStringBuilder() << tabletInfo.VolumeDirectBlockGroupCount);
+                RenderValue(
                     str,
                     "Region size",
-                    tabletInfo.BlockSize,
-                    tabletInfo.RegionBlockCount);
-                TABLER () {
-                    TABLED () {
-                        str << "Region count";
-                    }
-                    TABLED () {
-                        str << CalculateRegionCount(
-                            tabletInfo.BlockCount,
-                            tabletInfo.RegionBlockCount);
-                    }
-                }
+                    TStringBuilder()
+                        << FormatByteSize(regionSize) << " = "
+                        << FormatByteSize(tabletInfo.VChunkSize) << " * "
+                        << VChunkPerRegionCount << "(vpr)" << " = "
+                        << FormatByteSize(tabletInfo.BlockSize) << " * "
+                        << blocksPerRegion << "(block)");
+                RenderValue(
+                    str,
+                    "VChunk count",
+                    TStringBuilder()
+                        << totalVChunkCount << " = " << regionCount
+                        << "(region) * " << VChunkPerRegionCount << "(vpr)");
+                RenderValue(
+                    str,
+                    "Disk size",
+                    TStringBuilder()
+                        << FormatByteSize(
+                               tabletInfo.BlockSize * tabletInfo.BlockCount)
+                        << " = " << FormatByteSize(tabletInfo.BlockSize)
+                        << " * " << tabletInfo.BlockCount << "(block)" << " = "
+                        << FormatByteSize(tabletInfo.VChunkSize) << " * "
+                        << totalVChunkCount << "(vchunk)" << " = "
+                        << FormatByteSize(regionSize) << " * " << regionCount
+                        << "(region)");
+                RenderValue(
+                    str,
+                    "VChunks per region (vpr)",
+                    TStringBuilder() << VChunkPerRegionCount);
+                RenderValue(str, "Regions", TStringBuilder() << regionCount);
                 if (serviceInfo) {
-                    TABLER () {
-                        TABLED () {
-                            str << "DirectBlockGroups";
-                        }
-                        TABLED () {
-                            str << serviceInfo->DbgCount;
-                        }
-                    }
-                    TABLER () {
-                        TABLED () {
-                            str << "VChunks (total)";
-                        }
-                        TABLED () {
-                            str << serviceInfo->TotalVChunks;
-                        }
-                    }
-                    TABLER () {
-                        TABLED () {
-                            str << "LSN counter";
-                        }
-                        TABLED () {
-                            str << serviceInfo->LsnCounter;
-                        }
-                    }
-                    TABLER () {
-                        TABLED () {
-                            str << "Last safe barrier";
-                        }
-                        TABLED () {
-                            if (serviceInfo->LastSafeBarrier != 0) {
-                                str << serviceInfo->LastSafeBarrier;
-                            } else {
-                                str << "-";
-                            }
-                        }
-                    }
+                    RenderValue(
+                        str,
+                        "LSN counter",
+                        TStringBuilder() << serviceInfo->LsnCounter);
+                    RenderValue(
+                        str,
+                        "Last safe barrier",
+                        serviceInfo->LastSafeBarrier
+                            ? ToString(serviceInfo->LastSafeBarrier)
+                            : "-");
                 }
             }
         }

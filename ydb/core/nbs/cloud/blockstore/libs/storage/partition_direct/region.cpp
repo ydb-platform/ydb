@@ -34,12 +34,20 @@ TRegion::TRegion(
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
 {
+<<<<<<< HEAD
     Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
     const ui64 vChunksPerRegionCount = RegionSize / vChunkSize;
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
         const size_t dbgIndex =
             GetDirectBlockGroupIndex(vChunkIndex, directBlockGroups.size());
+=======
+    for (size_t i = 0; i < VChunkPerRegionCount; i++) {
+        const size_t vChunkIndex = GetVChunkIndex(regionIndex, i);
+        const size_t dbgIndex = GetDirectBlockGroupIndex(
+            vChunkIndex,
+            DefaultVolumeDirectBlockGroupCount);
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 
         NMonitoring::TDynamicCounterPtr vChunkCounters =
             counters->GetSubgroup("vchunk", ToString(vChunkIndex));

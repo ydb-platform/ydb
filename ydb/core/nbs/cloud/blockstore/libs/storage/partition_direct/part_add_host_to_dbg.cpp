@@ -1,7 +1,14 @@
 #include "fast_path_service.h"
 #include "part_database.h"
 #include "partition_direct_actor.h"
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
 #include "partition_direct_events_private.h"
+=======
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -537,10 +544,20 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         dbgId,
         dbgCount);
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     if (AddHostInFlight.has_value()) {
         RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
         return false;
     }
+=======
+    const ui64 regionCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionCount,
+        DefaultVolumeDirectBlockGroupCount);
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
@@ -573,7 +590,18 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
     auto request = MakeAllocateDDiskBlockGroupRequest();
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     return true;
+=======
+    auto* op = request->Record.AddDirectBlockGroupOperations();
+    op->SetDirectBlockGroupId(dbgId);
+    auto* define = op->MutableDefineDirectBlockGroup();
+    define->SetNumDDisks(numDDisks);
+    define->SetNumChunksPerDDisk(vChunkPerDbgCount);
+    define->SetNumPersistentBuffers(numDDisks);
+
+    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 }
 
 ////////////////////////////////////////////////////////////////////////////////

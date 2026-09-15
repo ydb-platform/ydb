@@ -165,4 +165,9 @@ private:
     void FinishPBufferCleanup();
 };
 
+<<<<<<< HEAD
+=======
+////////////////////////////////////////////////////////////////////////////////
+
+>>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

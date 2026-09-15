@@ -647,12 +647,23 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
 
     auto *const command = ctx.CreateAssignCmd();
     auto *const function = command->MutableFunction();
-    const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
+    const auto resultType = ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn());
+    const auto directKernelName = apply.KernelName().StringValue();
+    ui32 idx;
+    if (!directKernelName) {
+        idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
+    } else {
+        try {
+            idx = ctx.GetKernelRequestBuilder().Udf(directKernelName, false, argTypes, resultType);
+        } catch (const yexception&) {
+            idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
+        }
+    }
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
-    function->SetKernelName(apply.KernelName().StringValue());
+    function->SetKernelName(directKernelName);
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
-    return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
+    return {command->GetColumn().GetId(), resultType};
 }
 
 TTypedColumn CompileYqlKernelUnaryOperation(const TKqpOlapFilterUnaryOp& operation, TKqpOlapCompileContext& ctx)

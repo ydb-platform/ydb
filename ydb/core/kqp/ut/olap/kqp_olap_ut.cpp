@@ -1720,6 +1720,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     id Int64 NOT NULL,
                     str String,
                     u_str Utf8,
+                    json JsonDocument?,
                     PRIMARY KEY(id)
                 )
                 WITH (STORE = COLUMN);
@@ -1731,11 +1732,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto session = queryClient.GetSession().GetValueSync().GetSession();
         {
             const auto res = session.ExecuteQuery(R"(
-                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
-                    (1, "foobar", "foobar"),
-                    (2, "baz", "baz"),
-                    (3, "fooqux", "fooqux"),
-                    (4, NULL, NULL)
+                INSERT INTO `/Root/foo` (id, str, u_str, json) VALUES
+                    (1, "foobar", "foobar", JsonDocument('{"body":"process_payouts/327587223/0"}')),
+                    (2, "baz", "baz", JsonDocument('{"body":"baz"}')),
+                    (3, "fooqux", "fooqux", JsonDocument('{"body":"process_payouts/327587223/0"}')),
+                    (4, NULL, NULL, NULL)
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
         }
@@ -1747,6 +1748,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "str ILIKE '%nomatch%'",
             "u_str ILIKE '%foo%'",
             "u_str ILIKE '%FOO%'",
+            "JSON_VALUE(json, '$.body') ILIKE '%process|_payouts/327587223/0%' ESCAPE(\"|\")",
+            "JSON_VALUE(json, '$.body') ILIKE '%process|_payouts/327587223/0%' ESCAPE(\"|\") AND u_str = 'foobar'",
+            "JSON_VALUE(json, '$.body' RETURNING String) ILIKE 'baz'",
+            "JSON_VALUE(json, '$.body' RETURNING String) ILIKE 'process%'",
+            "JSON_VALUE(json, '$.body' RETURNING String) ILIKE '%223/0'",
         };
 
         std::vector<TString> expectedResults = {
@@ -1756,9 +1762,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "[]",
             "[[1];[3]]",
             "[[1];[3]]",
+            "[[1];[3]]",
+            "[[1]]",
+            "[[2]]",
+            "[[1];[3]]",
+            "[[1];[3]]",
+        };
+
+        std::vector<TString> expectedDirectKernels = {
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "OlapKernels._yql_AsciiContainsIgnoreCase",
+            "String._yql_AsciiEqualsIgnoreCase",
+            "String._yql_AsciiStartsWithIgnoreCase",
+            "String._yql_AsciiEndsWithIgnoreCase",
         };
 
         UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+        UNIT_ASSERT_EQUAL(expectedDirectKernels.size(), predicates.size());
 
         auto run = [&](const TString& extraPragma, bool expectFastKernel) {
             for (ui32 i = 0; i < predicates.size(); ++i) {
@@ -1777,24 +1803,22 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
 
                 const auto ast = res.GetStats()->GetAst();
+                const auto plan = res.GetStats()->GetPlan();
+                UNIT_ASSERT_C(plan, "Query plan is missing");
                 UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
                     TStringBuilder() << "ILIKE contains not pushed down. Query: " << query);
-                if (expectFastKernel) {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") != std::string::npos,
-                        TStringBuilder() << "OlapKernels UDF not used. Query: " << query << " AST: " << *ast);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") == std::string::npos,
-                        TStringBuilder() << "String UDF path still used with pragma on. Query: " << query);
-                } else {
-                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") == std::string::npos,
-                        TStringBuilder() << "OlapKernels UDF used with pragma off. Query: " << query);
-                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") != std::string::npos,
-                        TStringBuilder() << "UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
-                }
+                const bool expectDirectKernel = expectFastKernel;
+                UNIT_ASSERT_C(
+                    (plan->find(expectedDirectKernels[i]) != std::string::npos) == expectDirectKernel,
+                    TStringBuilder() << "Unexpected OLAP kernel selection. Query: " << query << " Plan: " << *plan);
                 CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
             }
         };
 
-        run(R"(PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";)", true);
+        run(R"(
+            PRAGMA kikimr.KqpPushOlapProcess = "true";
+            PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+        )", true);
         run("", false);
     }
 

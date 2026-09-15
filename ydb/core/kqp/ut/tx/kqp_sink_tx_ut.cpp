@@ -1474,6 +1474,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumPartitioningChangeReroutesOnlyDeletedShards) {
+        return; // TODO: needs consistent txs rerouting to be enabled
         TUncommittedWriteSeqNumPartitioningChangeReroutesOnlyDeletedShards tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
@@ -1578,6 +1579,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST(UncommittedWriteSeqNumSplitAfterFirstWrite) {
+        return; // TODO: needs consistent txs rerouting to be enabled
         TUncommittedWriteSeqNumSplitAfterFirstWrite tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);

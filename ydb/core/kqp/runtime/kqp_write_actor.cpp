@@ -1500,6 +1500,17 @@ public:
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+        if (Mode != EMode::WRITE) {
+            // At current time retries are only supported for WRITE mode.
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Can't retry sending data to tablet during commit."
+                    << "Tablet: " << shardId);
+            return;
+        }
+
         AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {

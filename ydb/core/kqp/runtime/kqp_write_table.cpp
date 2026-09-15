@@ -1884,7 +1884,8 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (!WriteInfos.empty()) {
+        if (!WriteInfos.empty() && Settings.Inconsistent) {
+            // TODO: Reroute will be supported for consistent txs later.
             // A changed shard set means split/merge: only the removed shards are
             // affected. Re-route their pending batches to the new shards (which
             // cover exactly the removed shards' key ranges); shards whose tablet id

@@ -759,6 +759,9 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
         AddCleanupPortion(portionInfo->GetPortionInfoPtr());
     }
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
+    if (PortionsObserver) {
+        PortionsObserver->OnPortionAdded(*portionInfo);
+    }
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
@@ -774,6 +777,9 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
             Counters->RemovePortion(*p);
         }
         Y_ABORT_UNLESS(spg.ErasePortion(portion));
+        if (PortionsObserver) {
+            PortionsObserver->OnPortionErased(portionInfo);
+        }
         return true;
     }
 }

@@ -330,7 +330,7 @@ void TGranuleMeta::InsertPortionOnExecute(
     portion->SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
-void TGranuleMeta::InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& /*engine*/) {
+void TGranuleMeta::InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& engine) {
     auto portionImpl = portion->MutablePortionInfoPtr();
     AFL_VERIFY(portionImpl->GetPortionType() == EPortionType::Written);
     auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
@@ -338,6 +338,7 @@ void TGranuleMeta::InsertPortionOnComplete(const std::shared_ptr<TPortionDataAcc
     AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), writtenPortion).second);
     AFL_VERIFY(InsertedAccessors.emplace(writtenPortion->GetInsertWriteId(), portion).second);
     DataAccessorsManager->AddPortion(portion);
+    static_cast<TColumnEngineForLogs&>(engine).NotifyPortionAdded(*portion);
 }
 
 void TGranuleMeta::CommitPortionOnExecute(

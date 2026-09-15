@@ -865,6 +865,74 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
         }
     }
+
+    // Appending an accessor and erasing notify the observer; committing an inserted portion does not.
+    Y_UNIT_TEST(PortionsObserverFires) {
+        TTestBasicRuntime runtime;
+        TTestDbWrapper db;
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        const auto pathId = TInternalPathId::FromRawValue(1);
+        ui32 step = 2000;
+
+        struct TRecordingObserver: public NOlap::IPortionsObserver {
+            ui32 Added = 0;
+            ui32 Erased = 0;
+
+            void OnPortionAdded(const NOlap::TPortionDataAccessor&) override {
+                ++Added;
+            }
+
+            void OnPortionErased(const NOlap::TPortionInfo&) override {
+                ++Erased;
+            }
+        };
+
+        auto observer = std::make_shared<TRecordingObserver>();
+
+        TSnapshot indexSnapshot(1, 1);
+        TColumnEngineForLogs engine(0, std::make_shared<TSchemaObjectsCache>(), NDataAccessorControl::TLocalManager::BuildForTests(),
+            CommonStoragesManager, indexSnapshot, 0, TIndexInfo(tableInfo), std::make_shared<NColumnShard::TPortionIndexStats>());
+        engine.RegisterTable(pathId);
+        engine.TestingLoad(db);
+        engine.SetPortionsObserver(observer);
+
+        // Insert two batches; Insert fills blobs with built columnar data that Compact needs.
+        NBlobOperations::NRead::TCompositeReadBlobs blobsAll;
+
+        NBlobOperations::NRead::TCompositeReadBlobs blobs1;
+        TString testBlob1 = MakeTestBlob(0, 100);
+        auto blobRange1 = MakeBlobRange(++step, testBlob1.size());
+        blobs1.Add(IStoragesManager::DefaultStorageId, blobRange1, testBlob1);
+        Insert(engine, db, TSnapshot(1, 2),
+            { TCommittedData(TUserData::Build(pathId, blobRange1, TLocalHelper::GetMetaProto(), 1, {}), TSnapshot(1, 2), 0, (TInsertWriteId)1) },
+                blobs1, step);
+        blobsAll.Merge(std::move(blobs1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(observer->Added, 1, "first Insert must fire OnPortionAdded once");
+
+        NBlobOperations::NRead::TCompositeReadBlobs blobs2;
+        TString testBlob2 = MakeTestBlob(200, 300);
+        auto blobRange2 = MakeBlobRange(++step, testBlob2.size());
+        blobs2.Add(IStoragesManager::DefaultStorageId, blobRange2, testBlob2);
+        Insert(engine, db, TSnapshot(2, 1),
+            { TCommittedData(TUserData::Build(pathId, blobRange2, TLocalHelper::GetMetaProto(), 1, {}), TSnapshot(2, 1), 0, (TInsertWriteId)2) },
+                blobs2, step);
+        blobsAll.Merge(std::move(blobs2));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(observer->Added, 2, "second Insert must fire OnPortionAdded again");
+        UNIT_ASSERT_VALUES_EQUAL_C(observer->Erased, 0, "no erasure after inserts");
+
+        // Compact merges the two portions into one; new one fires OnPortionAdded via AppendPortion(accessor).
+        const ui32 addedBeforeCompact = observer->Added;
+        Compact(engine, db, TSnapshot(3, 1), std::move(blobsAll), step, { 2, 1, 1 });
+        UNIT_ASSERT_C(observer->Added > addedBeforeCompact, "Compact must fire OnPortionAdded for the new compacted portion");
+
+        // Cleanup erases the compacted-away source portions; each fires OnPortionErased via ErasePortion.
+        Cleanup(engine, db, TSnapshot(4, 1), 2);
+        UNIT_ASSERT_C(observer->Erased > 0, "Cleanup must fire OnPortionErased for each dropped portion");
+    }
 }
 
 }   // namespace NKikimr

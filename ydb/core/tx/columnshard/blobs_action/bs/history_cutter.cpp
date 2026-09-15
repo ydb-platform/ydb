@@ -171,15 +171,26 @@ void THistoryCutterWrapper::OnPortionAdded(const TPortionDataAccessor& accessor)
         return;
     }
     const ui64 portionId = accessor.GetPortionInfo().GetPortionId();
-    THashSet<TEntryKey>& portionKeySet = PortionKeys[portionId];
+    TStackVec<TEntryKey, 2> keys;
     for (const auto& blobId : accessor.GetBlobIds()) {
         TEntryKey key;
         if (!GetEntryKey(blobId.GetLogoBlobId(), key)) {
             continue;
         }
-        if (portionKeySet.insert(key).second) {
+        bool found = false;
+        for (const auto& k : keys) {
+            if (k == key) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            keys.push_back(key);
             IncrementCounter(key);
         }
+    }
+    if (!keys.empty()) {
+        PortionKeys.emplace(portionId, std::move(keys));
     }
 }
 
@@ -187,7 +198,7 @@ void THistoryCutterWrapper::OnPortionRemoved(const ui64 portionId) {
     if (!IsEnabled()) {
         return;
     }
-    const THashSet<TEntryKey>* keys = PortionKeys.FindPtr(portionId);
+    const TStackVec<TEntryKey, 2>* keys = PortionKeys.FindPtr(portionId);
     if (!keys) {
         return;
     }
@@ -216,15 +227,26 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
         return;
     }
     for (const auto& [portionId, blobIds] : portionBlobIds) {
-        THashSet<TEntryKey>& portionKeySet = PortionKeys[portionId];
+        TStackVec<TEntryKey, 2> keys;
         for (const auto& blobId : blobIds) {
             TEntryKey key;
             if (!GetEntryKey(blobId.GetLogoBlobId(), key)) {
                 continue;
             }
-            if (portionKeySet.insert(key).second) {
+            bool found = false;
+            for (const auto& k : keys) {
+                if (k == key) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                keys.push_back(key);
                 IncrementCounter(key);
             }
+        }
+        if (!keys.empty()) {
+            PortionKeys.emplace(portionId, std::move(keys));
         }
     }
 }

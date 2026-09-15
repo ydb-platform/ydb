@@ -635,9 +635,6 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
-    void OnPortionAddedToEngine(const NOlap::TPortionDataAccessor& accessor);
-    void OnPortionRemovedFromEngine(ui64 portionId);
-
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

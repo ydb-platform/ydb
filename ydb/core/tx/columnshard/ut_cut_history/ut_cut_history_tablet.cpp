@@ -140,6 +140,58 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         }
     }
 
+    // Hooks track portions through compaction and cleanup: an old entry is cut only once it holds no data.
+    Y_UNIT_TEST(HooksTrackPortionsAcrossCompactionAndCleanup) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryTabletController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        TWrittenBlobs written;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                const TLogoBlobID& id = ev->Get()->Id;
+                if (id.TabletID() == TTestTxConfig::TxTablet0) {
+                    written.Generation = Max(written.Generation, id.Generation());
+                    if (id.Channel() >= 2) {
+                        written.DataChannels.insert(id.Channel());
+                    }
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+            TestTableDescription table;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 1, TableId, MakeTestBlob({ 0, 1000 }, table.Schema), table.Schema, &writeIds));
+            const auto planStep = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 1, writeIds);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, TSet<ui64>{ 1 });
+            for (int i = 0; i < 10; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            }
+        }
+        UNIT_ASSERT_C(!written.DataChannels.empty(), "write must put blobs into data channels");
+
+        RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
+
+        // After reboot with live data, the old entry must NOT be cut (hooks protect it).
+        THashSet<ui32> cutChannels;
+        auto cutObserver = runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetFromGeneration() == 0) {
+                cutChannels.insert(ev->Get()->Record.GetChannel());
+            }
+        });
+        const bool neverStop = false;
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+        for (const ui32 channel : written.DataChannels) {
+            UNIT_ASSERT_C(
+                !cutChannels.contains(channel), "a data channel with live compacted portions was incorrectly cut, channel " << channel);
+        }
+    }
+
     // An old entry that holds no data is cut once the first GC round of the new incarnation commits.
     Y_UNIT_TEST(EmptyOldEntryIsCutAfterFirstGcRound) {
         TTestBasicRuntime runtime;

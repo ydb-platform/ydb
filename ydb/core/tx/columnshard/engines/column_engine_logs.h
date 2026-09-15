@@ -2,6 +2,7 @@
 
 #include "column_engine.h"
 #include "defs.h"
+#include "portions_observer.h"
 
 #include "changes/actualization/controller/controller.h"
 #include "scheme/tier_info.h"
@@ -261,6 +262,17 @@ public:
     void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
+    void SetPortionsObserver(std::shared_ptr<IPortionsObserver> observer) {
+        PortionsObserver = std::move(observer);
+    }
+
+    // Exposed for TGranuleMeta::InsertPortionOnComplete which casts the engine to this type.
+    void NotifyPortionAdded(const TPortionDataAccessor& accessor) {
+        if (PortionsObserver) {
+            PortionsObserver->OnPortionAdded(accessor);
+        }
+    }
+
 private:
     ui64 TabletId;
     std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
@@ -269,6 +281,7 @@ private:
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     bool Loaded = false;
+    std::shared_ptr<IPortionsObserver> PortionsObserver;
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -19,6 +20,26 @@ namespace {
 
 using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
+
+// Bridges TColumnEngineForLogs portion events into THistoryCutterWrapper.
+class TCutHistoryPortionsObserver: public NOlap::IPortionsObserver {
+public:
+    explicit TCutHistoryPortionsObserver(THistoryCutterWrapper* cutter)
+        : Cutter(cutter)
+    {
+    }
+
+    void OnPortionAdded(const NOlap::TPortionDataAccessor& accessor) override {
+        Cutter->OnPortionAdded(accessor);
+    }
+
+    void OnPortionErased(const NOlap::TPortionInfo& portion) override {
+        Cutter->OnPortionRemoved(portion.GetPortionId());
+    }
+
+private:
+    THistoryCutterWrapper* Cutter;
+};
 
 // Runs on the conveyor thread after TTxAskPortionChunks delivers accessor objects.
 class TCutHistorySweepCallback: public NOlap::NDataAccessorControl::IAccessorCallback {
@@ -110,6 +131,10 @@ void TColumnShard::SetupCutHistory() {
     }
     cutter->SetLauncherActorId(LauncherID());
     CutHistoryCutter = cutter;
+    if (cutter->IsEnabled()) {
+        auto observer = std::make_shared<TCutHistoryPortionsObserver>(cutter);
+        TablesManager.SetPortionsObserver(observer);
+    }
     // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
     cutter->OnBootComplete({});
 }
@@ -194,18 +219,6 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     }
 
     CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
-}
-
-void TColumnShard::OnPortionAddedToEngine(const NOlap::TPortionDataAccessor& accessor) {
-    if (CutHistoryCutter) {
-        CutHistoryCutter->OnPortionAdded(accessor);
-    }
-}
-
-void TColumnShard::OnPortionRemovedFromEngine(const ui64 portionId) {
-    if (CutHistoryCutter) {
-        CutHistoryCutter->OnPortionRemoved(portionId);
-    }
 }
 
 }   // namespace NKikimr::NColumnShard

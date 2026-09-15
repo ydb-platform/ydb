@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/blobs_manager.h>
 
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -128,6 +129,10 @@ protected:
         return count ? *count : 0;
     }
 
+    size_t GetPortionKeysCountForTest() const {
+        return PortionKeys.size();
+    }
+
     // protected for tests: no public call sequence reaches the underflow branch.
     void DecrementCounter(const TEntryKey& key);
 
@@ -195,7 +200,7 @@ private:
     THashMap<TEntryKey, ECutState> CutState;
     THashSet<ui32> PoisonedChannels;
 
-    THashMap<ui64, THashSet<TEntryKey>> PortionKeys;
+    THashMap<ui64, TStackVec<TEntryKey, 2>> PortionKeys;
 
     bool SweepInFlight = false;
 

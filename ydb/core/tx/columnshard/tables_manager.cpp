@@ -371,6 +371,9 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
                     DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
+                if (PortionsObserver) {
+                    static_cast<NOlap::TColumnEngineForLogs&>(*PrimaryIndex).SetPortionsObserver(PortionsObserver);
+                }
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -544,12 +547,22 @@ void TTablesManager::AddSchemaVersion(
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
             NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+        if (PortionsObserver) {
+            static_cast<NOlap::TColumnEngineForLogs&>(*PrimaryIndex).SetPortionsObserver(PortionsObserver);
+        }
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
         PrimaryIndex->OnTieringModified(GetTtl());
     } else {
         PrimaryIndex->RegisterSchemaVersion(version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+    }
+}
+
+void TTablesManager::SetPortionsObserver(std::shared_ptr<NOlap::IPortionsObserver> observer) {
+    PortionsObserver = std::move(observer);
+    if (PrimaryIndex) {
+        static_cast<NOlap::TColumnEngineForLogs&>(*PrimaryIndex).SetPortionsObserver(PortionsObserver);
     }
 }
 

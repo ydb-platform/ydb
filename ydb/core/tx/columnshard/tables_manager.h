@@ -6,6 +6,7 @@
 #include "data_accessor/manager.h"
 #include "engines/column_engine.h"
 #include "engines/metadata_accessor.h"
+#include "engines/portions_observer.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -384,6 +385,7 @@ private:
     TSet<NOlap::TSnapshot> ReadOnlyTablesSnapshots;
     TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    std::shared_ptr<NOlap::IPortionsObserver> PortionsObserver;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
@@ -537,6 +539,8 @@ public:
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
+
+    void SetPortionsObserver(std::shared_ptr<NOlap::IPortionsObserver> observer);
 
     void MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
     void MoveTableProgress(

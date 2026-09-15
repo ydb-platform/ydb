@@ -391,4 +391,9 @@ message TFeatureFlags {
     // it holds has been compacted, rather than by the color it is in while the
     // write is still cheap.
     optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
+    // PDisk chunk-space colors start at 3% free (cyan) on large disks, with
+    // per-color minimum chunk floors so small disks keep a compaction runway.
+    // Applied at PDisk start (Keeper.Reset). ICB PDisk_<id>_ChunkBaseLimitPerMille
+    // still overrides the cyan permille; floors stay on while this flag is on.
+    optional bool EnableTightPDiskSpaceColors = 332 [default = false, (RequireRestart) = true];
 }

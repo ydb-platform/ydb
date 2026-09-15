@@ -708,6 +708,11 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
@@ -1414,6 +1419,12 @@ private:
 
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
         }
 
         auto rowType = table->SchemeNode;

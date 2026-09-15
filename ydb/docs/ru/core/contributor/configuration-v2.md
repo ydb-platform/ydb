@@ -98,7 +98,7 @@
   Узлы баз данных (database nodes) подписываются на события [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75), чтобы получать обновления конфигурации в реальном времени.
 - **Self-Heal**
 
-  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [Self-Heal](../maintenance/manual/selfheal.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
+  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [Self-Heal](../devops/concepts/selfheal-storage.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
 
 - **Локальные YAML-файлы на узлах**
 

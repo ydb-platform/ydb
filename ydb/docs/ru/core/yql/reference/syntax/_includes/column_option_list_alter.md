@@ -23,12 +23,11 @@
 
 ### NOT NULL
 
-Существуют две операции:
+`DROP NOT NULL` снимает ограничение `NOT NULL` с неключевой колонки, снова разрешая значения `NULL`. Операция поддерживается как для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables), так и для [колоночных](../../../../concepts/datamodel/table.md#column-oriented-tables) таблиц.
 
-* `SET NOT NULL` — устанавливает ограничение `NOT NULL` для колонки.
-* `DROP NOT NULL` — снимает ограничение `NOT NULL` с колонки, снова разрешая значения `NULL`.
-
-Подробнее о работе этих операций можно прочитать [здесь](../alter_table/not_null.md).
+```yql
+ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
+```
 
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 

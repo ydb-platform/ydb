@@ -274,4 +274,25 @@ Y_UNIT_TEST(JsonYsonUnusedFieldDoesNotGrowMkqlUsed) {
             << " used=" << JoinValues(used));
 }
 
+Y_UNIT_TEST(LlvmManyAppliesDoesNotGrowTypeEnv) {
+    constexpr size_t ExtraBytes = 8_KB;
+    constexpr size_t ApplyCount = 10000;
+    constexpr size_t WarmupApplies = 10;
+
+    ui64 usedAtBind = 0;
+    auto program = MakePositionsProgram("ON", &usedAtBind);
+    const auto used = ApplyPositions(*program, usedAtBind, ApplyCount, ExtraBytes);
+
+    const ui64 warmup = used[WarmupApplies];
+    const ui64 last = used.back();
+    const ui64 delta = last > warmup ? last - warmup : 0;
+    UNIT_ASSERT_C(
+        delta < 64_KB,
+        TStringBuilder()
+            << "MKQL TypeEnv grew across LLVM Apply() on a pooled pull-list worker: warmup="
+            << warmup << " last=" << last << " delta=" << delta
+            << " extra=" << ExtraBytes
+            << " applies=" << ApplyCount);
+}
+
 } // Y_UNIT_TEST_SUITE(TransferPurecalcMemory)

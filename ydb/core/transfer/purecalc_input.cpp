@@ -85,22 +85,17 @@ NYT::TNode CreateMessageScheme() {
 
 static const TVector<NYT::TNode> InputSchema{ CreateMessageScheme() };
 
+// String dict keys: same as GetDictionaryKeyTypes(TDataType::String). Do not call
+// TDictType::Create / TDataType::Create here — they Allocate() into TypeEnv and never intern.
+const TKeyTypes& AttrDictKeyTypes() {
+    static const TKeyTypes keyTypes{{NUdf::EDataSlot::String, false}};
+    return keyTypes;
+}
+
 struct TMessageWrapper {
     const TMessage& Message;
 
-    NYql::NUdf::TUnboxedValuePod GetAttributes(const THolderFactory& nodeFactory, const TTypeEnvironment& typeEnv) const {
-        auto type = TDictType::Create(
-                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
-                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
-                typeEnv
-            );
-
-        TKeyTypes keyTypes;
-        bool isTuple;
-        bool encoded;
-        bool useIHash;
-        GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded, useIHash);
-
+    NYql::NUdf::TUnboxedValuePod GetAttributes(const THolderFactory& nodeFactory) const {
         return nodeFactory.CreateDirectHashedDictHolder([&](TValuesDictHashMap& map) {
                 const auto& m = Message.Message.GetMessageMeta();
                 if (m) {
@@ -109,7 +104,7 @@ struct TMessageWrapper {
                     }
                 }
             },
-            keyTypes, false, true, nullptr, nullptr, nullptr);
+            AttrDictKeyTypes(), false, true, nullptr, nullptr, nullptr);
     }
 
     NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
@@ -172,13 +167,12 @@ public:
 
     void DoConvert(const TMessage* message, TUnboxedValue& result) {
         auto& holderFactory = Worker_->GetGraph().GetHolderFactory();
-        auto& typeEnv = Worker_->GetGraph().GetContext().TypeEnv;
         TUnboxedValue* items = nullptr;
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
         TMessageWrapper wrap {*message};
         // lex order by field name
-        items[0] = wrap.GetAttributes(holderFactory, typeEnv);
+        items[0] = wrap.GetAttributes(holderFactory);
         items[1] = wrap.GetCreateTimestamp();
         items[2] = wrap.GetData();
         items[3] = wrap.GetKey();

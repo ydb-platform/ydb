@@ -1,3 +1,11 @@
+---
+name: ydb-documentation
+description: >-
+  Use when documenting YDB features or functionality, including new articles,
+  glossary entries, references, recipes, cross-links, TOC, or redirects in
+  Russian and English.
+---
+
 # YDB Documentation Skill
 
 This skill helps developers write documentation for YDB while following all structure, style, and language rules.

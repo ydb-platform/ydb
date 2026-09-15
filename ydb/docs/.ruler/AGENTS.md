@@ -32,34 +32,31 @@ This is the YDB (Yandex Database) open-source project. You are helping developer
 
 ---
 
-## Documentation Writing Skill
+## Documentation Skills
 
-**All documentation-related skills, rules, and guidelines are in `ydb/docs/.ruler/` directory.**
+**All documentation-related skills, rules, and guidelines are in the
+`ydb/docs/.ruler/` directory.** Run `ruler apply --skills` from
+`ydb/docs` to distribute the skills to supported AI agents.
 
-### When to Use the Documentation Skill
+### Skill Routing
 
-When a developer needs to document a feature or functionality:
-1. **First**: Gather all information (facts) - description, parameters, examples, limits, context
-2. **Then**: Use the Documentation Writing Skill to integrate it into the structure
+Use the matching skill for the task:
 
-### What the Skill Does
+- `ydb-documentation`: document a feature or functionality and integrate it
+  into the documentation structure.
+- `generate-internal-changelog`: prepare internal YDB Server feature release
+  notes. Invoke it for requests such as "сделай внутренний релиз",
+  "подготовь внутренний релиз", or "internal release".
 
-The skill helps writers:
-1. Analyze the provided information and documentation structure
-2. Create comprehensive plan (main article, glossary, reference, recipes, cross-links, TOC, redirects)
-3. Generate documented articles integrated into YDB documentation
-4. Create both Russian and English versions simultaneously (not translation)
+### Documentation Inputs
 
-### Important: Provide Complete Information
+Before using `ydb-documentation`, gather the feature facts: description,
+parameters, examples, limits, context, and implementation source.
 
-The AI cannot invent details. You must provide:
-- **Description** - What does this do?
-- **Parameters/Options** - What can be configured?
-- **Examples** - Code samples, command examples, configuration
-- **Limitations** - What are the constraints?
-- **Context** - How does it relate to other features?
-- **Source** - PR, Issue, or specification reference
+Before using `generate-internal-changelog`, provide the three-component
+release identifier when known, for example `26.3.1`. The skill derives the
+public release line, target stable branch, previous stable branch, and Tracker
+candidate set.
 
-The more information you provide, the better the documentation.
-
-See `DOCUMENTATION_SKILL.md` for complete 5-stage workflow details.
+See `skills/ydb-documentation/SKILL.md` and
+`skills/generate-internal-changelog/SKILL.md` for the complete workflows.

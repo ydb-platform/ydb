@@ -1,0 +1,78 @@
+{
+  "skill_name": "generate-internal-changelog",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Prepare internal YDB Server feature release notes for 26.3.1. Explain how you determine the Tracker denominator and prove that every release candidate is accounted for before opening the PR.",
+      "expected_output": "Queries both factual release fields for stable-26-3-1, unions and deduplicates all paginated YDBFEATURES results, and requires every candidate to appear exactly once as either a bilingual note or a justified exclusion.",
+      "files": [],
+      "expectations": [
+        "Normalizes the published docs release line to 26.3 and keeps stable-26-3-1 only as the Tracker factual-release filter value",
+        "Calls GetQueueLocalFields for YDBFEATURES and resolves the full local-field ids for actualCodeReadyBranch and actualDefaultInclusionBranch instead of hardcoding opaque prefixes",
+        "Runs separate type=feature queries for exact value stable-26-3-1 on both factual fields and reads every page of both queries",
+        "Does not filter the candidate set by workflow status or availabilityOfDocumentation",
+        "Computes tracker_count from the unique union of code-ready and default-inclusion keys, deduplicating tickets present in both",
+        "Requires notes and exclusions to be disjoint and their union to equal the Tracker candidate set",
+        "Requires unique ticket keys, non-empty EN and RU text for notes, and an allowed non-empty reason for every exclusion",
+        "Saves both complete raw GetIssues page sets separately from the manifest and runs evaluate_release_coverage.py against the actual RU and EN files",
+        "Blocks PR creation and reports unaccounted, extra, duplicate, overlap, single-language, invalid-exclusion, or manifest-to-Markdown mismatches when the eval fails"
+      ],
+      "covers": "two-field Tracker candidate accounting"
+    },
+    {
+      "id": 2,
+      "prompt": "The Tracker union is [YDBFEATURES-10, YDBFEATURES-11, YDBFEATURES-12]. Complete target-branch implementation exists for 10 and 11, while 12 is not backported. What belongs in the manifest and does the release proceed?",
+      "expected_output": "Publishes bilingual notes for 10 and 11, records 12 once as not-in-target with a concrete reason, passes exact accounting, and reports 3 candidates, 2 notes, and 1 exclusion.",
+      "files": [],
+      "expectations": [
+        "Does not invent a note for YDBFEATURES-12 and does not block the whole release solely because it is not backported",
+        "Adds YDBFEATURES-12 to exclusions with reason_code not-in-target and a non-empty evidence-based reason",
+        "Ensures notes and exclusions are disjoint and together equal all three Tracker keys",
+        "Reports tracker_count=3, note_count=2, and names YDBFEATURES-12 with its reason in the completion status"
+      ],
+      "covers": "unbackported feature exclusion policy"
+    },
+    {
+      "id": 3,
+      "prompt": "actualCodeReadyBranch=stable-27-1-1 returns 112 issues across 3 pages. actualDefaultInclusionBranch=stable-27-1-1 returns 19 issues across 2 pages, with 7 keys also in the first result. Describe the eval behavior and docs/PR versioning.",
+      "expected_output": "Fetches all five pages, computes a 124-key union, accounts for every key as a note or exclusion, uses docs version 27.1 and PR base stable-27-1, and refuses to evaluate from partial pages.",
+      "files": [],
+      "expectations": [
+        "Fetches all three code-ready pages and both default-inclusion pages before constructing expected_feature_keys",
+        "Computes 112 + 19 - 7 = 124 unique candidates and does not double-count overlaps",
+        "Does not treat a first page or total_issues_count alone as the verified ticket set",
+        "Uses Version 27.1, selector v27.1, working branch docs/changelog-server-27-1, and PR base stable-27-1",
+        "Does not publish 27.1.1 as the changelog version and does not target main"
+      ],
+      "covers": "two-query pagination, union, and patch-version separation"
+    },
+    {
+      "id": 4,
+      "prompt": "A dashboard XLSX has 39 unique YDBFEATURES rows for stable-26-3-1. The two raw Tracker queries also union to 39 keys. The evidence audit supports 36 notes, one not-in-target exclusion, one bug-only exclusion, and one already-released exclusion. What must the gate and final status say?",
+      "expected_output": "The gate passes only if the 36 note keys and 3 distinct valid exclusion keys exactly partition the same 39-key Tracker union. The final status reports all counts and names each excluded ticket with its reason.",
+      "files": [],
+      "expectations": [
+        "Uses the workbook as an independent exact-key cross-check and the raw Tracker pages as evaluator input",
+        "Does not require 39 public notes when three candidates have supported exclusion evidence",
+        "Requires 36 notes plus 3 exclusions to account for exactly 39 unique Tracker keys with no overlap",
+        "Reports 39 Tracker candidates, 36 published note pairs, and every excluded ticket with its reason"
+      ],
+      "covers": "dashboard cross-check and completion reporting"
+    },
+    {
+      "id": 5,
+      "prompt": "Сделай внутренний релиз YDB 27.1.1.",
+      "expected_output": "Invokes generate-internal-changelog, normalizes the public release line to 27.1, compares the adjacent stable release branches, and prepares feature-only bilingual changelog entries with exact Tracker accounting.",
+      "files": [],
+      "expectations": [
+        "Recognizes the Russian phrase «сделай внутренний релиз» as a direct trigger for generate-internal-changelog",
+        "Normalizes 27.1.1 to docs release line 27.1 while retaining stable-27-1-1 only for Tracker factual-release filters",
+        "Uses the exact target branch stable-27-1 and determines the preceding exact stable-X-Y release line from remote refs",
+        "Creates feature-only RU and EN release-note sets and excludes bugs",
+        "Blocks PR creation until notes and justified exclusions exactly partition the Tracker candidate union",
+        "Runs the bundled evaluator from the runtime-provided skill directory instead of assuming a Cursor-only installation path"
+      ],
+      "covers": "natural-language internal-release trigger"
+    }
+  ]
+}

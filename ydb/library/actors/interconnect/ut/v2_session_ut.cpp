@@ -2,6 +2,11 @@
 #include <ydb/library/actors/interconnect/ut/lib/test_events.h>
 #include <ydb/library/actors/interconnect/interconnect_direct_session.h>
 #include <ydb/library/actors/interconnect/uring_context.h>
+#include <ydb/library/actors/interconnect/v2_probes.h>
+#include <library/cpp/testing/common/env.h>
+#include <util/stream/file.h>
+#include <util/stream/str.h>
+#include <util/generic/map.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -17,10 +22,75 @@
 #include <util/system/mutex.h>
 
 #include <atomic>
+#include <thread>
 
 using namespace NActors;
+LWTRACE_USING(INTERCONNECT_V2_PROVIDER);
 
 namespace {
+
+
+    // Keep control-plane/application history separate from the much busier I/O tail.
+    class TLoadTrace {
+    public:
+        TLoadTrace()
+            : Manager(*Singleton<NLWTrace::TProbeRegistry>(), false)
+        {
+            NLWTrace::TQuery progress;
+            progress.SetPerThreadLogSize(8192);
+            AddGroup(&progress, "ICV2Load");
+            AddGroup(&progress, "ICV2State");
+            Manager.New("progress", progress);
+            NLWTrace::TQuery io;
+            io.SetPerThreadLogSize(2048);
+            AddGroup(&io, "ICV2IO");
+            Manager.New("io", io);
+        }
+
+        void Stop() {
+            Manager.Stop("progress");
+            Manager.Stop("io");
+        }
+
+        void Dump(IOutputStream* out) {
+            Stop();
+            TReader reader;
+            Manager.ReadLog("progress", reader);
+            Manager.ReadLog("io", reader);
+            Sort(reader.Rows.begin(), reader.Rows.end(), [](const auto& a, const auto& b) {
+                return a.first < b.first;
+            });
+            *out << "LWTrace bounded per-thread tails; earlier events may have been overwritten.\n";
+            for (const auto& row : reader.Rows) {
+                *out << row.second << '\n';
+            }
+        }
+
+    private:
+        static void AddGroup(NLWTrace::TQuery* query, const TString& group) {
+            auto* block = query->AddBlocks();
+            block->MutableProbeDesc()->SetGroup(group);
+            block->AddAction()->MutableLogAction()->SetLogTimestamp(true);
+        }
+
+        struct TReader {
+            TVector<std::pair<ui64, TString>> Rows;
+
+            void Push(TThread::TId tid, const NLWTrace::TLogItem& item) {
+                TStringStream line;
+                line << item.Timestamp << " cycles=" << item.TimestampCycles
+                    << " tid=" << tid << ' ' << item.Probe->Event.Name;
+                TString values[LWTRACE_MAX_PARAMS];
+                item.Probe->Event.Signature.SerializeParams(item.Params, values);
+                for (size_t i = 0; i < item.SavedParamsCount; ++i) {
+                    line << ' ' << item.Probe->Event.Signature.ParamNames[i] << '=' << values[i];
+                }
+                Rows.emplace_back(item.TimestampCycles, line.Str());
+            }
+        };
+
+        NLWTrace::TManager Manager;
+    };
 
     // Echo actor on the peer node: replies to every TEvTest with a TEvTestResponse addressed back to
     // the sender, echoing the sequence number.
@@ -218,6 +288,8 @@ namespace {
                     "inline payload mismatch seq# %" PRIu64, seq);
             }
 
+            LWPROBE(LoadEvent, "echo-received", ev->Sender.ToString(), seq, ev->Cookie);
+            LWPROBE(LoadEvent, "reply-send", ev->Sender.ToString(), seq, ev->Cookie);
             Send(ev->Sender, new TEvTestResponse(seq),
                 IEventHandle::MakeFlags(ev->GetChannel(), 0), ev->Cookie);
         }
@@ -229,7 +301,7 @@ namespace {
     class TLoadDriverActor: public TActorBootstrapped<TLoadDriverActor> {
     public:
         TLoadDriverActor(const TActorId& responder, ui32 total, ui32 inFlyMax, ui32 payloadSize, ui16 channel,
-                NThreading::TPromise<ui32> done, bool useInlinePayload = false)
+                NThreading::TPromise<ui32> done, bool useInlinePayload = false, bool traceProgress = false)
             : Responder(responder)
             , Total(total)
             , InFlyMax(inFlyMax)
@@ -237,17 +309,22 @@ namespace {
             , Channel(channel)
             , UseInlinePayload(useInlinePayload)
             , Done(std::move(done))
+            , TraceProgress(traceProgress)
         {}
 
         void Bootstrap() {
             Become(&TThis::StateFunc);
             Generate();
+            if (TraceProgress) {
+                LogProgress();
+            }
         }
 
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(TEvTestResponse, Handle)
             hFunc(TEvents::TEvUndelivered, HandleUndelivered)
+            cFunc(TEvents::TEvWakeup::EventType, LogProgress)
         )
 
         void SendOne(ui64 seq) {
@@ -258,6 +335,10 @@ namespace {
             if (PayloadSize) {
                 ev->AddPayload(TRope(MakeLoadPayload(seq, PayloadSize)));
             }
+            if (TraceProgress) {
+                ++Pending[seq];
+            }
+            LWPROBE(LoadEvent, "request-send", SelfId().ToString(), seq, seq);
             Send(Responder, ev.Release(), IEventHandle::MakeFlags(Channel, 0) | IEventHandle::FlagTrackDelivery, seq);
             ++InFly;
         }
@@ -266,6 +347,8 @@ namespace {
         // (re)established (e.g. handshake races at startup); just retry it -- this is how a real client uses
         // FlagTrackDelivery.
         void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+            LWPROBE(LoadUndelivered, SelfId().ToString(), ev->Cookie, ev->Get()->SourceType,
+                ui32(ev->Get()->Reason), ev->Get()->Unsure);
             --InFly;
             SendOne(ev->Cookie);
         }
@@ -281,6 +364,10 @@ namespace {
             // Get() parses the response -> detects receive-side corruption on the driver's connection.
             const ui64 seq = ev->Get()->Record.GetConfirmedSequenceNumber();
             Y_ABORT_UNLESS(seq < Total, "corrupted response: seq# %" PRIu64 " total# %" PRIu32, seq, Total);
+            LWPROBE(LoadEvent, "reply-received", SelfId().ToString(), seq, ev->Cookie);
+            if (TraceProgress) {
+                Pending.erase(seq);
+            }
             --InFly;
             ++Received;
             if (Received >= Total) {
@@ -293,6 +380,16 @@ namespace {
             }
         }
 
+        void LogProgress() {
+            LWPROBE(LoadProgress, SelfId().ToString(), Sent, Received, InFly);
+            for (const auto& [seq, attempts] : Pending) {
+                LWPROBE(LoadPending, SelfId().ToString(), seq, attempts);
+            }
+            if (!Finished) {
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            }
+        }
+
         const TActorId Responder;
         const ui32 Total;
         const ui32 InFlyMax;
@@ -300,6 +397,8 @@ namespace {
         const ui16 Channel;
         const bool UseInlinePayload;
         NThreading::TPromise<ui32> Done;
+        const bool TraceProgress;
+        TMap<ui64, ui32> Pending;
         ui32 Sent = 0;
         ui32 Received = 0;
         ui32 InFly = 0;
@@ -439,6 +538,26 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
+    Y_UNIT_TEST(LoadTraceDump) {
+#ifndef LWTRACE_DISABLE
+        TLoadTrace trace;
+        LWPROBE(LoadEvent, "request-send", TString("test-driver"), 42, 42);
+        std::thread worker([] {
+            LWPROBE(IO, 7, "write-complete", false, 128, 0);
+        });
+        worker.join();
+        TStringStream output;
+        trace.Dump(&output);
+        UNIT_ASSERT_STRING_CONTAINS(output.Str(), "LoadEvent stage=request-send driver=test-driver seq=42 cookie=42");
+        UNIT_ASSERT_STRING_CONTAINS(output.Str(), "IO session=7 operation=write-complete");
+        LWPROBE(LoadEvent, "after-stop", TString("test-driver"), 43, 43);
+        TStringStream stopped;
+        trace.Dump(&stopped);
+        UNIT_ASSERT_STRING_CONTAINS(stopped.Str(), "seq=42");
+        UNIT_ASSERT(stopped.Str().find("after-stop") == TString::npos);
+#endif
+    }
+
 
     // Normal actor-system traffic must round-trip over a v2 session.
     Y_UNIT_TEST(ActorSystemRoundTrip) {
@@ -733,6 +852,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             Cerr << "io_uring not available; skipping" << Endl;
             return;
         }
+        TLoadTrace trace;
         auto cluster = MakeV2Cluster(/*tcpSocketBufferSize=*/8192);
         const TActorId responder = cluster->RegisterActor(new TLoadEchoActor, 2);
 
@@ -740,9 +860,23 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         auto future = promise.GetFuture();
         constexpr ui32 kTotal = 20000;
         cluster->RegisterActor(new TLoadDriverActor(responder, kTotal, /*inFlyMax=*/16, /*payloadSize=*/16384,
-            /*channel=*/1, promise), 1);
+            /*channel=*/1, promise, /*useInlinePayload=*/false, /*traceProgress=*/true), 1);
 
-        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "load-like round trip stalled under backpressure");
+        const bool completed = future.Wait(TDuration::Seconds(60));
+        trace.Stop();
+        if (!completed) {
+            try {
+                const auto path = GetOutputPath() / "interconnect-backpressure.lwtrace.log";
+                path.Parent().MkDirs();
+                TFileOutput output(path.GetPath());
+                trace.Dump(&output);
+                output.Finish();
+                Cerr << "Backpressure timeout; LWTrace: " << path.GetPath() << Endl;
+            } catch (const std::exception& error) {
+                Cerr << "Failed to save backpressure LWTrace: " << error.what() << Endl;
+            }
+        }
+        UNIT_ASSERT_C(completed, "load-like round trip stalled under backpressure");
         UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), kTotal);
     }
 

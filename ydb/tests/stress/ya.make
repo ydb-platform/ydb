@@ -12,6 +12,7 @@ RECURSE(
     kv_volume
     kv_volume_tool
     log
+    lorem_probe
     min_max_workload
     mixedpy
     nfs_backups

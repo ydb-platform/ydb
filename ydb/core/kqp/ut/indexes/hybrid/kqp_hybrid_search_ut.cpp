@@ -5,13 +5,10 @@
 
 #include <library/cpp/json/json_reader.h>
 
-<<<<<<< HEAD
-=======
 #include <array>
 #include <cmath>
 #include <limits>
 
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -19,13 +16,7 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-<<<<<<< HEAD
 TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
-=======
-TKikimrRunner MakeRunner(bool enableHybridSearch = true, bool enableCompactFulltextIndex = false,
-        bool enableIndexStreamWrite = false, bool useRealThreads = true,
-        bool enableVectorSearchActor = true) {
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
     // Fix the kmeans-tree build sampling seed so the index tree is reproducible run-to-run (otherwise it
     // seeds from the tablet id). Combined with the exhaustive search probe in TargetDecl below, this makes
     // the vector branch fully deterministic. See gVectorIndexSeed in schemeshard_impl.h (tests only).
@@ -38,11 +29,6 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true, bool enableCompactFullt
     // EnableHybridSearch is on by default; the explicit set both documents the dependency and lets
     // DisabledByFlag exercise the off path.
     settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(enableHybridSearch);
-<<<<<<< HEAD
-=======
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
     return TKikimrRunner(settings);
 }
 
@@ -139,10 +125,6 @@ void AddVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const
     )sql", table.c_str(), name.c_str(), metric.c_str()));
 }
 
-<<<<<<< HEAD
-// A prefixed vector index (a prefix column before the vector column). HybridRank does not support these
-// yet (the kmeans-tree lowering needs an OptionalIf prefix predicate the rewrite doesn't build).
-=======
 void AddManhattanVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
         const TString& name = "manhattan_idx") {
     ExecOk(db, Sprintf(R"sql(
@@ -174,7 +156,6 @@ void AddInnerProductVectorIndex(TQueryClient& db, const TString& table = "/Root/
 }
 
 // A prefixed vector index (a prefix column before the vector column).
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
 void AddPrefixedVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const TString& name = "vp_idx") {
     ExecOk(db, Sprintf(R"sql(
         ALTER TABLE `%s` ADD INDEX %s
@@ -261,8 +242,6 @@ void SetupDocs(TQueryClient& db) {
     AddVectorIndex(db);
 }
 
-<<<<<<< HEAD
-=======
 void SetupLargeDocs(TQueryClient& db, ui32 count) {
     ExecOk(db, R"sql(
         CREATE TABLE `/Root/LargeDocs` (
@@ -358,87 +337,6 @@ void SetupHybridPrefixMatrixFixture(TQueryClient& db, const THybridPrefixMatrixS
     )sql", table.c_str(), indexColumns.c_str()));
 }
 
-void SetupMultiBranchDocs(TQueryClient& db) {
-    ExecOk(db, R"sql(
-        CREATE TABLE `/Root/MultiDocs` (
-            Key Uint64,
-            TextA Utf8,
-            TextB Utf8,
-            EmbeddingA String,
-            EmbeddingB String,
-            PRIMARY KEY (Key)
-        );
-    )sql");
-    ExecOk(db, Sprintf(R"sql(
-        UPSERT INTO `/Root/MultiDocs` (Key, TextA, TextB, EmbeddingA, EmbeddingB) VALUES
-            (1u, "alpha alpha alpha", "plain", %s, %s),
-            (2u, "plain", "beta beta beta", %s, %s),
-            (3u, "alpha", "beta", %s, %s),
-            (4u, "plain", "plain", %s, %s);
-    )sql", Emb(1).c_str(), Emb(3).c_str(), Emb(2).c_str(), Emb(3).c_str(),
-        Emb(3).c_str(), Emb(1).c_str(), Emb(4).c_str(), Emb(2).c_str()));
-    ExecOk(db, R"sql(
-        ALTER TABLE `/Root/MultiDocs` ADD INDEX ft_a
-            GLOBAL USING fulltext_relevance
-            ON (TextA)
-            WITH (tokenizer=standard, use_filter_lowercase=true);
-    )sql");
-    ExecOk(db, R"sql(
-        ALTER TABLE `/Root/MultiDocs` ADD INDEX ft_b
-            GLOBAL USING fulltext_relevance
-            ON (TextB)
-            WITH (tokenizer=standard, use_filter_lowercase=true);
-    )sql");
-    ExecOk(db, R"sql(
-        ALTER TABLE `/Root/MultiDocs` ADD INDEX vec_a
-            GLOBAL USING vector_kmeans_tree
-            ON (EmbeddingA)
-            WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-    )sql");
-    ExecOk(db, R"sql(
-        ALTER TABLE `/Root/MultiDocs` ADD INDEX vec_b
-            GLOBAL USING vector_kmeans_tree
-            ON (EmbeddingB)
-            WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-    )sql");
-}
-
-void RestartSchemeShard(TKikimrRunner& kikimr, const TString& path) {
-    auto& runtime = *kikimr.GetTestServer().GetRuntime();
-    runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
-        new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
-    Sleep(TDuration::Seconds(3));
-    Tests::TClient::RefreshPathCache(&runtime, path);
-}
-
-// A real config-dispatcher update is delivered independently to the KQP proxy (which rebuilds the
-// optimizer configuration used by workers) and the compile service (which invalidates cached plans when
-// ShouldInvalidateCompileCache detects a relevant TableServiceConfig change). Deliver to both local
-// subscribers and wait for their acknowledgements, exactly as the dispatcher would, so a stale cached
-// HybridRank plan cannot mask the kill switch.
-void UpdateHybridSearchConfig(TKikimrRunner& kikimr, bool enabled) {
-    auto& runtime = *kikimr.GetTestServer().GetRuntime();
-    const auto edgeActor = runtime.AllocateEdgeActor();
-
-    NKikimrConfig::TAppConfig config;
-    config.MutableFeatureFlags()->SetEnableFulltextIndex(true);
-    auto* tableServiceConfig = config.MutableTableServiceConfig();
-    tableServiceConfig->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    tableServiceConfig->SetEnableHybridSearch(enabled);
-
-    for (const auto& service : {
-            MakeKqpProxyID(runtime.GetNodeId()),
-            MakeKqpCompileServiceID(runtime.GetNodeId())}) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        *request->Record.MutableConfig() = config;
-        runtime.Send(service, edgeActor, request.Release());
-        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
-            edgeActor, TDuration::Seconds(10));
-        UNIT_ASSERT_C(response, "KQP service must acknowledge the runtime TableServiceConfig update");
-    }
-}
-
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
 // The kmeans-tree search-probe pragma. Widens the probe to cover all clusters at every level
 // (clusters=2, levels=2 => up to 4 leaf clusters) so the 4-doc vector branch is exhaustive: it returns
 // all candidates ordered by their true distance, deterministically, instead of an approximate subset that
@@ -1708,7 +1606,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorCrossProduct, EnableVectorSearchActor) {
+    Y_UNIT_TEST(PrefixedVectorCrossProduct) {
         enum class EExpectedOrder {
             TextFirst,
             VectorFirst,
@@ -1736,12 +1634,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         };
 
         ui32 executedQueries = 0;
-        auto kikimr = MakeRunner(
-            /*enableHybridSearch=*/true,
-            /*enableCompactFulltextIndex=*/false,
-            /*enableIndexStreamWrite=*/false,
-            /*useRealThreads=*/true,
-            /*enableVectorSearchActor=*/EnableVectorSearchActor);
+        auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         for (const bool multiPrefix : {false, true}) {
             for (const bool nullablePrefix : {false, true}) {
@@ -1755,8 +1648,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
 
                     for (const auto& fusionCase : fusionCases) {
                         const TString context = TStringBuilder()
-                            << "actor=" << EnableVectorSearchActor
-                            << ", multiPrefix=" << multiPrefix
+                            << "multiPrefix=" << multiPrefix
                             << ", nullablePrefix=" << nullablePrefix
                             << ", pkSuffix=" << pkSuffix
                             << ", fusion=" << fusionCase.Name;

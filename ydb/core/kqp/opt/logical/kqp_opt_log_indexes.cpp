@@ -2658,8 +2658,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return false;
     };
 
-<<<<<<< HEAD
-=======
     using TPrefixColumns = TVector<std::pair<TString, TExprNode::TPtr>>;
     auto extractEqualityColumns = [&](const THashSet<TString>& columns) {
         TPrefixColumns extracted;
@@ -2734,7 +2732,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             || index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance;
     };
 
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
     // ---------------------------------------------------------------------------------------------
     // Classify each scoring argument into a branch and resolve its index, then fuse the branches.
     // ---------------------------------------------------------------------------------------------
@@ -2861,12 +2858,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             } else {
                 ui32 matches = 0;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
-<<<<<<< HEAD
-                    if ((idx.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                        idx.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) &&
-                        idx.State == TIndexDescription::EIndexState::Ready &&
-                        columnInList(idx.KeyColumns, b.ScoredColumn)) {
-=======
                     if (idx.State == TIndexDescription::EIndexState::Ready
                         && isFulltextRelevanceIndex(idx)
                         && !idx.KeyColumns.empty() && idx.KeyColumns.back() == b.ScoredColumn)
@@ -2875,7 +2866,6 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                         if (!prefixColumns) {
                             continue;
                         }
->>>>>>> 857e11ee866 (Fix prefixed indexes in hybrid search (#52871))
                         b.IndexName = idx.Name;
                         b.PrefixColumns = std::move(*prefixColumns);
                         ++matches;

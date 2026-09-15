@@ -303,6 +303,10 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            RunTruncateTable(body.GetTruncateTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -468,6 +472,14 @@ void TColumnShard::RunCopyTable(
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
     TablesManager.CopyTableProgress(db, version, srcPathId, dstPathId);
+}
+
+void TColumnShard::RunTruncateTable(
+    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
+    TablesManager.TruncateTableProgress(schemeShardLocalPathId, version, db);
 }
 
 void TColumnShard::RunAlterStore(

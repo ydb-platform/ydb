@@ -117,7 +117,7 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
             continue;
         }
         AFL_VERIFY(!table->GetVersions().empty())("gen", genPathId)("ss", schemeShardLocalPathId);
-        const NOlap::TSnapshot appearVersion = table->GetCopyVersionOptional(schemeShardLocalPathId).value_or(*table->GetVersions().begin());
+        const NOlap::TSnapshot appearVersion = table->GetPathCopyVersionOptional(schemeShardLocalPathId).value_or(*table->GetVersions().begin());
         if (appearVersion > readSnapshot) {
             continue;
         }
@@ -869,7 +869,7 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     AddToHistory(dstSchemeShardLocalPathId, internalPathId);
 }
 
-bool TTablesManager::TruncateTableProgress(
+void TTablesManager::TruncateTableProgress(
     const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     // Resolve old InternalPathId from fence.
     const auto* pInternalPathId = TruncatingLocalToInternal.FindPtr(schemeShardLocalPathId);
@@ -877,10 +877,6 @@ bool TTablesManager::TruncateTableProgress(
     const auto oldInternalPathId = *pInternalPathId;
     AFL_VERIFY(HasTable(oldInternalPathId));
     AFL_VERIFY(!GetTable(oldInternalPathId).IsReadOnly(schemeShardLocalPathId));
-
-    // Load last version info to carry over TTL settings.
-    // TRUNCATE is only supported for standalone column tables (not in-store),
-    // so SchemaPresetId/SchemaPresetVersionAdj are not carried over.
 
     // Perform the generation swap.
     auto* oldTable = Tables.FindPtr(oldInternalPathId);
@@ -932,8 +928,6 @@ bool TTablesManager::TruncateTableProgress(
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTableProgress")("ss_local_path_id", schemeShardLocalPathId)(
         "old_internal_path_id", oldInternalPathId)("new_internal_path_id", newInternalPathId)("version", version.DebugString());
-
-    return true;
 }
 
 void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {

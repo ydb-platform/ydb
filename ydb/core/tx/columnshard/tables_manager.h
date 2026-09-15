@@ -161,7 +161,6 @@ public:
         return SchemeShardLocalPathIds.contains(schemeShardLocalPathId);
     }
 
-    // Path-local drop version. Caller must ensure HasSchemeShardLocalPathId; nullopt means the path is live.
     std::optional<NOlap::TSnapshot> GetPathDropVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
         const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
         AFL_VERIFY(it != SchemeShardLocalPathIds.end());
@@ -173,13 +172,34 @@ public:
         Versions.insert(other.Versions.begin(), other.Versions.end());
         for (auto&& [schemeShardLocalPathId, pathInfo] : other.SchemeShardLocalPathIds) {
             auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
-            if (it != SchemeShardLocalPathIds.end() && it->second.DropVersion) {
-                if (pathInfo.DropVersion) {
-                    AFL_VERIFY(*it->second.DropVersion == *pathInfo.DropVersion)("existing", it->second.DropVersion->DebugString())(
-                                                            "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
-                } else {
-                    // V1 retention recovery: drop is stored only in V1, v0 does not carry it.
-                    pathInfo.DropVersion = it->second.DropVersion;
+            if (it != SchemeShardLocalPathIds.end()) {
+                auto& existing = it->second;
+                if (existing.DropVersion) {
+                    if (pathInfo.DropVersion) {
+                        AFL_VERIFY(*existing.DropVersion == *pathInfo.DropVersion)("existing", existing.DropVersion->DebugString())(
+                                                              "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
+                    } else {
+                        pathInfo.DropVersion = existing.DropVersion;
+                    }
+                }
+                if (existing.CopyVersion) {
+                    if (pathInfo.CopyVersion) {
+                        AFL_VERIFY(*existing.CopyVersion == *pathInfo.CopyVersion)("existing", existing.CopyVersion->DebugString())(
+                                                              "incoming", pathInfo.CopyVersion->DebugString())("ss", schemeShardLocalPathId);
+                    } else {
+                        pathInfo.CopyVersion = existing.CopyVersion;
+                    }
+                }
+                if (existing.IsReadOnly) {
+                    pathInfo.IsReadOnly = true;
+                }
+                if (existing.LastCompletedBackupTransaction) {
+                    if (pathInfo.LastCompletedBackupTransaction) {
+                        AFL_VERIFY(*existing.LastCompletedBackupTransaction == *pathInfo.LastCompletedBackupTransaction)("existing", *existing.LastCompletedBackupTransaction)(
+                                       "incoming", *pathInfo.LastCompletedBackupTransaction)("ss", schemeShardLocalPathId);
+                    } else {
+                        pathInfo.LastCompletedBackupTransaction = existing.LastCompletedBackupTransaction;
+                    }
                 }
             }
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);
@@ -216,6 +236,14 @@ public:
             return std::nullopt;
         }
         if (it->second.DropVersion) {
+            return std::nullopt;
+        }
+        return it->second.CopyVersion;
+    }
+
+    std::optional<NOlap::TSnapshot> GetPathCopyVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        if (it == SchemeShardLocalPathIds.end()) {
             return std::nullopt;
         }
         return it->second.CopyVersion;
@@ -428,20 +456,12 @@ private:
     void SetLivePathId(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
         AllPathIds[ss].insert(id);
         if (isDropped) {
-            // Invariant: a live generation always wins over a dropped one for the same SS path.
-            // During recovery, TableInfoV1 (dropped) and TableInfo (live) rows for the same SS path
-            // can be loaded in either order. Using emplace (no-overwrite) for dropped generations
-            // ensures a dropped generation never clobbers an already-loaded live one.
             LivePathIds.emplace(ss, id);
         } else {
-            // Live generation: always overwrite, regardless of what was loaded before.
             LivePathIds[ss] = id;
         }
     }
 
-    // Removes the live mapping for `ss`, verifying it points to `id`.
-    // AFL_VERIFYs that the mapping is present and matches — a mismatch indicates a logic error
-    // (the caller expected the live mapping to be present and pointing to `id`).
     void ForgetLivePathIdVerified(TSchemeShardLocalPathId ss, TInternalPathId id) {
         auto it = LivePathIds.find(ss);
         AFL_VERIFY(it != LivePathIds.end() && it->second == id)("ss", ss)("expected", id)(
@@ -450,8 +470,6 @@ private:
     }
 
     void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        // The path must be present in AllPathIds: it was added via SetLivePathId or AddToHistory
-        // before any drop/finalize operation that calls ForgetGeneration.
         auto it = AllPathIds.find(ss);
         AFL_VERIFY(it != AllPathIds.end())("ss", ss)("internal", id);
         AFL_VERIFY(it->second.erase(id) == 1)("ss", ss)("internal", id);
@@ -461,8 +479,6 @@ private:
     }
 
     void RenamePathId(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
-        // Propose (MoveTablePropose) always fences the source, so live mapping on `fromSs`
-        // must already be gone. Destination must not already have history or a live mapping.
         AFL_VERIFY(!LivePathIds.FindPtr(fromSs))("from", fromSs)("to", toSs);
         AFL_VERIFY(!LivePathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
         AFL_VERIFY(!AllPathIds.FindPtr(toSs))("from", fromSs)("to", toSs);
@@ -472,31 +488,19 @@ private:
         AllPathIds.erase(itAll);
     }
 
-    // Adds a generation to the AllPathIds index without touching LivePathIds.
-    // Used for lazy-populating AllPathIds during rolling deploy (tables created before
-    // this change lack entries) and for tracking copies in CopyTableProgress.
     void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
         AllPathIds[ss].insert(id);
     }
 
-    // Returns the live InternalPathId for `ss`, or nullopt if no live mapping exists.
-    // The nullopt is a legitimate "not found" result (e.g., the path is fenced during
-    // a TRUNCATE/Move propose, or the table does not exist). Callers that require the
-    // path to be live wrap the result in AFL_VERIFY.
     std::optional<TInternalPathId> ResolveLivePathId(TSchemeShardLocalPathId ss) const {
         const auto* it = LivePathIds.FindPtr(ss);
         return it ? std::optional<TInternalPathId>(*it) : std::nullopt;
     }
 
-    // Returns a pointer to the set of all generations for `ss`, or nullptr if none are tracked.
-    // nullptr is legitimate only for tables created before this change deployed (rolling
-    // deploy, before restart / first truncate). After a truncate, AllPathIds must be populated.
     const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
         return AllPathIds.FindPtr(ss);
     }
 
-    // Resolves the correct InternalPathId for a given SchemeShard path at a specific read snapshot.
-    // Only used internally by BuildTableMetadataAccessor.
     std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
         const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
 
@@ -655,7 +659,7 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
 
     void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
-    bool TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+    void TruncateTableProgress(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 

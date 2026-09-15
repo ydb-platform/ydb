@@ -81,8 +81,8 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
     """Roll the cluster while CutHistory is trimming ColumnShard channel history.
 
     History entries are created by Hive channel reassignment (not tablet restarts).
-    Channels are reassigned before any writes so the old range is trivially empty;
-    the boot proof then cuts it, and the roll verifies data stays readable throughout.
+    Channels are reassigned before any writes so the old range is trivially empty,
+    and the roll verifies data stays readable throughout.
     """
 
     rows_count = 200
@@ -214,7 +214,7 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
 
         assert self._column_shard_ids(), "no ColumnShard tablets found for the column table"
 
-        # Reassign before any writes: old range has zero blobs, boot proof can cut it immediately.
+        # Reassign before any writes: old range has zero blobs so it can be cut immediately.
         reassigned = self._reassign_column_shard_channels()
         assert reassigned > 0, "no Hive responded to reassign; cannot create channel history"
 
@@ -222,7 +222,7 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
         expected = self.rows_count
         self._assert_readable(table_name, expected)
 
-        # Restarts trigger the boot proof on each start.
+        # Each restart triggers a new nomination cadence pass.
         for round_n in range(self.restart_rounds):
             self._restart_column_shards()
             self._write_data(table_name, offset=(round_n + 1) * self.rows_count)
@@ -237,7 +237,7 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
             assert sensors.get("Channels/Poisoned", 0) == 0, f"cutter poisoned a channel: {sensors}"
             assert sensors.get("Barriers/Failed/Count", 0) == 0, f"barrier send failed: {sensors}"
 
-        # Allow the boot proof time to settle, then verify health and data.
+        # Allow the cutter time to settle, then verify health and data.
         time.sleep(90)
         sensors = self._cut_history_sensors()
         logger.info("cut_history sensors after settle: %s", sensors)

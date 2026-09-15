@@ -22,31 +22,44 @@ namespace {
         return settings;
     }
 
-    void PrefillTables(NYdb::NQuery::TQueryClient& queryClient)
+    void PrefillTables(NYdb::NQuery::TQueryClient& queryClient, bool large = false)
     {
         {
+            const TString partitioning = large
+                ? "PARTITION BY HASH (id) WITH (STORE = COLUMN, PARTITION_COUNT = 4)"
+                : "WITH (STORE = COLUMN)";
             auto status = queryClient.ExecuteQuery(
-                R"(
+                TStringBuilder() << R"(
                     CREATE TABLE `/Root/aggregatable` (
                         id Int64 NOT NULL,
                         group_key Int64 NOT NULL,
                         data Int64 NOT NULL,
                         PRIMARY KEY (id)
                     )
-                    WITH (STORE = COLUMN);
-                )",  NYdb::NQuery::TTxControl::NoTx()
+                )" << partitioning << ";", NYdb::NQuery::TTxControl::NoTx()
             ).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
         {
+            TStringBuilder insert;
+            insert << "INSERT INTO `/Root/aggregatable` (id, group_key, data) VALUES\n";
+            if (large) {
+                constexpr size_t rows = 4096;
+                constexpr size_t groups = 1024;
+                for (size_t i = 0; i < rows; ++i) {
+                    insert << "(" << i << ", " << i % groups << ", 1)"
+                        << (i + 1 == rows ? ";\n" : ",\n");
+                }
+            } else {
+                insert << R"(
+                    (1, 0, 100),
+                    (2, 0, 600),
+                    (3, 1, 300),
+                    (4, 1, 400)
+                )";
+            }
             auto status = queryClient.ExecuteQuery(
-                R"(
-                    INSERT INTO `/Root/aggregatable` (id, group_key, data) VALUES
-                        (1, 0, 100),
-                        (2, 0, 600),
-                        (3, 1, 300),
-                        (4, 1, 400)
-                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+                insert, NYdb::NQuery::TTxControl::BeginTx().CommitTx()
             ).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
@@ -74,6 +87,22 @@ namespace {
             UNIT_ASSERT(rp.GetValue(idx).GetProto().int64_value() == 700);
         }
     }
+
+    class TTaskCountExtractor : public NJson::IScanCallback {
+    public:
+        THashMap<int, int> TasksCountPerStage;
+
+        bool Do(const TString&, NJson::TJsonValue*, NJson::TJsonValue& value) override
+        {
+            if (value.IsMap() && value.Has("Tasks") && value.Has("PhysicalStageId")) {
+                const int taskCount = value["Tasks"].GetIntegerSafe();
+                const int stageId = value["PhysicalStageId"].GetIntegerSafe();
+                const auto [_, inserted] = TasksCountPerStage.emplace(stageId, taskCount);
+                UNIT_ASSERT_C(inserted, TStringBuilder() << "Duplicate stage " << stageId);
+            }
+            return true;
+        }
+    };
 }
 
 Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
@@ -130,10 +159,15 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
         TKikimrRunner kikimr(settings);
 
         auto queryClient = kikimr.GetQueryClient();
-        PrefillTables(queryClient);
+        PrefillTables(queryClient, true);
 
         TString hints = R"(
             PRAGMA TablePathPrefix = "/Root";
+            PRAGMA ydb.MaxTasksPerStage = "40";
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 40 },
+                { "tx": 0, "stage": 1, "tasks": 40 }
+            ] @@;
             PRAGMA ydb.UseDqHashCombine = "true";
             PRAGMA ydb.UseDqHashAggregate = "true";
             PRAGMA ydb.DqHashOperatorsUseBlocks = "true";
@@ -147,10 +181,62 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
         )";
 
         TString groupQuery = TStringBuilder() << hints << select;
-        auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto status = queryClient.ExecuteQuery(
+            groupQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            NYdb::NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full)
+        ).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         auto resultSet = status.GetResultSets()[0];
-        CheckGroupByResultSet(resultSet);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1024);
+        TResultSetParser resultParser(resultSet);
+        while (resultParser.TryNextRow()) {
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnParser("data_sum").GetInt64(), 4);
+        }
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(status.GetStats()->GetPlan().has_value());
+        UNIT_ASSERT(NJson::ReadJsonTree(*status.GetStats()->GetPlan(), &plan));
+        TTaskCountExtractor taskCounts;
+        plan.Scan(taskCounts);
+        UNIT_ASSERT(taskCounts.TasksCountPerStage.contains(0));
+        UNIT_ASSERT(taskCounts.TasksCountPerStage.contains(1));
+        UNIT_ASSERT_VALUES_EQUAL(taskCounts.TasksCountPerStage.at(0), 40);
+        UNIT_ASSERT_VALUES_EQUAL(taskCounts.TasksCountPerStage.at(1), 40);
+
+        TString supportedTypesQuery = TStringBuilder() << hints << R"(
+            SELECT
+                T.string_key AS string_key,
+                T.utf8_key AS utf8_key,
+                SUM(T.data) AS data_sum
+            FROM (
+                SELECT
+                    CAST(group_key AS String) AS string_key,
+                    CAST(group_key AS Utf8) AS utf8_key,
+                    CAST(data AS Uint64) AS data
+                FROM `aggregatable`
+            ) AS T
+            GROUP BY string_key, utf8_key
+        )";
+        auto supportedTypesStatus = queryClient.ExecuteQuery(
+            supportedTypesQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(supportedTypesStatus.IsSuccess(), supportedTypesStatus.GetIssues().ToString());
+
+        auto supportedTypesResultSet = supportedTypesStatus.GetResultSets()[0];
+        UNIT_ASSERT_VALUES_EQUAL(supportedTypesResultSet.RowsCount(), 1024);
+        TResultSetParser parser(supportedTypesResultSet);
+        THashSet<TString> seen;
+        while (parser.TryNextRow()) {
+            const TString stringKey(parser.ColumnParser("string_key").GetString());
+            const TString utf8Key(parser.ColumnParser("utf8_key").GetUtf8());
+            UNIT_ASSERT_VALUES_EQUAL(stringKey, utf8Key);
+            seen.insert(stringKey);
+
+            const ssize_t dataSumIndex = parser.ColumnIndex("data_sum");
+            UNIT_ASSERT(dataSumIndex >= 0);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetValue(dataSumIndex).GetProto().uint64_value(), 4);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(seen.size(), 1024);
 
         auto explainResult = queryClient.ExecuteQuery(
             groupQuery,

@@ -1690,8 +1690,12 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         }();
         UNIT_ASSERT_C(actualUniqueId != 0, "PersistentBufferUniqueId must not be zero");
 
-        // Rewrite the independently stored record A as a valid version-0 legacy record. Its
-        // payload remains readable after restore, but it intentionally has no payload checksums.
+        // Rewrite the independently stored record A as a valid version-0 record (no
+        // HAS_PAYLOAD_CHECKSUMS flag, i.e. sender supplied no payload checksums for it). Its
+        // payload remains readable after restore. The header checksum below is recomputed with
+        // the current on-disk formula (CalculateRawChecksum(sector, HeaderDataSize) ^ uniqueId);
+        // this fixture does not model the pre-this-PR on-disk format, since backward
+        // compatibility with data written by older binaries is not maintained.
         {
             TString& chunk = chunkBufs[rawA->Get()->ChunkIdx];
             char* sector = chunk.Detach() + rawA->Get()->Offset;
@@ -1712,13 +1716,8 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             // (one ui64) that used to be part of the checksummed prefix.
             header->HeaderDataSize -= sizeof(ui64);
 
-            TString checksumInput(sector, header->HeaderDataSize);
-            checksumInput.append(
-                reinterpret_cast<const char*>(
-                    &header->PersistentBufferUniqueId),
-                sizeof(header->PersistentBufferUniqueId));
-            header->Checksum = NDDisk::CalculateRawChecksum(
-                checksumInput.data(), checksumInput.size());
+            header->Checksum = NDDisk::CalculateRawChecksum(sector, header->HeaderDataSize)
+                ^ header->PersistentBufferUniqueId;
         }
         checksumsA.clear();
 
@@ -1878,6 +1877,87 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         for (ui32 i = 0; i < expectedChecksums.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Record.GetChecksums(i), expectedChecksums[i],
                 "Persisted checksum must be the pre-correction (original) value, never recomputed from on-disk bytes");
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferSectorChecksumsReuseOnlyUnmodifiedPayload) {
+        for (bool batching : {false, true}) {
+            // With verification disabled, deliberately different supplied checksums make
+            // recomputation observable. The corrected sector must still hash its disk bytes.
+            for (ui32 checksumMode : {0, 1, 2}) {
+                TTestContext ctx;
+                NDDisk::TDDiskConfig config;
+                config.EnableChecksums = checksumMode != 0;
+                NDDisk::TPersistentBufferFormat format;
+                format.EnableWritesBatching = batching;
+                const auto disk = ctx.CreateDDisk(92, 1, config, TTestContext::ChunkSize, format);
+                const auto creds = Connect(ctx, disk.PBServiceId, 192, 1);
+                auto sendWrite = [&](ui64 lsn, const TString& data) {
+                    auto event = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                        creds, NDDisk::TBlockSelector{1, 0, static_cast<ui32>(data.size())}, lsn,
+                        NDDisk::TWriteInstruction(0));
+                    TRope rope(data.substr(0, 17));
+                    rope.Insert(rope.End(), TRope(data.substr(17)));
+                    if (config.EnableChecksums) {
+                        event->AddPayloadThenChecksum(std::move(rope));
+                        if (checksumMode == 2 && lsn == 2) {
+                            for (ui32 i = 0; i < static_cast<ui32>(event->Record.ChecksumsSize()); ++i) {
+                                event->Record.SetChecksums(i, event->Record.GetChecksums(i) ^ 0x123456789abcdef0ull);
+                            }
+                        }
+                    } else {
+                        event->AddPayload(std::move(rope));
+                    }
+                    SendToDDisk(ctx, disk.PBServiceId, event.release());
+                };
+                std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>> held;
+                if (batching) {
+                    sendWrite(1, MakeData('A', BlockSize));
+                    held = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+                }
+                TString payload = MakeData('B', BlockSize) + MakeData('C', BlockSize) + MakeData('D', BlockSize);
+                payload.Detach()[BlockSize] = static_cast<char>(NDDisk::TPersistentBufferHeader::PersistentBufferHeaderSignature[0]);
+                sendWrite(2, payload);
+                if (held) {
+                    // Process the target request before releasing the write that forces batching.
+                    const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+                    bool queued = false;
+                    ui32 events = 0;
+                    ctx.Runtime.Sim([&] {
+                        ctx.Runtime.WrapInActorContext(actorId, [&](IActor* actor) {
+                            queued = static_cast<NDDisk::TDDiskActor*>(actor)->PersistentBufferBatchWriteCookie != 0;
+                        });
+                        return !queued && ++events < 1000;
+                    });
+                    UNIT_ASSERT_C(queued, "Target write did not enter the batch queue");
+                    ctx.SendPDiskResponse(disk, *held, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+                    AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+                }
+                auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+                TString bytes = raw->Get()->Data.ConvertToString();
+                UNIT_ASSERT_VALUES_EQUAL(bytes.size(), 4 * BlockSize);
+                const auto* header = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(bytes.data());
+                const auto* locations = reinterpret_cast<const NDDisk::TPersistentBufferSectorInfo*>(
+                    bytes.data() + sizeof(*header) + sizeof(NDDisk::TPersistentBufferLsnRecordHeader));
+                const auto supplied = CalculateChecksums(payload);
+                for (ui32 i = 0; i < 3; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(locations[i].HasSignatureCorrection, i == 1);
+                    ui64 expected = NDDisk::CalculateRawChecksum(bytes.data() + (i + 1) * BlockSize, BlockSize);
+                    if (checksumMode != 0 && i != 1) {
+                        expected = supplied[i] ^ (checksumMode == 2 ? 0x123456789abcdef0ull : 0);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(locations[i].ChecksumOrData, expected ^ header->PersistentBufferUniqueId);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(bytes[2 * BlockSize], '\0');
+                const ui64 storedHeaderChecksum = header->Checksum;
+                const ui64 uniqueId = header->PersistentBufferUniqueId;
+                const ui32 headerSize = header->HeaderDataSize;
+                reinterpret_cast<NDDisk::TPersistentBufferHeader*>(bytes.Detach())->Checksum = 0;
+                UNIT_ASSERT_VALUES_EQUAL(storedHeaderChecksum,
+                    NDDisk::CalculateRawChecksum(bytes.data(), headerSize) ^ uniqueId);
+                ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+                AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+            }
         }
     }
 

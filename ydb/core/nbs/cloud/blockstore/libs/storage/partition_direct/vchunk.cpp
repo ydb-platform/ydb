@@ -31,10 +31,9 @@ using namespace NThreading;
 
 namespace {
 
-ui32 CheckedVChunkBlockSize(ui32 blockSize, ui64 vChunkSize)
+ui32 CheckedVChunkBlockSize(ui32 blockSize)
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
-    Y_ABORT_UNLESS(vChunkSize % blockSize == 0);
     return blockSize;
 }
 
@@ -69,8 +68,8 @@ TVChunk::TVChunk(
     , DiskDescription(diskDescription)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , BlockSize(CheckedVChunkBlockSize(blockSize, vChunkSize))
-    , BlocksCount(vChunkSize / BlockSize)
+    , BlockSize(CheckedVChunkBlockSize(blockSize))
+    , BlocksCount(GetVChunkBlockCount(BlockSize, vChunkSize))
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
         .DiskId = DiskDescription.DiskId,

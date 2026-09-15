@@ -406,7 +406,7 @@ private:
                 HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
             }
 
-            const auto& metricsToSend = std::get<TMetricsToSend>(variant);
+            auto& metricsToSend = std::get<TMetricsToSend>(variant);
 
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
@@ -415,7 +415,7 @@ private:
                 selfId = SelfId(),
                 cookie = Cookie,
                 url = Url,
-                data = metricsToSend.Data,
+                data = std::move(metricsToSend.Data),
                 clusterType = WriteParams.Shard.GetClusterType(),
                 httpSenderId](const NThreading::TFuture<std::string>& future) mutable {
                     try {

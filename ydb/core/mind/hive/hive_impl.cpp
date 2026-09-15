@@ -721,7 +721,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     }
     sideEffects.Complete(TActivationContext::AsActorContext(), Requests);
     if (!reassigns.empty()) {
-        StartReassignActor(std::move(reassigns));
+        ContinueInterruptedReassigns(std::move(reassigns));
     }
     if (AreWeRootHive()) {
         YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: root Hive is ready",

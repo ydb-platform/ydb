@@ -701,6 +701,39 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
     }
 }
 
+Y_UNIT_TEST_SUITE(NbsConsoleLogConfigValidation) {
+    Y_UNIT_TEST(ShouldDefaultToInfo) {
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_VALUES_EQUAL(config.GetNbsConfig().GetConsoleLogLevel(), 5);
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
+    }
+
+    Y_UNIT_TEST(ShouldAcceptSupportedLevels) {
+        for (ui32 level = 0; level <= 8; ++level) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+            UNIT_ASSERT(errors.empty());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldRejectUnsupportedLevels) {
+        for (ui32 level: {9u, 256u, Max<ui32>()}) {
+            NKikimrConfig::TAppConfig config;
+            config.MutableNbsConfig()->SetConsoleLogLevel(level);
+            std::vector<TString> errors;
+            UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+            UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                errors.front(),
+                TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0..8, got " << level);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
     Y_UNIT_TEST(ShouldAcceptDisabledFrontend) {
         {

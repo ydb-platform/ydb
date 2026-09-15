@@ -8,7 +8,7 @@ namespace NKikimr::NPQ {
     public:
         TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp);
 
-        bool UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond);
+        bool UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp);
         void Update(const TInstant timestamp);
 
         bool CanExaust(const TInstant timestamp) ;
@@ -19,6 +19,7 @@ namespace NKikimr::NPQ {
 
     private:
         ui64 TransformToQuota(const ui64 bytes) const;
+        ui64 ComputeMaxBurstQuota(const ui64 maxBurst, const ui64 speedPerSecond) const;
 
         i64 AvailableQuota;
         ui64 SpeedPerSecond;
@@ -28,4 +29,4 @@ namespace NKikimr::NPQ {
         TDuration QuotedTime;
     };
 
-} // NKikimr::NPQ
+} // namespace NKikimr::NPQ

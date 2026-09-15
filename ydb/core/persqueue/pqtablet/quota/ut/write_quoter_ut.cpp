@@ -1,4 +1,4 @@
-#include "quota.h"
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -26,19 +26,18 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(true);
     pqConfig.SetTopicsAreFirstClassCitizen(true);
 
-    NPersQueue::TTopicConverterPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(writeSpeedInMessagesPerSecond);
     config.MutablePartitionConfig()->SetBurstSizeInMessages(burstSizeInMessages);
- 
+
     TPartitionId partitionId;
     TActorId tabletActor = edgeActor;
     ui64 tabletId = 28739;
     std::shared_ptr<TTabletCountersBase> counters = std::make_shared<TTabletCountersBase>();
 
-    auto quoterId = runtime.Register(CreateWriteQuoter(pqConfig, topicConverter, config, partitionId, tabletActor, tabletId, counters));
+    auto quoterId = runtime.Register(CreateWriteQuoter(pqConfig, /*topicConverter=*/nullptr, config, partitionId, tabletActor, tabletId, counters));
     runtime.EnableScheduleForActor(quoterId);
 
     return quoterId;
@@ -84,6 +83,32 @@ Y_UNIT_TEST(WaitMessagesQuota) {
         auto duration = TInstant::Now() - start;
         UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
     }
+}
+
+Y_UNIT_TEST(AlterMessagesQuotaIsApplied) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    auto edgeActorId = runtime.AllocateEdgeActor();
+
+    auto quoterId = RegisterQuoter(runtime, edgeActorId, 1_MB, 1, 1);
+    RequestQuota(runtime, quoterId, edgeActorId);
+    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+    ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
+
+    NKikimrPQ::TPQTabletConfig config;
+    config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(1_MB);
+    config.MutablePartitionConfig()->SetBurstSize(1_MB);
+    config.MutablePartitionConfig()->SetWriteSpeedInMessagesPerSecond(1_MB);
+    config.MutablePartitionConfig()->SetBurstSizeInMessages(1_MB);
+    runtime.Send(quoterId, edgeActorId, new TEvPQ::TEvChangePartitionConfig(nullptr, config));
+
+    TInstant start = TInstant::Now();
+    RequestQuota(runtime, quoterId, edgeActorId);
+    const auto ev = WaitForQuotaApproved(runtime, TDuration::MilliSeconds(500));
+    UNIT_ASSERT_LT_C(ev->PartitionQuotaWaitTime, TDuration::MilliSeconds(500),
+        "duration: " << ev->PartitionQuotaWaitTime);
+    UNIT_ASSERT_LT_C(TInstant::Now() - start, TDuration::MilliSeconds(500),
+        "wall: " << (TInstant::Now() - start));
 }
 
 }

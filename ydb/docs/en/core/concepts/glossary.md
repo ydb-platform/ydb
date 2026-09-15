@@ -434,6 +434,14 @@ A database schema consists of **schema objects**, which can be databases, [table
 
 For organizational convenience, schema objects form a hierarchy using [folders](#folder).
 
+{% if feature_serial %}
+
+### Sequence {#sequence}
+
+**Sequence** is an integer value generator owned by a [Serial](../yql/reference/types/serial.md) column. For its lifecycle and value-generation behavior, see [Sequence](datamodel/sequence.md).
+
+{% endif %}
+
 ### Folder {#folder}
 
 As in file systems, a **folder** or **directory** is a container for [schema objects](#scheme-object).
@@ -714,10 +722,6 @@ In addition, there is a **root SchemeShard** that stores information about datab
 **SysViewProcessor** is a tablet that stores data of some [system views](../dev/system-views.md).
 
 {% if feature_serial %}
-
-#### Sequence {#sequence}
-
-**Sequence** is an integer value generator owned by a [Serial](../yql/reference/types/serial.md) column. For its lifecycle and value-generation behavior, see [Sequence](datamodel/sequence.md).
 
 #### SequenceShard {#sequence-shard}
 

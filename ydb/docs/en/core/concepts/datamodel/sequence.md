@@ -27,4 +27,6 @@ Tables with Serial columns support the following operations:
 - [dump](../../reference/ydb-cli/export-import/tools-dump.md) and [restore](../../reference/ydb-cli/export-import/import-file.md)
 - [S3 import](../../reference/ydb-cli/export-import/import-s3.md) and [S3 export](../../reference/ydb-cli/export-import/export-s3.md)
 
+When a table is renamed, the paths of its sequences change to reflect the new table path, while their parameters and current positions are preserved.
+
 When dumping such a table, do not use [`--avoid-copy`](../../reference/ydb-cli/export-import/tools-dump.md), because without copying, the dump does not save the current generator position.

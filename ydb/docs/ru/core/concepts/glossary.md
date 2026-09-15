@@ -438,6 +438,14 @@ JSON-индекс, как и [полнотекстовый индекс](#fullte
 
 Для удобства организации, схемные объекты образуют иерархию с помощью [папок](#folder).
 
+{% if feature_serial %}
+
+### Sequence {#sequence}
+
+**Sequence** представляет собой генератор целочисленных значений, принадлежащий колонке типа [Serial](../yql/reference/types/serial.md). Его жизненный цикл и генерация значений описаны в статье [Sequence](datamodel/sequence.md).
+
+{% endif %}
+
 ### Папка {#folder}
 
 Как и в файловых системах, **папка**, **каталог**, **folder** или **directory** является контейнером для [схемных объектов](#scheme-object).
@@ -718,10 +726,6 @@ SID идентифицирует индивидуального [пользов�
 **SysViewProcessor** — это таблетка, которая хранит данные некоторых из [системных представлений](../dev/system-views.md).
 
 {% if feature_serial %}
-
-#### Sequence {#sequence}
-
-**Sequence** представляет собой генератор целочисленных значений, принадлежащий колонке типа [Serial](../yql/reference/types/serial.md). Его жизненный цикл и генерация значений описаны в статье [Sequence](datamodel/sequence.md).
 
 #### SequenceShard {#sequence-shard}
 

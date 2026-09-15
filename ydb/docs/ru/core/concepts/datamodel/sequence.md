@@ -27,4 +27,6 @@ Sequence представляет собой генератор целочисл
 - [dump](../../reference/ydb-cli/export-import/tools-dump.md) и [restore](../../reference/ydb-cli/export-import/import-file.md)
 - [импорт из S3](../../reference/ydb-cli/export-import/import-s3.md) и [экспорт в S3](../../reference/ydb-cli/export-import/export-s3.md)
 
+При переименовании таблицы пути связанных с ней Sequence изменяются в соответствии с новым путём таблицы, а их параметры и текущие позиции сохраняются.
+
 При выгрузке такой таблицы не используйте [`--avoid-copy`](../../reference/ydb-cli/export-import/tools-dump.md), поскольку без копирования актуальная позиция генератора не сохраняется в дампе.

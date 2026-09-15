@@ -241,22 +241,28 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::IMPORT, request.GetRequest().GetOperationParams());
-        if (uid) {
-            if (const auto* existing = FindOperationByUid(Self->ImportsByUid, uid)) {
+        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::IMPORT, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Replay,
+            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
+                if (const auto* existing = FindOperationByUid(Self->ImportsByUid, key.second)) {
+                    return TOperationUidRecord{(*existing)->Id, (*existing)->DomainPathId, {}, {}};
+                }
+                return Nothing();
+            },
+            [&](const auto& stored) {
                 const auto domain = DomainPathId(request.GetDatabaseName());
                 // Preserve legacy requests without a database binding.
-                const auto expectedDomain = domain ? domain : (*existing)->DomainPathId;
-                if (CompareOperationUid({(*existing)->DomainPathId, {}, {}}, {expectedDomain, {}, {}}) == EUidReplayMatch::Match) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), **existing);
-                    return Reply(std::move(response));
-                } else {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::ALREADY_EXISTS,
-                        TStringBuilder() << "Import with uid '" << uid << "' already exists"
-                    );
-                }
-            }
+                const auto expectedDomain = domain ? TMaybe<TPathId>(domain) : stored.DomainPathId;
+                return CompareOperationUid({stored.DomainPathId, {}, {}}, {expectedDomain, {}, {}});
+            });
+        if (admission.GetDecision() == TOperationUidAdmission::EDecision::Replay) {
+            Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(),
+                *Self->Imports.at(admission.GetOperationId()));
+            return Reply(std::move(response));
+        }
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
+            return Reply(std::move(response), Ydb::StatusIds::ALREADY_EXISTS,
+                TStringBuilder() << "Import with uid '" << uid << "' already exists");
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -371,13 +377,15 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->SanitizedToken = request.GetSanitizedToken();
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistCreateImport(db, *importInfo);
+        admission.Commit(true, [&] {
+            Self->PersistCreateImport(db, *importInfo);
 
-        importInfo->State = initialState;
-        importInfo->StartTime = TAppData::TimeProvider->Now();
-        Self->PersistImportState(db, *importInfo);
+            importInfo->State = initialState;
+            importInfo->StartTime = TAppData::TimeProvider->Now();
+            Self->PersistImportState(db, *importInfo);
 
-        Self->AddImport(importInfo);
+            Self->AddImport(importInfo);
+        });
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;

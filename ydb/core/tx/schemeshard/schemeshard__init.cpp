@@ -16,6 +16,8 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
@@ -6084,7 +6086,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.OriginalOperationId = operationId;
                 state.AwaitingInitialRestore = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::AwaitingInitialRestore>();
                 if (state.Uid) {
-                    Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, state.Uid}] = operationId;
+                    Self->SchemeOperationsByUid[{Ydb::TOperationId::RESTORE, state.Uid}] = operationId;
                 }
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
@@ -6367,7 +6369,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     backupInfo->Uid = rowset.GetValueOrDefault<Schema::IncrementalBackups::Uid>();
                     backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::IncrementalBackups::OriginalDdl>();
                     if (backupInfo->Uid) {
-                        Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, backupInfo->Uid}] = id;
+                        Self->SchemeOperationsByUid[{Ydb::TOperationId::INCREMENTAL_BACKUP, backupInfo->Uid}] = id;
                     }
 
                     Self->IncrementalBackups[id] = backupInfo;
@@ -6444,7 +6446,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     backupInfo->Uid = rowset.GetValueOrDefault<Schema::FullBackups::Uid>();
                     backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::FullBackups::OriginalDdl>();
                     if (backupInfo->Uid) {
-                        Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpBackupBackupCollection, backupInfo->Uid}] = id;
+                        Self->SchemeOperationsByUid[{Ydb::TOperationId::FULL_BACKUP, backupInfo->Uid}] = id;
                     }
 
                     Self->FullBackups[id] = backupInfo;

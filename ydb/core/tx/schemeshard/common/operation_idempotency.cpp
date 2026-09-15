@@ -32,4 +32,49 @@ EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const T
     return EUidReplayMatch::Match;
 }
 
+TOperationUidAdmission TOperationUidAdmission::Prepare(const TOperationUidKey& key,
+    EDuplicatePolicy policy, const TLookup& lookup, const TCheck& check)
+{
+    Y_ABORT_UNLESS(SupportsOperationUid(key.first));
+    TOperationUidAdmission admission;
+    if (key.second.empty()) {
+        return admission;
+    }
+    const auto stored = lookup(key);
+    if (!stored) {
+        return admission;
+    }
+    admission.OperationId = stored->OperationId;
+    if (policy == EDuplicatePolicy::Reject) {
+        admission.Decision = EDecision::AlreadyExists;
+        return admission;
+    }
+    Y_ABORT_UNLESS(check);
+    switch (check(*stored)) {
+        case EUidReplayMatch::Match:
+            admission.Decision = EDecision::Replay;
+            break;
+        case EUidReplayMatch::OwnerMismatch:
+            admission.Decision = EDecision::OwnerMismatch;
+            break;
+        case EUidReplayMatch::DomainMismatch:
+            admission.Decision = EDecision::DomainMismatch;
+            break;
+        case EUidReplayMatch::RequestMismatch:
+            admission.Decision = EDecision::RequestMismatch;
+            break;
+    }
+    return admission;
+}
+
+bool TOperationUidAdmission::Commit(bool admitted, const std::function<void()>& persist) {
+    if (!admitted || Decision != EDecision::Proceed) {
+        return false;
+    }
+    Y_ABORT_UNLESS(!Committed);
+    persist();
+    Committed = true;
+    return true;
+}
+
 } // namespace NKikimr::NSchemeShard

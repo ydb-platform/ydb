@@ -49,7 +49,15 @@ public:
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
-        if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
+        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
+                if (const auto* existing = FindOperationByUid(Self->SetColumnConstraintOperationsByUid, key.second)) {
+                    return TOperationUidRecord{ui64((*existing)->Id), {}, {}, {}};
+                }
+                return Nothing();
+            });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "SetColumnConstraint operation with uid '" << uid << "' already exists");
         }
@@ -144,12 +152,14 @@ public:
             operationInfo->UserSID = request.GetUserSID();
         }
 
-        Self->PersistCreateSetColumnConstraint(db, *operationInfo);
+        admission.Commit(true, [&] {
+            Self->PersistCreateSetColumnConstraint(db, *operationInfo);
 
-        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
-        Self->PersistSetColumnConstraintState(db, *operationInfo);
+            operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
+            Self->PersistSetColumnConstraintState(db, *operationInfo);
 
-        Self->AddSetColumnConstraintOperation(operationInfo);
+            Self->AddSetColumnConstraintOperation(operationInfo);
+        });
 
         Progress(BuildId);
 

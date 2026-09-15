@@ -13,6 +13,28 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
+namespace {
+
+void FinalizeAstParseResult(NYql::TAstParseResult& res, TContext& ctx) {
+    res.Pool = std::move(ctx.Pool);
+    if (res.Root) {
+        const bool unusedHintsAreValid = ctx.WarnUnusedHints();
+        if (ctx.RespectWarnPolicyForUnusedSqlHints && !unusedHintsAreValid) {
+            res.Root = nullptr;
+        }
+    }
+    if (!res.Root) {
+        if (ctx.Issues.Size()) {
+            ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
+        } else {
+            ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
+            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
+        }
+    }
+}
+
+} // namespace
+
 TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) {
     const google::protobuf::Descriptor* d = protoAst.GetDescriptor();
     if (d && d->name() != "TSQLv1ParserAST") {
@@ -50,32 +72,12 @@ TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
                      TContext& ctx) {
     res.Root = SqlASTToYql(protoAst, ctx);
-    res.Pool = std::move(ctx.Pool);
-    if (!res.Root) {
-        if (ctx.Issues.Size()) {
-            ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
-        } else {
-            ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
-        }
-    } else {
-        ctx.WarnUnusedHints();
-    }
+    FinalizeAstParseResult(res, ctx);
 }
 
 void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast, TContext& ctx) {
     res.Root = SqlASTsToYqls(ast, ctx);
-    res.Pool = std::move(ctx.Pool);
-    if (!res.Root) {
-        if (ctx.Issues.Size()) {
-            ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
-        } else {
-            ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
-        }
-    } else {
-        ctx.WarnUnusedHints();
-    }
+    FinalizeAstParseResult(res, ctx);
 }
 
 NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers,

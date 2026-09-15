@@ -75,7 +75,7 @@ public:
     }
 };
 
-class TAggregationTestCase {
+class TOlapTestCase {
 private:
     TString Query;
     TString ExpectedReply;
@@ -104,7 +104,7 @@ public:
         Cerr << "REQUEST:\n" << queryFixed << Endl;
         return queryFixed;
     }
-    TAggregationTestCase() = default;
+    TOlapTestCase() = default;
     TExpectedLimitChecker& MutableLimitChecker() {
         return LimitChecker;
     }
@@ -114,7 +114,7 @@ public:
     bool GetPushdown() const {
         return Pushdown;
     }
-    TAggregationTestCase& SetPushdown(const bool value = true) {
+    TOlapTestCase& SetPushdown(const bool value = true) {
         Pushdown = value;
         return *this;
     }
@@ -125,23 +125,23 @@ public:
     const TString& GetQuery() const {
         return Query;
     }
-    TAggregationTestCase& SetQuery(const TString& value) {
+    TOlapTestCase& SetQuery(const TString& value) {
         Query = value;
         return *this;
     }
-    TAggregationTestCase& SetUseLlvm(const bool value) {
+    TOlapTestCase& SetUseLlvm(const bool value) {
         UseLlvm = value;
         return *this;
     }
     const TString& GetExpectedReply() const {
         return ExpectedReply;
     }
-    TAggregationTestCase& SetExpectedReply(const TString& value) {
+    TOlapTestCase& SetExpectedReply(const TString& value) {
         ExpectedReply = value;
         return *this;
     }
 
-    TAggregationTestCase& AddExpectedPlanOptions(const std::string& value) {
+    TOlapTestCase& AddExpectedPlanOptions(const std::string& value) {
         ExpectedPlanOptions.emplace_back(value);
         return *this;
     }
@@ -150,7 +150,7 @@ public:
         return ExpectedPlanOptions;
     }
 
-    TAggregationTestCase& SetExpectedReadNodeType(const std::string& value) {
+    TOlapTestCase& SetExpectedReadNodeType(const std::string& value) {
         ExpectedReadNodeType = value;
         return *this;
     }
@@ -213,14 +213,14 @@ void CheckPlanForAggregatePushdown(
     }
 }
 
-void TestAggregationsBase(const std::vector<TAggregationTestCase>& cases);
+void TestOlapTableBase(const std::vector<TOlapTestCase>& cases);
 
-void TestAggregationsInternal(const std::vector<TAggregationTestCase>& cases);
+void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases);
 
-void TestAggregations(const std::vector<TAggregationTestCase>& cases);
+void TestOlapTable(const std::vector<TOlapTestCase>& cases);
 
 template <typename TClient>
-auto StreamExecuteQuery(const TAggregationTestCase& testCase, TClient& client) {
+auto StreamExecuteQuery(const TOlapTestCase& testCase, TClient& client) {
     if constexpr (std::is_same_v<NYdb::NTable::TTableClient, TClient>) {
         return client.StreamExecuteScanQuery(testCase.GetFixedQuery()).GetValueSync();
     } else {
@@ -231,7 +231,7 @@ auto StreamExecuteQuery(const TAggregationTestCase& testCase, TClient& client) {
 }
 
 template <typename TClient>
-void RunTestCaseWithClient(const TAggregationTestCase& testCase, TClient& client) {
+void RunTestCaseWithClient(const TOlapTestCase& testCase, TClient& client) {
     auto it = StreamExecuteQuery(testCase, client);
     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
     TString result = StreamResultToYson(it);
@@ -242,6 +242,6 @@ void RunTestCaseWithClient(const TAggregationTestCase& testCase, TClient& client
 
 void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable);
 
-void TestTableWithNulls(const std::vector<TAggregationTestCase>& cases, const bool genericQuery = false);
+void TestTableWithNulls(const std::vector<TOlapTestCase>& cases, const bool genericQuery = false);
 
 }

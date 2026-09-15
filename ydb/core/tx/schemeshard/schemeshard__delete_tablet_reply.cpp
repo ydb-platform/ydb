@@ -122,6 +122,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::BackupController:
                 Self->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Sub(1);
                 break;
+            case ETabletType::WasmCompileController:
+                Self->TabletCounters->Simple()[COUNTER_WASM_COMPILE_CONTROLLER_COUNT].Sub(1);
+                break;
             case ETabletType::TestShard:
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
                 break;

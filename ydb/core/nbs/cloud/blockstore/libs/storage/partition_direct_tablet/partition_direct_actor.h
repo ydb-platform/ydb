@@ -59,6 +59,9 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    TString FrontendRegistrationId;
+    // A queued Ready event must not republish metadata after backend shutdown.
+    bool FrontendRegistrationClosed = false;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -143,6 +146,7 @@ private:
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
     void CleanupResources(const NActors::TActorContext& ctx);
+    void UnregisterFrontendVolume(const NActors::TActorContext& ctx);
     void DetachEndpointAddDie(const NActors::TActorContext& ctx);
 
     void HandleConnect(

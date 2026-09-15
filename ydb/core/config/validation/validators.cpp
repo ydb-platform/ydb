@@ -9,6 +9,7 @@
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/util/pb.h>
 
+#include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/json/util.h>
 
 #include <util/generic/xrange.h>
@@ -262,6 +263,12 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    CHECK_ERR(
+        config.GetNbsConfig().GetConsoleLogLevel() <= LOG_MAX_PRIORITY,
+        TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0.."
+                         << static_cast<ui32>(LOG_MAX_PRIORITY) << ", got "
+                         << config.GetNbsConfig().GetConsoleLogLevel());
+
     if (config.GetNbsConfig().GetNbsFrontendConfig().GetEnabled()) {
         CHECK_ERR(
             config.GetNbsConfig().GetEnabled(),

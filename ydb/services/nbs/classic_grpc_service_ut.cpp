@@ -3,6 +3,10 @@
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc/service.pb.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_state.h>
+#include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos/request_source.pb.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -182,7 +186,9 @@ namespace NKikimr::NGRpcService {
             }
 
             Y_UNIT_TEST(ShouldReflectFacadeLifecycleThroughTransport) {
-                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore();
+                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
+                    TLog{});
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateControlStub();
 
@@ -216,7 +222,9 @@ namespace NKikimr::NGRpcService {
             }
 
             Y_UNIT_TEST(ShouldRegisterEverySupportedMethod) {
-                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore();
+                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
+                    TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateControlStub();
@@ -231,8 +239,7 @@ namespace NKikimr::NGRpcService {
         UNIT_ASSERT_C(status.ok(), status.error_message());                   \
         UNIT_ASSERT_VALUES_EQUAL(                                             \
             response.GetError().GetCode(),                                    \
-            NYdb::NBS::E_NOT_IMPLEMENTED);                                    \
-        UNIT_ASSERT_STRING_CONTAINS(response.GetError().GetMessage(), #name); \
+            NYdb::NBS::E_NOT_FOUND);                                          \
     }
 
                 // Keep the expected API independent of registration macros.
@@ -243,6 +250,65 @@ namespace NKikimr::NGRpcService {
                 TEST_METHOD(WriteBlocks)
 
 #undef TEST_METHOD
+            }
+
+            Y_UNIT_TEST(ShouldMountAndRevokeSessionThroughClassicPaths) {
+                NYdb::NBS::NBlockStore::TNbsFrontendRuntime runtime(TLog{});
+                NKikimrBlockStore::TVolumeConfig config;
+                config.SetDiskId("disk1");
+                config.SetBlockSize(4096);
+                config.AddPartitions()->SetBlockCount(33554432);
+                config.SetStorageMediaKind(NYdb::NBS::NProto::STORAGE_MEDIA_SSD);
+                UNIT_ASSERT(!NYdb::NBS::HasError(runtime.RegisterVolume(config)));
+                runtime.Start();
+                TClassicNbsGrpcTestServer server(runtime.GetBlockStore());
+                auto stub = server.CreateControlStub();
+
+                NProto::TMountVolumeRequest request;
+                request.SetDiskId("disk1");
+                request.MutableHeaders()->SetClientId("client1");
+                request.SetVolumeMountMode(NProto::VOLUME_MOUNT_REMOTE);
+                request.SetForceRemoteBinding(true);
+                request.SetIpcType(NProto::IPC_VHOST);
+                auto mount = [&] {
+                    NProto::TMountVolumeResponse response;
+                    grpc::ClientContext context;
+                    SetDeadline(&context);
+                    const auto status = stub->MountVolume(&context, request, &response);
+                    UNIT_ASSERT_C(status.ok(), status.error_message());
+                    UNIT_ASSERT(!NYdb::NBS::HasError(response));
+                    return response;
+                };
+                const auto first = mount();
+                UNIT_ASSERT_VALUES_EQUAL(first.GetVolume().GetDiskId(), "disk1");
+                UNIT_ASSERT_VALUES_EQUAL(first.GetVolume().GetBlockSize(), 4096);
+                UNIT_ASSERT_VALUES_EQUAL(first.GetVolume().GetBlocksCount(), 33554432);
+                UNIT_ASSERT(!first.GetSessionId().empty());
+                UNIT_ASSERT_VALUES_EQUAL(first.GetInactiveClientsTimeout(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(mount().GetSessionId(), first.GetSessionId());
+
+                NProto::TUnmountVolumeRequest unmountRequest;
+                unmountRequest.SetDiskId("disk1");
+                unmountRequest.MutableHeaders()->SetClientId("client1");
+                unmountRequest.SetSessionId(first.GetSessionId());
+                NProto::TUnmountVolumeResponse unmountResponse;
+                grpc::ClientContext unmountContext;
+                SetDeadline(&unmountContext);
+                UNIT_ASSERT(stub->UnmountVolume(&unmountContext, unmountRequest, &unmountResponse).ok());
+                UNIT_ASSERT(!NYdb::NBS::HasError(unmountResponse));
+
+                // A direct RPC has no NBS1 automatic remount to hide revocation.
+                NProto::TReadBlocksRequest readRequest;
+                readRequest.SetDiskId("disk1");
+                readRequest.MutableHeaders()->SetClientId("client1");
+                readRequest.SetSessionId(first.GetSessionId());
+                NProto::TReadBlocksResponse readResponse;
+                grpc::ClientContext readContext;
+                SetDeadline(&readContext);
+                UNIT_ASSERT(stub->ReadBlocks(&readContext, readRequest, &readResponse).ok());
+                UNIT_ASSERT_VALUES_EQUAL(readResponse.GetError().GetCode(), NYdb::NBS::E_BS_INVALID_SESSION);
+                const auto second = mount();
+                UNIT_ASSERT(second.GetSessionId() != first.GetSessionId());
             }
 
             Y_UNIT_TEST(ShouldAdaptHeadersAndRejectClientInternalHeaders) {
@@ -294,7 +360,9 @@ namespace NKikimr::NGRpcService {
             }
 
             Y_UNIT_TEST(ShouldRejectUnknownAndPrivateMethodPaths) {
-                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore();
+                auto blockStore = NYdb::NBS::NBlockStore::CreateNbsFrontendBlockStore(
+                    std::make_shared<NYdb::NBS::NBlockStore::TFrontendState>(),
+                    TLog{});
                 blockStore->Start();
                 TClassicNbsGrpcTestServer server(blockStore);
                 auto stub = server.CreateGenericStub();

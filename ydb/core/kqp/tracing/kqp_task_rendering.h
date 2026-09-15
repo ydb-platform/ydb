@@ -30,9 +30,8 @@ private:
     ui32 Operations_ = 0;
 };
 
-void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, ui64 stageSpanId);
+void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& stageTraceId);
 NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& parent);
-ui64 GetTaskTraceSpanId(const NWilson::TTraceId& traceId);
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
     const TString& table, ui64 rows, ui64 retries);
 void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats);

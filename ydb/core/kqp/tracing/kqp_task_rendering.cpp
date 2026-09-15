@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -13,14 +14,11 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-#include <array>
-#include <cstring>
-
 namespace NKikimr::NKqp {
 namespace {
 
 constexpr TStringBuf TASK_OPERATIONS_PARAM = "ydb.trace.task_operations";
-constexpr char STAGE_SPAN_ID_PARAM[] = "ydb.trace.stage_span_id";
+constexpr char STAGE_TRACE_ID_PARAM[] = "ydb.trace.stage_trace_id";
 enum class EOperation : ui32 {
     None = 0,
     Read = 1 << 0,
@@ -184,37 +182,34 @@ void TTaskTraceDescription::Annotate(NWilson::TSpan& span, const NYql::NDqProto:
     span.Attribute("ydb.task.operations", description.OperationsAttribute());
 }
 
-void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, ui64 stageSpanId) {
+void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& stageTraceId) {
     // ExecutionTrace writes this when it creates a stage span; the compute actor consumes it.
     // Keep it absent when tracing is disabled so reused task graphs cannot retain stale parents.
-    if (stageSpanId) {
-        (*task.MutableTaskParams())[STAGE_SPAN_ID_PARAM] = ToString(stageSpanId);
+    if (stageTraceId) {
+        NActorsProto::TTraceId serializedTraceId;
+        stageTraceId.Serialize(&serializedTraceId);
+        (*task.MutableTaskParams())[STAGE_TRACE_ID_PARAM] = serializedTraceId.SerializeAsString();
     } else if (!task.GetTaskParams().empty()) {
-        task.MutableTaskParams()->erase(STAGE_SPAN_ID_PARAM);
+        task.MutableTaskParams()->erase(STAGE_TRACE_ID_PARAM);
     }
-}
-
-ui64 GetTaskTraceSpanId(const NWilson::TTraceId& traceId) {
-    ui64 spanId = 0;
-    if (traceId) {
-        memcpy(&spanId, traceId.GetSpanIdPtr(), sizeof(spanId));
-    }
-    return spanId;
 }
 
 NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& parent) {
-    const auto it = task.GetTaskParams().find(STAGE_SPAN_ID_PARAM);
-    ui64 spanId = 0;
+    const auto it = task.GetTaskParams().find(STAGE_TRACE_ID_PARAM);
     if (!parent || !parent.GetTimeToLive()
             || parent.GetVerbosity() < TComponentTracingLevels::TQueryProcessor::Detailed
-            || it == task.GetTaskParams().end()
-            || !TryFromString(it->second, spanId) || !spanId) {
+            || it == task.GetTaskParams().end()) {
         return NWilson::TTraceId(parent);
     }
-    std::array<ui64, 2> traceId;
-    memcpy(traceId.data(), parent.GetTraceIdPtr(), parent.GetTraceIdSize());
-    return NWilson::TTraceId(traceId, spanId, parent.GetVerbosity(), parent.GetTimeToLive() - 1,
-        parent.IsRetroTrace());
+    NActorsProto::TTraceId serializedTraceId;
+    if (!serializedTraceId.ParseFromString(it->second)) {
+        return NWilson::TTraceId(parent);
+    }
+    NWilson::TTraceId stageTraceId(serializedTraceId);
+    if (!stageTraceId || !stageTraceId.IsSameTrace(parent)) {
+        return NWilson::TTraceId(parent);
+    }
+    return stageTraceId;
 }
 
 void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,

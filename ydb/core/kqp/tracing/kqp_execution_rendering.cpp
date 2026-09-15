@@ -56,17 +56,17 @@ TExecutionTrace::TExecutionTrace(ui8 verbosity)
     : CollectDetails_(verbosity >= TComponentTracingLevels::TQueryProcessor::Detailed) {
 }
 
-ui64 TExecutionTrace::StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
+NWilson::TTraceId TExecutionTrace::StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
         const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount) {
     if (!CollectDetails_ || !parent || !taskCount
             || (!Stages_.contains(stageId) && Stages_.size() == NQueryTraceSettings::MAX_STAGES)) {
-        return 0;
+        return {};
     }
     auto& stage = Stages_[stageId];
     if (!stage.Span.GetTraceId()) {
         StartStageSpan(stage, parent, stageId, physicalStage, taskCount);
     }
-    return GetTaskTraceSpanId(stage.Span.GetTraceId());
+    return NWilson::TTraceId(stage.Span.GetTraceId());
 }
 
 void TExecutionTrace::StartStageSpan(TStage& stage, const NWilson::TSpan& parent,
@@ -89,7 +89,7 @@ void TExecutionTrace::AnnotateTask(std::pair<ui64, ui32> stageId, NYql::NDqProto
     const auto& stage = it->second;
     stage.Description.Save(task);
     if (stage.Span) {
-        SaveTaskTraceParent(task, GetTaskTraceSpanId(stage.Span.GetTraceId()));
+        SaveTaskTraceParent(task, stage.Span.GetTraceId());
     }
 }
 
@@ -237,7 +237,7 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
         {"ydb.tasks_without_node_details", static_cast<i64>(stage.UnrepresentedNodeTasks)},
         {"ydb.fastest_task_node", static_cast<i64>(stage.FastestNode)},
         {"ydb.slowest_task_node", static_cast<i64>(stage.SlowestNode)},
-        {"ydb.interesting_tasks", std::move(tasks)},
+        {"ydb.ranked_tasks", std::move(tasks)},
         {"ydb.tasks_truncated", static_cast<i64>(stage.Reports - stage.Tasks.size())},
     };
     for (const auto& [key, value] : attributes) {

@@ -3,10 +3,11 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -38,8 +39,16 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
-        if (uid && Self->IndexBuildsByUid.contains(uid)) {
+        const TString& uid = GetUid(Ydb::TOperationId::BUILD_INDEX, request.GetOperationParams());
+        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::BUILD_INDEX, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
+                if (const auto* existing = FindOperationByUid(Self->IndexBuildsByUid, key.second)) {
+                    return TOperationUidRecord{ui64((*existing)->Id), {}, {}, {}};
+                }
+                return Nothing();
+            });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");
         }
@@ -356,21 +365,23 @@ public:
             buildInfo->UserSID = request.GetUserSID();
         }
 
-        Self->PersistCreateBuildIndex(db, *buildInfo);
+        admission.Commit(true, [&] {
+            Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsFulltextProvisioning()) {
-            Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
-            // Provision the rowid infrastructure (sequentially, via child builds) before this build
-            // takes its own lock and builds the fulltext index.
-            buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
-                ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
-                : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
-        } else {
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+            if (buildInfo->IsFulltextProvisioning()) {
+                Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
+                // Provision the rowid infrastructure (sequentially, via child builds) before this build
+                // takes its own lock and builds the fulltext index.
+                buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
+                    ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
+                    : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
+            } else {
+                buildInfo->State = TIndexBuildInfo::EState::Locking;
+            }
 
-        Self->PersistBuildIndexState(db, *buildInfo);
-        Self->AddIndexBuild(buildInfo);
+            Self->PersistBuildIndexState(db, *buildInfo);
+            Self->AddIndexBuild(buildInfo);
+        });
 
         Progress(BuildId);
 

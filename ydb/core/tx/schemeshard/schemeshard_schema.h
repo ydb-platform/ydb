@@ -2294,8 +2294,17 @@ struct Schema : NIceDb::Schema {
         // Persisted so post-reboot entry routes to HandleRetryPath.
         struct RetryNeeded : Column<11, NScheme::NTypeIds::Bool> {};
 
+        struct Uid : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<13, NScheme::NTypeIds::String> {};
+        struct UserSID : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct BackupCollectionPathOwnerId : Column<17, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct BackupCollectionPathId : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct AwaitingInitialRestore : Column<19, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
+            Uid, OriginalDdl, UserSID,
+            BackupCollectionPathOwnerId, BackupCollectionPathId, AwaitingInitialRestore,
             OperationId,
             State,
             CurrentIncrementalIdx,
@@ -2338,8 +2347,12 @@ struct Schema : NIceDb::Schema {
         struct StartTime : Column<6, NScheme::NTypeIds::Uint64> {};
         struct EndTime : Column<7, NScheme::NTypeIds::Uint64> {};
 
+        struct Uid : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<9, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
+            Uid, OriginalDdl,
             Id,
             State,
             DomainPathOwnerId,
@@ -2604,8 +2617,12 @@ struct Schema : NIceDb::Schema {
         // Source-of-truth for item count after reboot; item rows are written lazily.
         struct ExpectedItemCount : Column<11, NScheme::NTypeIds::Uint32> {};
 
+        struct Uid : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct OriginalDdl : Column<13, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
+            Uid, OriginalDdl,
             Id,
             State,
             DomainPathOwnerId,

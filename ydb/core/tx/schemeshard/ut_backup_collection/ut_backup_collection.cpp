@@ -1,4 +1,8 @@
+#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -4269,6 +4273,398 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         i64 persistedState = ReadPersistedRestoreState(runtime, restoreId);
         UNIT_ASSERT_VALUES_EQUAL_C(persistedState, -1,
             "IncrementalRestoreState row not deleted after FORGET");
+    }
+
+
+    TActorId SendKeyedBackupOperation(
+        TTestBasicRuntime& runtime, ui64 txId, NKikimrSchemeOp::EOperationType kind,
+        const TString& key, const TString& ddl)
+    {
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto* tx = request->Record.AddTransaction();
+        tx->SetWorkingDir("/MyRoot");
+        tx->SetOperationType(kind);
+        switch (kind) {
+            case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+                tx->MutableBackupBackupCollection()->SetName(".backups/collections/" DEFAULT_NAME_1);
+                break;
+            case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+                tx->MutableBackupIncrementalBackupCollection()->SetName(".backups/collections/" DEFAULT_NAME_1);
+                break;
+            case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+                tx->MutableRestoreBackupCollection()->SetName(".backups/collections/" DEFAULT_NAME_1);
+                break;
+            default:
+                UNIT_FAIL("Unexpected backup operation type");
+        }
+        auto* identity = tx->MutableOperationIdempotency();
+        identity->SetUid(key);
+        identity->SetOriginalDdl(ddl);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        return sender;
+    }
+
+    NKikimrScheme::TEvModifySchemeTransactionResult SubmitKeyedBackupOperation(
+        TTestBasicRuntime& runtime, ui64 txId, NKikimrSchemeOp::EOperationType kind,
+        const TString& key, const TString& ddl)
+    {
+        const auto sender = SendKeyedBackupOperation(runtime, txId, kind, key, ddl);
+        const auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+        return response->Get()->Record;
+    }
+
+    void WaitForKeyedIncrementalBackup(TTestBasicRuntime& runtime, ui64 operationId) {
+        for (ui32 attempt = 0; attempt != 300; ++attempt) {
+            const auto result = TestGetIncrementalBackup(runtime, operationId, "/MyRoot");
+            if (result.GetIncrementalBackup().GetProgress() == Ydb::Backup::BackupProgress::PROGRESS_DONE) {
+                return;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Incremental backup did not reach successful completion");
+    }
+
+    Y_UNIT_TEST_TWIN(IdempotencyRestoreForgetWaitsForFinalization, Reboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        WaitForKeyedIncrementalBackup(runtime, txId);
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> finalize(runtime, [](const auto& event) {
+            const auto& record = event->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize;
+        });
+        const ui64 originalId = ++txId;
+        const TString ddl = "RESTORE `MyCollection1`;";
+        const auto accepted = SubmitKeyedBackupOperation(runtime, originalId,
+            NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "restore:finalizing", ddl);
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        runtime.WaitFor("restore finalization proposal", [&] { return !finalize.empty(); });
+        if (Reboot) {
+            const auto heldBeforeReboot = finalize.size();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("recovered restore finalization proposal", [&] { return finalize.size() > heldBeforeReboot; });
+        }
+        const auto pending = TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetBackupCollectionRestore().GetProgress()),
+            static_cast<ui32>(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA));
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetBackupCollectionRestore().GetProgressPercent(), 99);
+
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId, Ydb::StatusIds::PRECONDITION_FAILED);
+        const auto replay = SubmitKeyedBackupOperation(runtime, ++txId,
+            NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "restore:finalizing", ddl);
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+        const auto conflict = SubmitKeyedBackupOperation(runtime, ++txId,
+            NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "restore:finalizing", ddl + " -- changed");
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+
+        finalize.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST_TWIN(IdempotencyConcurrentAdmissionForAllKinds, DifferentBodies) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        const TVector<std::pair<NKikimrSchemeOp::EOperationType, TString>> operations = {
+            {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, "BACKUP `MyCollection1`;"},
+            {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, "BACKUP `MyCollection1` INCREMENTAL;"},
+            {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "RESTORE `MyCollection1`;"},
+        };
+        for (const auto& [kind, ddl] : operations) {
+            if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+                env.TestWaitNotification(runtime, txId);
+            }
+            const ui64 firstId = ++txId;
+            const ui64 secondId = ++txId;
+            const TString secondDdl = DifferentBodies ? ddl + " -- changed body" : ddl;
+            // Both independent clients submit before either admission reply is read.
+            const auto firstSender = SendKeyedBackupOperation(runtime, firstId, kind, "concurrent:all-kinds", ddl);
+            const auto secondSender = SendKeyedBackupOperation(runtime, secondId, kind, "concurrent:all-kinds", secondDdl);
+            ui64 originalId = 0;
+            unsigned accepted = 0;
+            unsigned conflicts = 0;
+            for (const auto& sender : {firstSender, secondSender}) {
+                const auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+                const auto& record = response->Get()->Record;
+                if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
+                    if (originalId) {
+                        UNIT_ASSERT_VALUES_EQUAL(record.GetTxId(), originalId);
+                    }
+                    originalId = record.GetTxId();
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), ToString(originalId));
+                    ++accepted;
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrScheme::StatusPreconditionFailed, record.ShortDebugString());
+                    UNIT_ASSERT_STRING_CONTAINS(record.GetReason(), "UID_CONFLICT");
+                    UNIT_ASSERT(record.GetOperationId().empty());
+                    ++conflicts;
+                }
+            }
+            UNIT_ASSERT(originalId == firstId || originalId == secondId);
+            UNIT_ASSERT_VALUES_EQUAL(accepted, DifferentBodies ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(conflicts, DifferentBodies ? 1 : 0);
+            const ui64 unusedId = originalId == firstId ? secondId : firstId;
+            env.TestWaitNotification(runtime, originalId);
+            if (kind == NKikimrSchemeOp::ESchemeOpBackupBackupCollection) {
+                const auto sender = runtime.AllocateEdgeActor();
+                runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+                    new TEvBackup::TEvGetFullBackupRequest("/MyRoot", unusedId), 0, GetPipeConfigWithRetries());
+                const auto response = runtime.GrabEdgeEventRethrow<TEvBackup::TEvGetFullBackupResponse>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+            } else if (kind == NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
+                WaitForKeyedIncrementalBackup(runtime, originalId);
+                TestGetIncrementalBackup(runtime, unusedId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+                TestGetBackupCollectionRestore(runtime, unusedId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const TString& originalDdl = originalId == firstId ? ddl : secondDdl;
+            const auto replay = SubmitKeyedBackupOperation(runtime, ++txId, kind, "concurrent:all-kinds", originalDdl);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(IdempotencyCommitRecoveryWithoutRetryForAllKinds, ChildPrepared) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        const TVector<std::pair<NKikimrSchemeOp::EOperationType, TString>> operations = {
+            {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, "BACKUP `MyCollection1`;"},
+            {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, "BACKUP `MyCollection1` INCREMENTAL;"},
+            {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "RESTORE `MyCollection1`;"},
+        };
+        for (const auto& [kind, ddl] : operations) {
+            if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+                env.TestWaitNotification(runtime, txId);
+            }
+            // Reserve an older submission ID whose delivery will be delayed
+            // until after this admitted attempt has recovered and completed.
+            const ui64 delayedId = ++txId;
+            const ui64 originalId = ++txId;
+            bool childPrepared = false;
+            const auto oldActor = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+            TTestActorRuntime::TEventObserver previous;
+            previous = runtime.SetObserverFunc([&, oldActor, originalId](TAutoPtr<IEventHandle>& event) {
+                if (ChildPrepared
+                    && event->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType
+                    && event->GetRecipientRewrite() == oldActor)
+                {
+                    const auto& result = event->Get<TEvDataShard::TEvProposeTransactionResult>()->Record;
+                    if (result.GetTxId() == originalId
+                        && result.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED)
+                    {
+                        childPrepared = true;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                if (!ChildPrepared && event->GetTypeRewrite() == TEvPrivate::TEvProgressOperation::EventType
+                    && event->GetRecipientRewrite() == oldActor
+                    && event->Get<TEvPrivate::TEvProgressOperation>()->TxId == originalId)
+                {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                // Preserve the tablet tracer that enables timers after reboot.
+                return previous(event);
+            });
+            // The reply is emitted after commit. Stop either before dispatch
+            // or after a DataShard prepares a child schema transaction.
+            const auto admitted = SubmitKeyedBackupOperation(runtime, originalId, kind, "recovery:all-kinds", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+            if (ChildPrepared) {
+                runtime.WaitFor("backup child transaction prepared", [&] { return childPrepared; });
+            }
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            env.TestWaitNotification(runtime, originalId);
+            if (kind == NKikimrSchemeOp::ESchemeOpBackupBackupCollection) {
+                const auto sender = runtime.AllocateEdgeActor();
+                runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+                    new TEvBackup::TEvGetFullBackupRequest("/MyRoot", originalId), 0, GetPipeConfigWithRetries());
+                const auto result = runtime.GrabEdgeEventRethrow<TEvBackup::TEvGetFullBackupResponse>(sender);
+                const auto& record = result->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), Ydb::StatusIds::SUCCESS, record.ShortDebugString());
+                UNIT_ASSERT_VALUES_EQUAL_C(record.GetFullBackup().GetStatus(), Ydb::StatusIds::SUCCESS, record.ShortDebugString());
+                UNIT_ASSERT_VALUES_EQUAL(record.GetFullBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_DONE);
+            } else if (kind == NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
+                WaitForKeyedIncrementalBackup(runtime, originalId);
+            } else if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist, NLs::IsTable});
+            }
+            runtime.SetObserverFunc(previous);
+            // Only after autonomous recovery completes does the delayed older
+            // submission arrive. It must resolve to the winning newer ID.
+            const auto delayed = SubmitKeyedBackupOperation(runtime, delayedId, kind, "recovery:all-kinds", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(delayed.GetStatus(), NKikimrScheme::StatusAccepted, delayed.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(delayed.GetOperationId(), ToString(originalId));
+            const auto replay = SubmitKeyedBackupOperation(runtime, ++txId, kind, "recovery:all-kinds", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+            const auto conflict = SubmitKeyedBackupOperation(runtime, ++txId, kind, "recovery:all-kinds", ddl + " -- changed");
+            UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        }
+    }
+
+    Y_UNIT_TEST(IdempotencyNamespacesAndRebootForAllKinds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        const TVector<std::pair<NKikimrSchemeOp::EOperationType, TString>> operations = {
+            {NKikimrSchemeOp::ESchemeOpBackupBackupCollection, "BACKUP `MyCollection1`;"},
+            {NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, "BACKUP `MyCollection1` INCREMENTAL;"},
+            {NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, "RESTORE `MyCollection1`;"},
+        };
+        TVector<ui64> originals;
+        for (const auto& [kind, ddl] : operations) {
+            if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+                env.TestWaitNotification(runtime, txId);
+            }
+            const ui64 originalId = ++txId;
+            const auto accepted = SubmitKeyedBackupOperation(runtime, originalId, kind, "same-key", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(accepted.GetOperationId(), ToString(originalId));
+            originals.push_back(originalId);
+
+            // Replay while the operation may still be active. A new incoming
+            // transaction ID must not create another backup operation.
+            const ui64 retryId = ++txId;
+            const auto replay = SubmitKeyedBackupOperation(runtime, retryId, kind, "same-key", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+            env.TestWaitNotification(runtime, originalId);
+            if (kind == NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
+                WaitForKeyedIncrementalBackup(runtime, originalId);
+                TestGetIncrementalBackup(runtime, retryId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            } else if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                TestGetBackupCollectionRestore(runtime, retryId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+                UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist, NLs::IsTable});
+            }
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (size_t i = 0; i != operations.size(); ++i) {
+            const auto& [kind, ddl] = operations[i];
+            const auto replay = SubmitKeyedBackupOperation(runtime, ++txId, kind, "same-key", ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originals[i]));
+            const auto conflict = SubmitKeyedBackupOperation(runtime, ++txId, kind, "same-key", ddl + " -- changed");
+            UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(conflict.GetReason(), "UID_CONFLICT");
+        }
+
+        // Forget releases the UID in each operation type, durably. This is
+        // independent of deleting the backup snapshots themselves.
+        for (size_t i = 0; i != operations.size(); ++i) {
+            const auto kind = operations[i].first;
+            if (kind == NKikimrSchemeOp::ESchemeOpBackupBackupCollection) {
+                const auto sender = runtime.AllocateEdgeActor();
+                auto request = MakeHolder<TEvBackup::TEvForgetFullBackupRequest>(++txId, "/MyRoot", originals[i]);
+                runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+                auto response = runtime.GrabEdgeEventRethrow<TEvBackup::TEvForgetFullBackupResponse>(sender);
+                UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                    response->Get()->Record.ShortDebugString());
+            } else if (kind == NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
+                TestForgetIncrementalBackup(runtime, ++txId, "/MyRoot", originals[i]);
+            } else {
+                TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originals[i]);
+            }
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (size_t i = 0; i != operations.size(); ++i) {
+            const auto& [kind, ddl] = operations[i];
+            if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+                env.TestWaitNotification(runtime, txId);
+            }
+            const ui64 nextId = ++txId;
+            const auto next = SubmitKeyedBackupOperation(runtime, nextId, kind, "same-key", ddl + " -- new operation");
+            UNIT_ASSERT_VALUES_EQUAL_C(next.GetStatus(), NKikimrScheme::StatusAccepted, next.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(next.GetTxId(), nextId);
+            UNIT_ASSERT_VALUES_EQUAL(next.GetOperationId(), ToString(nextId));
+            UNIT_ASSERT_VALUES_UNEQUAL(nextId, originals[i]);
+            originals[i] = nextId;
+            env.TestWaitNotification(runtime, nextId);
+            if (kind == NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection) {
+                WaitForKeyedIncrementalBackup(runtime, nextId);
+            }
+            if (kind == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+                UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+            }
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (size_t i = 0; i != operations.size(); ++i) {
+            const auto& [kind, ddl] = operations[i];
+            const auto replay = SubmitKeyedBackupOperation(runtime, ++txId, kind, "same-key", ddl + " -- new operation");
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originals[i]));
+        }
+
     }
 
 } // TBackupCollectionTests

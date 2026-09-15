@@ -2,6 +2,8 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 namespace NKikimr::NSchemeShard {
 
 template <typename I, typename C, typename H>
@@ -173,6 +175,11 @@ void TMemoryChanges::GrabNewLongIncrementalBackupOp(TSchemeShard* ss, ui64 id) {
 void TMemoryChanges::GrabNewFullBackupOp(TSchemeShard* ss, ui64 id) {
     Y_ABORT_UNLESS(!ss->FullBackups.contains(id));
     FullBackups.emplace(id, nullptr);
+}
+
+void TMemoryChanges::GrabNewSchemeOperationUidKey(TSchemeShard* ss, const TOperationUidKey& key) {
+    Y_ABORT_UNLESS(!ss->SchemeOperationsByUid.contains(key));
+    SchemeOperationUidKeys.push(key);
 }
 
 void TMemoryChanges::GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId) {
@@ -388,6 +395,15 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (SchemeOperationUidKeys) {
+        const auto& key = SchemeOperationUidKeys.top();
+        if (key.first == Ydb::TOperationId::RESTORE) {
+            ss->IncrementalRestoreStates.erase(ss->SchemeOperationsByUid.at(key));
+        }
+        ss->SchemeOperationsByUid.erase(key);
+        SchemeOperationUidKeys.pop();
     }
 
     while (FullBackups) {

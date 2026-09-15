@@ -1,6 +1,8 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
+
 #include <ydb/core/backup/impl/logging.h>
 
 namespace NKikimr::NSchemeShard {
@@ -82,12 +84,12 @@ public:
         }
 
         // Check if the restore can be forgotten.
-        // Allowed when: main op inactive, state is terminal/finalizing, no sub-ops in flight.
+        // Finalizing can still own a queued or running cleanup request even
+        // when no schema operation is active. Only terminal states may be forgotten.
         bool mainOperationActive = Self->Operations.contains(TTxId(restoreId));
         bool stateAllowsForget =
             incrementalRestore.State == TIncrementalRestoreState::EState::Completed ||
-            incrementalRestore.State == TIncrementalRestoreState::EState::Failed ||
-            incrementalRestore.State == TIncrementalRestoreState::EState::Finalizing;
+            incrementalRestore.State == TIncrementalRestoreState::EState::Failed;
         bool hasActiveIncrementalOperations = false;
 
         // Check if any of the in-progress operations are still active
@@ -111,6 +113,9 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        if (incrementalRestore.Uid) {
+            Self->SchemeOperationsByUid.erase({Ydb::TOperationId::RESTORE, incrementalRestore.Uid});
+        }
         Self->CleanupIncrementalRestoreItems(restoreId, db,
             Self->IncrementalRestoreStates.FindPtr(restoreId));
 

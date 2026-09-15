@@ -3,9 +3,10 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
-#include "schemeshard_xxport__helpers.h"
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -43,8 +44,16 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
-        if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
+        const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
+        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Reject,
+            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
+                if (const auto* existing = FindOperationByUid(Self->SetColumnConstraintOperationsByUid, key.second)) {
+                    return TOperationUidRecord{ui64((*existing)->Id), {}, {}, {}};
+                }
+                return Nothing();
+            });
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "SetColumnConstraint operation with uid '" << uid << "' already exists");
         }
@@ -139,12 +148,14 @@ public:
             operationInfo->UserSID = request.GetUserSID();
         }
 
-        Self->PersistCreateSetColumnConstraint(db, *operationInfo);
+        admission.Commit(true, [&] {
+            Self->PersistCreateSetColumnConstraint(db, *operationInfo);
 
-        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
-        Self->PersistSetColumnConstraintState(db, *operationInfo);
+            operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
+            Self->PersistSetColumnConstraintState(db, *operationInfo);
 
-        Self->AddSetColumnConstraintOperation(operationInfo);
+            Self->AddSetColumnConstraintOperation(operationInfo);
+        });
 
         Progress(BuildId);
 

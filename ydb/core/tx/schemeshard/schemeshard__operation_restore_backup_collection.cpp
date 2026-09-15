@@ -74,7 +74,7 @@ public:
         auto path = context.SS->PathsById.at(targetPathId);
 
         // Find the backup collection path from the long incremental restore operation
-        auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
+        auto itOp = context.SS->LongIncrementalRestoreOps.find(TOperationId(OperationId.GetTxId(), 0));
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
             LOG_E(DebugHint() << "Failed to find long incremental restore operation");
             return false;
@@ -233,6 +233,9 @@ public:
 
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, bcPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.Base()->PathId);
 
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
@@ -296,8 +299,11 @@ public:
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
-        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, OperationId);
-        context.SS->LongIncrementalRestoreOps[OperationId] = op;
+        // Restore metadata is keyed by the parent transaction, as on restart
+        // and in finalization; the control part can have a nonzero suboperation ID.
+        const TOperationId restoreId(OperationId.GetTxId(), 0);
+        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, restoreId);
+        context.SS->LongIncrementalRestoreOps[restoreId] = op;
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state

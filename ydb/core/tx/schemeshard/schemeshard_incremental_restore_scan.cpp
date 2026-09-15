@@ -49,7 +49,7 @@ public:
 
         auto& state = stateIt->second;
 
-        if (state.State == TIncrementalRestoreState::EState::Finalizing ||
+        if (state.AwaitingInitialRestore || state.State == TIncrementalRestoreState::EState::Finalizing ||
             state.State == TIncrementalRestoreState::EState::Completed ||
             state.State == TIncrementalRestoreState::EState::Failed) {
             LOG_I("Incremental restore already in state " << static_cast<ui32>(state.State)
@@ -60,6 +60,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(TIncrementalRestoreState::EState::Running)),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::AwaitingInitialRestore>(state.AwaitingInitialRestore),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::RestoreStartedAt>(state.RestoreStartedAt.MicroSeconds()),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
@@ -573,7 +574,7 @@ private:
 
             TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
 
-            TString fullBackupPath = JoinPath({bcPathString, op.GetFullBackupTrimmedName()});
+            TString fullBackupPath = JoinPath({bcPathString, NBackup::FullBackupDirName(op.GetFullBackupTrimmedName())});
             for (const auto& tablePath : op.GetTablePathList()) {
                 TPath fullPath = TPath::Resolve(tablePath, Self);
                 TString tableName = fullPath.LeafName();
@@ -582,7 +583,7 @@ private:
             }
 
             for (const auto& incrBackupName : op.GetIncrementalBackupTrimmedNames()) {
-                TString incrBackupPath = JoinPath({bcPathString, incrBackupName});
+                TString incrBackupPath = JoinPath({bcPathString, NBackup::IncrementalBackupDirName(incrBackupName)});
                 for (const auto& tablePath : op.GetTablePathList()) {
                     TPath fullPath = TPath::Resolve(tablePath, Self);
                     TString tableName = fullPath.LeafName();
@@ -651,6 +652,14 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     }
 
     TIncrementalRestoreState state;
+    if (const auto* admitted = IncrementalRestoreStates.FindPtr(ui64(operationId.GetTxId())); admitted && admitted->Uid) {
+        if (!admitted->AwaitingInitialRestore) {
+            return; // A duplicate activation must not reset an existing UID's progress.
+        }
+        state.Uid = admitted->Uid;
+        state.OriginalDdl = admitted->OriginalDdl;
+        state.UserSID = admitted->UserSID;
+    }
     state.BackupCollectionPathId = backupCollectionPathId;
     state.OriginalOperationId = ui64(operationId.GetTxId());
     state.CurrentIncrementalIdx = 0;

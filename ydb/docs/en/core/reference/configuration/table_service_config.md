@@ -55,10 +55,7 @@ When the total memory consumption by queries on a node exceeds `spilling_percent
 
 For example, with the default value of `80`, spilling is activated when the query pool is about 80% full.
 
-The threshold applies:
-
-- To the total query memory pool on the node (size — see [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit)).
-- To the [resource pool](../../concepts/glossary.md#resource-pool) if the query is executed in a workload pool with the `total_memory_limit_percent_per_node` limit.
+The threshold applies to the total query memory pool on the node (size — see [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit)).
 
 {% note info %}
 

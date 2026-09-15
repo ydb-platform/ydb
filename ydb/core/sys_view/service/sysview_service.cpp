@@ -136,7 +136,10 @@ public:
             Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
         }
 
-        if (AppData()->FeatureFlags.GetEnableDbCounters()) {
+        // Detailed streams need TEvRemoveDatabase to evict both role streams
+        // when a database is removed.
+        if (AppData()->FeatureFlags.GetEnableDbCounters() ||
+            AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
             {
                 auto intervalSize = ProcessCountersInterval.MicroSeconds();
                 auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
@@ -144,15 +147,17 @@ public:
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessCounters());
             }
 
+            auto callback = MakeIntrusive<TServiceDbWatcherCallback>(ctx.ActorSystem());
+            DbWatcherActorId = ctx.Register(CreateDbWatcherActor(callback));
+        }
+
+        if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             {
                 auto intervalSize = ProcessLabeledCountersInterval.MicroSeconds();
                 auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessLabeledCounters());
             }
-
-            auto callback = MakeIntrusive<TServiceDbWatcherCallback>(ctx.ActorSystem());
-            DbWatcherActorId = ctx.Register(CreateDbWatcherActor(callback));
         }
 
         if (HasExternalCounters) {
@@ -173,6 +178,7 @@ public:
             hFunc(TEvPrivate::TEvProcessLabeledCounters, Handle);
             hFunc(TEvPrivate::TEvRemoveDatabase, Handle);
             hFunc(TEvSysView::TEvRegisterDbCounters, Handle);
+            hFunc(TEvSysView::TEvRegisterDbDetailedCounters, Handle);
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
@@ -382,6 +388,15 @@ private:
             for (auto& [service, state] : dbCounters.States) {
                 state.Counters->ToProto(state.Current);
             }
+            if constexpr (!isLabeled) {
+                dbCounters.DetailedCurrent.Clear();
+                for (auto& [service, state] : dbCounters.DetailedStates) {
+                    auto* entry = dbCounters.DetailedCurrent.Add();
+                    entry->SetService(service);
+                    // TODO(stage4): chunk if > Interconnect 50M
+                    state->Pack(*entry->MutableTables());
+                }
+            }
             ++dbCounters.Generation;
             dbCounters.IsConfirmed = false;
             dbCounters.IsRetrying = false;
@@ -404,6 +419,16 @@ private:
             }
         }
 
+        size_t detailedStreamCount = 0;
+        size_t detailedTableCount = 0;
+        if constexpr (!isLabeled) {
+            record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
+            detailedStreamCount = record.DetailedCountersSize();
+            for (const auto& entry : record.GetDetailedCounters()) {
+                detailedTableCount += entry.TablesSize();
+            }
+        }
+
         YDB_LOG_DEBUG("TSysViewService::SendCounters: sending database counters",
             {"actorId", SelfId()},
             {"processorId", processorId},
@@ -411,7 +436,9 @@ private:
             {"generation", record.GetGeneration()},
             {"nodeId", record.GetNodeId()},
             {"retrying", dbCounters.IsRetrying},
-            {"labeled", isLabeled});
+            {"labeled", isLabeled},
+            {"detailedStreams", detailedStreamCount},
+            {"detailedTables", detailedTableCount});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEv.Release(), processorId, true),
@@ -688,6 +715,29 @@ private:
                 {"database", database},
                 {"service", static_cast<int>(service)});
         }
+    }
+
+    void Handle(TEvSysView::TEvRegisterDbDetailedCounters::TPtr& ev) {
+        const auto& database = ev->Get()->Database;
+        const auto service = ev->Get()->Service;
+
+        auto [it, inserted] = DatabaseCounters.try_emplace(database, TDbCounters());
+        if (inserted) {
+            if (ProcessorIds.find(database) == ProcessorIds.end()) {
+                RequestProcessorId(database);
+            }
+
+            if (DbWatcherActorId) {
+                auto evWatch = MakeHolder<NSysView::TEvSysView::TEvWatchDatabase>(database);
+                Send(DbWatcherActorId, evWatch.Release());
+            }
+        }
+        it->second.DetailedStates[service] = ev->Get()->Counters;
+
+        YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbDetailedCounters: registering detailed counters",
+            {"actorId", SelfId()},
+            {"database", database},
+            {"service", static_cast<int>(service)});
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -978,6 +1028,11 @@ private:
 
     struct TDbCounters {
         std::unordered_map<NKikimrSysView::EDbCountersService, TDbCountersState> States;
+        std::unordered_map<NKikimrSysView::EDbCountersService,
+                           TIntrusivePtr<IDbDetailedCounters>> DetailedStates;
+        // Pack advances the delta baseline, so retain the complete detailed payload
+        // until it is confirmed and reuse it unchanged on every retry.
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TEvSendDbCountersRequest::TDetailedCounters> DetailedCurrent;
         ui64 Generation;
         bool IsConfirmed = true;
         bool IsRetrying = false;

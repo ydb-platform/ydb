@@ -37,6 +37,8 @@
 #include <util/memory/pool.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_RESTORE
+
 namespace {
 
     struct DestroyZCtx {

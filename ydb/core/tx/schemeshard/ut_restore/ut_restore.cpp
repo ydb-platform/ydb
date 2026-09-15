@@ -711,9 +711,6 @@ value {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-<<<<<<< HEAD
-    void ShouldSucceedOnMultipleFrames(ui32 batchSize) {
-=======
     Y_UNIT_TEST_FLAG(ShouldReportDataSizeWithoutCompaction, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -751,8 +748,7 @@ value {
         UNIT_ASSERT_GT(dataSize, 0);
     }
 
-    void ShouldSucceedOnMultipleFrames(bool enableDataShardDirectPartImport, ui32 batchSize) {
->>>>>>> b525833c55b ([DataShard] Update shard stats after DirectImport (#52426))
+    void ShouldSucceedOnMultipleFrames(ui32 batchSize) {
         TTestBasicRuntime runtime;
 
         const auto data = GenerateZstdTestData("a", 3, 2);

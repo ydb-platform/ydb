@@ -141,38 +141,33 @@ void TLoader::StageParseMeta()
                 FlatHistoricIndexes.clear();
             }
         }
+        auto forEachIndexMeta = [&](auto&& fn) {
+            for (auto* metas : {&BTreeGroupIndexes, &BTreeHistoricIndexes}) {
+                for (auto& meta : *metas) {
+                    fn(meta);
+                }
+            }
+        };
+
         if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) {
             // V2 read disabled: for dual-root (V2+V1) parts, strip RootV2 to use V1 index
-            for (auto& meta : BTreeGroupIndexes) {
+            forEachIndexMeta([](auto& meta) {
                 if (meta.HasRootV2() && meta.HasRootV1()) {
                     meta.RootV2 = NPage::TPageLocation::Max();
                     meta.LevelCountV2 = Max<ui32>();
                 }
-            }
-            for (auto& meta : BTreeHistoricIndexes) {
-                if (meta.HasRootV2() && meta.HasRootV1()) {
-                    meta.RootV2 = NPage::TPageLocation::Max();
-                    meta.LevelCountV2 = Max<ui32>();
-                }
-            }
+            });
             // if no RootV1, keep RootV2 even if disable
         } else {
             // For dual-root (V2+V1) parts, strip V1 tree and mark the index
             // page collection so the shared cache skips dead V1 BTreeIndex pages.
-            for (auto& meta : BTreeGroupIndexes) {
+            forEachIndexMeta([&](auto& meta) {
                 if (meta.HasRootV2() && meta.HasRootV1()) {
                     meta.RootV1 = Max<TPageId>();
                     meta.LevelCountV1 = Max<ui32>();
                     PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(true);
                 }
-            }
-            for (auto& meta : BTreeHistoricIndexes) {
-                if (meta.HasRootV2() && meta.HasRootV1()) {
-                    meta.RootV1 = Max<TPageId>();
-                    meta.LevelCountV1 = Max<ui32>();
-                    PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(true);
-                }
-            }
+            });
         }
 
     } else { /* legacy page collection w/o layout data, (Evolution < 14) */

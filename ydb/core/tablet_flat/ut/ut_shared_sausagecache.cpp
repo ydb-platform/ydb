@@ -1259,9 +1259,8 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2) {
     TMyEnvBase env;
     auto counters = GetSharedPageCounters(env);
 
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2(true);
-    env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     SetupSharedCache(env, 10_MB, true);
 

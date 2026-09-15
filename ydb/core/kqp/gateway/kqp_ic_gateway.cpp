@@ -1529,7 +1529,7 @@ public:
             }
 
             auto analyzePromise = NewPromise<TGenericResult>();
-            IActor* analyzeActor = new TAnalyzeActor(Database, settings.TablePath, settings.Columns, analyzePromise);
+            IActor* analyzeActor = new TAnalyzeActor(Database, settings.TablePath, settings.Columns, analyzePromise, settings.SampleRate);
             RegisterActor(analyzeActor);
 
             return analyzePromise.GetFuture();

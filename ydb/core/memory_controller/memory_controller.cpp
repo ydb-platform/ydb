@@ -79,7 +79,8 @@ public:
 
 public:
     const EMemoryConsumerKind Kind;
-    const TActorId ActorId;
+    // Not const: a restarted registrant of the same kind rebinds it, see Handle(TEvConsumerRegister)
+    TActorId ActorId;
 private:
     std::atomic<ui64> Consumption = 0;
 };
@@ -180,6 +181,7 @@ private:
             CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
 
             HFunc(TEvConsumerRegister, Handle);
+            HFunc(TEvConsumerUnregister, Handle);
 
             HFunc(TEvMemTableRegister, Handle);
             HFunc(TEvMemTableUnregister, Handle);
@@ -324,12 +326,52 @@ private:
 
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
-        Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
+        auto [it, inserted] = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
+        if (!inserted) {
+            // A kind the controller feeds itself has no registrant and must not be taken over
+            Y_ABORT_UNLESS(it->second->ActorId, "Consumer kind is owned by the memory controller");
+            // Two live services on one kind is still a bug, but a takeover keeps the node up while it is visible
+            if (it->second->ActorId != ev->Sender) {
+                YDB_LOG_WARN_CTX(ctx, "Consumer kind taken over by another actor",
+                    {"msgKind", msg->Kind},
+                    {"previous", it->second->ActorId},
+                    {"sender", ev->Sender});
+                Counters->GetCounter("Stats/ConsumerTakeovers", true)->Inc();
+            }
+            // A fresh object, not a rebind: the predecessor keeps a pointer to the old one and would keep writing
+            it->second = MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender);
+        }
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
-        Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
+        Send(ev->Sender, new TEvConsumerRegistered(it->second));
+    }
+
+    void Handle(TEvConsumerUnregister::TPtr &ev, const TActorContext& ctx) {
+        const auto *msg = ev->Get();
+        auto it = Consumers.find(msg->Kind);
+        if (it == Consumers.end() || it->second->ActorId != ev->Sender) {
+            // A stale unregister from a replaced registrant must not drop the live one
+            YDB_LOG_WARN_CTX(ctx, "Consumer unregister ignored",
+                {"msgKind", msg->Kind},
+                {"sender", ev->Sender});
+            return;
+        }
+        Consumers.erase(it);
+        // Nothing updates the gauges of a removed kind any more, so zero them instead of leaving the last values
+        ResetConsumerCounters(msg->Kind);
+        YDB_LOG_INFO_CTX(ctx, "Consumer unregistered",
+            {"msgKind", msg->Kind},
+            {"sender", ev->Sender});
+    }
+
+    void ResetConsumerCounters(EMemoryConsumerKind kind) {
+        auto& counters = GetConsumerCounters(kind);
+        counters.Consumption->Set(0);
+        counters.Reservation->Set(0);
+        counters.LimitBytes->Set(0);
+        counters.LimitMinBytes->Set(0);
+        counters.LimitMaxBytes->Set(0);
     }
 
     void Handle(TEvMemTableRegister::TPtr &ev, const TActorContext& ctx) {

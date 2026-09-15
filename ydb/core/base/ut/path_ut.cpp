@@ -242,6 +242,11 @@ Y_UNIT_TEST_SUITE(Path) {
     Y_UNIT_TEST(ResolveResourcePath) {
         for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
             {"dir/table", "/Root/mydb/dir/table"},
+            {"./dir/table", "/Root/mydb/dir/table"},
+            {"./Root/table", "/Root/mydb/Root/table"},
+            {"././Root/table", "/Root/mydb/Root/table"},
+            {"./", "/Root/mydb"},
+            {"./.", "/Root/mydb"},
             {"/Root/mydb/table", "/Root/mydb/table"},
             {"Root/mydb/table", "/Root/mydb/table"},
             {"mydb/table", "/Root/mydb/mydb/table"},
@@ -282,6 +287,10 @@ Y_UNIT_TEST_SUITE(Path) {
 
     Y_UNIT_TEST(ResolveResourcePathWithoutDatabase) {
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "dir/table", "/Root"), "/dir/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./dir/table", "/Root"), "/./dir/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./Root/table", "/Root"), "/./Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./", "/Root"), "/.");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "./.", "/Root"), "/./.");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "Root/table", "/Root"), "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "/Root/table", "/Root"), "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "", "/Root"), "");

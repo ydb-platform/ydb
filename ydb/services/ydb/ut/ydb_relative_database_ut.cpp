@@ -1,5 +1,6 @@
 #include "../ydb_common_ut.h"
 
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>

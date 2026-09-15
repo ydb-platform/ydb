@@ -31,6 +31,10 @@ namespace NBackup {
 // Retrive path relative to database root from absolute
 TString RelPathFromAbsolute(TString db, TString path);
 
+// Resolve backup metadata against a known absolute database path.
+// RPCs may keep their original resource paths; stored references must be absolute.
+TString ResolveBackupPath(const TString& database, const TString& path);
+
 // Parses strings from human readable format to ui64
 // Suppores decimal prefixes such as K(1000), M, G, T
 // Suppores binary prefixes such as Ki(1024), Mi, Gi, Ti

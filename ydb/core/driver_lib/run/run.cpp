@@ -782,6 +782,9 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
+    const auto& appConfig = runConfig.AppConfig;
+    EnabledGrpcService = appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy();
+
     if (!GRpcServersWrapper) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
@@ -1234,7 +1237,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
-        EnabledGrpcService = true;
         NYdbGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());

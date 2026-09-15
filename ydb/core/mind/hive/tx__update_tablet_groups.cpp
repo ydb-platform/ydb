@@ -42,6 +42,12 @@ public:
         return false;
     }
 
+    void NotifyCancel(const TLeaderTabletInfo* tablet) {
+        for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
+            SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
+        }
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         SideEffects.Reset(Self->SelfId());
 
@@ -76,6 +82,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -86,6 +93,7 @@ public:
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
             tablet->TryToBoot();
+            NotifyCancel(tablet);
             return true;
         }
 
@@ -111,6 +119,7 @@ public:
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
                 tablet->State = ETabletState::ReadyToWork;
                 tablet->TryToBoot();
+                NotifyCancel(tablet);
                 return true;
             }
         }
@@ -292,9 +301,7 @@ public:
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
                 }
-                for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
-                }
+                NotifyCancel(tablet);
                 newTabletState = ETabletState::ReadyToWork;
             }
         }

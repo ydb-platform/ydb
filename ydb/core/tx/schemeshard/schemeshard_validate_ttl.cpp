@@ -1,5 +1,6 @@
 #include "common/validation.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_subdomain.h"
+#include "schemeshard_info_types_table.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 

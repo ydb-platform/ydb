@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 
 namespace NKikimr::NSchemeShard {
 

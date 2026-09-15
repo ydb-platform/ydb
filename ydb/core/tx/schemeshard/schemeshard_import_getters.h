@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "schemeshard_import.h"
-#include "schemeshard_info_types.h"
+#include "schemeshard_info_types_import.h"
 
 namespace NKikimr {
 namespace NSchemeShard {

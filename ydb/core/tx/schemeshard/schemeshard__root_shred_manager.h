@@ -2,8 +2,10 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/schemeshard/operation_queue_timer.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h> // for TEvSchemeShard
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_types.h> // for EShredStatus
 #include <ydb/core/util/circular_queue.h>
 
 #include <util/generic/ptr.h>
@@ -13,6 +15,12 @@ namespace NKikimrConfig {
 class TDataErasureConfig;
 
 } // NKikimrConfig
+
+namespace NKikimr::NIceDb {
+
+class TNiceDb;
+
+} // namespace NKikimr::NIceDb
 
 namespace NKikimr::NSchemeShard {
 

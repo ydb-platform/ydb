@@ -8,6 +8,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -16,6 +17,8 @@
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>

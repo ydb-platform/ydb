@@ -10,6 +10,7 @@
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>

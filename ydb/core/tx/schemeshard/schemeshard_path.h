@@ -1,12 +1,12 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
 #include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/util/source_location.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
 
 namespace NACLib {
 
@@ -17,6 +17,7 @@ class TUserToken;
 namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
+struct TSubDomainInfo;
 
 class TPath {
     TSchemeShard* SS;
@@ -155,7 +156,7 @@ public:
     TPath& RiseUntilExisted();
     TPath FirstExistedParent() const;
     TString GetDomainPathString() const;
-    TSubDomainInfo::TPtr DomainInfo() const;
+    TIntrusivePtr<TSubDomainInfo> DomainInfo() const;
     TPathId GetPathIdForDomain() const;
     TPathId GetDomainKey() const;
     bool IsDomain() const;

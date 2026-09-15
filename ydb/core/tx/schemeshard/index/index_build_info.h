@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../schemeshard_billing_helpers.h"
+
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr {

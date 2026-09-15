@@ -1,4 +1,5 @@
 #include "operation_queue_timer.h"
+#include "schemeshard_info_types_table.h"
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tx/datashard/datashard.h>

@@ -2,7 +2,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/olap/layout/layout.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types_table.h>
 
 #include <util/system/types.h>
 

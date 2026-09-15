@@ -61,10 +61,20 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
     TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
+    TActorId InFlightLatencyAggregator;
     TIntrusivePtr<TGroupSessions> Sessions;
     TDeque<std::unique_ptr<IEventHandle>> InitQueue;
     std::multimap<TInstant, TActorId> DeadlineMap;
     THashMap<TActorId, std::multimap<TInstant, TActorId>::iterator, TActorId::THash> ActiveRequests;
+
+    struct TStoragePoolInFlightRequestInfo {
+        TDsProxyInFlightLatencyBucketKey BucketKey;
+        TMonotonic StartTime;
+    };
+
+    THashMap<TActorId, TStoragePoolInFlightRequestInfo, TActorId::THash> StoragePoolInFlightRequests;
+    bool LastInFlightLatencySnapshotEmpty = true;
+
     ui64 UnconfiguredBufferSize = 0;
     const bool IsEjected;
     bool ForceWaitAllDrives;
@@ -260,8 +270,11 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 
     // todo: in-fly tracking for cancelation and
-    void PushRequest(IActor *actor, TInstant deadline);
+    void PushRequest(IActor *actor, TInstant deadline, TMaybe<TStoragePoolInFlightRequestInfo> inFlightRequest = {});
     void CheckDeadlines();
+    TMaybe<TStoragePoolInFlightRequestInfo> MakeStoragePoolInFlightRequestInfo(
+        TStoragePoolCounters::EHandleClass handleClass, ui32 requestBytes, TMonotonic startTime) const;
+    void SendInFlightLatencySnapshot(bool force = false);
     void HandleNormal(TEvBlobStorage::TEvGet::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvGetBlock::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev);
@@ -275,6 +288,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void HandleNormal(TEvBlobStorage::TEvCheckIntegrity::TPtr &ev);
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
+    void Handle(TEvStoragePoolRequestFinished::TPtr ev);
     void Handle(TEvGetQueuesInfo::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -356,6 +370,7 @@ public:
         hFunc(TEvStopBatchingPutRequests, Handle);
         hFunc(TEvStopBatchingGetRequests, Handle);
         hFunc(TEvDeathNote, Handle);
+        hFunc(TEvStoragePoolRequestFinished, Handle);
         hFunc(TEvRequestProxySessionsState, Handle);
         hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
         hFunc(TEvTimeStats, Handle);

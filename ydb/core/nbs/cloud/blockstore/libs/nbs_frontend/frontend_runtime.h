@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/public.h>
@@ -34,9 +36,11 @@ public:
     [[nodiscard]] NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
     GetBlockStore() const;
 
-    // Publishes partition metadata and returns the token used to revoke it.
+    // Publishes partition metadata/backend and returns the token to revoke it.
     TResultOrError<TString> RegisterVolume(
-        const NKikimrBlockStore::TVolumeConfig& volumeConfig);
+        const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+        IStoragePtr storage,
+        TVolumeConfigPtr ioGeometry);
 
     // Revokes a matching registration without affecting a newer instance.
     void UnregisterVolume(const TString& registrationId);

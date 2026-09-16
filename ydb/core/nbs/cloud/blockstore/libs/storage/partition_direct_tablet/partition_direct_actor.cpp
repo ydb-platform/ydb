@@ -57,7 +57,16 @@ TPartitionActor::TPartitionActor(
         LogTitle.GetWithTime().c_str());
 }
 
-TPartitionActor::~TPartitionActor() = default;
+TPartitionActor::~TPartitionActor()
+{
+    // Actor-system cleanup can destroy a partition without PassAway(). Its
+    // frontend registration must not retain FastPath beyond the actor system.
+    if (!FrontendRegistrationId.empty()) {
+        if (auto& frontend = GetNbsService()->Frontend; frontend) {
+            frontend->UnregisterVolume(FrontendRegistrationId);
+        }
+    }
+}
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
@@ -530,10 +539,13 @@ void TPartitionActor::HandleFastPathServiceReady(
     if (auto& frontend = GetNbsService()->Frontend;
         frontend && !FrontendRegistrationClosed)
     {
-        auto registration = frontend->RegisterVolume(VolumeConfig);
+        auto registration = frontend->RegisterVolume(
+            VolumeConfig,
+            FastPathService,
+            FastPathService->GetVolumeConfig());
         Y_ABORT_UNLESS(
             !HasError(registration),
-            "%s Could not publish frontend metadata: %s",
+            "%s Could not publish frontend backend: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 
@@ -541,7 +553,7 @@ void TPartitionActor::HandleFastPathServiceReady(
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Frontend metadata published: registrationId=%s "
+            "%s Frontend backend published: registrationId=%s "
             "blockSize=%u blocksCount=%llu",
             LogTitle.GetWithTime().c_str(),
             FrontendRegistrationId.c_str(),

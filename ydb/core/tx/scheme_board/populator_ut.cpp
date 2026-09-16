@@ -179,6 +179,8 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
     enum class EReconfiguration {
         None,
         Reorder,
+        WriteOnly,
+        Remove,
         DuplicateAck,
     };
 
@@ -272,14 +274,31 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             runtime.Send(requiredAcks[i].Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
-        if (reconfiguration == EReconfiguration::Reorder) {
+        if (reconfiguration != EReconfiguration::None && reconfiguration != EReconfiguration::DuplicateAck) {
             auto updated = MakeIntrusive<TStateStorageInfo>();
             updated->RingGroups = stateStorageInfo->RingGroups;
-            Reverse(updated->RingGroups.begin(), updated->RingGroups.end());
+            if (reconfiguration == EReconfiguration::Reorder) {
+                Reverse(updated->RingGroups.begin(), updated->RingGroups.end());
+            } else {
+                const auto replica = populatorToReplicaMap.at(requiredAcks.back()->Sender);
+                auto group = FindIf(updated->RingGroups, [&](const auto& ringGroup) {
+                    return AnyOf(ringGroup.Rings, [&](const auto& ring) {
+                        return Find(ring.Replicas, replica) != ring.Replicas.end();
+                    });
+                });
+                UNIT_ASSERT(group != updated->RingGroups.end());
+                if (reconfiguration == EReconfiguration::WriteOnly) {
+                    group->WriteOnly = true;
+                } else {
+                    updated->RingGroups.erase(group);
+                }
+            }
             runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(updated)));
-            UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
         }
-        runtime.Send(requiredAcks.back().Release());
+        if (reconfiguration == EReconfiguration::None || reconfiguration == EReconfiguration::Reorder || reconfiguration == EReconfiguration::DuplicateAck) {
+            UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+            runtime.Send(requiredAcks.back().Release());
+        }
 
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(mainAck->Sender, populator, mainAck->ToString());
@@ -296,6 +315,14 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(ReorderRingGroupsDuringPublication) {
         TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} }, EReconfiguration::Reorder);
+    }
+
+    Y_UNIT_TEST(MakeRingGroupWriteOnlyDuringPublication) {
+        TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} }, EReconfiguration::WriteOnly);
+    }
+
+    Y_UNIT_TEST(RemoveRingGroupDuringPublication) {
+        TestPopulatorQuorum({ {.State = PRIMARY}, {.State = SYNCHRONIZED} }, EReconfiguration::Remove);
     }
 
     Y_UNIT_TEST(DuplicateReplicaAckDoesNotReachQuorum) {

@@ -3093,7 +3093,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -3126,6 +3126,24 @@ private:
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
                 if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "TABLES_METRICS_LEVEL") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoDataCtor>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Value of the TABLES_METRICS_LEVEL must be a string or an integer."));
+                    return TStatus::Error;
+                }
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                if (!ParseDatabaseTablesMetricsLevel(value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
                     return TStatus::Error;
                 }
             }

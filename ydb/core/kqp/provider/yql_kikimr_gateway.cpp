@@ -367,6 +367,35 @@ bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::Metric
     return true;
 }
 
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw,
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error)
+{
+    if (to_lower(TString(raw)) == "unspecified") {
+        out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+        return true;
+    }
+
+    Ydb::Table::MetricsSettings::MetricsLevel level;
+    if (ParseTablesMetricsLevel(raw, level, error)) {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        default:
+            break;
+        }
+    }
+
+    error = TStringBuilder() << "TABLES_METRICS_LEVEL is invalid: " << raw;
+    return false;
+}
+
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {
     if (!value) {
         return Ydb::FeatureFlag::STATUS_UNSPECIFIED;

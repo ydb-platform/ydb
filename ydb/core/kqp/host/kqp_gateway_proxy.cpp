@@ -967,8 +967,8 @@ public:
             return result;
         }
 
-        if (settings.SchemeLimits) {
-            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+        if (settings.SchemeLimits || settings.TablesMetricsLevel) {
+            NSchemeHelpers::FillAlterDatabaseSettings(modifyScheme, basename, settings);
 
             TGenericResult result;
             result.SetSuccess();
@@ -1001,7 +1001,7 @@ public:
                 if (settings.Owner) {
                     *schemeOp.MutableModifyPermissions() = modifyScheme;
                 }
-                if (settings.SchemeLimits) {
+                if (settings.SchemeLimits || settings.TablesMetricsLevel) {
                     *schemeOp.MutableAlterDatabase() = modifyScheme;
                 }
 

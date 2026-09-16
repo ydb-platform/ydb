@@ -657,6 +657,12 @@ void TDqPqRdReadActor::Init() {
 }
 
 void TDqPqRdReadActor::InitChild() {
+    if (Parent->WatermarkTracker) {
+        const auto now = TInstant::Now();
+        for (const auto partitionId : GetPartitionsToRead()) {
+            Parent->WatermarkTracker->RegisterPartition({Cluster, partitionId}, now);
+        }
+    }
     for (auto& [partitionKey, info]: Parent->Partitions) {
         if (Cluster == partitionKey.Cluster && info.Offset) {
             NextOffsetFromRD[partitionKey.PartitionId] = *info.Offset;
@@ -700,14 +706,6 @@ void TDqPqRdReadActor::ProcessGlobalState() {
             return;
         }
         auto partitionToRead = GetPartitionsToRead();
-        if (WatermarkTracker) {
-            auto now = TInstant::Now();
-            TPartitionKey partitionKey { .Cluster = Cluster };
-            for (auto partitionId: partitionToRead) {
-                partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey, now);
-            }
-        }
         auto cookie = ++CoordinatorRequestCookie;
         SRC_LOG_I("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: "
             << JoinSeq(", ", partitionToRead) << " cookie " << cookie);

@@ -20,17 +20,18 @@ TString GetUid(Ydb::TOperationId::EKind kind, const Ydb::Operations::OperationPa
     return GetUid(operationParams);
 }
 
-EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested) {
+TOperationUidAdmission::EDecision CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested) {
+    using EDecision = TOperationUidAdmission::EDecision;
     if (requested.UserSID && stored.UserSID != requested.UserSID) {
-        return EUidReplayMatch::OwnerMismatch;
+        return EDecision::OwnerMismatch;
     }
     if (requested.DomainPathId && stored.DomainPathId != requested.DomainPathId) {
-        return EUidReplayMatch::DomainMismatch;
+        return EDecision::DomainMismatch;
     }
     if (requested.RequestBody && stored.RequestBody != requested.RequestBody) {
-        return EUidReplayMatch::RequestMismatch;
+        return EDecision::RequestMismatch;
     }
-    return EUidReplayMatch::Match;
+    return EDecision::Replay;
 }
 
 TOperationUidAdmission TOperationUidAdmission::Prepare(const TOperationUidKey& key,
@@ -51,20 +52,7 @@ TOperationUidAdmission TOperationUidAdmission::Prepare(const TOperationUidKey& k
         return admission;
     }
     Y_ABORT_UNLESS(check);
-    switch (check(*stored)) {
-        case EUidReplayMatch::Match:
-            admission.Decision = EDecision::Replay;
-            break;
-        case EUidReplayMatch::OwnerMismatch:
-            admission.Decision = EDecision::OwnerMismatch;
-            break;
-        case EUidReplayMatch::DomainMismatch:
-            admission.Decision = EDecision::DomainMismatch;
-            break;
-        case EUidReplayMatch::RequestMismatch:
-            admission.Decision = EDecision::RequestMismatch;
-            break;
-    }
+    admission.Decision = check(*stored);
     return admission;
 }
 

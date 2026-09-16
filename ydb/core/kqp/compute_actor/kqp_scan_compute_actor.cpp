@@ -97,7 +97,8 @@ void TKqpScanComputeActor::AcquireRateQuota() {
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
     if (last) {
-        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst);
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
     }
 
     if (ScanData && dst->TasksSize() > 0) {

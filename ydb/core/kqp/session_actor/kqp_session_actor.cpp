@@ -378,7 +378,8 @@ public:
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
         AddWorkerQueryResultAttributes(QueryState->KqpSessionSpan, QueryState->TraceDescription,
-            QueryResponse->Record, QueryResponse->WorkerStats.get());
+            QueryResponse->Record, QueryResponse->WorkerStats.get(),
+            QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         Cleanup();
     }
 
@@ -3481,7 +3482,8 @@ public:
         auto& querySpan = QueryState->KqpSessionSpan;
         if (querySpan && QueryState->RequestEv) {
             AddQueryResultAttributes(querySpan, QueryState->TraceDescription, QueryState->QueryStats,
-                CalcRequestUnit(QueryState->QueryStats), status);
+                CalcRequestUnit(QueryState->QueryStats), status,
+                QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         }
         if (status == Ydb::StatusIds::SUCCESS) {
             if (QueryState) {

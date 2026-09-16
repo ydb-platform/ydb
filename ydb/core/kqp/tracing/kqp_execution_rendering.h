@@ -34,7 +34,7 @@ private:
 // Consumes terminal task reports once; the executer's planner deduplicates them.
 class TExecutionTrace {
 public:
-    explicit TExecutionTrace(ui8 verbosity);
+    TExecutionTrace(ui8 verbosity, bool spilledBytesAvailable);
 
     NWilson::TTraceId StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
         const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount);
@@ -99,10 +99,11 @@ private:
     static void StartStageSpan(TStage& stage, const NWilson::TSpan& parent,
         std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount);
     static void RecordDetailedTask(TStage& stage, TTask sample, Ydb::StatusIds::StatusCode status);
-    static void FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status);
+    static void FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status, bool spilledBytesAvailable);
 
 private:
     const bool CollectDetails_;
+    const bool SpilledBytesAvailable_;
     std::map<std::pair<ui64, ui32>, TStage> Stages_;
     ui64 WaitUs_ = 0;
     ui64 SpilledBytes_ = 0;

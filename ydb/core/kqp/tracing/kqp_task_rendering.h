@@ -32,8 +32,9 @@ private:
 
 void SaveTaskTraceParent(NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& stageTraceId);
 NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const NWilson::TTraceId& parent);
-void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
-    const TString& table, ui64 rows, ui64 retries);
-void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats);
+void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats, ui64 retries);
+void AddReadTraceAttributes(NWilson::TSpan& span, const TString& table, ui64 rows, ui64 retries);
+void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats,
+    bool spilledBytesAvailable);
 
 } // namespace NKikimr::NKqp

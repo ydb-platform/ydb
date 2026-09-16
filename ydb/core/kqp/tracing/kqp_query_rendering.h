@@ -71,7 +71,8 @@ void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
 NWilson::TSpan MakeQueryRedirectTraceSpan(const NWilson::TSpan& parent, ui32 sourceNodeId, ui32 targetNodeId);
 void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-    const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats);
+    const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats,
+    bool spilledBytesAvailable);
 NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::TActorSystem* actorSystem,
     EMetadataTraceOperation operation, const TString& table, const char* purpose);
 void MarkJoinedCompilation(NWilson::TSpan& waiter, const NWilson::TSpan& compilation);

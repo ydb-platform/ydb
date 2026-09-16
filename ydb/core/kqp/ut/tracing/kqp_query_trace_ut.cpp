@@ -181,6 +181,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(FindAttribute(*query, "ydb.cpu_us"));
         UNIT_ASSERT(FindAttribute(*query, "ydb.wait_us"));
         UNIT_ASSERT(FindAttribute(*query, "ydb.spilled_bytes"));
+        UNIT_ASSERT(FindAttribute(*query, "ydb.spilled_bytes_available"));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.code.component")->value().string_value(), "KQP");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*FindSpan(*uploader, "Query Proxy"), "ydb.code.component")->value().string_value(), "KQP");
         const auto* run = FindSpan(*uploader, "Run tasks");
@@ -1256,6 +1257,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT(uploader->BuildTraceTrees());
                 const auto* query = FindSpan(*uploader, "Query");
                 UNIT_ASSERT(query);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.spilled_bytes_available")->value().bool_value(), full);
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.spilled_bytes")->value().int_value(), spilledBytes);
             }
         }

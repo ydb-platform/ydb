@@ -12,7 +12,7 @@ namespace NPrivate {
 
 template<class TStats>
 void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-        const TStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
+        const TStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status, bool spilledBytesAvailable) {
     span.Attribute("db.query.summary", description.DisplayName);
     span.Attribute("db.operation.name", description.Operation);
     ui64 cpuUs = 0;
@@ -45,6 +45,7 @@ void AddQueryExecutionAttributes(NWilson::TSpan& span, const TQueryTraceDescript
     span.Attribute("ydb.rows_written", static_cast<i64>(rowsWritten));
     if (span.GetTraceId().GetVerbosity() >= TComponentTracingLevels::TQueryProcessor::Basic) {
         span.Attribute("ydb.wait_us", static_cast<i64>(waitUs));
+        span.Attribute("ydb.spilled_bytes_available", spilledBytesAvailable);
         span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytes));
         span.Attribute("ydb.max_task_skew", maxTaskSkew);
         span.Attribute("ydb.task_stats_incomplete", taskStatsIncomplete);
@@ -63,11 +64,11 @@ inline void AddQueryCompilationAttributes(NWilson::TSpan& span, bool fromCache, 
 
 template<class TStats>
 void AddQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-        const TStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status) {
+        const TStats& stats, ui64 requestUnits, Ydb::StatusIds::StatusCode status, bool spilledBytesAvailable) {
     if (!span) {
         return;
     }
-    NPrivate::AddQueryExecutionAttributes(span, description, stats, requestUnits, status);
+    NPrivate::AddQueryExecutionAttributes(span, description, stats, requestUnits, status, spilledBytesAvailable);
     if (stats.Compilation) {
         NPrivate::AddQueryCompilationAttributes(span, stats.Compilation->FromCache,
             stats.Compilation->CpuTimeUs, stats.Compilation->DurationUs);

@@ -1560,8 +1560,8 @@ public:
     }
 
     void FillExtraStats(NDqProto::TDqTaskStats* stats, bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
+        AddReadTraceStats(ReadActorSpan, *stats, TotalRetries);
         if (last) {
-            AddReadTraceStats(ReadActorSpan, *stats, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
             NDqProto::TDqTableStats* tableStats = nullptr;
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
                 auto* table = stats->MutableTables(i);
@@ -1627,6 +1627,7 @@ public:
             }
         }
         if (ReadActorSpan) {
+            AddReadTraceAttributes(ReadActorSpan, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
             ReadActorSpan.End();
         }
         TBase::PassAway();
@@ -1643,6 +1644,7 @@ public:
 
         ShardReadTrace.Finish(ReadActorSpan);
         if (ReadActorSpan) {
+            AddReadTraceAttributes(ReadActorSpan, Settings->GetTable().GetTablePath(), ReceivedRowCount, TotalRetries);
             ReadActorSpan.EndError(issues.ToOneLineString());
         }
 

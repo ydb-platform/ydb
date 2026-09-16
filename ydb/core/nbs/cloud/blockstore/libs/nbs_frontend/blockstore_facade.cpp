@@ -20,6 +20,9 @@ namespace {
 
 namespace NCompatProto = NNbs1CompatApi::NBlockStore::NProto;
 
+// Payload limit, excluding protobuf overhead. GRpcConfig.MaxMessageSize and
+// client message limits must allow the serialized request/response. Smaller
+// transport limits can fail with RESOURCE_EXHAUSTED instead of an NBS error.
 constexpr ui64 MaxIoBytes = 32_MB;
 
 NProto::TError ValidateIoMode(ui32 flags, const NCompatProto::THeaders& headers)

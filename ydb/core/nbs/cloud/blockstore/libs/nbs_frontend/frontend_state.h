@@ -23,9 +23,9 @@ struct TFrontendIoBackend
     TVolumeConfigPtr IoGeometry;
 };
 
-// Owns request admission, disk backend and process-local session.
-// For now this is a prototype and there is no a goal to support full sessions
-// logic for all possible disks.
+// Owns request admission, disk backend and single process-local session.
+// Unmount revokes admission but does not drain accepted I/O. The caller
+// must stop submitting requests and await their completion before unmounting.
 class TFrontendState final
 {
 public:

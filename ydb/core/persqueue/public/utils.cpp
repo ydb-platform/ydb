@@ -163,6 +163,31 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
     return nullptr;
 }
 
+const NKikimrPQ::TPartitionConfig::TReadQuota* GetReadQuota(const NKikimrPQ::TPQTabletConfig& config, const TString& clientId) {
+    return FindIfPtr(config.GetPartitionConfig().GetReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() == clientId;
+    });
+}
+
+NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletConfig& config, const TString& clientId) {
+    auto* partConfig = config.MutablePartitionConfig();
+    auto* quota = FindIfPtr(*partConfig->MutableReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() == clientId;
+    });
+    if (quota) {
+        return quota;
+    }
+    auto* newQuota = partConfig->AddReadQuota();
+    newQuota->SetClientId(clientId);
+    return newQuota;
+}
+
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config) {
+    EraseIf(*config.MutablePartitionConfig()->MutableReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() != CLIENTID_WITHOUT_CONSUMER;
+    });
+}
+
 TPartitionGraph::TPartitionGraph() {
 }
 

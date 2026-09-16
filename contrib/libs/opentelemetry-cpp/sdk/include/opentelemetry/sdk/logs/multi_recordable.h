@@ -13,6 +13,7 @@
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/logs/log_record.h"
 #include "opentelemetry/nostd/string_view.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/recordable.h"
 #include "opentelemetry/sdk/resource/resource.h"
@@ -106,6 +107,12 @@ public:
    */
   void SetInstrumentationScope(const opentelemetry::sdk::instrumentationscope::InstrumentationScope
                                    &instrumentation_scope) noexcept override;
+
+  /**
+   * Propagate attribute limits to every wrapped recordable. Must be called
+   * before any SetAttribute call.
+   */
+  void SetLogRecordLimits(const LogRecordLimits &limits) noexcept override;
 
 private:
   std::unordered_map<std::size_t, std::unique_ptr<Recordable>> recordables_;

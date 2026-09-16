@@ -1,6 +1,6 @@
 #include "overlapped_requests_guard_wrapper.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 

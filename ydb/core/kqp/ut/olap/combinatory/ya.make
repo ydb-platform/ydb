@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib
     ydb/core/protos
+    ydb/core/kqp/ut/olap/helpers
 )
 
 YQL_LAST_ABI_VERSION()

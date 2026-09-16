@@ -25,6 +25,8 @@
 
 #include <ydb/core/base/cputime.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_ACTOR
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -90,7 +92,6 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
         , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
@@ -110,20 +111,6 @@ public:
 
         config->ApplyServiceConfig(tableServiceConfig);
 
-        if (tableServiceConfig.GetSqlVersion() != 0) {
-            EnforcedSqlVersion = false;
-        } else if (EnforcedSqlVersion) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
-                "Enforced SQL version 1, "
-                << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << GetQueryTextForLog(QueryId.Text)
-            );
-
-            config->SetSqlVersion(1);
-        } else {
-            EnforcedSqlVersion = false;
-        }
-
         // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
         config->SetEnableNewRBO(EnableNewRBO);
 
@@ -142,6 +129,9 @@ public:
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+            config->OptValidateStreamingCheckpoints = true;
+        } else {
+            config->OptValidateStreamingCheckpoints = false;
         }
 
         if (UsePessimisticLocks) {
@@ -218,11 +208,11 @@ private:
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
         Y_UNUSED(ctx);
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send split result"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", success: " << GetYdbStatus(result)
-            << ", issues: " << result.Issues().ToOneLineString());
+        YDB_LOG_DEBUG("Send split result",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"success", GetYdbStatus(result)},
+            {"issues", result.Issues().ToOneLineString()});
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
@@ -287,16 +277,16 @@ private:
 
         Counters->ReportCompileStart(DbCounters);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "traceId: verbosity = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
+            {"traceVerbosity", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
+            {"traceId", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
-            << ", self: " << ctx.SelfID
-            << ", cluster: " << QueryId.Cluster
-            << ", database: " << QueryId.Database
-            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
+            {"self", ctx.SelfID},
+            {"cluster", QueryId.Cluster},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
@@ -373,7 +363,6 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
-        // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
@@ -440,7 +429,8 @@ private:
         }
         replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
-        replayMessage.InsertValue("query_syntax", ToString(Config->GetSqlVersion()));
+        // Keep the field for compatibility with existing query replay datasets.
+        replayMessage.InsertValue("query_syntax", "1");
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
@@ -465,20 +455,21 @@ private:
         GUCSettings->ExportToJson(replayMessage);
 
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
-            << "Built the replay message " << message);
+        YDB_LOG_DEBUG("Built the replay message",
+            {"selfId", SelfId()},
+            {"message", message});
 
         ReplayMessage = std::move(message);
     }
 
     void Reply() {
         Y_ENSURE(KqpCompileResult);
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", status: " << KqpCompileResult->Status
-            << ", issues: " << KqpCompileResult->Issues.ToString()
-            << ", uid: " << KqpCompileResult->Uid);
+        YDB_LOG_DEBUG("Send response",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"status", KqpCompileResult->Status},
+            {"issues", KqpCompileResult->Issues},
+            {"uid", KqpCompileResult->Uid});
 
         if (ReplayMessageUserView) {
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
@@ -515,9 +506,9 @@ private:
     }
 
     void InternalError(const TString message) {
-        ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
-            << ", self: " << SelfId()
-            << ", message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"self", SelfId()},
+            {"message", message});
 
 
         NYql::TIssue issue(NYql::TPosition(), "Internal error while compiling query.");
@@ -542,10 +533,10 @@ private:
 
         for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
             if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
-                ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Get parsing result with error"
-                    << ", self: " << SelfId()
-                    << ", owner: " << Owner
-                    << ", statement id: " << statementId);
+                YDB_LOG_ERROR("Get parsing result with error statement",
+                    {"self", SelfId()},
+                    {"owner", Owner},
+                    {"id", statementId});
 
                 auto status = GetYdbStatus(astStatements[statementId].Ast->Issues);
 
@@ -559,10 +550,10 @@ private:
             }
         }
 
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send parsing result"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", statements size: " << astStatements.size());
+        YDB_LOG_DEBUG("Send parsing result statements",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"size", astStatements.size()});
 
         auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
         Send(Owner, responseEv.Release());
@@ -603,7 +594,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, kqpResult.Issues(), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
+                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
             Reply();
             return;
         }
@@ -612,6 +603,10 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
             // Disable compilation with new RBO.
             EnableNewRBO = false;
+            FallbackToYqlOptimizerIssue = NYql::TIssue(TStringBuilder()
+                                                       << "Compilation with the new RBO failed: "
+                                                       << kqpResult.Issues().ToOneLineString());
+            FallbackToYqlOptimizerIssue->SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
             RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
             return;
@@ -619,17 +614,6 @@ private:
             Counters->ReportCompileNewRBOSuccess(DbCounters);
         } else if (IsSuitableToReportFailOnNewRBO(status)) {
             Counters->ReportCompileNewRBOFailed(DbCounters);
-        }
-
-        // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
-        if (IsSuitableToFallbackToSqlV0(status)) {
-            Counters->ReportCompileEnforceConfigFailed(DbCounters);
-            EnforcedSqlVersion = false;
-            TString logMessage = "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0";
-            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
-            return;
-        } else if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
-            Counters->ReportCompileEnforceConfigSuccess(DbCounters);
         }
 
         auto database = QueryId.Database;
@@ -645,7 +629,7 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -656,18 +640,18 @@ private:
             auto duration = now - StartTime;
             Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
-                << ", self: " << ctx.SelfID
-                << ", duration: " << duration);
+            YDB_LOG_DEBUG_CTX(ctx, "Compilation successful",
+                {"self", ctx.SelfID},
+                {"duration", duration});
         } else {
             if (kqpResult.PreparingQuery) {
                 FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
             }
 
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
-                << ", self: " << ctx.SelfID
-                << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
-                << ", issues: " << kqpResult.Issues().ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Compilation failed",
+                {"self", ctx.SelfID},
+                {"status", Ydb::StatusIds_StatusCode_Name(status)},
+                {"issues", kqpResult.Issues()});
             Counters->ReportCompileError(DbCounters);
         }
 
@@ -675,12 +659,12 @@ private:
     }
 
     void HandleTimeout() {
-        ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
-            << ", self: " << SelfId()
-            << ", cluster: " << QueryId.Cluster
-            << ", database: " << QueryId.Database
-            << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+        YDB_LOG_NOTICE("Query compilation timed out",
+            {"self", SelfId()},
+            {"cluster", QueryId.Cluster},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
         return ReplyError(Ydb::StatusIds::TIMEOUT, {issue});
@@ -701,11 +685,23 @@ private:
     }
 
 private:
+    NYql::TIssues CollectIssues(const NYql::TIssues& issues) const {
+        if (!FallbackToYqlOptimizerIssue) {
+            return issues;
+        }
+
+        NYql::TIssues result;
+        result.AddIssue(*FallbackToYqlOptimizerIssue);
+        result.AddIssues(issues);
+        return result;
+    }
+
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
-                << ", self: " << ctx.SelfID
-                << ", database: " << QueryId.Database
-                << ", text: \"" << GetQueryTextForLog(QueryId.Text) << "\"");
+        YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
+            {"logMessage", logMessage},
+            {"self", ctx.SelfID},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.
@@ -727,14 +723,6 @@ private:
 
     bool IsSuitableToReportFailOnNewRBO(Ydb::StatusIds::StatusCode status) {
         return EnableNewRBO && status != Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsSuitableToFallbackToSqlV0(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status != Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsSuitableToReportSuccessOnEnforcedSqlVersion(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status == Ydb::StatusIds::SUCCESS;
     }
 
     TActorId Owner;
@@ -777,8 +765,8 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
-    bool EnforcedSqlVersion;
     bool EnableNewRBO;
+    TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;
 };

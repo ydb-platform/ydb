@@ -1,0 +1,61 @@
+pragma config.flags('OptimizerFlags', 'KeepWorld', 'CheckMissingWorld');
+
+use plato;
+
+PRAGMA yt.MapJoinLimit = '1M';
+
+$big_supply = (
+    SELECT
+        supply_request.msk_supply_created_dttm + Interval('PT0S') AS msk_supply_created_dttm,
+        supply_request.partner_id AS partner_id,
+        supply_request.ssku AS ssku
+    FROM SupplyRequest AS supply_request
+);
+
+$ssku_estimated_cost = (
+    SELECT
+        state_dt
+    FROM
+        CostOfGoods
+    WHERE
+        (ssku, partner_id) IN (
+            SELECT
+                (ssku, partner_id)
+            FROM
+                $big_supply
+        )
+    GROUP BY
+        state_dt
+);
+
+$keys_by_calendar = (
+    SELECT
+        calendar.state_dt AS state_dt
+    FROM $ssku_estimated_cost AS cost
+    CROSS JOIN (SELECT Date('2025-09-03') AS state_dt) AS calendar
+);
+
+$supply_w_estimated_cost = (
+    SELECT
+        supply.ssku AS ssku,
+        supply.msk_supply_created_dttm AS msk_supply_created_dttm,
+        0.0 AS estimated_cost_wo_vat_rub,
+    FROM
+        $big_supply AS supply
+    LEFT JOIN
+        $keys_by_calendar AS estimated_cost
+    ON
+        DateTime::MakeDate(supply.msk_supply_created_dttm) == estimated_cost.state_dt
+);
+
+INSERT INTO Output WITH TRUNCATE
+SELECT
+    supply.estimated_cost_wo_vat_rub,
+    assort.ssku AS assort_ssku
+FROM $supply_w_estimated_cost AS supply
+LEFT JOIN (
+    SELECT ssku
+    FROM BaseSsku
+    WHERE ssku IN (SELECT ssku FROM $big_supply)
+) AS assort
+ON supply.ssku == assort.ssku;

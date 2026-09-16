@@ -9,5 +9,7 @@ class ServerContext;
 namespace NTestUtils {
 
 TString CaptureXUserIP(grpc::ServerContext* ctx);
+TString CaptureUserAgent(grpc::ServerContext* ctx);
+TString CaptureRequestId(grpc::ServerContext* ctx);
 
 }  // namespace NTestUtils

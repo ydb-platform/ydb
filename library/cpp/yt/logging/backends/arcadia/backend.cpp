@@ -57,7 +57,7 @@ public:
         // Use low-level api, because it is more convinient here.
         auto loggingContext = GetLoggingContext();
         auto event = NDetail::CreateLogEvent(loggingContext, Logger_, logLevel);
-        event.MessageRef = NDetail::BuildLogMessage(loggingContext, Logger_, message).MessageRef;
+        event.Payload = NDetail::BuildLogMessage(loggingContext, Logger_, message).Payload;
         event.Family = ELogFamily::PlainText;
         Logger_.Write(std::move(event));
     }

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    virtual_timestamp.cpp
     ydb.cpp
 )
 

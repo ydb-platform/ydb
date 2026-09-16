@@ -5,7 +5,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputColumns = Filter->GetInput()->GetOutputIUs();
+    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(*Filter, 0);
 
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -23,7 +23,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
     }
 
-    auto lambda = TCoLambda(Filter->FilterExpr.Node);
+    auto lambda = TCoLambda(Filter->GetFilterExpression().Node);
     auto lambdaBody = lambda.Body().Ptr();
 
     auto isMember = [&](const TExprNode::TPtr& node) -> bool {
@@ -62,7 +62,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(Filter->GetOutputIUs()), Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Filter)), Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

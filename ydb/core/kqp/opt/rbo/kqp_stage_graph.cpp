@@ -127,6 +127,10 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
+TVector<TInfoUnit> TShuffleConnection::GetUsedIUs() const {
+    return Keys;
+}
+
 NJson::TJsonValue TShuffleConnection::ToJson() const {
     auto json = TConnection::ToJson();
     Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
@@ -163,6 +167,15 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
     // clang-format on
 }
 
+TVector<TInfoUnit> TMergeConnection::GetUsedIUs() const {
+    TVector<TInfoUnit> result;
+    result.reserve(Order.size());
+    for (const auto& sortElement : Order) {
+        result.push_back(sortElement.SortColumn);
+    }
+    return result;
+}
+
 NJson::TJsonValue TMergeConnection::ToJson() const {
     auto json = TConnection::ToJson();
     const auto sortBy = FormatSortElements(Order);
@@ -175,6 +188,22 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
     return inputStage;
+}
+
+TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(InputType, "Stream lookup input type has not been set");
+    // clang-format off
+    return Build<TKqpCnStreamLookup>(ctx, pos)
+        .Output()
+            .Stage(inputStage)
+            .Index().Build(ToString(OutputIndex))
+        .Build()
+        .Table(Table)
+        .Columns(Columns)
+        .InputType(InputType)
+        .Settings(Settings)
+    .Done().Ptr();
+    // clang-format on
 }
 
 ui32 TStageGraph::AddStage() {

@@ -51,8 +51,8 @@ ui64 GetConfigHash(const TString& config);
 // @param allowUnknownFields - silently ignore unknown fields (for specified Proto)
 //
 // @return
-//  nullptr - on empty imput YAML
-//  parsed Proto message - on successfull parsing
+//  nullptr - on empty input YAML
+//  parsed Proto message - on successful parsing
 //
 // @throw
 //  std::exception - on underlying parser errors / unknown fields present (without allowUnknownFields)

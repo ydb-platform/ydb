@@ -749,7 +749,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
 }
 
 TColumnConverter ArrowComputeConvertor(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
-    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Can not cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
+    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Cannot cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
     return [targetType](const std::shared_ptr<arrow::Array>& value) {
         auto res = arrow::compute::Cast(*value, targetType);
         THROW_ARROW_NOT_OK(res.status());
@@ -865,6 +865,10 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
+        case NUdf::EDataSlot::Uuid:
+        case NUdf::EDataSlot::DyNumber:
             return {};
         case NUdf::EDataSlot::Date32:
         case NUdf::EDataSlot::Datetime64:
@@ -886,7 +890,7 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
 }
 
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
-    std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters,
+    std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters, TMissingColumns& missingColumns,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
 
     for (int i = 0; i < dataSchema->num_fields(); ++i) {
@@ -902,13 +906,21 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         }
     }
 
+    missingColumns.Schema = outputSchema;
     columnConverters.reserve(outputSchema->num_fields());
     for (int i = 0; i < outputSchema->num_fields(); ++i) {
         const auto& targetField = outputSchema->field(i);
+        auto rowSpecColumnIt = rowTypes.find(targetField->name());
+        YQL_ENSURE(rowSpecColumnIt != rowTypes.end(), "Column " << targetField->name() << " not found in row spec");
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
         if (srcFieldIndex == -1) {
-            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name() << ", found fields in arrow file: " << dataSchema->ToString());
-        };
+            if (!rowSpecColumnIt->second->IsOptional()) {
+                throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name()
+                    << " (only optional fields may be absent in file), found fields in arrow file: " << dataSchema->ToString());
+            }
+            missingColumns.Columns.emplace_back(static_cast<size_t>(i), targetField);
+            continue;
+        }
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();
         if (originalType->layout().has_dictionary) {
@@ -916,13 +928,12 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
                 << targetField->name() << ", type: " << originalType->ToString());
         }
         columnIndices.push_back(srcFieldIndex);
-        auto rowSpecColumnIt = rowTypes.find(targetField->name());
-        YQL_ENSURE(rowSpecColumnIt != rowTypes.end(), "Column " << targetField->name() << " not found in row spec");
         columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second, settings));
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters) {
+std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters,
+    const TMissingColumns& missingColumns) {
     auto columns = batch->columns();
     for (size_t i = 0; i < columnConverters.size(); ++i) {
         auto converter = columnConverters[i];
@@ -930,7 +941,30 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
             columns[i] = converter(columns[i]);
         }
     }
-    return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
+
+    if (missingColumns.Columns.empty()) {
+        return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
+    }
+
+    const size_t numColumns = missingColumns.Schema->num_fields();
+    YQL_ENSURE(columns.size() + missingColumns.Columns.size() == numColumns, "Batch has " << columns.size() << " columns and "
+        << missingColumns.Columns.size() << " missing columns, expected " << numColumns << " columns in total");
+
+    std::vector<std::shared_ptr<arrow::Array>> result;
+    result.reserve(numColumns);
+    auto column = columns.begin();
+    auto missingColumn = missingColumns.Columns.begin();
+    for (size_t i = 0; i < numColumns; ++i) {
+        if (missingColumn != missingColumns.Columns.end() && missingColumn->OutputIndex == i) {
+            auto nullColumn = arrow::MakeArrayOfNull(missingColumn->Field->type(), batch->num_rows());
+            THROW_ARROW_NOT_OK(nullColumn.status());
+            result.emplace_back(std::move(nullColumn).ValueOrDie());
+            ++missingColumn;
+        } else {
+            result.emplace_back(std::move(*column++));
+        }
+    }
+    return arrow::RecordBatch::Make(missingColumns.Schema, batch->num_rows(), std::move(result));
 }
 
 // Type conversion same as in ClickHouseClient.SerializeFormat udf
@@ -966,6 +1000,8 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
             type = arrow::timestamp(arrow::TimeUnit::SECOND, "UTC");
             return true;
         case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Interval64:
             type = arrow::int64();
             return true;
         case NUdf::EDataSlot::Uint64:
@@ -980,7 +1016,11 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::DyNumber:
             type = arrow::binary();
+            return true;
+        case NUdf::EDataSlot::Uuid:
+            type = arrow::fixed_size_binary(16);
             return true;
         case NUdf::EDataSlot::Decimal: {
             if (itemType) {

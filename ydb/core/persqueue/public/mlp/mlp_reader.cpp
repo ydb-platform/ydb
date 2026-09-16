@@ -6,8 +6,19 @@
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NMLP {
+
+namespace {
+
+bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+    return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+}
+
+} // namespace
 
 TReaderActor::TReaderActor(const TActorId& parentId, const TReaderSettings& settings)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_READER)
@@ -41,7 +52,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
     auto& topic = topics.begin()->second;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             Info = topic.Info;
             ConsumerConfig = GetConsumer(Info->Description.GetPQTabletConfig(), Settings.Consumer);
             if (!ConsumerConfig) {
@@ -49,6 +60,10 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
                     TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
             }
             return DoSelectPartition();
+        }
+        case NDescriber::EStatus::BadRequest: {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                NDescriber::Description(Settings.TopicName, topic.Status));
         }
         default: {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
@@ -71,7 +86,10 @@ void TReaderActor::DoSelectPartition() {
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPGetPartitionResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     auto* result = ev->Get();
     switch (result->GetStatus()) {
         case Ydb::StatusIds::SUCCESS: {
@@ -131,13 +149,19 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());
         if (!res) {
-            LOG_W("Error parsing data. Offset " << message.GetId().GetOffset());
+            LOG_W(
+                "Error parsing data. Offset",
+                {"messageIdOffset", message.GetId().GetOffset()}
+            );
             // Skip message
             continue;
         }
 
         TString messageGroupId;
         TString messageDeduplicationId;
+        if (IsKafkaBatchDataChunk(proto)) {
+            NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), message.GetId().GetOffset());
+        }
 
         std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
         for (auto& meta : *proto.MutableMessageMeta()) {
@@ -173,7 +197,10 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D(
+        "Handle TEvPQ::TEvMLPErrorResponse",
+        {"ev", ev->Get()->Record.ShortDebugString()}
+    );
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -205,7 +232,10 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TReaderActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    LOG_I(
+        "Reply error",
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)}
+    );
     Send(ParentId, new TEvReadResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

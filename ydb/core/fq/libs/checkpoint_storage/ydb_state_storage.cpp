@@ -9,6 +9,8 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
+
 #include <util/stream/str.h>
 #include <util/string/join.h>
 
@@ -39,6 +41,25 @@ enum class EStateType {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString CompressBlob(const TString& blob) {
+    TString result;
+    TStringOutput output(result);
+    {
+        TZstdCompress compress(&output, /* quality */ 3);   // ZSTD_CLEVEL_DEFAULT
+        compress.Write(blob.data(), blob.size());
+        compress.Finish();
+    }
+    return result;
+}
+
+TString DecompressBlob(const TString& blob) {
+    TStringInput input(blob);
+    TZstdDecompress decompress(&input);
+    return decompress.ReadAll();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TIncrementLogic {
 public:
 
@@ -57,38 +78,45 @@ public:
             TStringBuf buf(blob);
 
             while (!buf.empty()) {
-                auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+                auto& nodeState = NodeStates[nodeNum++];
+                const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+                if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                    // Stateful operator was not initialized
+                    continue;
+                }
+
+                if (!nodeState) {
+                    nodeState.emplace();
+                }
+
                 Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
                 TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
                 buf.Skip(nodeStateSize);
 
                 NKikimr::NMiniKQL::TInputSerializer reader(nodeStateBuf);
                 auto type = reader.GetType();
-                auto& nodeState = NodeStates[nodeNum];
-                nodeState.Type = type;
+                nodeState->Type = type;
 
                 switch (type) {
-                    case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB:
-                    {
-                        nodeState.SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
+                    case NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB: {
+                        nodeState->SimpleBlobNodeState = TString(nodeStateBuf.data(), nodeStateBuf.size());
+                        break;
                     }
-                    break;
                     case NKikimr::NMiniKQL::EMkqlStateType::SNAPSHOT:
-                    case NKikimr::NMiniKQL::EMkqlStateType::INCREMENT:
-                    {
+                    case NKikimr::NMiniKQL::EMkqlStateType::INCREMENT: {
                         reader.ReadItems(
                             [&](std::string_view key, std::string_view value) {
-                                nodeState.Items[TString(key)] = TString(value);
+                                nodeState->Items[TString(key)] = TString(value);
                             },
                             [&](std::string_view key) {
                                 // Not used for SNAPSHOT.
-                                nodeState.Items.erase(TString(key));
+                                nodeState->Items.erase(TString(key));
                             });
+                        break;
                     }
-                    break;
                 }
-                ++nodeNum;
             }
+
             Y_ENSURE(buf.empty(), "State/buf is corrupted");
         }
     }
@@ -98,19 +126,21 @@ public:
         NYql::NDq::TComputeActorState state;
         state.Sources = Sources;
         state.Sinks = Sinks;
+
         TString result;
         for (const auto& [nodeNum, nodeState] : NodeStates) {
-
-            if (nodeState.Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB) {
-                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, nodeState.SimpleBlobNodeState);
+            if (!nodeState) {
+                NKikimr::NMiniKQL::WriteUi64(result, std::numeric_limits<ui64>::max());
+            } else if (nodeState->Type == NKikimr::NMiniKQL::EMkqlStateType::SIMPLE_BLOB) {
+                NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(result, nodeState->SimpleBlobNodeState);
             } else {
-                NYql::NUdf::TUnboxedValue saved =
-                     NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState.Items, 0);
+                const auto saved = NKikimr::NMiniKQL::TOutputSerializer::MakeSnapshotState(nodeState->Items, 0);
                 const TStringBuf savedBuf = saved.AsStringRef();
                 NKikimr::NMiniKQL::WriteUi64(result, savedBuf.size());
                 result.AppendNoAlias(savedBuf.data(), savedBuf.size());
             }
         }
+
         auto& stateData = state.MiniKqlProgram.ConstructInPlace().Data;
         stateData.Blob = result;
         Y_ENSURE(LastVersion, "LastVersion is empty");
@@ -122,28 +152,37 @@ public:
         if (!state.MiniKqlProgram) {
             return EStateType::Snapshot;
         }
+
         const TString& blob = state.MiniKqlProgram->Data.Blob;
         TStringBuf buf(blob);
         while (!buf.empty()) {
-            auto nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            const ui64 nodeStateSize = NKikimr::NMiniKQL::ReadUi64(buf);
+            if (nodeStateSize == std::numeric_limits<ui64>::max()) {
+                // Stateful operator was not initialized
+                continue;
+            }
+
             Y_ENSURE(buf.size() >= nodeStateSize, "State/buf is corrupted");
             TStringBuf nodeStateBuf(buf.data(), nodeStateSize);
             if (NKikimr::NMiniKQL::TInputSerializer(nodeStateBuf).GetType() == NKikimr::NMiniKQL::EMkqlStateType::INCREMENT) {
                 return EStateType::Increment;
             }
+
             buf.Skip(nodeStateSize);
         }
+
         Y_ENSURE(buf.empty(), "State/buf is corrupted");
         return EStateType::Snapshot;
     }
 
 private:
-    struct NodeState {
+    struct TNodeState {
         NKikimr::NMiniKQL::EMkqlStateType Type;
         std::map<TString, TString> Items;
         TString SimpleBlobNodeState;
     };
-    std::map<ui64, NodeState> NodeStates;
+
+    std::map<ui64, std::optional<TNodeState>> NodeStates;
     std::list<NYql::NDq::TSourceState> Sources;
     std::list<NYql::NDq::TSinkState> Sinks;
     TMaybe<ui64> LastVersion;
@@ -156,6 +195,7 @@ struct TContext : public TThrRefBase {
     struct TStateInfo {
         TCheckpointId CheckpointId;
         ui64 StateRowsCount = 0;
+        TMaybe<EStateType> Type;
     };
 
     struct TaskInfo {
@@ -165,6 +205,7 @@ struct TContext : public TThrRefBase {
         size_t CurrentProcessingRow = 0;
         std::list<TString> Rows;
         EStateType Type = EStateType::Snapshot;
+        bool IsCompressed = false;
         std::list<TStateInfo> ListOfStatesForReading;     // ordered by desc
         std::list<NYql::NDq::TComputeActorState> States;
     };
@@ -204,11 +245,13 @@ struct TContext : public TThrRefBase {
         const TCheckpointId& checkpointId,
         TMaybe<ISession::TPtr> session = {},
         const std::list<TString>& rows = {},
-        EStateType type = EStateType::Snapshot)
+        EStateType type = EStateType::Snapshot,
+        bool isCompressed = false)
         : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
     {
         Tasks[0].Rows = rows;
         Tasks[0].Type = type;
+        Tasks[0].IsCompressed = isCompressed;
     }
 };
 
@@ -251,6 +294,7 @@ TStatus ProcessRowState(
             return;
         }
         taskInfo.Rows.push_back(*parser.ColumnParser("blob").GetOptionalString());
+        taskInfo.IsCompressed = parser.ColumnParser("is_compressed").GetOptionalBool().value_or(false);
     };
     parse();
 
@@ -333,12 +377,16 @@ private:
     TFuture<TStatus> SelectRowState(
         const TContextPtr& context);
 
+    TFuture<TStatus> ListStatesForGeneration(
+        const TContextPtr& context);
+
     TFuture<TStatus> ListStates(
         const TContextPtr& context);
 
     size_t SerializeState(
         const NYql::NDq::TComputeActorState& state,
-        std::list<TString>& outSerializedState);
+        std::list<TString>& outSerializedState,
+        bool& outIsCompressed);
 
     EStateType DeserializeState(
         const TContextPtr& context,
@@ -376,7 +424,12 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
         .AddNullableColumn("blob", EPrimitiveType::String)
         .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
         .AddNullableColumn("type", EPrimitiveType::Uint8)
+        .AddNullableColumn("is_compressed", EPrimitiveType::Bool)
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .BeginPartitioningSettings()
+            .SetPartitioningBySize(true)
+            .SetMinPartitionsCount(1)
+        .EndPartitioningSettings()
         .Build();
 
     auto promise = NThreading::NewPromise<TIssues>();
@@ -406,10 +459,20 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
         blob += *it;
         it = taskInfo.Rows.erase(it);
     }
+
+    if (taskInfo.IsCompressed) {
+        YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState: decompressing blob",
+            {"graphId", context->GraphId},
+            {"checkpointId", context->CheckpointId},
+            {"taskId", taskInfo.TaskId},
+            {"compressedBlobSize", blob.size()});
+        blob = DecompressBlob(blob);
+    }
+
     taskInfo.States.push_front({});
     NYql::NDq::TComputeActorState& state = taskInfo.States.front();
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState, task id, blob size",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "DeserializeState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -422,25 +485,36 @@ EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext:
 
 size_t TStateStorage::SerializeState(
     const NYql::NDq::TComputeActorState& state,
-    std::list<TString>& outSerializedState) {
+    std::list<TString>& outSerializedState,
+    bool& outIsCompressed) {
     outSerializedState.clear();
+    outIsCompressed = false;
 
     TString serializedState;
     if (!state.SerializeToString(&serializedState)) {
         return 0;
     }
 
-    auto size = serializedState.size();
-    size_t result = size;
+    auto originalSize = serializedState.size();
+
     size_t rowLimit = Config.GetStateStorageLimits().GetMaxRowSizeBytes();
+    if (rowLimit && originalSize > rowLimit && Config.GetEnableCompression()) {
+        TString compressed = CompressBlob(serializedState);
+        if (compressed.size() < serializedState.size()) {
+            serializedState = std::move(compressed);
+            outIsCompressed = true;
+        }
+    }
+
+    size_t remaining = serializedState.size();
     size_t offset = 0;
-    while (size) {
-        size_t chunkSize = (rowLimit && (size > rowLimit)) ? rowLimit : size;
+    while (remaining) {
+        size_t chunkSize = (rowLimit && (remaining > rowLimit)) ? rowLimit : remaining;
         outSerializedState.push_back(serializedState.substr(offset, chunkSize));
         offset += chunkSize;
-        size -= chunkSize;
+        remaining -= chunkSize;
     }
-    return result;
+    return originalSize;
 }
 
 TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
@@ -451,11 +525,12 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
 
     std::list<TString> serializedState;
     EStateType type = EStateType::Snapshot;
+    bool isCompressed = false;
     size_t size = 0;
 
     try {
         type = TIncrementLogic::GetStateType(state);
-        size = SerializeState(state, serializedState);
+        size = SerializeState(state, serializedState, isCompressed);
         if (!size || serializedState.empty()) {
             return MakeFuture(TSaveStateResult(0, NYql::TIssues{NYql::TIssue{"Failed to serialize compute actor state"}}));
         }
@@ -471,7 +546,8 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
         checkpointId,
         TMaybe<ISession::TPtr>(),
         serializedState,
-        type);
+        type,
+        isCompressed);
 
     auto promise = NewPromise<TSaveStateResult>();
     auto future = UpsertRow(context);
@@ -527,12 +603,44 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         {"checkpointId", context->CheckpointId},
         {"tasks", JoinSeq(", ", taskIds)});
 
-    return ListStates(context)
-        .Apply([context, thisPtr = TIntrusivePtr(this)] (const TFuture<TStatus>& result) mutable {
+    // First, query only the exact target checkpoint by coordinator_generation + seq_no to check
+    // whether it is a snapshot. If so, we can skip loading the full cross-generation history.
+    return ListStatesForGeneration(context)
+        .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) mutable -> TFuture<TStatus> {
             if (!result.GetValue().IsSuccess()) {
                 return result;
             }
-            return thisPtr->SkipStatesInFuture(context);
+            // Check whether every task has a snapshot at the exact target checkpoint.
+            bool allSnapshots = true;
+            for (const auto& task : context->Tasks) {
+                if (task.ListOfStatesForReading.empty() ||
+                    !task.ListOfStatesForReading.front().Type ||
+                    *task.ListOfStatesForReading.front().Type != EStateType::Snapshot) {
+                    allSnapshots = false;
+                    break;
+                }
+            }
+            if (allSnapshots) {
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem,
+                    "GetState: target checkpoint is a snapshot, skipping full history read",
+                    {"graphId", context->GraphId},
+                    {"checkpointId", context->CheckpointId});
+                // ListOfStatesForReading is already set with the single target checkpoint.
+                // Proceed directly to ReadRows.
+                return MakeFuture(TStatus{EStatus::SUCCESS, NYdb::NIssue::TIssues{}});
+            }
+            // Target checkpoint is an increment (or type unknown). Fall back to reading
+            // the full cross-generation history to locate the underlying snapshot.
+            for (auto& task : context->Tasks) {
+                task.ListOfStatesForReading.clear();
+            }
+            return thisPtr->ListStates(context)
+                .Apply([context, thisPtr](const TFuture<TStatus>& innerResult) mutable -> TFuture<TStatus> {
+                    if (!innerResult.GetValue().IsSuccess()) {
+                        return innerResult;
+                    }
+                    return thisPtr->SkipStatesInFuture(context);
+                });
         })
         .Apply([context, thisPtr = TIntrusivePtr(this)](const TFuture<TStatus>& result) mutable {
             if (!result.GetValue().IsSuccess()) {
@@ -610,6 +718,98 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
         });
 }
 
+TFuture<TStatus> TStateStorage::ListStatesForGeneration(const TContextPtr& context) {
+    return YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+
+            paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
+
+            if (context->Tasks.size() == 1) {
+                paramsBuilder->AddParam("$task_id").Uint64(context->Tasks[0].TaskId).Build();
+            } else {
+                auto& taskIdsParam = paramsBuilder->AddParam("$task_ids").BeginList();
+                for (const auto& taskInfo : context->Tasks) {
+                    taskIdsParam.AddListItem().Uint64(taskInfo.TaskId);
+                }
+                taskIdsParam.EndList().Build();
+            }
+
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                PRAGMA TablePathPrefix("%s");
+
+                declare $graph_id as string;
+                declare $coordinator_generation as Uint64;
+                declare $seq_no as Uint64;
+                %s;
+
+                SELECT task_id, CAST(COUNT(*) as UINT64) as cnt, CAST(MAX(type) as UINT8) as type
+                FROM %s
+                WHERE graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND %s
+                GROUP BY task_id;
+            )", prefix.c_str(),
+                context->Tasks.size() == 1 ? "DECLARE $task_id AS Uint64" : "DECLARE $task_ids AS List<Uint64>",
+                StatesTable,
+                context->Tasks.size() == 1 ? "task_id = $task_id" : "task_id IN $task_ids");
+
+            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration",
+                {"graphId", context->GraphId},
+                {"checkpointId", context->CheckpointId});
+
+            auto future = session->ExecuteDataQuery(
+                query,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
+                thisPtr->GetExecDataQuerySettings());
+
+            return future.Apply(
+                [context] (const TFuture<TDataQueryResult>& future) {
+                    TStatus status = future.GetValue();
+                    if (!status.IsSuccess()) {
+                        return status;
+                    }
+                    try {
+                        const auto& selectResult = future.GetValue();
+                        TResultSetParser parser(selectResult.GetResultSet(0));
+                        while (parser.TryNextRow()) {
+                            auto taskId = parser.ColumnParser("task_id").GetOptionalUint64();
+                            auto cnt = parser.ColumnParser("cnt").GetUint64();
+                            auto typeVal = parser.ColumnParser("type").GetOptionalUint8();
+
+                            if (!taskId) {
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Unexpected empty task_id"}});
+                            }
+                            const auto taskIt = std::find_if(context->Tasks.begin(), context->Tasks.end(),
+                                [&] (const auto& item) { return item.TaskId == *taskId; });
+                            if (taskIt == context->Tasks.end()) {
+                                return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Got unexpected task id"}});
+                            }
+
+                            TContext::TStateInfo stateInfo{context->CheckpointId, cnt, {}};
+                            if (typeVal) {
+                                stateInfo.Type = static_cast<EStateType>(*typeVal);
+                            }
+                            taskIt->ListOfStatesForReading.push_back(stateInfo);
+
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListStatesForGeneration result row",
+                                {"graphId", context->GraphId},
+                                {"checkpointId", context->CheckpointId},
+                                {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
+                                {"count", cnt},
+                                {"typeVal", (typeVal ? ToString(static_cast<ui32>(*typeVal)) : "(null)")});
+                        }
+                    } catch (const std::exception& e) {
+                        return TStatus(EStatus::BAD_REQUEST, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{e.what()}});
+                    }
+                    return status;
+            });
+        }, GetRetryOperationSettings());
+}
+
 TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
     return YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
@@ -682,12 +882,12 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 
                             auto& taskInfo = *taskIt;
                             TCheckpointId checkpointId(*coordinatorGeneration, *seqNo);
-                            taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt});
-                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "TaskId checkpoint, rows",
+                            taskInfo.ListOfStatesForReading.push_back(TContext::TStateInfo{checkpointId, cnt, {}});
+                            YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ListOfStates result row",
                                 {"graphId", context->GraphId},
                                 {"checkpointId", context->CheckpointId},
                                 {"taskId", (taskId ? ToString(taskId.value()) : "(empty maybe)")},
-                                {"id", checkpointId},
+                                {"listedCheckpointId", checkpointId},
                                 {"count", cnt});
                         }
                     }
@@ -814,7 +1014,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState: task_id, seq_no, blob_seq_num",
+    YDB_LOG_DEBUG_CTX(*context->ActorSystem, "SelectState",
         {"graphId", context->GraphId},
         {"checkpointId", context->CheckpointId},
         {"taskId", taskInfo.TaskId},
@@ -837,7 +1037,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         DECLARE $seq_no AS Uint64;
         DECLARE $blob_seq_num AS Uint64;
 
-        SELECT task_id, blob, type
+        SELECT task_id, blob, type, is_compressed
         FROM %s
         WHERE task_id = $task_id AND graph_id = $graph_id AND coordinator_generation = $coordinator_generation AND seq_no = $seq_no AND (blob_seq_num = $blob_seq_num %s);
     )",
@@ -871,6 +1071,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
             paramsBuilder->AddParam("$blob").String(taskInfo.Rows.front()).Build();
             paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
             paramsBuilder->AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
+            paramsBuilder->AddParam("$is_compressed").Bool(taskInfo.IsCompressed).Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -883,9 +1084,10 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
                 declare $blob as string;
                 declare $blob_seq_num as Uint64;
                 declare $type as Uint8;
+                declare $is_compressed as Bool;
 
-                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type) VALUES
-                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type);
+                UPSERT INTO %s (task_id, graph_id, coordinator_generation, seq_no, blob, blob_seq_num, type, is_compressed) VALUES
+                    ($task_id, $graph_id, $coordinator_generation, $seq_no, $blob, $blob_seq_num, $type, $is_compressed);
             )", context->TablePathPrefix.c_str(), StatesTable);
 
             Y_ENSURE(context->Session, "Session is empty");
@@ -988,15 +1190,15 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     NYql::TIssues& issues) {
     YDB_LOG_DEBUG_CTX(*context->ActorSystem, "ApplyIncrements",
         {"graphId", context->GraphId},
-        {"checkpointId", context->CheckpointId});
+        {"checkpointId", context->CheckpointId},
+        {"taskCount", context->Tasks.size()});
 
     std::vector<NYql::NDq::TComputeActorState> states;
+
     try {
-        for (auto& task : context->Tasks)
-        {
+        for (auto& task : context->Tasks) {
             TIncrementLogic logic;
-            for (auto& state : task.States)
-            {
+            for (auto& state : task.States) {
                 logic.Apply(state);
             }
             states.push_back(std::move(logic.Build()));
@@ -1004,6 +1206,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
     } catch (...) {
         issues.AddIssue(CurrentExceptionMessage());
     }
+
     return states;
 }
 

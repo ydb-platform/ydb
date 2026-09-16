@@ -397,7 +397,7 @@ public:
             ui64 totalMetricsCount;
             YQL_ENSURE(TryFromString(settings.TotalMetricsCount(), totalMetricsCount));
 
-            auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
+            auto providerFactory = State_->CredentialsFactory->Create(State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
 
             NDq::TDqSolomonReadParams readParams{ .Source = source };
@@ -451,7 +451,9 @@ public:
         shardDesc.SetCluster(shard.Cluster().StringValue());
         shardDesc.SetService(shard.Service().StringValue());
 
-        shardDesc.SetClusterType(NSo::MapClusterType(clusterDesc->GetClusterType()));
+        shardDesc.SetClusterType(NSo::IsMoniumProject(*clusterDesc)
+            ? NSo::NProto::CT_MONIUM
+            : NSo::MapClusterType(clusterDesc->GetClusterType()));
         shardDesc.SetUseSsl(clusterDesc->GetUseSsl());
 
         const TTypeAnnotationNode* itemType = shard.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();

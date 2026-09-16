@@ -20,14 +20,14 @@ TRemapColumns::TOthersData::TFinishContext TRemapColumns::BuildRemapInfo(
         builder.Add(i.first, statsByKeyIndex[i.second].GetRecordsCount(), statsByKeyIndex[i.second].GetDataSize(),
             settings.IsSparsed(statsByKeyIndex[i.second].GetRecordsCount(), recordsCount) ? NArrow::NAccessor::IChunkedArray::EType::SparsedArray
                                                                                           : NArrow::NAccessor::IChunkedArray::EType::Array,
-            // For now others always encode in BinaryJson
-            NArrow::NAccessor::NSubColumns::EValueType::BinaryJson);
+            NArrow::NAccessor::NSubColumns::OthersExplicitBinaryJson);
         remap[i.second] = idx++;
     }
     return TOthersData::TFinishContext(builder.Finish(), remap);
 }
 
 void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sourceColumnStats, const TDictStats& sourceOtherStats) {
+    AFL_VERIFY(ColumnStatsRegistered);
     if (RemapInfo.size() <= sourceIdx) {
         RemapInfo.resize((sourceIdx + 1) * 2);
     }
@@ -35,17 +35,15 @@ void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sou
     auto& remapSourceInfo = RemapInfo[sourceIdx];
     remapSourceInfo.resize(2);
     auto& remapSourceInfoColumns = remapSourceInfo[1];
-    AFL_VERIFY(ResultColumnStats);
     for (ui32 i = 0; i < sourceColumnStats.GetColumnsCount(); ++i) {
         if (remapSourceInfoColumns.size() <= i) {
             remapSourceInfoColumns.resize((i + 1) * 2);
         }
         AFL_VERIFY(!remapSourceInfoColumns[i]);
-        if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceColumnStats.GetColumnName(i))) {
-            remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, true);
+        if (const auto it = ResultColumnKeyIndex.find(sourceColumnStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
+            remapSourceInfoColumns[i] = TRemapInfo(it->second, true);
         } else {
-            commonKeyIndex = RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i));
-            remapSourceInfoColumns[i] = TRemapInfo(*commonKeyIndex, false);
+            remapSourceInfoColumns[i] = TRemapInfo(RegisterNewOtherIndex(sourceColumnStats.GetColumnName(i)), false);
         }
     }
     auto& remapSourceInfoOthers = remapSourceInfo[0];
@@ -54,11 +52,10 @@ void TRemapColumns::StartSourceChunk(const ui32 sourceIdx, const TDictStats& sou
             remapSourceInfoOthers.resize((i + 1) * 2);
         }
         AFL_VERIFY(!remapSourceInfoOthers[i]);
-        if (auto commonKeyIndex = ResultColumnStats->GetKeyIndexOptional(sourceOtherStats.GetColumnName(i))) {
-            remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, true);
+        if (const auto it = ResultColumnKeyIndex.find(sourceOtherStats.GetColumnName(i)); it != ResultColumnKeyIndex.end()) {
+            remapSourceInfoOthers[i] = TRemapInfo(it->second, true);
         } else {
-            commonKeyIndex = RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i));
-            remapSourceInfoOthers[i] = TRemapInfo(*commonKeyIndex, false);
+            remapSourceInfoOthers[i] = TRemapInfo(RegisterNewOtherIndex(sourceOtherStats.GetColumnName(i)), false);
         }
     }
 }

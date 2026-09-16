@@ -37,11 +37,11 @@ TColumnNameToConstraintMap MakeColumnNameToConstraintMap(
     for (auto& [stableName, constraint] : columnStableNameToConstraint) {
         const auto* column = schema.FindColumnByStableName(stableName);
         if (!column) {
-            YT_LOG_ALERT(
-                "No column was found during transforming stable named constraints into named constraints "
-                "(ColumnStableName: %v, ColumnStableNameToConstraint: %v)",
-                stableName,
-                MakeShrunkFormattableView(columnStableNameToConstraint, TDefaultFormatter(), columnToConstraintLogLimit));
+            YT_TLOG_ALERT("No column was found during transforming stable named constraints into named constraints")
+                .With("ColumnStableName", stableName)
+                .With(
+                    "ColumnStableNameToConstraint",
+                    MakeShrunkFormattableView(columnStableNameToConstraint, TDefaultFormatter(), columnToConstraintLogLimit));
             continue;
         }
         result.emplace(column->Name(), std::move(constraint));
@@ -58,11 +58,11 @@ TColumnStableNameToConstraintMap MakeColumnStableNameToConstraintMap(
     for (auto& [name, constraint] : columnNameToConstraint) {
         const auto* column = schema.FindColumn(name);
         if (!column) {
-            YT_LOG_ALERT(
-                "No column was found during transforming named constraints into stable named constraints "
-                "(ColumnStableName: %v, ColumnStableNameToConstraint: %v)",
-                name,
-                MakeShrunkFormattableView(columnNameToConstraint, TDefaultFormatter(), columnToConstraintLogLimit));
+            YT_TLOG_ALERT("No column was found during transforming named constraints into stable named constraints")
+                .With("ColumnName", name)
+                .With(
+                    "ColumnNameToConstraint",
+                    MakeShrunkFormattableView(columnNameToConstraint, TDefaultFormatter(), columnToConstraintLogLimit));
             continue;
         }
         result.emplace(column->StableName(), std::move(constraint));
@@ -93,8 +93,8 @@ void FromProto(NTableClient::TColumnNameToConstraintMap* constraints, const TCol
             THROW_ERROR_EXCEPTION(
                 "Received duplicate constraints for column %Qv",
                 entry.name())
-                << TErrorAttribute("first_conflicting_constraint", entry.constraint())
-                << TErrorAttribute("second_conflicting_constraint", it->second);
+                .With("first_conflicting_constraint", entry.constraint())
+                .With("second_conflicting_constraint", it->second);
         }
     }
 }

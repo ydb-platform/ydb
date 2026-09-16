@@ -115,7 +115,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         const TDuration duration = TDuration::Seconds(PutTimer.Passed());
-        IntermediateResults->Stat.PutLatencies.push_back(duration.MilliSeconds());
+        IntermediateResults->Stat.PutLatencies.emplace_back(ev->Get()->Id.Channel(), duration.MilliSeconds());
 
         auto groupId = ev->Get()->GroupId;
         CheckYellow(ev->Get()->StatusFlags, groupId);
@@ -289,7 +289,9 @@ public:
         InFlightQueries -= request.ReadQueue.size();
 
         ui64 durationMs = (TAppData::TimeProvider->Now() - request.SentAt).MilliSeconds();
-        IntermediateResults->Stat.GetLatencies.push_back(durationMs);
+        Y_ABORT_UNLESS(!request.ReadQueue.empty());
+        IntermediateResults->Stat.GetLatencies.emplace_back(
+                request.ReadQueue.front().ReadItem->LogoBlobId.Channel(), durationMs);
 
         auto resetReadItems = [&](NKikimrProto::EReplyStatus status) {
             Y_ABORT_UNLESS(status != NKikimrProto::UNKNOWN);

@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/persqueue/common
     ydb/core/persqueue/events
     ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer
@@ -52,4 +53,5 @@ RECURSE_FOR_TESTS(
     ut
     ut/new_schemecache_ut
     ut/describes_ut
+    ut/direct_read_restore_ut
 )

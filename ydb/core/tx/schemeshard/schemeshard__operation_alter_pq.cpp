@@ -18,6 +18,7 @@
 
 #include <format>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -106,6 +107,7 @@ void ComputeAlterPartitionCounts(
 }
 
 class TAlterPQ: public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterPQ"; }
     // Make sure we make decisions using a consistent runtime value
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -317,7 +319,7 @@ public:
             if (auto it = attrs.find("database_id"); it != attrs.end()) {
                 alterConfig.SetYdbDatabaseId(it->second);
             }
-            if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+            if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
             alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));
@@ -326,6 +328,19 @@ public:
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
+
+            if (tabletConfig->HasId()) {
+                // Never change an existing topic Id; preserve it together with its fill step.
+                alterConfig.MutableId()->CopyFrom(tabletConfig->GetId());
+            } else if (alterConfig.HasId() && AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()
+                && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                // Federation back-fill: the Id is filled by this alter only for federation topics.
+                // FirstClassCitizen topics get their Id at create time, not via alter.
+                // Leave TxStep unset, it is stamped with the exact plan step at NPQState::TPropose::PersistState.
+                alterConfig.MutableId()->ClearTxStep();
+            } else {
+                alterConfig.ClearId();
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
@@ -494,14 +509,18 @@ public:
         TShardInfo defaultShardInfo = TShardInfo::PersQShardInfo(txId, pathId);
         defaultShardInfo.BindedChannels = pqBindedChannels;
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "AlterPQGroup txid# " << txId
-                    << " AlterVersion# " << pqGroup->AlterData->AlterVersion
-                    << " Parts count# " << pqGroup->TotalPartitionCount << "->" << pqGroup->AlterData->TotalPartitionCount
-                    << " Groups count# " << pqGroup->TotalGroupCount << "->" << pqGroup->AlterData->TotalGroupCount
-                    << " MaxPerPQ# " << pqGroup->MaxPartsPerTablet << "->" << pqGroup->AlterData->MaxPartsPerTablet
-                    << " adding partitions# " << pqGroup->AlterData->PartitionsToAdd.size()
-                    << " deleting partitions#  " << pqGroup->AlterData->PartitionsToDelete.size());
+        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup",
+            {"txId", txId},
+            {"alterVersion", pqGroup->AlterData->AlterVersion},
+            {"totalPartitionCount", pqGroup->TotalPartitionCount},
+            {"alterTotalPartitionCount", pqGroup->AlterData->TotalPartitionCount},
+            {"totalGroupCount", pqGroup->TotalGroupCount},
+            {"alterTotalGroupCount", pqGroup->AlterData->TotalGroupCount},
+            {"maxPartsPerTablet", pqGroup->MaxPartsPerTablet},
+            {"alterMaxPartsPerTablet", pqGroup->AlterData->MaxPartsPerTablet},
+            {"partitionsToAdd", pqGroup->AlterData->PartitionsToAdd.size()},
+            {"partitionsToDelete", pqGroup->AlterData->PartitionsToDelete.size()},
+        );
 
         // Leave pqGroup->AlterVersion unchanged. It will be updated in TxPlanStep.
         ui32 shardsNeeded = pqGroup->AlterData->ExpectedShardCount();
@@ -557,11 +576,13 @@ public:
             txState.Shards.emplace_back(shardIdx, ETabletType::PersQueueReadBalancer, TTxState::ConfigureParts);
         }
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "AlterPQGroup txid# " << txId
-                    << ". Shard count " << shardsCurrent << "->" << shardsNeeded
-                    << ", first new shardIdx " << startShardIdx
-                    << " hasBalancer " << hasBalancer);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "AlterPQGroup shard count changed",
+            {"txId", txId},
+            {"shardsCurrent", shardsCurrent},
+            {"shardsNeeded", shardsNeeded},
+            {"startShardIdx", startShardIdx},
+            {"hasBalancer", hasBalancer},
+        );
 
         if (!pqGroup->AlterData->PartitionsToAdd.empty()) {
             ReassignIds(pqGroup);
@@ -617,12 +638,10 @@ public:
         const TString& name = alter.GetName();
         const TPathId pathId = alter.HasPathId() ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterPQ Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", pathId},
+        );
 
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -876,13 +895,11 @@ public:
                     }
                     if (prescribedChildPartitionId && ShouldCreateSiblingAtRootLevel(split, topic)) [[unlikely]] {
                         if (topic->Partitions.contains(*prescribedChildPartitionId)) {
-                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                        std::format("Skipping split partition {} because child partition {} exists",
+                            YDB_LOG_TRACE_CTX(context.Ctx, std::format("Skipping split partition {} because child partition {} exists",
                                                     splittedPartitionId, *prescribedChildPartitionId));
                             alterData->TotalGroupCount -= 1;
                         } else {
-                            LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                        std::format("Skipping split partition {}. Create new partition {}",
+                            YDB_LOG_TRACE_CTX(context.Ctx, std::format("Skipping split partition {}. Create new partition {}",
                                                     splittedPartitionId, *prescribedChildPartitionId));
                             alterData->PartitionsToAdd.emplace_back(childPartitionId.value(), childPartitionId.value() + 1);
                         }
@@ -1246,11 +1263,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterPQ AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterPQ AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -1270,3 +1287,5 @@ ISubOperation::TPtr CreateAlterPQ(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

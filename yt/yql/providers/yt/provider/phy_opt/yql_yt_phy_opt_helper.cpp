@@ -1149,15 +1149,13 @@ bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& 
     if (type.GetKind() == ETypeAnnotationKind::Variant) {
         for (auto tupleItemType: type.Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems()) {
             if (tupleItemType->HasBareYson() && (NYql::GetNativeYtTypeFlags(*tupleItemType->Cast<TStructExprType>()) & NTCF_COMPLEX)) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tupleItemType));
+                ReportNonWritableBareYsonError(ctx.GetPosition(pos), *tupleItemType->Cast<TStructExprType>(), ctx);
                 return false;
             }
         }
 
     } else if (type.HasBareYson() && (NYql::GetNativeYtTypeFlags(*type.Cast<TStructExprType>()) & NTCF_COMPLEX)) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                    << type));
+        ReportNonWritableBareYsonError(ctx.GetPosition(pos), *type.Cast<TStructExprType>(), ctx);
         return false;
     }
 

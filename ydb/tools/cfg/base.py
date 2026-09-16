@@ -63,12 +63,38 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None, disk_scope=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None,
+                 expected_slot_size=None, max_slots=None, kind=None, pdisk_config=None, disk_scope=None):
+        # the same settings may come as top-level drive fields or inside pdisk_config;
+        # validate the effective combination so that invalid mixes do not surface only
+        # as NodeWarden warnings after the config is deployed. Zero values are treated
+        # as 'not set' to match the C++ side
+        pdisk_config_dict = pdisk_config if isinstance(pdisk_config, dict) else {}
+
+        def effective(top_level_value, key):
+            value = top_level_value if top_level_value is not None else pdisk_config_dict.get(key)
+            return value if value else None
+
+        effective_slot_count = effective(expected_slot_count, "expected_slot_count")
+        effective_slot_size = effective(expected_slot_size, "expected_slot_size")
+        effective_max_slots = effective(max_slots, "max_slots")
+        slot_size_in_units = pdisk_config_dict.get("slot_size_in_units")
+        if effective_slot_size is not None:
+            if effective_slot_count is not None:
+                raise ValueError("expected_slot_size is mutually exclusive with expected_slot_count")
+            if slot_size_in_units:
+                raise ValueError("expected_slot_size is mutually exclusive with slot_size_in_units")
+            if effective_max_slots is None:
+                raise ValueError("expected_slot_size requires max_slots")
+        elif effective_max_slots is not None:
+            raise ValueError("max_slots requires expected_slot_size")
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
         self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
+        self.expected_slot_size = expected_slot_size
+        self.max_slots = max_slots
         self.kind = kind
         self.disk_scope = disk_scope
 
@@ -78,13 +104,25 @@ class KiKiMRDrive(object):
             and self.path == other.path
             and self.shared_with_os == other.shared_with_os
             and self.expected_slot_count == other.expected_slot_count
+            and self.expected_slot_size == other.expected_slot_size
+            and self.max_slots == other.max_slots
             and self.kind == other.kind
             and self.pdisk_config == other.pdisk_config
             and self.disk_scope == other.disk_scope
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config, self.disk_scope))))
+        return hash("\0".join(map(str, (
+            self.type,
+            self.path,
+            self.shared_with_os,
+            self.expected_slot_count,
+            self.expected_slot_size,
+            self.max_slots,
+            self.kind,
+            self.pdisk_config,
+            self.disk_scope,
+        ))))
 
 
 Domain = collections.namedtuple(

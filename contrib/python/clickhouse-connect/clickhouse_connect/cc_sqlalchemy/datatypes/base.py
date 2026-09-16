@@ -1,5 +1,8 @@
 import logging
+from collections.abc import Callable
+from typing import Any
 
+from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.exc import CompileError
 
 from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, ClickHouseType, TypeDef
@@ -15,11 +18,10 @@ class ChSqlaType:
     subclasses will inherit from TypeEngine.
     """
 
-    ch_type: ClickHouseType = None
+    ch_type: ClickHouseType | None = None
     generic_type: None
-    _ch_type_cls = None
-    _instance = None
-    _instance_cache: dict[TypeDef, "ChSqlaType"] = None
+    _ch_type_cls: type[ClickHouseType] | None = None
+    _instance_cache: dict[TypeDef, "ChSqlaType"] | None = None
 
     def __init_subclass__(cls):
         """
@@ -44,7 +46,7 @@ class ChSqlaType:
         :param type_def: -- TypeDef tuple that defines arguments for this instance
         :return: Shared instance of a configured ChSqlaType
         """
-        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))
+        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))  # type: ignore[union-attr]
 
     def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
         """
@@ -55,7 +57,7 @@ class ChSqlaType:
         parse_name function
         """
         self.type_def = type_def
-        self.ch_type = self._ch_type_cls.build(type_def)
+        self.ch_type = self._ch_type_cls.build(type_def)  # type: ignore[union-attr]
 
     @property
     def name(self):
@@ -73,30 +75,24 @@ class ChSqlaType:
     def low_card(self):
         return self.ch_type.low_card
 
-    @staticmethod
-    def result_processor():
+    def result_processor(self, dialect, coltype):
         """
         Override for the SqlAlchemy TypeEngine result_processor method, which is used to convert row values to the
         correct Python type.  The core driver handles this automatically, so we always return None.
         """
         return None
 
-    @staticmethod
-    def _cached_result_processor(*_):
+    def literal_processor(self, dialect: Dialect) -> Callable[[Any], str]:
         """
-        Override for the SqlAlchemy TypeEngine _cached_result_processor method to prevent weird behavior
-        when SQLAlchemy tries to cache.
+        Delegate SQLAlchemy literal rendering to the driver's query value formatter.
         """
-        return None
+        if not dialect.identifier_preparer._double_percents:
+            return str_query_value
 
-    @staticmethod
-    def _cached_literal_processor(*_):
-        """
-        Override for the SqlAlchemy TypeEngine _cached_literal_processor. We delegate to the driver format_query_value
-        method and should be able to ignore literal_processor definitions in the dialect, which are verbose and
-        confusing.
-        """
-        return str_query_value
+        def process(value: Any) -> str:
+            return str_query_value(value).replace("%", "%%")
+
+        return process
 
     def _compiler_dispatch(self, _visitor, **_):
         """
@@ -124,7 +120,7 @@ class CaseInsensitiveDict(dict):
 
 
 sqla_type_map: dict[str, type[ChSqlaType]] = CaseInsensitiveDict()
-schema_types = []
+schema_types: list[str] = []
 
 
 def sqla_type_from_name(name: str) -> ChSqlaType:

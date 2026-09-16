@@ -38,13 +38,13 @@ struct TCursorTokenContext {
 };
 
 bool GetStatement(
-    ILexer::TPtr& lexer,
+    const ILexer::TPtr& lexer,
     const TMaterializedInput& input,
     TCompletionInput& output,
     size_t& output_position);
 
 bool GetCursorTokenContext(
-    ILexer::TPtr& lexer,
+    const ILexer::TPtr& lexer,
     TCompletionInput input,
     TCursorTokenContext& context);
 

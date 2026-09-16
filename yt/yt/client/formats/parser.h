@@ -13,8 +13,7 @@ namespace NYT::NFormats {
 struct IParser
     : public TNonCopyable
 {
-    virtual ~IParser()
-    { }
+    virtual ~IParser() = default;
 
     virtual void Read(TStringBuf data) = 0;
     virtual void Finish() = 0;

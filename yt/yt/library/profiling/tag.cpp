@@ -186,7 +186,7 @@ TDynamicTagPtr TTagSet::AddDynamicTag(int index)
     return tag;
 }
 
-void TTagSet::ApplyDynamicTag(TDynamicTagPtr dynamicTag)
+void TTagSet::ApplyDynamicTag(const TDynamicTagPtr& dynamicTag)
 {
     for (auto& [tag, index] : DynamicTags_) {
         if (tag == dynamicTag) {

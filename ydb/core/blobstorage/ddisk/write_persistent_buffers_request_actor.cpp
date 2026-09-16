@@ -141,14 +141,22 @@ namespace NKikimr::NDDisk {
         NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForInternal(
             inflight.TabletId,
             inflight.TabletGeneration,
-            std::nullopt);
+            std::nullopt,
+            inflight.DirectBlockGroupIndex);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
             inflight.PersistentBufferIds, inflight.Timeout);
         msg->AddPayload(TRope(payload));
+        // Forward the checksums persisted on the source record. Successful writes always store them,
+        // so a successful source read returns exactly one checksum per aligned block. Without this,
+        // TEvReadThenWritePersistentBuffers would re-replicate a record that the destination would
+        // then reject as a checksum-less write.
+        msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
         auto h = std::make_unique<IEventHandle>(SelfId(), inflight.Sender, msg.release(), 0, inflight.Cookie);
-        TActivationContext::Send(h.release());
+        // Keep the request represented in actor-owned state across the read-to-write
+        // transition, so poison cannot overtake a queued fan-out self-message.
+        Handle(TEvWritePersistentBuffers::TPtr(static_cast<TEventHandle<TEvWritePersistentBuffers>*>(h.release())));
 
         ReadInflights.erase(it);
     }
@@ -156,11 +164,12 @@ namespace NKikimr::NDDisk {
     void TWritePersistentBuffersRequestActor::Handle(TEvReadThenWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
-        auto recordCreds = record.GetCredentials();
+        TQueryCredentials recordCreds(record.GetCredentials());
         TQueryCredentials creds = TQueryCredentials::ForInternal(
-            recordCreds.GetTabletId(),
-            recordCreds.GetGeneration(),
-            std::nullopt);
+            recordCreds.TabletId,
+            recordCreds.Generation,
+            std::nullopt,
+            recordCreds.DirectBlockGroupIndex);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
         auto timeout = record.GetReplyTimeoutMicroseconds();
@@ -170,6 +179,7 @@ namespace NKikimr::NDDisk {
             .Cookie = ev->Cookie,
             .TabletId = creds.TabletId,
             .TabletGeneration = creds.Generation,
+            .DirectBlockGroupIndex = creds.DirectBlockGroupIndex,
             .RequestGeneration = requestGeneration,
             .Lsn = lsn,
             .Timeout = timeout,
@@ -180,7 +190,7 @@ namespace NKikimr::NDDisk {
         }
 
         auto msg = std::make_unique<TEvReadPersistentBuffer>();
-        creds.Serialize(msg->Record.MutableCredentials());
+        creds.SerializeForRequest(msg->Record.MutableCredentials());
         msg->Record.SetLsn(lsn);
         msg->Record.SetGeneration(requestGeneration);
         NDDisk::TReadInstruction(true).Serialize(msg->Record.MutableInstruction());
@@ -202,11 +212,12 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
-        auto recordCreds = record.GetCredentials();
+        TQueryCredentials recordCreds(record.GetCredentials());
         TQueryCredentials creds = TQueryCredentials::ForInternal(
-            recordCreds.GetTabletId(),
-            recordCreds.GetGeneration(),
-            std::nullopt);
+            recordCreds.TabletId,
+            recordCreds.Generation,
+            std::nullopt,
+            recordCreds.DirectBlockGroupIndex);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());
@@ -219,6 +230,7 @@ namespace NKikimr::NDDisk {
             auto partCookie = NextCookie++;
             auto msg = std::make_unique<TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
             msg->AddPayload(TRope(payload));
+            msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
             auto pbServiceId = MakeBlobStoragePersistentBufferId(pbId.GetNodeId(), pbId.GetPDiskId(), pbId.GetDDiskSlotId());
             auto h = std::make_unique<IEventHandle>(pbServiceId, SelfId(), msg.release(), IEventHandle::FlagSubscribeOnSession, partCookie);
             TActivationContext::Send(h.release());
@@ -242,12 +254,40 @@ namespace NKikimr::NDDisk {
     }
 
     void TWritePersistentBuffersRequestActor::PassAway() {
-        for (auto& [_, i] : Inflights) {
-            for (auto& [__, inflight] : i.Inflights) {
+        static constexpr TStringBuf StoppingReason = "PersistentBuffer is stopping";
+        for (const auto& [_, inflight] : ReadInflights) {
+            auto msg = std::make_unique<TEvWritePersistentBuffersResult>();
+            for (const auto& [nodeId, pdiskId, ddiskSlotId] : inflight.PersistentBufferIds) {
+                auto* res = msg->Record.AddResult();
+                auto* pbId = res->MutablePersistentBufferId();
+                pbId->SetNodeId(nodeId);
+                pbId->SetPDiskId(pdiskId);
+                pbId->SetDDiskSlotId(ddiskSlotId);
+                auto* result = res->MutableResult();
+                result->SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH);
+                result->SetErrorReason(TString(StoppingReason));
+                result->SetFreeSpace(-1);
+                result->SetPDiskNormalizedOccupancy(-1);
+            }
+            Send(inflight.Sender, msg.release(), 0, inflight.Cookie);
+        }
+        ReadInflights.clear();
+
+        while (!Inflights.empty()) {
+            auto& [cookie, i] = *Inflights.begin();
+            for (auto& [partCookie, inflight] : i.Inflights) {
                 if (inflight.NodeId != SelfId().NodeId()) {
                     Send(TActivationContext::InterconnectProxy(inflight.NodeId), new TEvents::TEvUnsubscribe());
                 }
+                if (!inflight.Received) {
+                    inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH;
+                    inflight.ErrorReason = StoppingReason;
+                    inflight.Received = true;
+                    ++i.Received;
+                    InflightParts.erase(partCookie);
+                }
             }
+            ReplyAndFinish(cookie);
         }
         TActor::PassAway();
     }

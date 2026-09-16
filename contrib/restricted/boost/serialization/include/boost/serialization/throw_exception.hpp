@@ -17,7 +17,7 @@
 
 #include <boost/config.hpp>
 
-#ifndef BOOST_NO_EXCEPTIONS
+#ifdef BOOST_NO_EXCEPTIONS
 #include <boost/throw_exception.hpp>
 #endif
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <stop_token>
-namespace NYdb {
+namespace NYdb::inline Dev {
 namespace NCoordination {
     struct TYdbLockException : public TYdbException {
         TYdbLockException(const std::string& message) : TYdbException(message) {}

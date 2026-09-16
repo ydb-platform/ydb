@@ -30,6 +30,12 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
     if (auto enable = features.Extract<bool>("ENABLE_NATIVE_COLUMNS")) {
         Settings.SetEnableNativeColumns(enable);
     }
+    if (auto version = features.Extract<ui32>("DENSE_ENCODING_VERSION")) {
+        if (*version > GetMaxDenseEncodingVersion()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "DENSE_ENCODING_VERSION must not exceed " << GetMaxDenseEncodingVersion());
+        }
+        Settings.SetDenseEncodingVersion(version);
+    }
     THolder<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {
         extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);

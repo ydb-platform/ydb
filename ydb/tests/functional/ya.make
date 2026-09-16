@@ -15,6 +15,7 @@ RECURSE(
     dstool
     encryption
     hive
+    kafka
     kqp
     large_serializable
     limits
@@ -42,6 +43,7 @@ RECURSE(
     tpcc
     tenants
     ttl
+    udf_store
     wardens
     ydb_cli
 )

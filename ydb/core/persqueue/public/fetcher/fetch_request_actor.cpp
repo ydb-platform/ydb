@@ -3,20 +3,19 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
-#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
-#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
-#define LOG(level, stream) LOG_LOG_S(*NActors::TlsActivationContext, level, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
+#include <optional>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ {
 
@@ -49,7 +48,8 @@ struct TTopicInfo {
 
 using namespace NActors;
 
-class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor>
+class TPQFetchRequestActor : public TBaseActor<TPQFetchRequestActor>
+                           , public TConstantLogPrefix
                            , private TRlHelpers {
 private:
     TFetchRequestSettings Settings;
@@ -67,7 +67,7 @@ private:
     THashMap<ui64, TTabletInfo> TabletInfo;
 
     TActorId RequesterId;
-    ui64 PendingQuotaAmount;
+    std::optional<ui64> PendingQuotaAmount;
 
     TActorId YdbProxy;
     TActorId LongTimer;
@@ -89,7 +89,8 @@ public:
     }
 
     TPQFetchRequestActor(const TFetchRequestSettings& settings, const TActorId& schemeCacheId, const TActorId& requesterId)
-        : TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1))
+        : TBaseActor(NKikimrServices::PQ_FETCH_REQUEST)
+        , TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1))
         , Settings(settings)
         , FetchRequestCurrentPartitionIndex(0)
         , FetchRequestCurrentReadTablet(0)
@@ -138,12 +139,15 @@ public:
         switch (tag) {
             case EWakeupTag::RlAllowed:
                 ProceedFetchRequest(ctx);
-                PendingQuotaAmount = 0;
+                PendingQuotaAmount.reset();
                 break;
 
             case EWakeupTag::RlNoResource:
-                // Re-requesting the quota. We do this until we get a quota.
-                RequestDataQuota(PendingQuotaAmount, ctx);
+                // Ignore until a quota amount is known. Otherwise a wakeup in StateDescribe
+                // would acquire with a dummy amount and ProceedFetchRequest too early.
+                if (PendingQuotaAmount) {
+                    RequestDataQuota(*PendingQuotaAmount, ctx);
+                }
                 break;
 
             default:
@@ -151,8 +155,15 @@ public:
         }
     }
 
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"database", Settings.Database},
+            {"consumer", Settings.Consumer});
+    }
+
     void Bootstrap(const TActorContext& ctx) {
-        LOG_I("Fetch request actor boostrapped. Request is valid: " << (!Response));
+        LOG_I("Fetch request actor boostrapped. Request is",
+            {"valid", (!Response)});
 
         // handle error from constructor
         if (Response) {
@@ -169,7 +180,7 @@ public:
     void DescribeTopics(const TActorContext&) {
         LOG_D("DescribeTopics");
 
-        std::unordered_set<TString> topics;
+        absl::flat_hash_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
             topics.insert(part.Topic);
         }
@@ -186,8 +197,9 @@ public:
 
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
-                case NDescriber::EStatus::SUCCESS: {
-                    auto& topicInfo = TopicInfo[topicPath];
+                case NDescriber::EStatus::Success: {
+                    // Describer keys responses by the original request path; TopicInfo is keyed by CanonizePath.
+                    auto& topicInfo = TopicInfo[CanonizePath(topicPath)];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
                     break;
@@ -195,7 +207,11 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            info.Status == NDescriber::EStatus::UNAUTHORIZED ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SCHEME_ERROR,
+                            info.Status == NDescriber::EStatus::Unauthorized
+                                ? Ydb::StatusIds::UNAUTHORIZED
+                                : (info.Status == NDescriber::EStatus::BadRequest
+                                    ? Ydb::StatusIds::BAD_REQUEST
+                                    : Ydb::StatusIds::SCHEME_ERROR),
                             NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx
@@ -245,7 +261,8 @@ public:
             auto& fetchInfo = topicInfo.HasDataRequests[partitionId];
             const auto partitionIndex = fetchInfo->Record.GetCookie();
             tabletInfo.PartitionIndexes.push_back(partitionIndex);
-            LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
+            LOG_D("Sending TEvPersQueue::TEvHasDataInfo",
+                {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
         }
@@ -260,8 +277,10 @@ public:
 
     void ProceedFetchRequest(const TActorContext& ctx) {
         if (FetchRequestCurrentReadTablet) { //already got active read request
-            LOG_D("Fetch request is pending. TabletId=" << FetchRequestCurrentReadTablet
-                << " partitionIndex=" << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
+            LOG_D("Fetch request is pending. /",
+                {"tabletId", FetchRequestCurrentReadTablet},
+                {"partitionIndex", FetchRequestCurrentPartitionIndex},
+                {"settingsPartitionsSize", Settings.Partitions.size()});
             return;
         }
 
@@ -270,7 +289,9 @@ public:
             ("r", Settings.Partitions.size());
 
         while (true) {
-            LOG_D("Processing " << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
+            LOG_D("Processing /",
+                {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                {"settingsPartitionsSize", Settings.Partitions.size()});
             if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
                 CreateOkResponse();
                 return SendReplyAndDie(std::move(Response), ctx);
@@ -278,13 +299,17 @@ public:
 
             auto& status = PartitionStatus[FetchRequestCurrentPartitionIndex];
             if (status == EPartitionStatus::DataReceived) {
-                LOG_D("Skip partition " << FetchRequestCurrentPartitionIndex << " because status is DataReceived");
+                LOG_D("Skip partition because status is DataReceived",
+                    {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex});
                 ++FetchRequestCurrentPartitionIndex;
                 continue;
             }
 
             if (FetchRequestBytesLeft == 0) {
-                LOG_D("Partition " << FetchRequestCurrentPartitionIndex << " status is " << (int)status << " bytesLeft=" << FetchRequestBytesLeft);
+                LOG_D("Partition status is",
+                    {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                    {"status", (int)status},
+                    {"bytesLeft", FetchRequestBytesLeft});
                 if (status == EPartitionStatus::HasDataReceived) {
                     ++FetchRequestCurrentPartitionIndex;
                     continue;
@@ -316,7 +341,8 @@ public:
 
             //Form read request
             auto request = CreateReadRequest(topic, req);
-            LOG_D("Sending request: " << request->Record.ShortDebugString());
+            LOG_D("Sending",
+                {"request", request->Record.ShortDebugString()});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
 
             break;
@@ -326,15 +352,24 @@ public:
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         auto partitionIndex = record.GetCookie();
-        LOG_D("Handle TEvPersQueue::TEvHasDataInfoResponse " << record.ShortDebugString());
+        LOG_D("Handle TEvPersQueue::TEvHasDataInfoResponse",
+            {"ev", record.ShortDebugString()});
         if (partitionIndex >= PartitionStatus.size()) {
             Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
             return;
         }
         auto& status = PartitionStatus[partitionIndex];
-        LOG_D("Partition " << partitionIndex << " status is " << (int)status);
+        LOG_D("Partition status is",
+            {"partitionIndex", partitionIndex},
+            {"status", (int)status});
         if (status != EPartitionStatus::HasDataRequested) {
             // On timeout we resend send HasData
+            return;
+        }
+
+        if (record.GetSessionInvalidated()) {
+            AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
+            ProceedFetchRequest(ctx);
             return;
         }
 
@@ -354,12 +389,15 @@ public:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        LOG_D("Handle TEvPersQueue::TEvResponse " << record.ShortDebugString());
+        LOG_D("Handle TEvPersQueue::TEvResponse",
+            {"ev", record.ShortDebugString()});
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
-            LOG_W("proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
-                                << " while waiting from " << FetchRequestCurrentPartitionIndex << " and requested tablet is " << FetchRequestCurrentReadTablet);
+            LOG_W("Proxy fetch error: got response from tablet while waiting from and requested tablet is",
+                {"partitionResponseCookie", record.GetPartitionResponse().GetCookie()},
+                {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                {"fetchRequestCurrentReadTablet", FetchRequestCurrentReadTablet});
             return;
         }
 
@@ -401,13 +439,14 @@ public:
             Response->Response.SetTimestampType(timestampType);
         }
 
-        LOG_D("After processing result FetchRequestBytesLeft=" << FetchRequestBytesLeft);
+        LOG_D("After processing result",
+            {"fetchRequestBytesLeft", FetchRequestBytesLeft});
         if (FetchRequestBytesLeft == 0) {
             FinishProcessing(ctx);
         } else if (IsQuotaRequired()) {
             PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
             Settings.RuPerRequest = false;
-            RequestDataQuota(PendingQuotaAmount, ctx);
+            RequestDataQuota(*PendingQuotaAmount, ctx);
         } else {
             ProceedFetchRequest(ctx);
         }
@@ -489,7 +528,8 @@ public:
                 fetchInfo->Record.SetDeadline(0);
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
-                LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
+                LOG_D("Sending TEvPersQueue::TEvHasDataInfo",
+                    {"fetchInfoRecord", fetchInfo->Record.ShortDebugString()});
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
@@ -541,7 +581,9 @@ public:
     }
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
-        LOG_D("Reply to " << RequesterId << ": " << event->Response.ShortDebugString());
+        LOG_D("Reply",
+            {"requesterId", RequesterId},
+            {"response", event->Response.ShortDebugString()});
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

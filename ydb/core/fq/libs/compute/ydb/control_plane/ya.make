@@ -15,7 +15,7 @@ PEERDIR(
     ydb/core/fq/libs/compute/ydb/synchronization_service
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/quota_manager/proto
-    ydb/core/kqp/workload_service/common
+    ydb/services/workload_manager/common
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/actors/protos

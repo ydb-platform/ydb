@@ -436,6 +436,22 @@ public:
         }
     }
 
+    bool IsCompact() const {
+        switch (Type) {
+            case EType::GlobalFulltextCompact:
+            case EType::GlobalFulltextCompactRelevance:
+            case EType::GlobalJsonCompact:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool IsWrittenBySink(bool enableIndexStreamWrite) const {
+        return IsCompact() || enableIndexStreamWrite &&
+            (Type == EType::GlobalSync || Type == EType::GlobalSyncUnique);
+    }
+
     std::span<const std::string_view> GetImplTables() const {
         switch (Type) {
             case EType::GlobalSync:
@@ -475,6 +491,9 @@ struct TMultiColumnStatisticsDescription {
             switch (type) {
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    Types.push_back("EQ_HEIGHT_HISTOGRAM");
                     break;
                 default:
                     break;
@@ -603,6 +622,14 @@ struct TColumnEncoding {
 
 using TColumnEncodingsList = TVector<TColumnEncoding>;
 
+struct TDefaultExpressionColumnInfo {
+    TString ExprText;
+    NYql::TExprNode::TPtr Expr; // Compiled ExprText
+    TString Context;
+    TVector<TString> Dependencies;
+    bool Stored = false;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -620,6 +647,7 @@ struct TKikimrColumnMetadata {
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
     TMaybe<TColumnEncodingsList> Encoding;
+    TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
     TKikimrColumnMetadata() = default;
 
@@ -685,6 +713,15 @@ struct TKikimrColumnMetadata {
                     break;
             }
         }
+
+        if (IsDefaultFromExpression()) {
+            const auto& defaultExpression = message->GetDefaultExpression();
+            DefaultExpression = TDefaultExpressionColumnInfo{};
+            DefaultExpression->ExprText = defaultExpression.GetExprText();
+            DefaultExpression->Context = defaultExpression.GetContext();
+            DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -695,12 +732,21 @@ struct TKikimrColumnMetadata {
         DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
     }
 
+
+    void SetDefaultFromExpression() {
+        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
+    }
+
     bool IsDefaultFromSequence() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
     }
 
     bool IsDefaultFromLiteral() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+    }
+
+    bool IsDefaultFromExpression() const {
+        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
     }
 
     bool IsDefaultKindDefined() const {
@@ -720,6 +766,15 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
+        if (DefaultExpression) {
+            auto& defaultExpression = *message->MutableDefaultExpression();
+            defaultExpression.SetExprText(DefaultExpression->ExprText);
+            defaultExpression.SetContext(DefaultExpression->Context);
+            defaultExpression.SetStored(DefaultExpression->Stored);
+            for (const auto& dep : DefaultExpression->Dependencies) {
+                defaultExpression.AddDependencies(dep);
+            }
+        }
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }
@@ -812,6 +867,7 @@ struct TExternalSource {
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
     TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
+    ui64 WriteOperations = 0;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -1369,6 +1425,7 @@ struct TDropTransferSettings {
 struct TAnalyzeSettings {
     TString TablePath;
     TVector<TString> Columns;
+    double SampleRate = 1.0;
 };
 
 struct TBackupCollectionSettings {
@@ -1410,6 +1467,9 @@ struct TSecretSettings {
     TString Value;
     TString ValueParamName; // when set, the value is taken from parameter at execution
     std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
+    bool ReplaceIfExists = false; // CREATE OR REPLACE
+    bool ExistingOk = false; // CREATE IF NOT EXISTS
+    bool MissingOk = false; // ALTER/DROP IF EXISTS
 };
 
 struct TKikimrListPathItem {

@@ -9,13 +9,13 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_control.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
@@ -31,9 +31,9 @@ struct TTransaction;
 
 //USES MAIN chanel for big blobs, INLINE or EXTRA for ZK-like load, EXTRA2 for small blob for logging (VDISK of type LOG is ok with EXTRA2)
 
-class TPersQueue : public NKeyValue::TKeyValueFlat {
+class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     enum ECookie : ui64 {
-        WRITE_CONFIG_COOKIE = 2,
+        WRITE_CONFIG_COOKIE = 2, // reserved: former TEvUpdateConfig persist cookie
         READ_CONFIG_COOKIE  = 3,
         WRITE_STATE_COOKIE  = 4,
         WRITE_TX_COOKIE = 5,
@@ -83,11 +83,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorContext&);
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
 
-    //client requests
-    // remove TEvPersQueue::TEvUpdateConfig at 26-3 release
-    void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
-    void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
@@ -114,7 +109,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
-    TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
+    TString RenderSendReadSetHtmlForms(
+        const TDistributedTransaction& tx,
+        const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter,
+        const TStringBuf pathInfo) const;
 
     void HandleDie(const TActorContext& ctx) override;
 
@@ -122,10 +120,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleConfigReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
     void HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp, const TActorContext& ctx);
-    void ApplyNewConfigAndReply(const TActorContext& ctx);
     void ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
                         const TActorContext& ctx);
-    void HandleStateWriteResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx);
 
     void ReadTxInfo(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                     const TActorContext& ctx);
@@ -137,9 +133,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
     void InitializeMeteringSink(const TActorContext& ctx);
-    void ProcessReadRequestImpl(const ui64 responseCookie, const TActorId& partActor,
-                                const NKikimrClient::TPersQueuePartitionRequest& req, bool doPrepare, ui32 readId,
-                                const TActorContext& ctx);
 
     TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
@@ -153,7 +146,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
         const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
         TEvPQ::TEvWrite::TMsg& msg) const;
 
-    void TrySendUpdateConfigResponses(const TActorContext& ctx);
     static void CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
                                      NPersQueue::TConverterFactoryPtr& converterFactory,
                                      NPersQueue::TTopicConverterPtr& topicConverter,
@@ -187,7 +179,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE_WITH_SENDER(HandleReserveBytesRequest)
 #undef DESCRIBE_HANDLE_WITH_SENDER
 
-    bool ChangingState() const { return !TabletStateRequests.empty(); }
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
@@ -212,7 +203,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
 
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }
@@ -253,19 +244,12 @@ private:
     TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
-    TSet<TChangeNotification> ChangeConfigNotification;
-    NKikimrPQ::TPQTabletConfig NewConfig;
-    bool NewConfigShouldBeApplied;
-    size_t ChangePartitionConfigInflight = 0;
-
     TString TopicName;
     TString TopicPath;
     NPersQueue::TConverterFactoryPtr TopicConverterFactory;
     NPersQueue::TTopicConverterPtr TopicConverter;
-    bool IsLocalDC = false;
     TString DCId;
     bool IsServerless = false;
-    TVector<NScheme::TTypeInfo> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
 
     NKikimrPQ::ETabletState TabletState;
@@ -279,7 +263,6 @@ private:
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
-    TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
     using TMLPRequest = std::variant<
         TEvPQ::TEvMLPReadRequest::TPtr,
@@ -297,7 +280,6 @@ public:
         TActorId PartActor;
         TString Owner;
         ui32 ServerActors = 0;
-        TString ClientId;
         TString SessionId;
         ui64 PartitionSessionId = 0;
         TPipeInfo() = default;
@@ -333,11 +315,7 @@ private:
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
-    bool DeleteTxsContainsKafkaTxs = false;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
-    TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
-    TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
-    TMaybe<NKikimrPQ::TPartitions> PartitionsDataConfigTx;
     /**
     Requests are placed in this queue when there is a GetOwnership request with writeId that is being deleted.
     In kafka transactions (kafka api prior to 4.0.0 version) all transactional writes in same session will have
@@ -381,8 +359,6 @@ private:
                          NKikimrClient::TKeyValueRequest& request);
     void ProcessDeleteTxs(const TActorContext& ctx,
                           NKikimrClient::TKeyValueRequest& request);
-    void ProcessConfigTx(const TActorContext& ctx,
-                         TEvKeyValue::TEvRequest* request);
     void AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& request);
 
     void ScheduleProposeTransactionResult(const TDistributedTransaction& tx);
@@ -457,33 +433,23 @@ private:
                              NPersQueue::TTopicConverterPtr topicConverter,
                              const TActorContext& ctx);
     void CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& config,
-                                 const NKikimrPQ::TPQTabletConfig::TPartition& partition,
                                  NPersQueue::TTopicConverterPtr topicConverter,
                                  const TPartitionId& partitionId,
                                  bool newPartition,
                                  const TActorContext& ctx);
     void EnsurePartitionsAreNotDeleted(const NKikimrPQ::TPQTabletConfig& config) const;
 
-    void BeginWriteConfig(const NKikimrPQ::TPQTabletConfig& cfg,
-                          const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
-                          const TActorContext& ctx);
-    void EndWriteConfig(const NKikimrClient::TResponse& resp,
-                        const TActorContext& ctx);
     void AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
                            const NKikimrPQ::TPQTabletConfig& cfg,
                            const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
                            const NKikimrPQ::TPartitions& partitionsData,
                            const TActorContext& ctx);
 
-    void ClearNewConfig();
-
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
                     std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                     const TActorContext& ctx);
 
-    void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
-                          THashMap<ui32, TVector<TTransaction>>& partitionTxs);
     void TryStartTransaction(const TActorContext& ctx);
     void OnInitComplete(const TActorContext& ctx);
 
@@ -572,8 +538,6 @@ private:
                                            const NKikimrClient::TPersQueuePartitionRequest& req,
                                            const TActorContext& ctx);
 
-    void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
-
     //
     // list of supporive partitions created before writing
     //
@@ -650,8 +614,6 @@ private:
     void BeginDeleteTransaction(const TActorContext& ctx,
                                 TDistributedTransaction& tx,
                                 NKikimrPQ::TTransaction::EState state);
-
-    void ResendSplitMergeRequests(const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx);
 

@@ -25,7 +25,6 @@ protected:
                             const TMaybe<TString>& value, TExprContext& ctx);
     virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx);
 
-protected:
     // FIXME switch to an accessor
     TSettingDispatcher::TPtr GetDispatcher() const;
 

@@ -61,7 +61,7 @@ TCommonClientSettings GetDsClientOptions(const TString& database, const TPqClust
 } // anonymous namespace
 
 TPqSession::TPqSession(const TString& sessionId, const TString& username, const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-    const TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     IPqLocalClientFactory::TPtr localTopicClientFactory)
     : SessionId(sessionId)
     , UserName(username)
@@ -80,7 +80,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
 
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint");
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -115,7 +115,7 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 
     YQL_ENSURE(config->GetEndpoint(), "Can't get list topics for " << cluster << ": no endpoint");
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -154,7 +154,15 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& requestedDatabase, const TString& requestedPath, const TString& token) {
     const auto* config = ClusterConfigs->FindPtr(cluster);
     if (!config) {
-        ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        // For local (non-federated) topics the cluster name is empty.
+        // If a LocalTopicClientFactory is available, use an empty cluster config
+        // which routes through the local factory path below.
+        if (cluster.empty() && LocalTopicClientFactory) {
+            static const TPqClusterConfig defaultLocalConfig;
+            config = &defaultLocalConfig;
+        } else {
+            ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        }
     }
 
     TString database = requestedDatabase;
@@ -168,10 +176,10 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         path = requestedPath.substr(pos + 1);
     }
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         NYdb::NTopic::TDescribeTopicSettings settings;
-        settings.IncludeStats(true);
         return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
             .Apply([path](const TAsyncDescribeTopicResult& f) {
                 IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
@@ -184,13 +192,11 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 try {
                     const auto& response = f.GetValue();
                     if (response.IsSuccess()) {
-                        info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
-                        const auto& partitions = response.GetTopicDescription().GetPartitions();
-                        for (const auto& partitionInfo : partitions) {
-                            if (!partitionInfo.GetPartitionStats()) {
-                                continue;
-                            }
-                            info.MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
+                        const auto& topicDescription = response.GetTopicDescription();
+                        info.PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                        info.Consumers.reserve(topicDescription.GetConsumers().size());
+                        for (const auto& consumer : topicDescription.GetConsumers()) {
+                            info.Consumers.emplace(consumer.GetConsumerName());
                         }
                     } else {
                         setError(response.GetIssues().ToString());
@@ -266,7 +272,12 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                                 ex << describeTopicResult.GetIssues().ToString();
                                 continue;
                             }
-                            results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+                            const auto& topicDescription = describeTopicResult.GetTopicDescription();
+                            results[i].PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                            results[i].Consumers.reserve(topicDescription.GetConsumers().size());
+                            for (const auto& consumer : topicDescription.GetConsumers()) {
+                                results[i].Consumers.emplace(consumer.GetConsumerName());
+                            }
                             gotAnyTopic = true;
                         } catch (...) {
                             addErrorCluster();

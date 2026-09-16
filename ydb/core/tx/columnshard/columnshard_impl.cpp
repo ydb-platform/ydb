@@ -34,7 +34,10 @@
 #include "transactions/operators/ev_write/sync.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -51,6 +54,8 @@
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
@@ -93,6 +98,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
     , TablesManager(StoragesManager, nullptr, Counters.GetPortionIndexCounters(), info->TabletID)
+    , ColumnShardConfig(std::make_unique<NKikimrConfig::TColumnShardConfig>())
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
@@ -104,6 +110,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
 {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
 }
+
+TColumnShard::~TColumnShard() = default;
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
     Die(ctx);
@@ -188,7 +196,7 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
         // the same snapshot is used by bulk upsert and aborts
         // aborts are fine, but be careful with bulk upsert,
         // it must correctly break conflicting serializable txs
-        return GetCurrentSnapshotForInternalModification();
+        return GetOutdatedSnapshot();
     }
 }
 
@@ -217,8 +225,14 @@ ui64 TColumnShard::GetOutdatedStep() const {
 }
 
 void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {
-    const auto minSnapshot = guard.GetMinSnapshotForNewReads();
-    Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minSnapshot.GetPlanStep()));
+    const ui64 minNewScanStep = guard.GetMinSnapshotForNewReads().GetPlanStep();
+    // If SnapshotRegistry is not ready yet, we wanna publish 0 instead of (now - 0) - too big value, breaks charts
+    ui64 maxNewScanAgeSeconds = 0;
+    if (minNewScanStep != 0) {
+        ui64 nowStep = GetOutdatedStep();
+        maxNewScanAgeSeconds = nowStep > minNewScanStep ? (nowStep - minNewScanStep) / 1000 : 0;
+    }
+    Counters.GetRequestsTracingCounters()->OnMaxNewScanAgeSeconds(maxNewScanAgeSeconds);
 }
 
 NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
@@ -374,6 +388,7 @@ void TColumnShard::RunEnsureTable(
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunAlterTable(
@@ -409,6 +424,7 @@ void TColumnShard::RunAlterTable(
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunDropTable(
@@ -477,6 +493,7 @@ void TColumnShard::RunAlterStore(
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -498,8 +515,9 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
 
     SetupCompaction({});
     SetupCleanupSchemas();
-    SetupCleanupPortions();
-    SetupCleanupTables();
+    auto snapshotHolders = GetSnapshotHolders();
+    SetupCleanupPortions(*snapshotHolders);
+    SetupCleanupTables(*snapshotHolders);
     SetupMetadata();
     SetupTtl();
     SetupGC();
@@ -919,7 +937,7 @@ bool TColumnShard::SetupTtl() {
     return true;
 }
 
-void TColumnShard::SetupCleanupPortions() {
+void TColumnShard::SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders) {
     Counters.GetCSCounters().OnSetupCleanup();
     if (!AppDataVerified().ColumnShardConfig.GetCleanupEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Cleanup)) {
@@ -937,7 +955,7 @@ void TColumnShard::SetupCleanupPortions() {
     }
 
     const auto& pathsToDrop = TablesManager.GetPathsToDrop();
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(*GetSnapshotHolders(), pathsToDrop, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
     if (!changes) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},
@@ -959,7 +977,7 @@ void TColumnShard::SetupCleanupPortions() {
             GetLastCompletedTx(), TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
-void TColumnShard::SetupCleanupTables() {
+void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders) {
     Counters.GetCSCounters().OnSetupCleanup();
     if (BackgroundController.IsCleanupTablesActive()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -968,12 +986,19 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
-    THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
-        pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
+    THashSet<TInternalPathId> pathIdsToCleanup;
+    for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
+        for (const TInternalPathId pathId : pathIds) {
+            if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
+                continue;
+            }
+            pathIdsToCleanup.insert(pathId);
+        }
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsToCleanup, DataLocksManager);
     if (!changes) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
             {"background", "cleanup"},
@@ -1251,9 +1276,18 @@ void TColumnShard::Die(const TActorContext& ctx) {
     IActor::Die(ctx);
 }
 
-void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            YDB_LOG_WARN("",
+                {"event", "failed_to_deliver_config_subscription_request"});
+            ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryConfigSubscription());
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            YDB_LOG_ERROR("",
+                {"event", "failed_to_deliver_config_notification_response"});
+            break;
         case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:
@@ -1269,13 +1303,14 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
     auto& txController = GetProgressTxController();
     const ui64 txId = ev->Get()->Record.GetTxId();
     const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
+    const ui64 seqNo = ev->Get()->Record.GetSeqno();
 
     auto op = txController.GetTxOperatorAs<TEvWriteCommitSyncTransactionOperator>(txId, ETxOperatorStatus::Any, /*optional*/ true);
     if (!op) {
         YDB_LOG_DEBUG("",
             {"event", "read_set_ignored"},
             {"proto", ev->Get()->Record.DebugString()});
-        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
+        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest, seqNo);
         return;
     }
     YDB_LOG_DEBUG("",
@@ -1285,7 +1320,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
 
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
-    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, seqNo, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
     Execute(tx.release(), ctx);
 }
 
@@ -1862,6 +1897,84 @@ void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<
     OnTieringModified(pathId);
 }
 
+STFUNC(TColumnShard::StateWork) {
+    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
+        "self_id", SelfId())("ev", ev->GetTypeName());
+    TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvTxProcessing::TEvReadSet, Handle);
+        HFunc(TEvTxProcessing::TEvReadSetAck, Handle);
+
+        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
+        HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
+        HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
+        HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+        HFunc(TEvDataShard::TEvKqpScan, Handle);
+        HFunc(TEvColumnShard::TEvInternalScan, Handle);
+        HFunc(TEvTxProcessing::TEvPlanStep, Handle);
+        HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+        HFunc(TEvPrivate::TEvStartCompaction, Handle);
+        HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
+
+        HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+        HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
+        HFunc(TEvPrivate::TEvWriteIndex, Handle);
+        HFunc(TEvPrivate::TEvScanStats, Handle);
+        HFunc(TEvPrivate::TEvReadFinished, Handle);
+        HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
+        HFunc(NActors::TEvents::TEvWakeup, Handle);
+        HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
+        hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
+        hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
+        HFunc(NEvents::TDataEvents::TEvWrite, Handle);
+        HFunc(TEvPrivate::TEvWriteDraft, Handle);
+        HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
+        HFunc(TEvPrivate::TEvTieringModified, Handle);
+
+        HFunc(NActors::TEvents::TEvUndelivered, Handle);
+
+        HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
+        HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+        HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
+
+        HFunc(NOlap::NDataSharing::NEvents::TEvProposeFromInitiator, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvStartToSource, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvSendDataFromSource, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvAckDataToSource, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
+        HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
+        HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
+        HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
+        HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
+        HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
+        HFunc(TEvDataShard::TEvCancelBackup, Handle);
+        HFunc(TEvDataShard::TEvCancelRestore, Handle);
+        HFunc(TEvDataShard::TEvCompactTable, Handle);
+
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
+
+        default:
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
+                                                        << " event: " << ev->ToString());
+            }
+            break;
+    }
+}
+
 void TColumnShard::Enqueue(STFUNC_SIG) {
     const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
         "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
@@ -1872,6 +1985,10 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        hFunc(TEvPrivate::TEvRetryConfigSubscription, Handle);
+        HFunc(NActors::TEvents::TEvUndelivered, Handle);
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "unexpected event in enqueue"});

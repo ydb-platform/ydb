@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
@@ -26,11 +27,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
 
-namespace NWorkload {
+namespace NWorkloadManager {
 class IQueryClassifier;
-} // namespace NWorkload
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -49,6 +52,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -68,7 +74,6 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
-        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
@@ -126,6 +131,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
         QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
@@ -149,9 +155,10 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
-    std::shared_ptr<NWorkload::IQueryClassifier> QueryClassifier;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
+    TString QueryTextForLogging;
     TKqpCompileResult::TConstPtr CompileResult;
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
@@ -161,7 +168,6 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -191,6 +197,8 @@ public:
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -653,6 +661,10 @@ public:
         return cStats;
     }
 
+    bool GetCollectAffectedRows() const {
+        return RequestEv->GetCollectAffectedRows();
+    }
+
     bool ReportStats() const {
         return GetStatsMode() != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE
             // always report stats for scripting subrequests
@@ -712,5 +724,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

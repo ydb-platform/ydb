@@ -541,7 +541,6 @@ private:
 public:
     using TCustomListValue::TCustomListValue;
 
-public:
     void SetValue(NKikimr::NUdf::TUnboxedValue&& value) {
         Value_ = std::move(value);
         HasValue_ = true;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -31,8 +32,10 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 
 void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output);
 
-void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions> *permissions);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to);
 
 struct TACLAttrs {
     ui32 AccessMask;

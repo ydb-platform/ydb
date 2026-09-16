@@ -12,6 +12,8 @@ namespace NKqp {
 using namespace NYql;
 
 class IOperator;
+class TOpAggregate;
+class TExpression;
 
 const TInfoUnitSet& EmptyInfoUnitSet();
 bool ContainsInfoUnit(const TVector<TInfoUnit>& units, const TInfoUnit& unit);
@@ -23,9 +25,12 @@ TInfoUnitSet MakeInfoUnitSet(const TVector<TInfoUnit>& ius);
 bool IsGeneratedIgnoreIU(const TInfoUnit& iu);
 TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props);
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op);
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props);
+bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx);
 
 bool JoinOutputsLeft(const TString& joinKind);
 bool JoinOutputsRight(const TString& joinKind);
+TString GetValidJoinKind(const TString& joinKind);
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
@@ -33,6 +38,8 @@ TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, const TInfoUnitSet& r
 TVector<TInfoUnit> IUSetUnion(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
 
 bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
+
+bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen);
 
 template <class T> void AddUnique(TVector<T>& toAdd, TVector<T>& target) {
     for (const auto & e : toAdd) {

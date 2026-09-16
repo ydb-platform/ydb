@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import decimal
+import pathlib
 import pickle
 import re
 import typing as t
@@ -44,6 +45,7 @@ from traitlets import (
     Long,
     MetaHasTraits,
     ObjectName,
+    Path,
     Set,
     TCPAddress,
     This,
@@ -62,6 +64,7 @@ from traitlets import (
     traitlets,
     validate,
 )
+from traitlets.tests.test_traitlets import TraitTestBase
 from traitlets.utils import cast_unicode
 
 from ._warnings import expected_warnings
@@ -69,7 +72,7 @@ from ._warnings import expected_warnings
 
 def change_dict(*ordered_values):
     change_names = ("name", "old", "new", "owner", "type")
-    return dict(zip(change_names, ordered_values))
+    return dict(zip(change_names, ordered_values, strict=True))
 
 
 # -----------------------------------------------------------------------------
@@ -364,6 +367,18 @@ class TestTraitType(TestCase):
             class C(HasTraits):
                 t = Dict(Int)
 
+    def test_long_deprecated_aliases(self):
+        for cls, replacement in [(Long, "Integer"), (CLong, "CInt")]:
+            with expected_warnings([f"`{cls.__name__}` trait is deprecated"]):
+                trait = cls(3)
+            # deprecated aliases still behave like their replacement
+            assert isinstance(trait, Integer)
+
+            class C(HasTraits):
+                x = trait
+
+            assert C().x == 3
+
 
 class TestHasDescriptorsMeta(TestCase):
     def test_metaclass(self):
@@ -419,7 +434,7 @@ class TestHasDescriptors(TestCase):
             fd = FooDescriptor()
 
             def setup_instance(self, *args, **kwargs):
-                self.foo = kwargs.get("foo", None)
+                self.foo = kwargs.get("foo")
                 super().setup_instance(*args, **kwargs)
 
         hfd = HasFooDescriptors(foo="bar")
@@ -821,6 +836,44 @@ class TestHasTraits(TestCase):
         self.assertEqual(sorted(A.class_trait_names()), ["f", "i"])
         self.assertTrue(a.has_trait("f"))
         self.assertFalse(a.has_trait("g"))
+
+    def test_trait_events(self):
+        class A(HasTraits):
+            i = Int()
+
+            @observe("i")
+            def _on_i(self, change):
+                pass
+
+        class B(A):
+            f = Float()
+
+            @observe("f")
+            def _on_f(self, change):
+                pass
+
+        self.assertEqual(sorted(B.trait_events()), ["_on_f", "_on_i"])
+        self.assertEqual(list(B.trait_events("f")), ["_on_f"])
+        self.assertEqual(list(B.trait_events("i")), ["_on_i"])
+
+    def test_class_own_trait_events(self):
+        class A(HasTraits):
+            i = Int()
+
+            @observe("i")
+            def _on_i(self, change):
+                pass
+
+        class B(A):
+            f = Float()
+
+            @observe("f")
+            def _on_f(self, change):
+                pass
+
+        self.assertEqual(list(A.class_own_trait_events("i")), ["_on_i"])
+        self.assertEqual(list(B.class_own_trait_events("f")), ["_on_f"])
+        self.assertEqual(list(B.class_own_trait_events("i")), [])
 
     def test_trait_has_value(self):
         class A(HasTraits):
@@ -1235,59 +1288,6 @@ class TestThis(TestCase):
             tree.leaves = [1, 2]
 
 
-class TraitTestBase(TestCase):
-    """A best testing class for basic trait types."""
-
-    def assign(self, value):
-        self.obj.value = value  # type:ignore
-
-    def coerce(self, value):
-        return value
-
-    def test_good_values(self):
-        if hasattr(self, "_good_values"):
-            for value in self._good_values:
-                self.assign(value)
-                self.assertEqual(self.obj.value, self.coerce(value))  # type:ignore
-
-    def test_bad_values(self):
-        if hasattr(self, "_bad_values"):
-            for value in self._bad_values:
-                try:
-                    self.assertRaises(TraitError, self.assign, value)
-                except AssertionError:
-                    assert False, value  # noqa: PT015
-
-    def test_default_value(self):
-        if hasattr(self, "_default_value"):
-            self.assertEqual(self._default_value, self.obj.value)  # type:ignore
-
-    def test_allow_none(self):
-        if (
-            hasattr(self, "_bad_values")
-            and hasattr(self, "_good_values")
-            and None in self._bad_values
-        ):
-            trait = self.obj.traits()["value"]  # type:ignore
-            try:
-                trait.allow_none = True
-                self._bad_values.remove(None)
-                # skip coerce. Allow None casts None to None.
-                self.assign(None)
-                self.assertEqual(self.obj.value, None)  # type:ignore
-                self.test_good_values()
-                self.test_bad_values()
-            finally:
-                # tear down
-                trait.allow_none = False
-                self._bad_values.append(None)
-
-    def tearDown(self):
-        # restore default value after tests, if set
-        if hasattr(self, "_default_value"):
-            self.obj.value = self._default_value  # type:ignore
-
-
 class AnyTrait(HasTraits):
     value = Any()
 
@@ -1643,6 +1643,20 @@ class TestTCPAddress(TraitTestBase):
     _bad_values = [(0, 0), ("localhost", 10.0), ("localhost", -1), None]
 
 
+class PathTrait(HasTraits):
+    value = Path()
+
+
+class TestPath(TraitTestBase):
+    obj = PathTrait()
+
+    _good_values = ["foo", "foo/bar", pathlib.Path("foo"), pathlib.PurePath("foo")]
+    _bad_values = [0, 10.0, None, ["foo"]]
+
+    def coerce(self, value):
+        return pathlib.Path(value)
+
+
 class ListTrait(HasTraits):
     value = List(Int())
 
@@ -1650,7 +1664,7 @@ class ListTrait(HasTraits):
 class TestList(TraitTestBase):
     obj = ListTrait()
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [[], [1], list(range(10)), (1, 2)]
     _bad_values = [10, [1, "a"], "a"]
 
@@ -1667,7 +1681,7 @@ class SetTrait(HasTraits):
 class TestSet(TraitTestBase):
     obj = SetTrait()
 
-    _default_value: t.Set[str] = set()
+    _default_value: set[str] = set()
     _good_values = [{"a", "b"}, "ab"]
     _bad_values = [1]
 
@@ -1689,7 +1703,7 @@ class NoneInstanceListTrait(HasTraits):
 class TestNoneInstanceList(TraitTestBase):
     obj = NoneInstanceListTrait()
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [[Foo(), Foo()], []]
     _bad_values = [[None], [Foo(), None]]
 
@@ -1705,7 +1719,7 @@ class TestInstanceList(TraitTestBase):
         """Test that the instance klass is properly assigned."""
         self.assertIs(self.obj.traits()["value"]._trait.klass, Foo)
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [[Foo(), Foo()], []]
     _bad_values = [
         [
@@ -1725,7 +1739,7 @@ class UnionListTrait(HasTraits):
 class TestUnionListTrait(TraitTestBase):
     obj = UnionListTrait()
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [[True, 1], [False, True]]
     _bad_values = [[1, "True"], False]
 
@@ -1881,7 +1895,7 @@ class DictTrait(HasTraits):
 
 
 def test_dict_assignment():
-    d: t.Dict[str, int] = {}
+    d: dict[str, int] = {}
     c = DictTrait()
     c.value = d
     d["a"] = 5
@@ -2436,7 +2450,7 @@ def test_notification_order():
     obj = OrderTraits()
     assert obj.notified == {}
     obj = OrderTraits(**d)
-    notifications = {c: d for c in "abcdefghijkl"}
+    notifications = dict.fromkeys("abcdefghijkl", d)
     assert obj.notified == notifications
 
 
@@ -2504,7 +2518,7 @@ class TestForwardDeclaredInstanceList(TraitTestBase):
         """Test that the instance klass is properly assigned."""
         self.assertIs(self.obj.traits()["value"]._trait.klass, ForwardDeclaredBar)
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [
         [ForwardDeclaredBar(), ForwardDeclaredBarSub()],
         [],
@@ -2527,7 +2541,7 @@ class TestForwardDeclaredTypeList(TraitTestBase):
         """Test that the instance klass is properly assigned."""
         self.assertIs(self.obj.traits()["value"]._trait.klass, ForwardDeclaredBar)
 
-    _default_value: t.List[t.Any] = []
+    _default_value: list[t.Any] = []
     _good_values = [
         [ForwardDeclaredBar, ForwardDeclaredBarSub],
         [],

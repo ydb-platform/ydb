@@ -19,8 +19,7 @@
 #include <arrow/scalar.h>
 #include <arrow/array/builder_primitive.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -354,7 +353,7 @@ public:
         , Reader_(MakeBlockReader(TTypeInfoHelper(), type))
         , Converter_(MakeBlockItemConverter(TTypeInfoHelper(), type, ctx.Builder->GetPgBuilder()))
         , Compare_(TBlockTypeHelper().MakeComparator(type))
-        , Packer_(false, type)
+        , Packer_(/*stable=*/false, type)
     {
     }
 
@@ -787,7 +786,7 @@ private:
 };
 
 template <bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const arrow::Datum& datum, ui64 row) {
+void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const arrow::Datum& datum, ui64 row) {
     using TInScalar = typename TPrimitiveDataType<TIn>::TScalarResult;
     if constexpr (IsScalar) {
         Y_ENSURE(datum.is_scalar());
@@ -1125,5 +1124,4 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockMaxFactory() {
     return std::make_unique<TBlockMinMaxFactory<false>>();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

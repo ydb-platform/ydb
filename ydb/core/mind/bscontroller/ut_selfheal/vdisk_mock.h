@@ -4,6 +4,8 @@
 
 #include "events.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 class TVDisk : TNonCopyable {
     TVDiskID VDiskId;
     const ui32 NodeId;

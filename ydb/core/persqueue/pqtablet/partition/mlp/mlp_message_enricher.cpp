@@ -4,6 +4,8 @@
 
 #include <util/generic/algorithm.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
@@ -46,6 +48,7 @@ void TMessageEnricherActor::Bootstrap() {
 
 void TMessageEnricherActor::PassAway() {
     LOG_D("PassAway");
+
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
         if (!PendingResponses[i].Sent) {
             const TReadResult& reply = Replies[i];
@@ -88,27 +91,33 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        LOG_W(
+            "Fetch messages",
+            {"failed", ev->Get()->Record.DebugString()}
+        );
         return PassAway();
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()) {
+    size_t& entryIndex = NextEntryIdx;
+
+    // Empty / missing read result: advance past the current requested offset and continue.
+    // Do not re-issue the same fetch — that would loop forever.
+    if (!response.GetPartitionResponse().HasCmdReadResult()
+            || response.GetPartitionResponse().GetCmdReadResult().GetResult().empty()) {
+        if (entryIndex < SortedEntries.size()) {
+            ++entryIndex;
+        }
+        if (RepliesSent == PendingResponses.size()) {
+            return PassAway();
+        }
         ProcessQueue();
         return;
     }
 
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
-    size_t& entryIndex = NextEntryIdx;
     int resultIndex = 0;
     const int resultsSize = results.size();
-
-    if (resultsSize <= 0) {
-        ++entryIndex;
-        ProcessQueue();
-        return;
-    }
-
     const ui64 maxReturnedOffset = results[resultsSize - 1].GetOffset();
 
     // Two-pointer: both SortedEntries and results are sorted by offset
@@ -189,7 +198,10 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            LOG_E(
+                "Unexpected",
+                {"event", EventStr("StateWork", ev)}
+            );
     }
 }
 

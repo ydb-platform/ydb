@@ -6,6 +6,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -255,6 +257,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
         .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+        .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+        .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
     };
 
 
@@ -365,39 +369,29 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
 }
 
 class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TConfigureParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -409,8 +403,9 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard",
+                {"datashardId", datashardId},
+            );
 
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
@@ -424,31 +419,25 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TPropose"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " triggers early"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -456,13 +445,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", operationId: " << OperationId
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -519,11 +505,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -543,6 +525,9 @@ public:
 
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
+
+public:
+    virtual const char* Name() const override final { return "TAlterTable"; }
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -608,12 +593,10 @@ public:
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", pathId},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -784,11 +767,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -877,6 +860,58 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 }
 
+// A table's detailed metrics level covers its indexes: fan the setting out to every live impl
+// table under the table's index children. Both Configured and NotConfigured propagate - clearing
+// the base table's level must clear the copies too, or an index stays pinned at a stale level.
+static void AppendIndexImplTableMetricsAlters(TVector<ISubOperation::TPtr>& result, TOperationId id,
+        const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (!alter.HasDetailedMetricsSettings()
+        || !AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics())
+    {
+        return;
+    }
+
+    for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (child->Dropped() || !child->IsTableIndex()) {
+            continue;
+        }
+
+        const TPath indexPath = TPath::Init(childPathId, context.SS);
+        for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+            const TPath implTablePath = TPath::Init(implTablePathId, context.SS);
+            const auto checks = implTablePath.Check();
+            checks
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsTable()
+                .IsInsideTableIndexPath();
+            // An impl table busy under another operation is skipped rather than failing the
+            // whole alter; it keeps its previous level until the base table's
+            // DetailedMetricsSettings is set again.
+            if (!checks) {
+                continue;
+            }
+
+            auto scheme = TransactionTemplate(indexPath.PathString(),
+                NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+            // Internal so the sub-operation may alter a private impl table.
+            scheme.SetInternal(true);
+
+            auto& implTableAlter = *scheme.MutableAlterTable();
+            implTableAlter.SetName(implTableName);
+            *implTableAlter.MutableDetailedMetricsSettings() = alter.GetDetailedMetricsSettings();
+
+            result.push_back(CreateAlterTable(NextPartId(id, result), scheme));
+        }
+    }
+}
+
 // Collects the names of the table's live local prefix bloom filter index children.
 static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperationContext& context) {
     TVector<TString> names;
@@ -917,6 +952,7 @@ static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilter
     for (const auto& indexName : bloomIndexNames) {
         AddDropIndex(result, id, path.Child(indexName));
     }
+    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
     return result;
 }
 
@@ -990,6 +1026,7 @@ static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
         result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
     }
 
+    AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
     return result;
 }
 
@@ -1034,6 +1071,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         TVector<ISubOperation::TPtr> result;
         result.push_back(CreateAlterTable(NextPartId(id, result), tx));
         AppendOwnedSequenceDrops(result, id, tx, path, context);
+        AppendIndexImplTableMetricsAlters(result, id, tx, path, context);
         return result;
     }
 
@@ -1086,3 +1124,5 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

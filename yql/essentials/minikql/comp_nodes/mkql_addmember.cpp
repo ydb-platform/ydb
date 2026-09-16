@@ -4,13 +4,12 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TAddMemberWrapper: public TMutableCodegeneratorFallbackNode<TAddMemberWrapper> {
-    typedef TMutableCodegeneratorFallbackNode<TAddMemberWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorFallbackNode<TAddMemberWrapper>;
 
 public:
     TAddMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, IComputationNode* member, ui32 index,
@@ -55,7 +54,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         if (Representations_.size() > CodegenArraysFallbackLimit) {
             return TBaseComputation::DoGenerateGetValue(ctx, block);
         }
@@ -165,5 +164,4 @@ IComputationNode* AddMember(const TComputationNodeFactoryContext& ctx, TRuntimeN
     return new TAddMemberWrapper(ctx.Mutables, structObj, member, index, std::move(representations));
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

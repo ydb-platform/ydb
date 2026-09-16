@@ -70,6 +70,10 @@ bool TBootstrapConfigValidator::CheckTablets(const NKikimrConfig::TAppConfig &co
         NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER,
     };
 
+    if (config.HasNbsConfig() && config.GetNbsConfig().GetEnabled()) {
+        importantTablets.insert(NKikimrConfig::TBootstrap::DBS_CONTROLLER);
+    }
+
     auto &cfg = config.GetBootstrapConfig();
     auto &nsCfg = config.GetNameserviceConfig();
     THashSet<ui32> nodeIds;

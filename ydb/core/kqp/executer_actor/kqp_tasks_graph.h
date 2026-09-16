@@ -77,6 +77,11 @@ struct TColumnShardHashV1Params {
 struct TStageInfoMeta {
     const IKqpGateway::TPhysicalTxData& Tx;
 
+    // The physical plan protobuf numbers stages within each transaction independently, while TStageId::StageId is
+    // unique across the whole tasks graph. This is the StageId of the first stage of this stage's transaction, so
+    // `StageId - StageIdBase` is the index of the stage in Tx.Body.
+    ui64 StageIdBase = 0;
+
     enum ETasksType : ui8 {
         UNKNOWN_TASKS = 0,
         SOURCE_TASKS,
@@ -154,9 +159,16 @@ struct TStageInfoMeta {
         return txBody->GetStages(idx);
     }
 
+    // Index of the stage in Tx.Body, see StageIdBase.
+    template <class TStageIdExt>
+    size_t GetStageIdx(const TStageIdExt& stageId) const {
+        YQL_ENSURE(stageId.StageId >= StageIdBase);
+        return stageId.StageId - StageIdBase;
+    }
+
     template <class TStageIdExt>
     const NKqpProto::TKqpPhyStage& GetStage(const TStageIdExt& stageId) const {
-        return GetStage(stageId.StageId);
+        return GetStage(GetStageIdx(stageId));
     }
 
     bool HasReads() const {
@@ -221,6 +233,8 @@ struct TGraphMeta {
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
     Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    bool CollectAffectedRows = false;
+    bool AllowCheckpoints = false;
 
     // TODO: stuff about shards on nodes should be private or protected.
     using TShardToNodeMap = TMap<ui64 /* shardId */, ui64 /* nodeId */>;
@@ -315,6 +329,7 @@ struct TTaskInputMeta {
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
+    NKikimrTxDataShard::TKqpVectorSearchSettings* VectorSearchSettings = nullptr;
     // Fully-qualified table path for TLI filtering (vector resolve only;
     // stream lookup reads path from its proto settings directly).
     TString TablePath;
@@ -414,6 +429,20 @@ public:
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
+    // The physical plan protobuf numbers stages within each transaction independently, while TStageId::StageId is
+    // unique across the whole graph (see TStageInfoMeta::StageIdBase). Converts a transaction-local stage index
+    // (NKqpProto::TKqpPhyConnection::StageIndex and the like) into the graph-wide stage id.
+    NYql::NDq::TStageId MakeStageId(ui64 txIdx, ui64 stageIdx) const {
+        return NYql::NDq::TStageId(txIdx, StageIdBases.at(txIdx) + stageIdx);
+    }
+
+    // StageId of the first stage of each transaction, indexed by transaction index.
+    const TVector<ui64>& GetStageIdBases() const {
+        return StageIdBases;
+    }
+
+    void FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
+
 private:
     void FillStages();
 
@@ -460,6 +489,9 @@ private:
     void BuildVectorResolveChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex,
         const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex,
+        const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
         ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
@@ -489,6 +521,7 @@ private:
 
 private:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
+    TVector<ui64> StageIdBases; // filled by FillStages()
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TKqpRequestCounters::TPtr Counters;

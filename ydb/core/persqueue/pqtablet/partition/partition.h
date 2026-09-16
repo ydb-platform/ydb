@@ -299,12 +299,13 @@ private:
     void LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx);
     void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx);
 
-    void OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx);
+    void OnReadRequestFinished(ui64 cookie, ui64 answerSize, ui64 consumedMessages, const TString& consumer, const TActorContext& ctx);
 
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -538,8 +539,8 @@ private:
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
-    const TString& GetLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const;
+    const TStructuredMessage& GetLogPrefix() const override;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -623,7 +624,8 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        LOG_T("Handle event",
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -670,7 +672,8 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+                LOG_E("Unexpected",
+                    {"event", EventStr("StateInit", ev)});
             }
             break;
         };
@@ -680,7 +683,8 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        LOG_T("Handle event",
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -752,7 +756,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            LOG_E("Unexpected",
+                {"event", EventStr("StateIdle", ev)});
             break;
         };
     }
@@ -864,9 +869,9 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
-    mutable TMaybe<TString> IdleLogPrefix;
-    mutable TMaybe<TString> InitLogPrefix;
-    mutable TMaybe<TString> UnknownLogPrefix;
+    mutable TMaybe<TStructuredMessage> IdleLogPrefix;
+    mutable TMaybe<TStructuredMessage> InitLogPrefix;
+    mutable TMaybe<TStructuredMessage> UnknownLogPrefix;
 
     struct TAffectedSourceIdsAndConsumers {
         TVector<TString> TxWriteSourcesIds;
@@ -1071,6 +1076,7 @@ private:
 
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgWriteBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadMessages;
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgQuotaBytes;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgQuotaMessages;
 
@@ -1167,6 +1173,8 @@ private:
     void ProcessPendingEvents(const TActorContext& ctx);
 
     TRowVersion LastEmittedHeartbeat;
+    TRowVersion LastEmittedSchemaChange;
+    TMessageQueue PendingSchemaChangeResponses;
 
     const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
 
@@ -1232,6 +1240,7 @@ private:
                         const TActorContext& ctx);
 
     void TryRunCompaction(bool force = false);
+    void AbortBlobsCompaction(const TString& reason, const TActorContext& ctx);
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
     ui64 NextReadCookie();

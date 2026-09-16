@@ -4,6 +4,9 @@
 #include "scheme.h"
 #include "types.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
 namespace NKikimr::NBsController {
 
     template<typename Traits>

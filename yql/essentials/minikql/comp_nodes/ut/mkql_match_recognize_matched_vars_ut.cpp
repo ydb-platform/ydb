@@ -10,19 +10,19 @@ public:
     using iterator = TUnboxedValueVector::const_iterator;
 
     [[nodiscard]] iterator Begin() const noexcept {
-        return Rows.begin();
+        return Rows_.begin();
     }
 
     [[nodiscard]] iterator End() const noexcept {
-        return Rows.end();
+        return Rows_.end();
     }
 
     [[nodiscard]] size_t Size() const noexcept {
-        return Rows.size();
+        return Rows_.size();
     }
 
     [[nodiscard]] bool Empty() const noexcept {
-        return Rows.empty();
+        return Rows_.empty();
     }
 
     [[nodiscard]] bool Contains(size_t i) const noexcept {
@@ -30,7 +30,7 @@ public:
     }
 
     [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
-        return Rows.at(i);
+        return Rows_.at(i);
     }
 
     /// Range that includes starting and ending points
@@ -38,39 +38,39 @@ public:
     class TRange {
     public:
         TRange()
-            : FromIndex(Max())
-            , ToIndex(Max())
+            : FromIndex_(Max())
+            , ToIndex_(Max())
             , NfaIndex_(Max())
         {
         }
 
         explicit TRange(ui64 index)
-            : FromIndex(index)
-            , ToIndex(index)
+            : FromIndex_(index)
+            , ToIndex_(index)
             , NfaIndex_(Max())
         {
         }
 
         TRange(ui64 from, ui64 to)
-            : FromIndex(from)
-            , ToIndex(to)
+            : FromIndex_(from)
+            , ToIndex_(to)
             , NfaIndex_(Max())
         {
-            MKQL_ENSURE(FromIndex <= ToIndex, "Internal logic error");
+            MKQL_ENSURE(FromIndex_ <= ToIndex_, "Internal logic error");
         }
 
         bool IsValid() const {
-            return FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
+            return FromIndex_ != Max<size_t>() && ToIndex_ != Max<size_t>();
         }
 
         size_t From() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return FromIndex;
+            return FromIndex_;
         }
 
         size_t To() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex;
+            return ToIndex_;
         }
 
         [[nodiscard]] size_t NfaIndex() const {
@@ -80,28 +80,28 @@ public:
 
         size_t Size() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex - FromIndex + 1;
+            return ToIndex_ - FromIndex_ + 1;
         }
 
         void Extend() {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            ++ToIndex;
+            ++ToIndex_;
         }
 
     private:
-        size_t FromIndex;
-        size_t ToIndex;
+        size_t FromIndex_;
+        size_t ToIndex_;
         size_t NfaIndex_;
     };
 
     TRange Append(NUdf::TUnboxedValue&& value) {
-        TRange result(Rows.size());
-        Rows.push_back(std::move(value));
+        TRange result(Rows_.size());
+        Rows_.push_back(std::move(value));
         return result;
     }
 
 private:
-    TUnboxedValueVector Rows;
+    TUnboxedValueVector Rows_;
 };
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {

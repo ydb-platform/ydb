@@ -11,7 +11,6 @@ NActors::IActor* CreateFinalizePublicationActor(
     const TString& database,
     ui64 intPublicationId,
     EFinalizePublicationOp op,
-    const TString& userToken,
     const TString& callerSid);
 
 } // namespace NKikimr::NPQ::NDeferredPublish

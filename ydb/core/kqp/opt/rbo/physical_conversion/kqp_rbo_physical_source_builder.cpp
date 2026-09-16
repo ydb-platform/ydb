@@ -1,6 +1,7 @@
 #include "kqp_rbo_physical_source_builder.h"
 
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -34,9 +35,19 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     for (const auto& column : Read->Columns) {
         columns.push_back(Ctx.NewAtom(Pos, column));
     }
+    // Extract ranges.
+    TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
 
     switch (Read->GetTableStorageType()) {
         case NYql::EStorageType::RowStorage: {
+            TKqpReadTableSettings settings;
+            if (Read->SortDir != ESortDir::None) {
+                settings.SetSorting(Read->SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC);
+                if (Read->Limit) {
+                    settings.SetItemsLimit(Read->Limit);
+                }
+            }
+
             // clang-format off
             source = Build<TDqSource>(Ctx, Pos)
                 .DataSource<TCoDataSource>()
@@ -47,8 +58,8 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Columns()
                         .Add(columns)
                     .Build()
-                    .Settings<TCoNameValueTupleList>().Build()
-                    .RangesExpr<TCoVoid>().Build()
+                    .Settings(settings.BuildNode(Ctx, Pos))
+                    .RangesExpr(ranges)
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Build()
             .Done().Ptr();
@@ -74,7 +85,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Args({programArg})
                     .Body(renameMap)
                 .Build()
-                .Settings().Build()
+                .Settings(NYql::NDq::TDqStageSettings::New(StageGUID).BuildNode(Ctx, Pos))
             .Done().Ptr();
             // clang-format on
             break;
@@ -108,7 +119,6 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
-            TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
@@ -139,7 +149,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             break;
         }
         default:
-            Y_ENSURE(false, "Unsupported table source type");
+            Y_ENSURE(false, "Unsupported table source type.");
     }
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);

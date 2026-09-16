@@ -24,6 +24,8 @@
 
 #include <yt/yt/core/ytree/public.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 namespace NYT::NDriver {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -69,7 +71,7 @@ struct TDriverRequest
     std::optional<std::string> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<std::string> LoggingTags;
+    NLogging::TLoggingTagList LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.

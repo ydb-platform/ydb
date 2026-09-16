@@ -178,7 +178,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForBlob(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for blob format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for blob format").With(ex);
     }
 }
 

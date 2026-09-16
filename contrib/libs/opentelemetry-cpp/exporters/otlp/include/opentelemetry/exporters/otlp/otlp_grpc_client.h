@@ -7,6 +7,7 @@
 #include <grpcpp/support/status.h>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -22,8 +23,6 @@
 // clang-format on
 
 #ifdef ENABLE_ASYNC_EXPORT
-#  include <functional>
-
 #  include "opentelemetry/sdk/common/exporter_utils.h"
 #endif /* ENABLE_ASYNC_EXPORT */
 
@@ -151,21 +150,30 @@ public:
       std::unique_ptr<grpc::ClientContext> &&context,
       std::unique_ptr<google::protobuf::Arena> &&arena,
       proto::collector::trace::v1::ExportTraceServiceRequest *request,
-      proto::collector::trace::v1::ExportTraceServiceResponse *response);
+      proto::collector::trace::v1::ExportTraceServiceResponse *response,
+      std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                         proto::collector::trace::v1::ExportTraceServiceResponse *)> &&on_complete =
+          {});
 
   static grpc::Status DelegateExport(
       proto::collector::metrics::v1::MetricsService::StubInterface *stub,
       std::unique_ptr<grpc::ClientContext> &&context,
       std::unique_ptr<google::protobuf::Arena> &&arena,
       proto::collector::metrics::v1::ExportMetricsServiceRequest *request,
-      proto::collector::metrics::v1::ExportMetricsServiceResponse *response);
+      proto::collector::metrics::v1::ExportMetricsServiceResponse *response,
+      std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                         proto::collector::metrics::v1::ExportMetricsServiceResponse *)>
+          &&on_complete = {});
 
   static grpc::Status DelegateExport(
       proto::collector::logs::v1::LogsService::StubInterface *stub,
       std::unique_ptr<grpc::ClientContext> &&context,
       std::unique_ptr<google::protobuf::Arena> &&arena,
       proto::collector::logs::v1::ExportLogsServiceRequest *request,
-      proto::collector::logs::v1::ExportLogsServiceResponse *response);
+      proto::collector::logs::v1::ExportLogsServiceResponse *response,
+      std::function<void(std::unique_ptr<google::protobuf::Arena> &&,
+                         proto::collector::logs::v1::ExportLogsServiceResponse *)> &&on_complete =
+          {});
 
   void AddReference(OtlpGrpcClientReferenceGuard &guard,
                     const OtlpGrpcClientOptions &options) noexcept;

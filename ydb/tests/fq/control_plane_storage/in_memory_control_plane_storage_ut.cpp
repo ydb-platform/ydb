@@ -13,7 +13,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <ydb/tests/tools/fqrun/src/fq_setup.h>
 

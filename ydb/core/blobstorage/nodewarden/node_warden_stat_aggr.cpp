@@ -37,11 +37,11 @@ void TNodeWarden::Handle(TEvGroupStatReport::TPtr ev) {
     }
 }
 
-void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId) {
+void TNodeWarden::StartAggregator(const TActorId& vdiskServiceId, ui32 groupId, ui32 actorPoolId) {
     if (RunningVDiskServiceIds.emplace(vdiskServiceId).second) {
         const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
         const TActorId actorId = Register(CreateGroupStatAggregatorActor(groupId, vdiskServiceId),
-            TMailboxType::Revolving, AppData()->SystemPoolId);
+            TMailboxType::Revolving, actorPoolId);
         TActivationContext::ActorSystem()->RegisterLocalService(groupStatAggregatorId, actorId);
     }
 }
@@ -50,6 +50,6 @@ void TNodeWarden::StopAggregator(const TActorId& vdiskServiceId) {
     if (RunningVDiskServiceIds.erase(vdiskServiceId)) {
         const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, groupStatAggregatorId, {}, nullptr, 0));
-        PerAggregatorInfo.erase(groupStatAggregatorId);
+        PerAggregatorInfo.erase(vdiskServiceId);
     }
 }

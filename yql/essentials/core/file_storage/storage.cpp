@@ -465,7 +465,6 @@ private:
         Dirty_.store(true);
     }
 
-private:
     const TFsPath StorageDir_;
     const TFsPath ProcessTempDir_;
     const TFsPath FileLocksDir_;
@@ -487,9 +486,7 @@ TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath)
 {
 }
 
-TStorage::~TStorage()
-{
-}
+TStorage::~TStorage() = default;
 
 TFsPath TStorage::GetRoot() const {
     return Impl_->GetRoot();
@@ -515,7 +512,7 @@ TFileLinkPtr TStorage::HardlinkFromStorage(const TString& existingStorageFileNam
 
 void TStorage::MoveToStorage(const TFsPath& src, const TString& dstStorageFileName)
 {
-    return Impl_->MoveToStorage(src, dstStorageFileName);
+    Impl_->MoveToStorage(src, dstStorageFileName);
 }
 
 bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)

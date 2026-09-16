@@ -12,11 +12,10 @@
 
 namespace NYql {
 
-class TUserDataStorage : public TThrRefBase {
+class TUserDataStorage: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUserDataStorage>;
 
-public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
     void SetTokenResolver(TTokenResolver tokenResolver);
     void SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing);
@@ -28,6 +27,8 @@ public:
     bool ContainsUserDataBlock(const TStringBuf& name) const;
     bool ContainsUserDataBlock(const TUserDataKey& key) const;
     TUserDataBlock& GetUserDataBlock(const TUserDataKey& key);
+    const TUserDataBlock& GetUserDataBlock(const TUserDataKey& key) const;
+    TUserDataBlock GetUserDataBlockForDownload(const TUserDataKey& key) const;
     TUserDataBlock* FindUserDataBlock(const TStringBuf& name);
     const TUserDataBlock* FindUserDataBlock(const TUserDataKey& key) const;
     TUserDataBlock* FindUserDataBlock(const TUserDataKey& key);
@@ -69,16 +70,16 @@ public:
     NThreading::TFuture<std::function<TUserDataBlock()>> FreezeAsync(const TUserDataKey& key);
 
 private:
-    void TryFillUserDataUrl(TUserDataBlock& block) const;
+    void TryFillUserDataUrl(const TUserDataKey& key, TUserDataBlock& block);
     TUserDataBlock& RegisterLink(const TUserDataKey& key, TFileLinkPtr link);
 
-private:
     THoldingFileStorage FileStorage_;
     TUserDataTable UserData_;
     IUdfResolver::TPtr UdfResolver_;
     TUdfIndex::TPtr UdfIndex_;
     TTokenResolver TokenResolver_;
     IUrlPreprocessing::TPtr UrlPreprocessing_;
+    THashMap<TUserDataKey, TString, TUserDataKey::THash, TUserDataKey::TEqualTo> UrlAliases_;
 
     THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs_;
     std::function<void(const TUserDataBlock& block)> ScanUdfStrategy_;

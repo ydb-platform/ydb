@@ -20,7 +20,7 @@
 namespace NKikimr::NOlap::NReader {
 
 class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter,
-                        NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
+                        public NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
@@ -118,6 +118,7 @@ private:
     bool SendResult(bool pageFault, bool lastBatch, ui64 sourceId = 0);
 
     void SendScanError(const TString& reason);
+    void SendScanAborted();
 
     void Finish(const NColumnShard::TScanCounters::EStatusFinish status);
 
@@ -133,6 +134,8 @@ private:
 private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
+    // The KQP compute actor for a client scan; for an internal scan, the actor that asked for it -- the
+    // restore actor of a write, for instance. Both speak the TEvKqpCompute scan protocol.
     const TActorId ScanComputeActorId;
     const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;

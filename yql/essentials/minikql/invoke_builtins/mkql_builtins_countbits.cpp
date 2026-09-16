@@ -3,8 +3,7 @@
 #include <bit>
 #include <type_traits>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -24,7 +23,7 @@ struct TCountBits: public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TIn
     {
         auto& context = ctx.Codegen.GetContext();
         auto& module = ctx.Codegen.GetModule();
-        const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
+        const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, /*isVarArg=*/false);
         const auto& name = GetFuncNameForType<TInput>("llvm.ctpop");
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto result = CallInst::Create(fnType, func, {arg}, "popcount", block);
@@ -39,5 +38,4 @@ void RegisterCountBits(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryIntegralFunctionOpt<TCountBits, TUnaryArgsOpt>(registry, "CountBits");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

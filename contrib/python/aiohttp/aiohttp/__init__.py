@@ -1,4 +1,4 @@
-__version__ = "3.10.6"
+__version__ = "3.12.15"
 
 from typing import TYPE_CHECKING, Tuple
 
@@ -8,6 +8,7 @@ from .client import (
     ClientConnectionError,
     ClientConnectionResetError,
     ClientConnectorCertificateError,
+    ClientConnectorDNSError,
     ClientConnectorError,
     ClientConnectorSSLError,
     ClientError,
@@ -22,6 +23,7 @@ from .client import (
     ClientSSLError,
     ClientTimeout,
     ClientWebSocketResponse,
+    ClientWSTimeout,
     ConnectionTimeoutError,
     ContentTypeError,
     Fingerprint,
@@ -41,8 +43,16 @@ from .client import (
     TCPConnector,
     TooManyRedirects,
     UnixConnector,
+    WSMessageTypeError,
     WSServerHandshakeError,
     request,
+)
+from .client_middleware_digest_auth import DigestAuthMiddleware
+from .client_middlewares import ClientHandlerType, ClientMiddlewareType
+from .compression_utils import set_zlib_backend
+from .connector import (
+    AddrInfoType as AddrInfoType,
+    SocketFactoryType as SocketFactoryType,
 )
 from .cookiejar import CookieJar as CookieJar, DummyCookieJar as DummyCookieJar
 from .formdata import FormData as FormData
@@ -123,10 +133,12 @@ if TYPE_CHECKING:
 __all__: Tuple[str, ...] = (
     "hdrs",
     # client
+    "AddrInfoType",
     "BaseConnector",
     "ClientConnectionError",
     "ClientConnectionResetError",
     "ClientConnectorCertificateError",
+    "ClientConnectorDNSError",
     "ClientConnectorError",
     "ClientConnectorSSLError",
     "ClientError",
@@ -141,9 +153,11 @@ __all__: Tuple[str, ...] = (
     "ClientSession",
     "ClientTimeout",
     "ClientWebSocketResponse",
+    "ClientWSTimeout",
     "ConnectionTimeoutError",
     "ContentTypeError",
     "Fingerprint",
+    "FlowControlDataQueue",
     "InvalidURL",
     "InvalidUrlClientError",
     "InvalidUrlRedirectClientError",
@@ -155,6 +169,7 @@ __all__: Tuple[str, ...] = (
     "ServerDisconnectedError",
     "ServerFingerprintMismatch",
     "ServerTimeoutError",
+    "SocketFactoryType",
     "SocketTimeoutError",
     "TCPConnector",
     "TooManyRedirects",
@@ -162,6 +177,9 @@ __all__: Tuple[str, ...] = (
     "NamedPipeConnector",
     "WSServerHandshakeError",
     "request",
+    # client_middleware
+    "ClientMiddlewareType",
+    "ClientHandlerType",
     # cookiejar
     "CookieJar",
     "DummyCookieJar",
@@ -170,7 +188,9 @@ __all__: Tuple[str, ...] = (
     # helpers
     "BasicAuth",
     "ChainMapProxy",
+    "DigestAuthMiddleware",
     "ETag",
+    "set_zlib_backend",
     # http
     "HttpVersion",
     "HttpVersion10",
@@ -211,7 +231,6 @@ __all__: Tuple[str, ...] = (
     "DataQueue",
     "EMPTY_PAYLOAD",
     "EofStream",
-    "FlowControlDataQueue",
     "StreamReader",
     # tracing
     "TraceConfig",
@@ -234,11 +253,12 @@ __all__: Tuple[str, ...] = (
     # workers (imported lazily with __getattr__)
     "GunicornUVLoopWebWorker",
     "GunicornWebWorker",
+    "WSMessageTypeError",
 )
 
 
 def __dir__() -> Tuple[str, ...]:
-    return __all__ + ("__author__", "__doc__")
+    return __all__ + ("__doc__",)
 
 
 def __getattr__(name: str) -> object:

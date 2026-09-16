@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
@@ -43,8 +44,8 @@ public:
         DoFillReadStats(*stats);
     }
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const {
-        return std::vector<TInsertWriteId>();
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const {
+        return std::vector<TPortionInfo::TConstPtr>();
     }
 
     TString DebugString() const {
@@ -89,8 +90,8 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
+    std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
     class TWriteIdInfo {
     private:
@@ -127,6 +128,7 @@ private:
     virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) = 0;
 
     mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    bool DuplicateFilteringNeeded = false;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -136,13 +138,11 @@ public:
         return std::move(SourcesConstructor);
     }
 
-    bool GetBreakLockOnReadFinished() const {
-        return BreakLockOnReadFinished.Val();
-    }
+    // Breaking it right away, not at read finish, so that this scan stops at its next step
+    // (HasWritesAndBroken) and its own reply already reports the lock as broken (DoOnReplyConstruction).
+    void BreakLock() const;
 
-    void SetBreakLockOnReadFinished() const {
-        BreakLockOnReadFinished.Inc();
-    }
+    virtual bool HasWritesAndBroken() const override;
 
     THashSet<ui64> GetConflictingLockIds() const {
         THashSet<ui64> result;
@@ -189,6 +189,16 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+    const ESourcesSorting SourcesSorting;
+
+    bool NeedDuplicateFiltering() const {
+        return DuplicateFilteringNeeded;
+    }
+
+    ESourcesSorting GetSourcesSorting() const {
+        return SourcesSorting;
+    }
+
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<TReadStats> ReadStats;
 
@@ -198,7 +208,7 @@ public:
     TReadMetadata& operator=(const TReadMetadata&) = delete;
 
     bool OrderByLimitAllowed() const {
-        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+        return TableMetadataAccessor->OrderByLimitAllowed();
     }
 
     EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {

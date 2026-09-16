@@ -52,7 +52,7 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 forceTerminalState = Ydb::Table::AnalyzeState::STATE_FAILED;
                 break;
         }
-        Self->FinishTraversal(db, forceTerminalState, Issues);
+        Self->FinishTraversal(db, Status, forceTerminalState, Issues);
 
         return true;
     }
@@ -108,6 +108,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
 void TStatisticsAggregator::DispatchFinishTraversalTx(
         NKikimrStat::TEvAnalyzeResponse::EStatus status,
         NYql::TIssues issues) {
+    if (FinishingTraversal || (!TraversalPathId && !ForceTraversalOperationId)) {
+        return;
+    }
+    FinishingTraversal = true;
     Execute(
         new TTxFinishTraversal(this, status, std::move(issues)),
         TActivationContext::AsActorContext());

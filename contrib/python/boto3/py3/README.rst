@@ -17,13 +17,19 @@ Boto (pronounced boh-toh) was named after the fresh water dolphin native to the 
 Notices
 -------
 
-On 2023-12-13, support for Python 3.7 ended for Boto3. This follows the
-Python Software Foundation `end of support <https://peps.python.org/pep-0537/#lifespan>`__
-for the runtime which occurred on 2023-06-27.
-For more information, see this `blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.
+On 2026-04-29, support for Python 3.9 will end for Boto3. This follows the
+Python Software Foundation `end of support <https://peps.python.org/pep-0596/#lifespan>`__
+for the runtime which occurred on 2025-10-31.
+
+On 2025-04-22, support for Python 3.8 ended for Boto3. This follows the
+Python Software Foundation `end of support <https://peps.python.org/pep-0569/#lifespan>`__
+for the runtime which occurred on 2024-10-07.
+
+For more information on deprecations, see this
+`blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.
 
 .. _boto: https://docs.pythonboto.org/
-.. _`doc site`: https://boto3.amazonaws.com/v1/documentation/api/latest/index.html
+.. _`doc site`: https://docs.aws.amazon.com/boto3/latest/
 .. _`Amazon Web Services`: https://aws.amazon.com/what-is-aws/
 .. |Python| image:: https://img.shields.io/pypi/pyversions/boto3.svg?style=flat
     :target: https://pypi.python.org/pypi/boto3/
@@ -79,9 +85,9 @@ Then, set up a default region (in e.g. ``~/.aws/config``):
 .. code-block:: ini
 
    [default]
-   region=us-east-1
+   region = us-east-1
 
-Other credential configuration methods can be found `here <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html>`__
+Other credential configuration methods can be found `here <https://docs.aws.amazon.com/boto3/latest/guide/credentials.html>`__
 
 Then, from a Python interpreter:
 

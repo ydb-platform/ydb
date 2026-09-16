@@ -214,7 +214,8 @@
       },
       "input":{"shape":"DescribeChannelRequest"},
       "output":{"shape":"DescribeChannelResponse"},
-      "documentation":"<p>Describes a channel. For information about MediaTailor channels, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-channels.html\">Working with channels</a> in the <i>MediaTailor User Guide</i>.</p>"
+      "documentation":"<p>Describes a channel. For information about MediaTailor channels, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-channels.html\">Working with channels</a> in the <i>MediaTailor User Guide</i>.</p>",
+      "readonly":true
     },
     "DescribeLiveSource":{
       "name":"DescribeLiveSource",
@@ -225,7 +226,8 @@
       },
       "input":{"shape":"DescribeLiveSourceRequest"},
       "output":{"shape":"DescribeLiveSourceResponse"},
-      "documentation":"<p>The live source to describe.</p>"
+      "documentation":"<p>The live source to describe.</p>",
+      "readonly":true
     },
     "DescribeProgram":{
       "name":"DescribeProgram",
@@ -236,7 +238,8 @@
       },
       "input":{"shape":"DescribeProgramRequest"},
       "output":{"shape":"DescribeProgramResponse"},
-      "documentation":"<p>Describes a program within a channel. For information about programs, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-programs.html\">Working with programs</a> in the <i>MediaTailor User Guide</i>.</p>"
+      "documentation":"<p>Describes a program within a channel. For information about programs, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-programs.html\">Working with programs</a> in the <i>MediaTailor User Guide</i>.</p>",
+      "readonly":true
     },
     "DescribeSourceLocation":{
       "name":"DescribeSourceLocation",
@@ -247,7 +250,8 @@
       },
       "input":{"shape":"DescribeSourceLocationRequest"},
       "output":{"shape":"DescribeSourceLocationResponse"},
-      "documentation":"<p>Describes a source location. A source location is a container for sources. For more information about source locations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-source-locations.html\">Working with source locations</a> in the <i>MediaTailor User Guide</i>.</p>"
+      "documentation":"<p>Describes a source location. A source location is a container for sources. For more information about source locations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/channel-assembly-source-locations.html\">Working with source locations</a> in the <i>MediaTailor User Guide</i>.</p>",
+      "readonly":true
     },
     "DescribeVodSource":{
       "name":"DescribeVodSource",
@@ -258,7 +262,8 @@
       },
       "input":{"shape":"DescribeVodSourceRequest"},
       "output":{"shape":"DescribeVodSourceResponse"},
-      "documentation":"<p>Provides details about a specific video on demand (VOD) source in a specific source location.</p>"
+      "documentation":"<p>Provides details about a specific video on demand (VOD) source in a specific source location.</p>",
+      "readonly":true
     },
     "GetChannelPolicy":{
       "name":"GetChannelPolicy",
@@ -269,7 +274,8 @@
       },
       "input":{"shape":"GetChannelPolicyRequest"},
       "output":{"shape":"GetChannelPolicyResponse"},
-      "documentation":"<p>Returns the channel's IAM policy. IAM policies are used to control access to your channel.</p>"
+      "documentation":"<p>Returns the channel's IAM policy. IAM policies are used to control access to your channel.</p>",
+      "readonly":true
     },
     "GetChannelSchedule":{
       "name":"GetChannelSchedule",
@@ -280,7 +286,8 @@
       },
       "input":{"shape":"GetChannelScheduleRequest"},
       "output":{"shape":"GetChannelScheduleResponse"},
-      "documentation":"<p>Retrieves information about your channel's schedule.</p>"
+      "documentation":"<p>Retrieves information about your channel's schedule.</p>",
+      "readonly":true
     },
     "GetPlaybackConfiguration":{
       "name":"GetPlaybackConfiguration",
@@ -291,7 +298,8 @@
       },
       "input":{"shape":"GetPlaybackConfigurationRequest"},
       "output":{"shape":"GetPlaybackConfigurationResponse"},
-      "documentation":"<p>Retrieves a playback configuration. For information about MediaTailor configurations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/configurations.html\">Working with configurations in AWS Elemental MediaTailor</a>.</p>"
+      "documentation":"<p>Retrieves a playback configuration. For information about MediaTailor configurations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/configurations.html\">Working with configurations in AWS Elemental MediaTailor</a>.</p>",
+      "readonly":true
     },
     "GetPrefetchSchedule":{
       "name":"GetPrefetchSchedule",
@@ -302,7 +310,8 @@
       },
       "input":{"shape":"GetPrefetchScheduleRequest"},
       "output":{"shape":"GetPrefetchScheduleResponse"},
-      "documentation":"<p>Retrieves a prefetch schedule for a playback configuration. A prefetch schedule allows you to tell MediaTailor to fetch and prepare certain ads before an ad break happens. For more information about ad prefetching, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/prefetching-ads.html\">Using ad prefetching</a> in the <i>MediaTailor User Guide</i>.</p>"
+      "documentation":"<p>Retrieves a prefetch schedule for a playback configuration. A prefetch schedule allows you to tell MediaTailor to fetch and prepare certain ads before an ad break happens. For more information about ad prefetching, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/prefetching-ads.html\">Using ad prefetching</a> in the <i>MediaTailor User Guide</i>.</p>",
+      "readonly":true
     },
     "ListAlerts":{
       "name":"ListAlerts",
@@ -313,7 +322,8 @@
       },
       "input":{"shape":"ListAlertsRequest"},
       "output":{"shape":"ListAlertsResponse"},
-      "documentation":"<p>Lists the alerts that are associated with a MediaTailor channel assembly resource.</p>"
+      "documentation":"<p>Lists the alerts that are associated with a MediaTailor channel assembly resource.</p>",
+      "readonly":true
     },
     "ListChannels":{
       "name":"ListChannels",
@@ -324,7 +334,8 @@
       },
       "input":{"shape":"ListChannelsRequest"},
       "output":{"shape":"ListChannelsResponse"},
-      "documentation":"<p>Retrieves information about the channels that are associated with the current AWS account.</p>"
+      "documentation":"<p>Retrieves information about the channels that are associated with the current AWS account.</p>",
+      "readonly":true
     },
     "ListLiveSources":{
       "name":"ListLiveSources",
@@ -335,7 +346,8 @@
       },
       "input":{"shape":"ListLiveSourcesRequest"},
       "output":{"shape":"ListLiveSourcesResponse"},
-      "documentation":"<p>Lists the live sources contained in a source location. A source represents a piece of content.</p>"
+      "documentation":"<p>Lists the live sources contained in a source location. A source represents a piece of content.</p>",
+      "readonly":true
     },
     "ListPlaybackConfigurations":{
       "name":"ListPlaybackConfigurations",
@@ -346,7 +358,8 @@
       },
       "input":{"shape":"ListPlaybackConfigurationsRequest"},
       "output":{"shape":"ListPlaybackConfigurationsResponse"},
-      "documentation":"<p>Retrieves existing playback configurations. For information about MediaTailor configurations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/configurations.html\">Working with Configurations in AWS Elemental MediaTailor</a>.</p>"
+      "documentation":"<p>Retrieves existing playback configurations. For information about MediaTailor configurations, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/configurations.html\">Working with Configurations in AWS Elemental MediaTailor</a>.</p>",
+      "readonly":true
     },
     "ListPrefetchSchedules":{
       "name":"ListPrefetchSchedules",
@@ -357,7 +370,8 @@
       },
       "input":{"shape":"ListPrefetchSchedulesRequest"},
       "output":{"shape":"ListPrefetchSchedulesResponse"},
-      "documentation":"<p>Lists the prefetch schedules for a playback configuration.</p>"
+      "documentation":"<p>Lists the prefetch schedules for a playback configuration.</p>",
+      "readonly":true
     },
     "ListSourceLocations":{
       "name":"ListSourceLocations",
@@ -368,7 +382,8 @@
       },
       "input":{"shape":"ListSourceLocationsRequest"},
       "output":{"shape":"ListSourceLocationsResponse"},
-      "documentation":"<p>Lists the source locations for a channel. A source location defines the host server URL, and contains a list of sources.</p>"
+      "documentation":"<p>Lists the source locations for a channel. A source location defines the host server URL, and contains a list of sources.</p>",
+      "readonly":true
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -382,7 +397,8 @@
       "errors":[
         {"shape":"BadRequestException"}
       ],
-      "documentation":"<p>A list of tags that are associated with this resource. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html\">Tagging AWS Elemental MediaTailor Resources</a>.</p>"
+      "documentation":"<p>A list of tags that are associated with this resource. Tags are key-value pairs that you can associate with Amazon resources to help with organization, access control, and cost tracking. For more information, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/tagging.html\">Tagging AWS Elemental MediaTailor Resources</a>.</p>",
+      "readonly":true
     },
     "ListVodSources":{
       "name":"ListVodSources",
@@ -393,7 +409,8 @@
       },
       "input":{"shape":"ListVodSourcesRequest"},
       "output":{"shape":"ListVodSourcesResponse"},
-      "documentation":"<p>Lists the VOD sources contained in a source location. A source represents a piece of content.</p>"
+      "documentation":"<p>Lists the VOD sources contained in a source location. A source represents a piece of content.</p>",
+      "readonly":true
     },
     "PutChannelPolicy":{
       "name":"PutChannelPolicy",
@@ -611,7 +628,7 @@
       "members":{
         "StreamingMediaFileConditioning":{
           "shape":"StreamingMediaFileConditioning",
-          "documentation":"<p>For ads that have media files with streaming delivery and supported file extensions, indicates what transcoding action MediaTailor takes when it first receives these ads from the ADS. <code>TRANSCODE</code> indicates that MediaTailor must transcode the ads. <code>NONE</code> indicates that you have already transcoded the ads outside of MediaTailor and don't need them transcoded as part of the ad insertion workflow. For more information about ad conditioning see <a href=\"https://docs.aws.amazon.com/precondition-ads.html\">https://docs.aws.amazon.com/precondition-ads.html</a>.</p>"
+          "documentation":"<p>For ads that have media files with streaming delivery and supported file extensions, indicates what transcoding action MediaTailor takes when it first receives these ads from the ADS. <code>TRANSCODE</code> indicates that MediaTailor must transcode the ads. <code>NONE</code> indicates that you have already transcoded the ads outside of MediaTailor and don't need them transcoded as part of the ad insertion workflow. For more information about ad conditioning see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/precondition-ads.html\">Using preconditioned ads</a> in the Elemental MediaTailor user guide.</p>"
         }
       },
       "documentation":"<p>The setting that indicates what conditioning MediaTailor will perform on ads that the ad decision server (ADS) returns.</p>"
@@ -632,6 +649,70 @@
         "DATERANGE",
         "SCTE35_ENHANCED"
       ]
+    },
+    "AdsInteractionExcludeEventType":{
+      "type":"string",
+      "enum":[
+        "AD_MARKER_FOUND",
+        "NON_AD_MARKER_FOUND",
+        "MAKING_ADS_REQUEST",
+        "MODIFIED_TARGET_URL",
+        "VAST_REDIRECT",
+        "EMPTY_VAST_RESPONSE",
+        "EMPTY_VMAP_RESPONSE",
+        "VAST_RESPONSE",
+        "REDIRECTED_VAST_RESPONSE",
+        "FILLED_AVAIL",
+        "FILLED_OVERLAY_AVAIL",
+        "BEACON_FIRED",
+        "WARNING_NO_ADVERTISEMENTS",
+        "WARNING_VPAID_AD_DROPPED",
+        "WARNING_URL_VARIABLE_SUBSTITUTION_FAILED",
+        "ERROR_UNKNOWN",
+        "ERROR_UNKNOWN_HOST",
+        "ERROR_DISALLOWED_HOST",
+        "ERROR_ADS_IO",
+        "ERROR_ADS_TIMEOUT",
+        "ERROR_ADS_RESPONSE_PARSE",
+        "ERROR_ADS_RESPONSE_UNKNOWN_ROOT_ELEMENT",
+        "ERROR_ADS_INVALID_RESPONSE",
+        "ERROR_VAST_REDIRECT_EMPTY_RESPONSE",
+        "ERROR_VAST_REDIRECT_MULTIPLE_VAST",
+        "ERROR_VAST_REDIRECT_FAILED",
+        "ERROR_VAST_MISSING_MEDIAFILES",
+        "ERROR_VAST_MISSING_CREATIVES",
+        "ERROR_VAST_MISSING_OVERLAYS",
+        "ERROR_VAST_MISSING_IMPRESSION",
+        "ERROR_VAST_INVALID_VAST_AD_TAG_URI",
+        "ERROR_VAST_MULTIPLE_TRACKING_EVENTS",
+        "ERROR_VAST_MULTIPLE_LINEAR",
+        "ERROR_VAST_INVALID_MEDIA_FILE",
+        "ERROR_FIRING_BEACON_FAILED",
+        "ERROR_PERSONALIZATION_DISABLED",
+        "VOD_TIME_BASED_AVAIL_PLAN_VAST_RESPONSE_FOR_OFFSET",
+        "VOD_TIME_BASED_AVAIL_PLAN_SUCCESS",
+        "VOD_TIME_BASED_AVAIL_PLAN_WARNING_NO_ADVERTISEMENTS",
+        "INTERSTITIAL_VOD_SUCCESS",
+        "INTERSTITIAL_VOD_FAILURE"
+      ]
+    },
+    "AdsInteractionLog":{
+      "type":"structure",
+      "members":{
+        "PublishOptInEventTypes":{
+          "shape":"__adsInteractionPublishOptInEventTypesList",
+          "documentation":"<p>Indicates that MediaTailor emits <code>RAW_ADS_RESPONSE</code> logs for playback sessions that are initialized with this configuration.</p>"
+        },
+        "ExcludeEventTypes":{
+          "shape":"__adsInteractionExcludeEventTypesList",
+          "documentation":"<p>Indicates that MediaTailor won't emit the selected events in the logs for playback sessions that are initialized with this configuration.</p>"
+        }
+      },
+      "documentation":"<p>Settings for customizing what events are included in logs for interactions with the ad decision server (ADS).</p> <p>For more information about ADS logs, inlcuding descriptions of the event types, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/ads-log-format.html\">MediaTailor ADS logs description and event types</a> in Elemental MediaTailor User Guide.</p>"
+    },
+    "AdsInteractionPublishOptInEventType":{
+      "type":"string",
+      "enum":["RAW_ADS_RESPONSE"]
     },
     "Alert":{
       "type":"structure",
@@ -961,6 +1042,14 @@
         "EnabledLoggingStrategies":{
           "shape":"__listOfLoggingStrategies",
           "documentation":"<p>The method used for collecting logs from AWS Elemental MediaTailor. To configure MediaTailor to send logs directly to Amazon CloudWatch Logs, choose <code>LEGACY_CLOUDWATCH</code>. To configure MediaTailor to send logs to CloudWatch, which then vends the logs to your destination of choice, choose <code>VENDED_LOGS</code>. Supported destinations are CloudWatch Logs log group, Amazon S3 bucket, and Amazon Data Firehose stream.</p> <p>To use vended logs, you must configure the delivery destination in Amazon CloudWatch, as described in <a href=\"https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AWS-logs-and-resource-policy.html#AWS-vended-logs-permissions-V2\">Enable logging from AWS services, Logging that requires additional permissions [V2]</a>.</p>"
+        },
+        "AdsInteractionLog":{
+          "shape":"AdsInteractionLog",
+          "documentation":"<p>The event types that MediaTailor emits in logs for interactions with the ADS.</p>"
+        },
+        "ManifestServiceInteractionLog":{
+          "shape":"ManifestServiceInteractionLog",
+          "documentation":"<p>The event types that MediaTailor emits in logs for interactions with the origin server.</p>"
         }
       },
       "documentation":"<p>Configures Amazon CloudWatch log settings for a playback configuration.</p>"
@@ -980,6 +1069,14 @@
         "EnabledLoggingStrategies":{
           "shape":"__listOfLoggingStrategies",
           "documentation":"<p>The method used for collecting logs from AWS Elemental MediaTailor. <code>LEGACY_CLOUDWATCH</code> indicates that MediaTailor is sending logs directly to Amazon CloudWatch Logs. <code>VENDED_LOGS</code> indicates that MediaTailor is sending logs to CloudWatch, which then vends the logs to your destination of choice. Supported destinations are CloudWatch Logs log group, Amazon S3 bucket, and Amazon Data Firehose stream. </p>"
+        },
+        "AdsInteractionLog":{
+          "shape":"AdsInteractionLog",
+          "documentation":"<p>The event types that MediaTailor emits in logs for interactions with the ADS.</p>"
+        },
+        "ManifestServiceInteractionLog":{
+          "shape":"ManifestServiceInteractionLog",
+          "documentation":"<p>The event types that MediaTailor emits in logs for interactions with the origin server.</p>"
         }
       }
     },
@@ -1150,15 +1247,13 @@
     "CreatePrefetchScheduleRequest":{
       "type":"structure",
       "required":[
-        "Consumption",
         "Name",
-        "PlaybackConfigurationName",
-        "Retrieval"
+        "PlaybackConfigurationName"
       ],
       "members":{
         "Consumption":{
           "shape":"PrefetchConsumption",
-          "documentation":"<p>The configuration settings for MediaTailor's <i>consumption</i> of the prefetched ads from the ad decision server. Each consumption configuration contains an end time and an optional start time that define the <i>consumption window</i>. Prefetch schedules automatically expire no earlier than seven days after the end time.</p>"
+          "documentation":"<p>The configuration settings for how and when MediaTailor consumes prefetched ads from the ad decision server for single prefetch schedules. Each consumption configuration contains an end time and an optional start time that define the <i>consumption window</i>. Prefetch schedules automatically expire no earlier than seven days after the end time.</p>"
         },
         "Name":{
           "shape":"__string",
@@ -1176,6 +1271,14 @@
           "shape":"PrefetchRetrieval",
           "documentation":"<p>The configuration settings for retrieval of prefetched ads from the ad decision server. Only one set of prefetched ads will be retrieved and subsequently consumed for each ad break.</p>"
         },
+        "RecurringPrefetchConfiguration":{
+          "shape":"RecurringPrefetchConfiguration",
+          "documentation":"<p>The configuration that defines how and when MediaTailor performs ad prefetching in a live event.</p>"
+        },
+        "ScheduleType":{
+          "shape":"PrefetchScheduleType",
+          "documentation":"<p>The frequency that MediaTailor creates prefetch schedules. <code>SINGLE</code> indicates that this schedule applies to one ad break. <code>RECURRING</code> indicates that MediaTailor automatically creates a schedule for each ad avail in a live event.</p> <p>For more information about the prefetch types and when you might use each, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/prefetching-ads.html\">Prefetching ads in Elemental MediaTailor.</a> </p>"
+        },
         "StreamId":{
           "shape":"__string",
           "documentation":"<p>An optional stream identifier that MediaTailor uses to prefetch ads for multiple streams that use the same playback configuration. If <code>StreamId</code> is specified, MediaTailor returns all of the prefetch schedules with an exact match on <code>StreamId</code>. If not specified, MediaTailor returns all of the prefetch schedules for the playback configuration, regardless of <code>StreamId</code>.</p>"
@@ -1191,7 +1294,7 @@
         },
         "Consumption":{
           "shape":"PrefetchConsumption",
-          "documentation":"<p>The configuration settings for MediaTailor's <i>consumption</i> of the prefetched ads from the ad decision server. Each consumption configuration contains an end time and an optional start time that define the <i>consumption window</i>. Prefetch schedules automatically expire no earlier than seven days after the end time.</p>"
+          "documentation":"<p>The configuration settings for how and when MediaTailor consumes prefetched ads from the ad decision server for single prefetch schedules. Each consumption configuration contains an end time and an optional start time that define the <i>consumption window</i>. Prefetch schedules automatically expire no earlier than seven days after the end time.</p>"
         },
         "Name":{
           "shape":"__string",
@@ -1204,6 +1307,14 @@
         "Retrieval":{
           "shape":"PrefetchRetrieval",
           "documentation":"<p>The configuration settings for retrieval of prefetched ads from the ad decision server. Only one set of prefetched ads will be retrieved and subsequently consumed for each ad break.</p>"
+        },
+        "RecurringPrefetchConfiguration":{
+          "shape":"RecurringPrefetchConfiguration",
+          "documentation":"<p>The configuration that defines how MediaTailor performs recurring prefetch. </p>"
+        },
+        "ScheduleType":{
+          "shape":"PrefetchScheduleType",
+          "documentation":"<p>The frequency that MediaTailor creates prefetch schedules. <code>SINGLE</code> indicates that this schedule applies to one ad break. <code>RECURRING</code> indicates that MediaTailor automatically creates a schedule for each ad avail in a live event.</p>"
         },
         "StreamId":{
           "shape":"__string",
@@ -1532,8 +1643,7 @@
     },
     "DeleteChannelPolicyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteChannelRequest":{
       "type":"structure",
@@ -1549,8 +1659,7 @@
     },
     "DeleteChannelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLiveSourceRequest":{
       "type":"structure",
@@ -1575,8 +1684,7 @@
     },
     "DeleteLiveSourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePlaybackConfigurationRequest":{
       "type":"structure",
@@ -1592,8 +1700,7 @@
     },
     "DeletePlaybackConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePrefetchScheduleRequest":{
       "type":"structure",
@@ -1618,8 +1725,7 @@
     },
     "DeletePrefetchScheduleResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteProgramRequest":{
       "type":"structure",
@@ -1644,8 +1750,7 @@
     },
     "DeleteProgramResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteSourceLocationRequest":{
       "type":"structure",
@@ -1661,8 +1766,7 @@
     },
     "DeleteSourceLocationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteVodSourceRequest":{
       "type":"structure",
@@ -1687,8 +1791,7 @@
     },
     "DeleteVodSourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeChannelRequest":{
       "type":"structure",
@@ -2212,7 +2315,7 @@
         },
         "Consumption":{
           "shape":"PrefetchConsumption",
-          "documentation":"<p>Consumption settings determine how, and when, MediaTailor places the prefetched ads into ad breaks. Ad consumption occurs within a span of time that you define, called a <i>consumption window</i>. You can designate which ad breaks that MediaTailor fills with prefetch ads by setting avail matching criteria.</p>"
+          "documentation":"<p>The configuration settings for how and when MediaTailor consumes prefetched ads from the ad decision server for single prefetch schedules. Each consumption configuration contains an end time and an optional start time that define the <i>consumption window</i>. Prefetch schedules automatically expire no earlier than seven days after the end time.</p>"
         },
         "Name":{
           "shape":"__string",
@@ -2225,6 +2328,14 @@
         "Retrieval":{
           "shape":"PrefetchRetrieval",
           "documentation":"<p>A complex type that contains settings for prefetch retrieval from the ad decision server (ADS).</p>"
+        },
+        "ScheduleType":{
+          "shape":"PrefetchScheduleType",
+          "documentation":"<p>The frequency that MediaTailor creates prefetch schedules. <code>SINGLE</code> indicates that this schedule applies to one ad break. <code>RECURRING</code> indicates that MediaTailor automatically creates a schedule for each ad avail in a live event.</p>"
+        },
+        "RecurringPrefetchConfiguration":{
+          "shape":"RecurringPrefetchConfiguration",
+          "documentation":"<p>The configuration that defines how and when MediaTailor performs ad prefetching in a live event.</p>"
         },
         "StreamId":{
           "shape":"__string",
@@ -2331,13 +2442,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum number of alerts that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> alerts, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p>The maximum number of alerts that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> alerts, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListAlerts</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
@@ -2367,13 +2478,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum number of channels that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> channels, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p>The maximum number of channels that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> channels, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListChannels</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         }
@@ -2398,13 +2509,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum number of live sources that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> live sources, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p>The maximum number of live sources that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> live sources, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListLiveSources</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
@@ -2434,13 +2545,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p>The maximum number of playback configurations that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> playback configurations, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p>The maximum number of playback configurations that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> playback configurations, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"MaxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListPlaybackConfigurations</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"NextToken"
         }
@@ -2459,23 +2570,35 @@
         }
       }
     },
+    "ListPrefetchScheduleType":{
+      "type":"string",
+      "enum":[
+        "SINGLE",
+        "RECURRING",
+        "ALL"
+      ]
+    },
     "ListPrefetchSchedulesRequest":{
       "type":"structure",
       "required":["PlaybackConfigurationName"],
       "members":{
         "MaxResults":{
           "shape":"__integerMin1Max100",
-          "documentation":"<p>The maximum number of prefetch schedules that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> prefetch schedules, use the value of <code>NextToken</code> in the response to get the next page of results.</p>"
+          "documentation":"<p>The maximum number of prefetch schedules that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> prefetch schedules, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>(Optional) If the playback configuration has more than <code>MaxResults</code> prefetch schedules, use <code>NextToken</code> to get the second and subsequent pages of results.</p> <p> For the first <code>ListPrefetchSchedulesRequest</code> request, omit this value.</p> <p> For the second and subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request.</p> <p> If the previous response didn't include a <code>NextToken</code> element, there are no more prefetch schedules to get.</p>"
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListPrefetchSchedules</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>"
         },
         "PlaybackConfigurationName":{
           "shape":"__string",
           "documentation":"<p>Retrieves the prefetch schedule(s) for a specific playback configuration.</p>",
           "location":"uri",
           "locationName":"PlaybackConfigurationName"
+        },
+        "ScheduleType":{
+          "shape":"ListPrefetchScheduleType",
+          "documentation":"<p>The type of prefetch schedules that you want to list. <code>SINGLE</code> indicates that you want to list the configured single prefetch schedules. <code>RECURRING</code> indicates that you want to list the configured recurring prefetch schedules. <code>ALL</code> indicates that you want to list all configured prefetch schedules.</p>"
         },
         "StreamId":{
           "shape":"__string",
@@ -2501,13 +2624,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p> The maximum number of source locations that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> source locations, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p> The maximum number of source locations that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> source locations, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListSourceLocations</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         }
@@ -2554,13 +2677,13 @@
       "members":{
         "MaxResults":{
           "shape":"MaxResults",
-          "documentation":"<p> The maximum number of VOD sources that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> VOD sources, use the value of <code>NextToken</code> in the response to get the next page of results.</p>",
+          "documentation":"<p> The maximum number of VOD sources that you want MediaTailor to return in response to the current request. If there are more than <code>MaxResults</code> VOD sources, use the value of <code>NextToken</code> in the response to get the next page of results.</p> <p>The default value is 100. MediaTailor uses DynamoDB-based pagination, which means that a response might contain fewer than <code>MaxResults</code> items, including 0 items, even when more results are available. To retrieve all results, you must continue making requests using the <code>NextToken</code> value from each response until the response no longer includes a <code>NextToken</code> value.</p>",
           "location":"querystring",
           "locationName":"maxResults"
         },
         "NextToken":{
           "shape":"__string",
-          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p>",
+          "documentation":"<p>Pagination token returned by the list request when results exceed the maximum allowed. Use the token to fetch the next page of results.</p> <p>For the first <code>ListVodSources</code> request, omit this value. For subsequent requests, get the value of <code>NextToken</code> from the previous response and specify that value for <code>NextToken</code> in the request. Continue making requests until the response no longer includes a <code>NextToken</code> value, which indicates that all results have been retrieved.</p>",
           "location":"querystring",
           "locationName":"nextToken"
         },
@@ -2642,7 +2765,10 @@
     },
     "LogConfiguration":{
       "type":"structure",
-      "required":["PercentEnabled"],
+      "required":[
+        "PercentEnabled",
+        "EnabledLoggingStrategies"
+      ],
       "members":{
         "PercentEnabled":{
           "shape":"__integer",
@@ -2651,6 +2777,14 @@
         "EnabledLoggingStrategies":{
           "shape":"__listOfLoggingStrategies",
           "documentation":"<p>The method used for collecting logs from AWS Elemental MediaTailor. <code>LEGACY_CLOUDWATCH</code> indicates that MediaTailor is sending logs directly to Amazon CloudWatch Logs. <code>VENDED_LOGS</code> indicates that MediaTailor is sending logs to CloudWatch, which then vends the logs to your destination of choice. Supported destinations are CloudWatch Logs log group, Amazon S3 bucket, and Amazon Data Firehose stream. </p>"
+        },
+        "AdsInteractionLog":{
+          "shape":"AdsInteractionLog",
+          "documentation":"<p>Settings for customizing what events are included in logs for interactions with the ad decision server (ADS).</p>"
+        },
+        "ManifestServiceInteractionLog":{
+          "shape":"ManifestServiceInteractionLog",
+          "documentation":"<p>Settings for customizing what events are included in logs for interactions with the origin server.</p>"
         }
       },
       "documentation":"<p>Defines where AWS Elemental MediaTailor sends logs for the playback configuration.</p>"
@@ -2693,6 +2827,53 @@
         }
       },
       "documentation":"<p>The configuration for manifest processing rules. Manifest processing rules enable customization of the personalized manifests created by MediaTailor.</p>"
+    },
+    "ManifestServiceExcludeEventType":{
+      "type":"string",
+      "enum":[
+        "GENERATED_MANIFEST",
+        "ORIGIN_MANIFEST",
+        "SESSION_INITIALIZED",
+        "TRACKING_RESPONSE",
+        "CONFIG_SYNTAX_ERROR",
+        "CONFIG_SECURITY_ERROR",
+        "UNKNOWN_HOST",
+        "TIMEOUT_ERROR",
+        "CONNECTION_ERROR",
+        "IO_ERROR",
+        "UNKNOWN_ERROR",
+        "HOST_DISALLOWED",
+        "PARSING_ERROR",
+        "MANIFEST_ERROR",
+        "NO_MASTER_OR_MEDIA_PLAYLIST",
+        "NO_MASTER_PLAYLIST",
+        "NO_MEDIA_PLAYLIST",
+        "INCOMPATIBLE_HLS_VERSION",
+        "SCTE35_PARSING_ERROR",
+        "INVALID_SINGLE_PERIOD_DASH_MANIFEST",
+        "UNSUPPORTED_SINGLE_PERIOD_DASH_MANIFEST",
+        "LAST_PERIOD_MISSING_AUDIO",
+        "LAST_PERIOD_MISSING_AUDIO_WARNING",
+        "ERROR_ORIGIN_PREFIX_INTERPOLATION",
+        "ERROR_ADS_INTERPOLATION",
+        "ERROR_LIVE_PRE_ROLL_ADS_INTERPOLATION",
+        "ERROR_CDN_AD_SEGMENT_INTERPOLATION",
+        "ERROR_CDN_CONTENT_SEGMENT_INTERPOLATION",
+        "ERROR_SLATE_AD_URL_INTERPOLATION",
+        "ERROR_PROFILE_NAME_INTERPOLATION",
+        "ERROR_BUMPER_START_INTERPOLATION",
+        "ERROR_BUMPER_END_INTERPOLATION"
+      ]
+    },
+    "ManifestServiceInteractionLog":{
+      "type":"structure",
+      "members":{
+        "ExcludeEventTypes":{
+          "shape":"__manifestServiceExcludeEventTypesList",
+          "documentation":"<p>Indicates that MediaTailor won't emit the selected events in the logs for playback sessions that are initialized with this configuration.</p>"
+        }
+      },
+      "documentation":"<p>Settings for customizing what events are included in logs for interactions with the origin server.</p> <p>For more information about manifest service logs, including descriptions of the event types, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/log-types.html\">MediaTailor manifest logs description and event types</a> in Elemental MediaTailor User Guide.</p>"
     },
     "MaxResults":{
       "type":"integer",
@@ -2841,7 +3022,7 @@
           "documentation":"<p>The time when prefetched ads are considered for use in an ad break. If you don't specify <code>StartTime</code>, the prefetched ads are available after MediaTailor retrieves them from the ad decision server.</p>"
         }
       },
-      "documentation":"<p>A complex type that contains settings that determine how and when that MediaTailor places prefetched ads into upcoming ad breaks.</p>"
+      "documentation":"<p>For single prefetch, describes how and when that MediaTailor places prefetched ads into upcoming ad breaks.</p>"
     },
     "PrefetchRetrieval":{
       "type":"structure",
@@ -2858,6 +3039,18 @@
         "StartTime":{
           "shape":"__timestampUnix",
           "documentation":"<p>The time when prefetch retrievals can start for this break. Ad prefetching will be attempted for manifest requests that occur at or after this time. Defaults to the current time. If not specified, the prefetch retrieval starts as soon as possible.</p>"
+        },
+        "TrafficShapingType":{
+          "shape":"TrafficShapingType",
+          "documentation":"<p>Indicates the type of traffic shaping used for prefetch traffic shaping and limiting the number of requests to the ADS at one time.</p>"
+        },
+        "TrafficShapingRetrievalWindow":{
+          "shape":"TrafficShapingRetrievalWindow",
+          "documentation":"<p>Configuration for spreading ADS traffic across a set window instead of sending ADS requests for all sessions at the same time.</p>"
+        },
+        "TrafficShapingTpsConfiguration":{
+          "shape":"TrafficShapingTpsConfiguration",
+          "documentation":"<p>The configuration for TPS-based traffic shaping that limits the number of requests to the ad decision server (ADS) based on transactions per second instead of time windows.</p>"
         }
       },
       "documentation":"<p>A complex type that contains settings governing when MediaTailor prefetches ads, and which dynamic variables that MediaTailor includes in the request to the ad decision server.</p>"
@@ -2866,10 +3059,8 @@
       "type":"structure",
       "required":[
         "Arn",
-        "Consumption",
         "Name",
-        "PlaybackConfigurationName",
-        "Retrieval"
+        "PlaybackConfigurationName"
       ],
       "members":{
         "Arn":{
@@ -2878,7 +3069,7 @@
         },
         "Consumption":{
           "shape":"PrefetchConsumption",
-          "documentation":"<p>Consumption settings determine how, and when, MediaTailor places the prefetched ads into ad breaks. Ad consumption occurs within a span of time that you define, called a <i>consumption window</i>. You can designate which ad breaks that MediaTailor fills with prefetch ads by setting avail matching criteria.</p>"
+          "documentation":"<p>Consumption settings determine how, and when, MediaTailor places the prefetched ads into ad breaks for single prefetch schedules. Ad consumption occurs within a span of time that you define, called a <i>consumption window</i>. You can designate which ad breaks that MediaTailor fills with prefetch ads by setting avail matching criteria.</p>"
         },
         "Name":{
           "shape":"__string",
@@ -2892,12 +3083,27 @@
           "shape":"PrefetchRetrieval",
           "documentation":"<p>A complex type that contains settings for prefetch retrieval from the ad decision server (ADS).</p>"
         },
+        "ScheduleType":{
+          "shape":"PrefetchScheduleType",
+          "documentation":"<p>The frequency that MediaTailor creates prefetch schedules. <code>SINGLE</code> indicates that this schedule applies to one ad break. <code>RECURRING</code> indicates that MediaTailor automatically creates a schedule for each ad avail in a live event.</p> <p>For more information about the prefetch types and when you might use each, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/prefetching-ads.html\">Prefetching ads in Elemental MediaTailor.</a> </p>"
+        },
+        "RecurringPrefetchConfiguration":{
+          "shape":"RecurringPrefetchConfiguration",
+          "documentation":"<p>The settings that determine how and when MediaTailor prefetches ads and inserts them into ad breaks.</p>"
+        },
         "StreamId":{
           "shape":"__string",
           "documentation":"<p>An optional stream identifier that you can specify in order to prefetch for multiple streams that use the same playback configuration.</p>"
         }
       },
       "documentation":"<p>A prefetch schedule allows you to tell MediaTailor to fetch and prepare certain ads before an ad break happens. For more information about ad prefetching, see <a href=\"https://docs.aws.amazon.com/mediatailor/latest/ug/prefetching-ads.html\">Using ad prefetching</a> in the <i>MediaTailor User Guide</i>.</p>"
+    },
+    "PrefetchScheduleType":{
+      "type":"string",
+      "enum":[
+        "SINGLE",
+        "RECURRING"
+      ]
     },
     "PutChannelPolicyRequest":{
       "type":"structure",
@@ -2920,8 +3126,7 @@
     },
     "PutChannelPolicyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "PutPlaybackConfigurationRequest":{
       "type":"structure",
@@ -3083,6 +3288,73 @@
           "documentation":"<p>The setting that indicates what conditioning MediaTailor will perform on ads that the ad decision server (ADS) returns, and what priority MediaTailor uses when inserting ads. </p>"
         }
       }
+    },
+    "RecurringConsumption":{
+      "type":"structure",
+      "members":{
+        "RetrievedAdExpirationSeconds":{
+          "shape":"__integer",
+          "documentation":"<p>The number of seconds that an ad is available for insertion after it was prefetched.</p>"
+        },
+        "AvailMatchingCriteria":{
+          "shape":"__listOfAvailMatchingCriteria",
+          "documentation":"<p>The configuration for the dynamic variables that determine which ad breaks that MediaTailor inserts prefetched ads in.</p>"
+        }
+      },
+      "documentation":"<p>The settings that determine how and when MediaTailor places prefetched ads into upcoming ad breaks for recurring prefetch scedules.</p>"
+    },
+    "RecurringPrefetchConfiguration":{
+      "type":"structure",
+      "required":[
+        "EndTime",
+        "RecurringConsumption",
+        "RecurringRetrieval"
+      ],
+      "members":{
+        "StartTime":{
+          "shape":"__timestampUnix",
+          "documentation":"<p>The start time for the window that MediaTailor prefetches and inserts ads in a live event. </p>"
+        },
+        "EndTime":{
+          "shape":"__timestampUnix",
+          "documentation":"<p>The end time for the window that MediaTailor prefetches and inserts ads in a live event. </p>"
+        },
+        "RecurringConsumption":{
+          "shape":"RecurringConsumption",
+          "documentation":"<p>The settings that determine how and when MediaTailor places prefetched ads into upcoming ad breaks for recurring prefetch scedules.</p>"
+        },
+        "RecurringRetrieval":{
+          "shape":"RecurringRetrieval",
+          "documentation":"<p>The configuration for prefetch ad retrieval from the ADS.</p>"
+        }
+      },
+      "documentation":"<p>The configuration that defines how MediaTailor performs recurring prefetch. </p>"
+    },
+    "RecurringRetrieval":{
+      "type":"structure",
+      "members":{
+        "DynamicVariables":{
+          "shape":"__mapOf__string",
+          "documentation":"<p>The dynamic variables to use for substitution during prefetch requests to the ADS.</p>"
+        },
+        "DelayAfterAvailEndSeconds":{
+          "shape":"__integer",
+          "documentation":"<p>The number of seconds that MediaTailor waits after an ad avail before prefetching ads for the next avail. If not set, the default is 0 (no delay).</p>"
+        },
+        "TrafficShapingType":{
+          "shape":"TrafficShapingType",
+          "documentation":"<p>Indicates the type of traffic shaping used for traffic shaping and limiting the number of requests to the ADS at one time.</p>"
+        },
+        "TrafficShapingRetrievalWindow":{
+          "shape":"TrafficShapingRetrievalWindow",
+          "documentation":"<p>Configuration for spreading ADS traffic across a set window instead of sending ADS requests for all sessions at the same time.</p>"
+        },
+        "TrafficShapingTpsConfiguration":{
+          "shape":"TrafficShapingTpsConfiguration",
+          "documentation":"<p>The configuration for TPS-based traffic shaping that limits the number of requests to the ad decision server (ADS) based on transactions per second instead of time windows.</p>"
+        }
+      },
+      "documentation":"<p>With recurring prefetch, MediaTailor automatically prefetches ads for every avail that occurs during the retrieval window. The following configurations describe the MediaTailor behavior when prefetching ads for a live event.</p>"
     },
     "RelativePosition":{
       "type":"string",
@@ -3430,8 +3702,7 @@
     },
     "StartChannelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StopChannelRequest":{
       "type":"structure",
@@ -3447,8 +3718,7 @@
     },
     "StopChannelResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "StreamingMediaFileConditioning":{
       "type":"string",
@@ -3505,6 +3775,37 @@
         }
       },
       "documentation":"<p>The SCTE-35 <code>time_signal</code> message can be sent with one or more <code>segmentation_descriptor</code> messages. A <code>time_signal</code> message can be sent only if a single <code>segmentation_descriptor</code> message is sent.</p> <p>The <code>time_signal</code> message contains only the <code>splice_time</code> field which is constructed using a given presentation timestamp. When sending a <code>time_signal</code> message, the <code>splice_command_type</code> field in the <code>splice_info_section</code> message is set to 6 (0x06).</p> <p>See the <code>time_signal()</code> table of the 2022 SCTE-35 specification for more information.</p>"
+    },
+    "TrafficShapingRetrievalWindow":{
+      "type":"structure",
+      "members":{
+        "RetrievalWindowDurationSeconds":{
+          "shape":"__integer",
+          "documentation":"<p>The amount of time, in seconds, that MediaTailor spreads prefetch requests to the ADS. </p>"
+        }
+      },
+      "documentation":"<p>The configuration that tells Elemental MediaTailor how to spread out requests to the ad decision server (ADS). Instead of sending ADS requests for all sessions at the same time, MediaTailor spreads the requests across the amount of time specified in the retrieval window.</p>"
+    },
+    "TrafficShapingTpsConfiguration":{
+      "type":"structure",
+      "members":{
+        "PeakTps":{
+          "shape":"__integer",
+          "documentation":"<p>The maximum number of transactions per second (TPS) that your ad decision server (ADS) can handle. MediaTailor uses this value along with concurrent users and headroom multiplier to calculate optimal traffic distribution and prevent ADS overload.</p>"
+        },
+        "PeakConcurrentUsers":{
+          "shape":"__integer",
+          "documentation":"<p>The expected peak number of concurrent viewers for your content. MediaTailor uses this value along with peak TPS to determine how to distribute prefetch requests across the available capacity without exceeding your ADS limits.</p>"
+        }
+      },
+      "documentation":"<p>The configuration for TPS-based traffic shaping. This approach limits requests to the ad decision server (ADS) based on transactions per second and concurrent users, providing more intuitive capacity management compared to time-window based traffic shaping.</p>"
+    },
+    "TrafficShapingType":{
+      "type":"string",
+      "enum":[
+        "RETRIEVAL_WINDOW",
+        "TPS"
+      ]
     },
     "Transition":{
       "type":"structure",
@@ -3998,6 +4299,14 @@
       },
       "documentation":"<p>VOD source configuration parameters.</p>"
     },
+    "__adsInteractionExcludeEventTypesList":{
+      "type":"list",
+      "member":{"shape":"AdsInteractionExcludeEventType"}
+    },
+    "__adsInteractionPublishOptInEventTypesList":{
+      "type":"list",
+      "member":{"shape":"AdsInteractionPublishOptInEventType"}
+    },
     "__boolean":{
       "type":"boolean",
       "box":true
@@ -4084,6 +4393,10 @@
     "__long":{
       "type":"long",
       "box":true
+    },
+    "__manifestServiceExcludeEventTypesList":{
+      "type":"list",
+      "member":{"shape":"ManifestServiceExcludeEventType"}
     },
     "__mapOf__string":{
       "type":"map",

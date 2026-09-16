@@ -49,6 +49,11 @@ public:
   void Add(uint64_t value) noexcept override;
 
   void Add(uint64_t value, const opentelemetry::context::Context &context) noexcept override;
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<uint64_t>> Bind(
+      const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
+#endif
 };
 
 class DoubleCounter : public Synchronous, public opentelemetry::metrics::Counter<double>
@@ -66,6 +71,11 @@ public:
 
   void Add(double value) noexcept override;
   void Add(double value, const opentelemetry::context::Context &context) noexcept override;
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<double>> Bind(
+      const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
+#endif
 };
 
 class LongUpDownCounter : public Synchronous, public opentelemetry::metrics::UpDownCounter<int64_t>
@@ -147,6 +157,11 @@ public:
   void Record(uint64_t value) noexcept override;
 #endif
 
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<uint64_t>> Bind(
+      const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
+#endif
+
   void Record(uint64_t value,
               const opentelemetry::common::KeyValueIterable &attributes,
               const opentelemetry::context::Context &context) noexcept override;
@@ -165,6 +180,11 @@ public:
               const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
 
   void Record(double value) noexcept override;
+#endif
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+  opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<double>> Bind(
+      const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
 #endif
 
   void Record(double value,

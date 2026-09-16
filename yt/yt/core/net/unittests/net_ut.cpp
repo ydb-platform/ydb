@@ -91,11 +91,11 @@ TEST_F(TNetTest, TransferFourBytesUsingWriteV)
 
 TEST_F(TNetTest, BigTransfer)
 {
-// Select-based poller implementation is much slower there.
+// Select-based poller re-arms on every partial IO, so each chunk costs a full poller cycle.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;
@@ -132,11 +132,11 @@ TEST_F(TNetTest, BigTransfer)
 
 TEST_F(TNetTest, BidirectionalTransfer)
 {
-// Select-based poller implementation is much slower there.
+// See the note in BigTransfer.
 #if defined(HAVE_EPOLL_POLLER)
     const int N = 1024, K = 256 * 1024;
 #else
-    const int N = 32, K = 256 * 1024;
+    const int N = 8, K = 64 * 1024;
 #endif
 
     IConnectionPtr a, b;

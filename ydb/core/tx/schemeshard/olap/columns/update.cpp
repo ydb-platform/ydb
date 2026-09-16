@@ -63,6 +63,10 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         ColumnFamilyName = columnSchema.GetColumnFamilyName();
     }
 
+    if (columnSchema.HasNotNull()) {
+        NotNull = columnSchema.GetNotNull();
+    }
+
     if (columnSchema.HasSerializer()) {
         Serializer = NArrow::NSerialization::TSerializerContainer();
         if (columnSchema.GetSerializer().HasClassName()) {
@@ -269,6 +273,19 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
             << "Column FAMILY is not supported for column tables");
         return false;
     }
+    if (diffColumn.GetNotNull().has_value()) {
+        if (*diffColumn.GetNotNull()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "SET NOT NULL is not supported for column tables (column '" << Name << "')");
+            return false;
+        }
+        if (IsKeyColumn()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Cannot drop NOT NULL from primary key column '" << Name << "'");
+            return false;
+        }
+        NotNullFlag = false;
+    }
     if (diffColumn.GetSerializer()) {
         if (*diffColumn.GetSerializer()) {
             Serializer = *diffColumn.GetSerializer();
@@ -358,6 +375,9 @@ bool TOlapColumnBase::IsAllowedDictionaryType(ui32 typeId) {
         case NYql::NProto::Date:
         case NYql::NProto::Datetime:
         case NYql::NProto::Timestamp:
+        case NYql::NProto::Interval:
+        case NYql::NProto::Uuid:
+        case NYql::NProto::DyNumber:
             return true;
         default:
             return false;

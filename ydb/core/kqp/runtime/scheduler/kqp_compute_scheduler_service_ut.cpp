@@ -1,10 +1,10 @@
-#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NKqp {
 
-using namespace NWorkload;
+using namespace NWorkloadManager;
 
 Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 

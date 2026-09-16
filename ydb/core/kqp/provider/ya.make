@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
     yql_kikimr_constraints.cpp
@@ -42,7 +43,9 @@ PEERDIR(
     ydb/library/yql/dq/constraints
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
+    ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/provider
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/metadata/optimization
@@ -68,7 +71,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/sql
     yql/essentials/sql/settings
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

@@ -13,6 +13,7 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_db_ref_map.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -263,6 +264,10 @@ public:
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
+    // Set at the start of destruction so TPathDbRef::Release() during member
+    // teardown does not touch already-destroyed members (PathsById,
+    // CleanDroppedPathsCandidates, ...).
+    bool IsBeingDestroyed = false;
 
     bool IsDomainSchemeShard = false;
 
@@ -284,7 +289,12 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables;
+    // Every TDbRefMap below registers here from its constructor (it takes
+    // `this` and this list), so Clear() disarms+drops them all by iteration and
+    // a map cannot be declared without being registered.
+    TVector<IDbRefMap*> DbRefMaps;
+
+    TDbRefMap<TTableInfo::TPtr> Tables{"Tables", this, DbRefMaps};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -294,11 +304,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
-    THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
-    THashMap<TPathId, TSequenceInfo::TPtr> Sequences;
-    THashMap<TPathId, TReplicationInfo::TPtr> Replications;
-    THashMap<TPathId, TBlobDepotInfo::TPtr> BlobDepots;
+    TDbRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, DbRefMaps};
+    TDbRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, DbRefMaps};
+    TDbRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, DbRefMaps};
+    TDbRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, DbRefMaps};
+    TDbRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, DbRefMaps};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -306,24 +316,24 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TTopicInfo::TPtr> Topics;
-    THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
-    THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
-    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
-    THashMap<TPathId, TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes;
-    THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
-    THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
-    THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TExternalTableInfo::TPtr> ExternalTables;
-    THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
-    THashMap<TPathId, TViewInfo::TPtr> Views;
-    THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
-    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
-    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
-    THashMap<TPathId, TSecretInfo::TPtr> Secrets;
-    THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
+    TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
+    TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
+    TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
+    TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
+    TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
+    TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
+    TDbRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, DbRefMaps};
+    TDbRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, DbRefMaps};
+    TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
+    TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
+    TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
+    TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
+    TDbRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, DbRefMaps};
+    TDbRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, DbRefMaps};
+    TDbRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, DbRefMaps};
+    TDbRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, DbRefMaps};
     THashSet<TPathId> TableInBackupCollections;
-    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
+    TDbRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, DbRefMaps};
 
     TTempDirsState TempDirsState;
 
@@ -336,6 +346,7 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore
@@ -412,6 +423,7 @@ public:
     bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnableStatistics = false;
+    bool EnableWasmCompileController = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;
@@ -455,6 +467,8 @@ public:
     bool TablePersistStatsPending = false;
     TStatsQueue<TEvDataShard::TEvPeriodicTableStats> TableStatsQueue;
 
+    TActorId StatsParserActorId;
+
     bool TopicStatsBatchScheduled = false;
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
@@ -490,14 +504,14 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
-        THolder<TProposeResponse>& response,
+        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
         TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
 
@@ -801,8 +815,13 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
+    void AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason);
+    void ReleaseOwnDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // Debug-only: assert every self-ref map is consistent with PathsById.
+    void DebugCheckDbRefIntegrity() const;
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
@@ -819,9 +838,10 @@ public:
     void PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId);
 
     // user attrs
+    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
     void ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId, TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs);
-    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement);
 
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -931,6 +951,8 @@ public:
     void PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainServerlessComputeResourcesMode(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainTablesMetricsLevel(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistAddKesusAlter(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
@@ -1553,6 +1575,8 @@ public:
     void ScheduleTableStatsBatch(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx);
+    void HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
 
     void ExecuteTopicStatsBatch(const TActorContext& ctx);
@@ -1679,7 +1703,7 @@ public:
 
     static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
-    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore);
     void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
@@ -1911,6 +1935,7 @@ public:
         struct TTxReplyValidateUniqueIndex;
         struct TTxReplyFulltextIndex;
         struct TTxReplyFulltextDict;
+        struct TTxReplyStatistics;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1943,6 +1968,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
@@ -1963,6 +1989,7 @@ public:
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 
@@ -1993,6 +2020,10 @@ public:
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
+    // txIds of concurrent operations (e.g. a backup CopyTable) that a
+    // SetColumnConstraint operation is currently waiting on before it can retry
+    // one of its own internal sub-transactions.
+    THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentSetColumnConstraint;
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
@@ -2240,6 +2271,7 @@ public:
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
+    ~TSchemeShard();
 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }
     TTabletId SelfTabletId() const { return TTabletId(ITablet::TabletID()); }

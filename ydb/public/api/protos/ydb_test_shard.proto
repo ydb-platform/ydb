@@ -12,7 +12,7 @@ message CreateTestShardSetRequest {
     // Path to the TestShardSet object to create
     string path = 2;
 
-    // Storage pool names for tablet channels (optional)
+    // Storage pool kinds for tablet channels (optional)
     // If not provided, uses first 3 storage pools from the database domain
     repeated string channels = 3;
 

@@ -133,7 +133,7 @@ public:
             TableIndexColumnId_ = nameTable->GetIdOrRegisterName(TableIndexColumnName);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Failed to add system columns to name table for protobuf writer")
-                << ex;
+                .With(ex);
         }
     }
 
@@ -971,7 +971,7 @@ private:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Error writing value of field %Qv",
                         fieldDescription->Name)
-                        << ex;
+                        .With(ex);
                 }
             }
             WriterImpl_.OnEndRow();
@@ -1090,7 +1090,7 @@ ISchemalessFormatWriterPtr CreateWriterForProtobuf(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for protobuf format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for protobuf format").With(ex);
     }
 }
 

@@ -10,16 +10,15 @@
 
 #include <arrow/util/bitmap_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TBlockAsContainerExec {
 public:
     TBlockAsContainerExec(const TVector<TType*>& argTypes, const std::shared_ptr<arrow::DataType>& returnArrowType)
-        : ArgTypes(argTypes)
-        , ReturnArrowType(returnArrowType)
+        : ArgTypes_(argTypes)
+        , ReturnArrowType_(returnArrowType)
     {
     }
 
@@ -37,21 +36,22 @@ public:
         if (allScalars) {
             // return scalar too
             std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+            arrowValue.reserve(batch.values.size());
             for (const auto& x : batch.values) {
                 arrowValue.emplace_back(x.scalar());
             }
 
-            *res = arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, ReturnArrowType));
+            *res = arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, ReturnArrowType_));
             return arrow::Status::OK();
         }
 
-        auto newArrayData = arrow::ArrayData::Make(ReturnArrowType, length, {nullptr}, 0, 0);
-        MKQL_ENSURE(ArgTypes.size() == batch.values.size(), "Mismatch batch columns");
+        auto newArrayData = arrow::ArrayData::Make(ReturnArrowType_, length, {nullptr}, 0, 0);
+        MKQL_ENSURE(ArgTypes_.size() == batch.values.size(), "Mismatch batch columns");
         for (ui32 i = 0; i < batch.values.size(); ++i) {
             const auto& datum = batch.values[i];
             if (datum.is_scalar()) {
                 // expand scalar to array
-                auto expandedArray = MakeArrayFromScalar(*datum.scalar(), length, AS_TYPE(TBlockType, ArgTypes[i])->GetItemType(), *ctx->memory_pool());
+                auto expandedArray = MakeArrayFromScalar(*datum.scalar(), length, AS_TYPE(TBlockType, ArgTypes_[i])->GetItemType(), *ctx->memory_pool());
                 newArrayData->child_data.push_back(expandedArray.array());
             } else {
                 newArrayData->child_data.push_back(datum.array());
@@ -63,8 +63,8 @@ public:
     }
 
 private:
-    const TVector<TType*> ArgTypes;
-    const std::shared_ptr<arrow::DataType> ReturnArrowType;
+    const TVector<TType*> ArgTypes_;
+    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsContainerKernel(const TVector<TType*>& argTypes, TType* resultType) {
@@ -94,5 +94,4 @@ IComputationNode* WrapBlockAsContainer(TCallable& callable, const TComputationNo
     return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

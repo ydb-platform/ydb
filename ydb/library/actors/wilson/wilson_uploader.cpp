@@ -3,8 +3,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
-#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
+#include <contrib/proto/opentelemetry/opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
+#include <contrib/proto/opentelemetry/opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>

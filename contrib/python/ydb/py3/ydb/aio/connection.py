@@ -26,7 +26,8 @@ from ydb.connection import (
 from ydb.driver import DriverConfig
 from ydb.settings import BaseRequestSettings
 from ydb import issues
-from ydb.opentelemetry.tracing import get_trace_metadata
+from ydb.observability import sdk_build_info_tokens
+from ydb.observability.tracing import get_trace_metadata
 
 try:
     from ydb.public.api.grpc import ydb_topic_v1_pb2_grpc
@@ -70,7 +71,8 @@ async def _construct_metadata(
         if settings.request_type is not None:
             metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
 
-    metadata.append(_utilities.x_ydb_sdk_build_info_header(getattr(driver_config, "_additional_sdk_headers", ())))
+    additional_sdk_headers = (*sdk_build_info_tokens(), *getattr(driver_config, "_additional_sdk_headers", ()))
+    metadata.append(_utilities.x_ydb_sdk_build_info_header(additional_sdk_headers))
 
     metadata.extend(get_trace_metadata())
 
@@ -279,7 +281,7 @@ class Connection:
         """
         Closes the underlying gRPC channel
         :param: grace: If a grace period is specified, this method wait until all active
-        RPCs are finshed, once the grace period is reached the ones that haven't
+        RPCs are finished, once the grace period is reached the ones that haven't
         been terminated are cancelled. If grace is None, this method will wait until all tasks are finished.
         :return: None
         """

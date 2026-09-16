@@ -16,6 +16,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
@@ -68,7 +70,7 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
     for (auto&& i : Proto->GetStages()) {
         TStagePredictor predictor;
         if (!predictor.DeserializeFromKqpSettings(i.GetProgram().GetSettings())) {
-            ALS_ERROR(NKikimrServices::KQP_EXECUTER) << "cannot parse program settings for data prediction";
+            YDB_LOG_ERROR("Cannot parse program settings for data prediction");
             Predictors.emplace_back();
         } else {
             Predictors.emplace_back(std::move(predictor));
@@ -229,7 +231,9 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(indexSettings.GetTable().GetPath());
                     if (indexSettings.HasFulltextSettings()) {
                         tablesSet.insert(indexSettings.GetDocsTable().GetPath());
-                        tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        if (indexSettings.HasDictTable()) {
+                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        }
                         tablesSet.insert(indexSettings.GetStatsTable().GetPath());
                     }
                 }
@@ -331,7 +335,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                             }
                         };
                         fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
-                        fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        if (indexSettings.HasDictTable()) {
+                            fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        }
                         fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
                     }
                 }

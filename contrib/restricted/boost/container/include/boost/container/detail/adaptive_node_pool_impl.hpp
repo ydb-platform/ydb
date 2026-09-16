@@ -565,6 +565,7 @@ class private_adaptive_node_pool_impl_common
                }
             }
          }
+         (void)total_free_blocks;
          BOOST_ASSERT(total_free_blocks == m_totally_free_blocks);
          BOOST_ASSERT(total_free_nodes >= m_totally_free_blocks*real_num_node);
       }

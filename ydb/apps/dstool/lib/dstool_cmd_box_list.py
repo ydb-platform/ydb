@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 from collections import defaultdict
@@ -59,7 +59,7 @@ def do(args):
 
         box = boxes[pdisk.BoxId][pdisk.Type]
 
-        for key in ['PDisks_TOTAL', 'PDisks_' + kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)]:
+        for key in ['PDisks_TOTAL', 'PDisks_' + kikimr_bs3.EDriveStatus.Name(pdisk.DriveStatus)]:
             box[key] += 1
 
         box['TotalSize'] += pdisk.PDiskMetrics.TotalSize

@@ -4,13 +4,13 @@
 
 #include <yt/yt/client/job_tracker_client/public.h>
 
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
+
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/hash.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
-
-#include <library/cpp/yt/compact_containers/compact_vector.h>
-#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -368,6 +368,7 @@ DEFINE_ENUM(EObjectType,
     // Queue stuff
     ((QueueConsumer)                               (1700))
     ((QueueProducer)                               (1701))
+    ((QueueMultiConsumer)                          (1702))
 );
 
 //! A bit mask marking schema types.

@@ -480,7 +480,7 @@ class EventAliaser(BaseEventHooks):
 
             new_name = '.'.join(event_parts)
             logger.debug(
-                f"Changing event name from {event_name} to {new_name}"
+                "Changing event name from %s to %s", event_name, new_name
             )
             self._alias_name_cache[event_name] = new_name
             return new_name

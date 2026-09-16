@@ -292,7 +292,7 @@ def _common_type_names(csource):
     return words_used
 
 
-class Parser(object):
+class Parser:
 
     def __init__(self):
         self._declarations = {}
@@ -804,11 +804,10 @@ class Parser(object):
                 raise AssertionError("kind = %r" % (kind,))
             if name is not None:
                 self._declare(key, tp)
-        else:
-            if kind == 'enum' and type.values is not None:
-                raise NotImplementedError(
-                    "enum %s: the '{}' declaration should appear on the first "
-                    "time the enum is mentioned, not later" % explicit_name)
+        elif kind == 'enum' and type.values is not None:
+            raise NotImplementedError(
+                "enum %s: the '{}' declaration should appear on the first "
+                "time the enum is mentioned, not later" % explicit_name)
         if not tp.forcename:
             tp.force_the_name(force_name)
         if tp.forcename and '$' in tp.name:

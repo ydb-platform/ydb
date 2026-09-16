@@ -1,7 +1,9 @@
 #include "yql_yt_ytflow_integration.h"
+#include "yql_yt_op_settings.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_table.h"
 
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -53,6 +55,11 @@ public:
                 auto pathInfo = TYtPathInfo(path);
                 auto tableInfo = pathInfo.Table;
 
+                if (!tableInfo->Meta) {
+                    AddIssue(ctx, TIssue("table without meta"));
+                    return false;
+                }
+
                 if (!tableInfo->Meta->IsDynamic) {
                     AddIssue(ctx, TIssue("static table"));
                     return false;
@@ -86,9 +93,11 @@ public:
             return Nothing();
         }
 
-        auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
-        auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
-        auto commitEpoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
+        auto writeTable = maybeWriteTable.Cast();
+
+        auto cluster = TString(writeTable.DataSink().Cluster().Value());
+        auto tableName = TString(TYtTableInfo::GetTableLabel(writeTable.Table()));
+        auto commitEpoch = TEpochInfo::Parse(writeTable.Table().CommitEpoch().Ref());
 
         auto ytState = State_.lock();
         YQL_ENSURE(ytState);
@@ -104,6 +113,35 @@ public:
             && !(commitTableDesc.Intents & TYtTableIntent::Override)
         ) {
             AddIssue(ctx, TIssue("write to static table"));
+            return false;
+        }
+
+        auto mode = EYtWriteMode::Renew;
+        if (auto modeSetting = NYql::GetSetting(writeTable.Settings().Ref(), EYtSettingType::Mode)) {
+            mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
+        }
+
+        const bool tableExists = tableDesc.Meta->DoesExist;
+        const bool isSortedTable = tableDesc.RowSpec && tableDesc.RowSpec->IsSorted();
+
+        if (isSortedTable && mode != EYtWriteMode::Replace) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Writing into sorted table " << tableName.Quote()
+                << " is supported only by REPLACE"));
+            return false;
+        }
+
+        if (tableExists && !isSortedTable && mode == EYtWriteMode::Replace) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "REPLACE is supported only for sorted tables, but table "
+                << tableName.Quote() << " is not sorted"));
+            return false;
+        }
+
+        if (mode == EYtWriteMode::Replace && !HasSort(writeTable.Content().Ptr())) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "REPLACE into table " << tableName.Quote()
+                << " requires ORDER BY"));
             return false;
         }
 
@@ -278,17 +316,26 @@ public:
         }
 
         {
-            auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
-            auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
-
             auto ytState = State_.lock();
             YQL_ENSURE(ytState);
 
+            TYtTableInfo tableInfo(maybeWriteTable.Cast().Table());
             auto tableDesc = ytState->TablesData->GetTable(
-                cluster, tableName, 0);
+                tableInfo.Cluster, tableInfo.Name, 0);
 
             sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
             sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+
+            const auto& originalRowSpec = tableDesc.RowSpec;
+            const auto& resultRowSpec = tableInfo.RowSpec;
+            if (resultRowSpec) {
+                for (const auto& [column, _] : resultRowSpec->GetForeignSort()) {
+                    bool skipExpressionColumn = originalRowSpec && originalRowSpec->ExpressionColumns.contains(column);
+                    if (!skipExpressionColumn) {
+                        sinkSettings.AddKeyColumns(column);
+                    }
+                }
+            }
         }
 
         settings.PackFrom(sinkSettings);
@@ -348,6 +395,25 @@ private:
         }
 
         ctx.IssueManager.RaiseIssue(issue);
+    }
+
+    bool HasSort(const TExprNode::TPtr& node) {
+        bool hasSort = false;
+
+        VisitExpr(node, [&hasSort](const TExprNode::TPtr& node) {
+            if (hasSort || node->IsLambda()) {
+                return false;
+            }
+
+            if (TMaybeNode<TCoSort>(node)) {
+                hasSort = true;
+                return false;
+            }
+
+            return true;
+        });
+
+        return hasSort;
     }
 
 private:

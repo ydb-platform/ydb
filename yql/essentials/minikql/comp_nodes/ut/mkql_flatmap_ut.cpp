@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest) {
 Y_UNIT_TEST_LLVM(TestOverListAndPartialLists) {
@@ -340,11 +339,11 @@ Y_UNIT_TEST_LLVM(TestNarrowWithIndependentFlow) {
     const auto pgmReturn = pb.Collect(pb.NarrowFlatMap(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                     [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                        [&](TRuntimeNode::TList) { return pb.Map(
-                                                                                      pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<float>{+1.f, -1.f}), {}),
+                                                                                      pb.ToFlow(NTest::ConvertValueToLiteralNode(pb, TVector<float>{+1.F, -1.F}), {}),
                                                                                       [&](TRuntimeNode item) { return pb.Minus(item); }); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{-1.f, +1.f, -1.f, +1.f, -1.f, +1.f});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{-1.F, +1.F, -1.F, +1.F, -1.F, +1.F});
 }
 
 Y_UNIT_TEST_LLVM(TestThinNarrowWithList) {
@@ -476,5 +475,4 @@ Y_UNIT_TEST_LLVM(TestRecursiveFlatMapOverLazyZipWithoutCollect) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

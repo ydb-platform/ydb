@@ -1,16 +1,20 @@
 #pragma once
 
-#include <list>
+#include <util/generic/maybe.h>
 #include <util/ysaveload.h>
+
+#include <list>
 
 namespace NYql::NDq {
 
 struct TStateData {
-    TStateData() {}
+    TStateData() {
+    }
 
     TStateData(const TString& blob, ui64 version)
-    : Blob(blob)
-    , Version(version) {}
+        : Blob(blob)
+        , Version(version)
+    {}
 
     TString Blob;
     ui64 Version{0};
@@ -30,15 +34,17 @@ struct TMiniKqlProgramState {
 };
 
 struct TSourceState {
-// State data for source.
-// Typically there is only one element with state that
-// source saved. But when we are migrating states
-// between tasks there can be state
-// from several different tasks sources.
+    // State data for source.
+    // Typically there is only one element with state that
+    // source saved. But when we are migrating states
+    // between tasks there can be state
+    // from several different tasks sources.
     std::list<TStateData> Data;
     ui64 InputIndex{0};
 
-    size_t DataSize() const { return Data.size(); }
+    size_t DataSize() const {
+        return Data.size();
+    }
 
     Y_SAVELOAD_DEFINE(Data, InputIndex);
 };
@@ -62,18 +68,13 @@ struct TComputeActorState {
         Sinks.clear();
     }
 
-    bool ParseFromString(const TString& in) {
-        TStringStream str(in);
-        Load(&str);
-        return true;
+    bool ParseFromString(const TString& in);
+
+    bool SerializeToString(TString* out) const;
+
+    size_t ByteSizeLong() const {
+        return MiniKqlProgram ? MiniKqlProgram->Data.Blob.size() : 0;
     }
-    bool SerializeToString(TString* out) const { 
-        TStringStream result;
-        Save(&result);
-        *out = result.Str();
-        return true;
-    }
-    size_t ByteSizeLong() const {return MiniKqlProgram ? MiniKqlProgram->Data.Blob.size() : 0; }
 
     Y_SAVELOAD_DEFINE(MiniKqlProgram, Sources, Sinks);
 };

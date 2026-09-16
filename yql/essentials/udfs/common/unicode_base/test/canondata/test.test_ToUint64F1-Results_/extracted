@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:15:14: Error: Input string contains junk after the number
+	    Unicode::ToUint64(value),
+	             ^

@@ -1,6 +1,6 @@
 #include "named_node_visibility.h"
 
-#include "parse_tree.h"
+#include <yql/essentials/sql/v1/ide/analysis/parse_tree.h>
 
 #include <yql/essentials/sql/v1/ide/pure_ast/narrowing_visitor.h>
 
@@ -13,7 +13,7 @@ namespace {
 class TVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     TVisitor(const TParsedInput& input, THashSet<TString>* visible)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
         , Visible_(visible)
     {
     }
@@ -112,7 +112,7 @@ private:
 
 TVector<TString> VisibleNamedNodes(TParsedInput input) {
     THashSet<TString> visible;
-    TVisitor(input, &visible).visit(input.SqlQuery);
+    TVisitor(input, &visible).visit(input.ParseTree->Root());
 
     TVector<TString> result(Reserve(visible.size()));
     std::ranges::move(visible, std::back_inserter(result));

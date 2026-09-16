@@ -4,6 +4,8 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("topic", TopicName)
 
 using namespace NPersQueue;
@@ -30,11 +32,14 @@ void TMirrorDescriber::Bootstrap(const TActorContext& ctx) {
 void TMirrorDescriber::StartInit(const TActorContext& ctx) {
     Become(&TThis::StateInit);
     DescribeRetryTimeout = DESCRIBE_RETRY_TIMEOUT_START;
-    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
+    ++DescribeGeneration;
+    DescribeTopicRequestInFlight = false;
+    CredentialsRequestInFlight = false;
+    ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials, 0, DescribeGeneration);
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_N("killed");
+    LOG_N("Killed");
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -44,25 +49,43 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    LOG_D("got new config, equal with previous: " << equalConfigs);
+    LOG_D(
+        "Got new config, equal with",
+        {"previous", equalConfigs}
+    );
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        LOG_I("changing config");
+        LOG_I("Changing config");
         StartInit(ctx);
     }
 }
 
 void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != DescribeGeneration) {
+        LOG_D(
+            "Ignoring stale topic description",
+            {"cookie", ev->Cookie},
+                    {"generation",
+            DescribeGeneration}
+        );
+        return;
+    }
     DescribeTopicRequestInFlight = false;
     const auto& description = ev->Get()->Description;
     if (!description.has_value()) {
-        LOG_E("cannot describe topic " << description.error());
+        LOG_E(
+            "Cannot describe topic",
+            {"error", description.error()}
+        );
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
     const NYdb::NTopic::TDescribeTopicResult& result = description.value();
     if (!result.IsSuccess()) {
-        LOG_E("cannot describe topic " << result.GetIssues().ToString());
+        LOG_E(
+            "Cannot describe topic",
+            {"issues", result.GetIssues()}
+        );
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
@@ -71,14 +94,17 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
         descr.SerializeTo(req);
         return req.ShortUtf8DebugString();
     };
-    LOG_T("topic description: " << debugTopicDescriptionString(description.value().GetTopicDescription()));
+    LOG_T(
+        "Topic",
+        {"description", debugTopicDescriptionString(description.value().GetTopicDescription())}
+    );
     ctx.Send(TabletActorId, ev->Release());
     ctx.Schedule(DESCRIBE_RETRY_TIMEOUT_MAX, new TEvents::TEvWakeup());
 }
 
 void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     if (DescribeTopicRequestInFlight) {
-        LOG_I("description request already inflight.");
+        LOG_I("Description request already inflight");
         return;
     }
 
@@ -88,14 +114,15 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     future.Subscribe(
         [
             actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
+            selfId = SelfId(),
+            generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::NTopic::TDescribeTopicResult>& result) {
             THolder<TEvPQ::TEvMirrorTopicDescription> ev;
             const bool hasValue = result.HasValue();
             if (hasValue) {
                 const auto& value = result.GetValue();
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(value);
-                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+                actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
                 return;
             }
             try {
@@ -103,15 +130,24 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
             } catch (...) {
                 ev = MakeHolder<TEvPQ::TEvMirrorTopicDescription>(CurrentExceptionMessage());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
     );
     DescribeTopicRequestInFlight = true;
 }
 
-void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != 0 && ev->Cookie != DescribeGeneration) {
+        LOG_D(
+            "Ignoring stale credentials init",
+            {"cookie", ev->Cookie},
+                    {"generation",
+            DescribeGeneration}
+        );
+        return;
+    }
     if (CredentialsRequestInFlight) {
-        LOG_W("credentials request already inflight.");
+        LOG_W("Credentials request already inflight");
         return;
     }
     CredentialsProvider = nullptr;
@@ -122,7 +158,8 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
     future.Subscribe(
         [
             actorSystem = ctx.ActorSystem(),
-            selfId = SelfId()
+            selfId = SelfId(),
+            generation = DescribeGeneration
         ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
             THolder<TEvPQ::TEvCredentialsCreated> ev;
             if (result.HasException()) {
@@ -136,22 +173,37 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
             } else {
                 ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release(), 0, generation));
         }
     );
     CredentialsRequestInFlight = true;
 }
 
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Cookie != DescribeGeneration) {
+        LOG_D(
+            "Ignoring stale credentials",
+            {"cookie", ev->Cookie},
+                    {"generation",
+            DescribeGeneration}
+        );
+        return;
+    }
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
-        LOG_W("cannot initialize credentials provider: " << ev->Get()->Error.value());
+        LOG_W(
+            "Cannot initialize credentials",
+            {"provider", ev->Get()->Error.value()}
+        );
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
         return;
     }
 
     CredentialsProvider = ev->Get()->Credentials;
-    LOG_N("credentials provider created " << bool(CredentialsProvider));
+    LOG_N(
+        "Credentials provider created",
+        {"hasCredentialsProvider", bool(CredentialsProvider)}
+    );
     CredentialsInitInterval = INIT_INTERVAL_START;
     ScheduleDescription(ctx);
 }
@@ -164,17 +216,9 @@ void TMirrorDescriber::ScheduleDescription(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
 }
 
-TString TMirrorDescriber::BuildLogPrefix() const {
-    return TStringBuilder() << "[MirrorDescriber][" << TopicName << "] ";
-}
-
-TString TMirrorDescriber::GetCurrentState() const {
-    if (CurrentStateFunc() == &TThis::StateInit) {
-        return "StateInitConsumer";
-    } else if (CurrentStateFunc() == &TThis::StateWork) {
-        return "StateWork";
-    }
-    return "UNKNOWN";
+TStructuredMessage TMirrorDescriber::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"topic", TopicName});
 }
 
 NActors::IActor* CreateMirrorDescriber(

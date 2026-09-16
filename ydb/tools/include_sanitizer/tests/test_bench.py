@@ -88,5 +88,62 @@ class BaselineRoundTripTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class CounterColumnsTest(unittest.TestCase):
+    """The retrofitted CPU-time and instruction columns."""
+
+    def _capture(self, fn, *args) -> str:
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            fn(*args)
+        return buf.getvalue()
+
+    def test_counters_are_shown_when_present(self) -> None:
+        results = {
+            "ydb/a.cpp": {"min_us": 1500000, "median_us": 1500000,
+                          "runs_us": [1500000], "min_user_us": 1400000,
+                          "instructions": 7.0e9},
+        }
+        out = self._capture(bench._print_results, results)
+        self.assertIn("instructions", out)
+        self.assertIn("7.00 G", out)
+        self.assertIn("1400.0", out)
+
+    def test_files_without_counters_show_a_dash(self) -> None:
+        results = {
+            "ydb/a.cpp": {"min_us": 1500000, "median_us": 1500000,
+                          "runs_us": [1500000], "instructions": 7.0e9},
+            "ydb/b.cpp": {"min_us": 1000000, "median_us": 1000000,
+                          "runs_us": [1000000]},
+        }
+        out = self._capture(bench._print_results, results)
+        self.assertIn("-", out.splitlines()[-1])
+
+    def test_columns_are_omitted_when_nothing_was_counted(self) -> None:
+        results = {"ydb/a.cpp": {"min_us": 1500000, "median_us": 1500000,
+                                 "runs_us": [1500000]}}
+        out = self._capture(bench._print_results, results)
+        self.assertNotIn("instructions", out)
+        self.assertNotIn("CPU(ms)", out)
+
+    def test_instruction_comparison_only_covers_counted_files(self) -> None:
+        base = {"ydb/a.cpp": {"min_us": 2000000, "instructions": 9.0e9},
+                "ydb/b.cpp": {"min_us": 1000000}}
+        cur = {"ydb/a.cpp": {"min_us": 1500000, "instructions": 7.0e9},
+               "ydb/b.cpp": {"min_us": 1050000}}
+        out = self._capture(bench._print_instruction_comparison,
+                            "base", base, cur, ["ydb/a.cpp", "ydb/b.cpp"], 10)
+        self.assertIn("-22.2%", out)
+        self.assertNotIn("ydb/b.cpp", out)
+
+    def test_instruction_comparison_is_skipped_without_counts(self) -> None:
+        base = {"ydb/a.cpp": {"min_us": 2000000}}
+        cur = {"ydb/a.cpp": {"min_us": 1500000}}
+        out = self._capture(bench._print_instruction_comparison,
+                            "base", base, cur, ["ydb/a.cpp"], 10)
+        self.assertEqual(out, "")
+
+
 if __name__ == "__main__":
     unittest.main()

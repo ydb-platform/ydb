@@ -40,6 +40,9 @@ constinit const auto Logger = BacktraceIntrospectorLogger;
 
 namespace {
 
+const auto OverflowTraceLoggingTags = NLogging::TLoggingTagList()
+    .With("TraceLoggingTags", "Overflow");
+
 struct TStaticString
 {
     TStaticString() = default;
@@ -48,6 +51,11 @@ struct TStaticString
     {
         Length = std::min(std::ssize(str), std::ssize(Buffer));
         std::copy(str.data(), str.data() + Length, Buffer.data());
+    }
+
+    static TStaticString FromWholeBytesOrFallback(TStringBuf bytes, TStringBuf fallback)
+    {
+        return TStaticString(std::ssize(bytes) <= std::ssize(TStaticString{}.Buffer) ? bytes : fallback);
     }
 
     operator std::string() const
@@ -79,7 +87,7 @@ struct TSignalHandlerContext
 
     TFiberId FiberId = {};
     TTraceId TraceId = {};
-    TStaticString TraceLoggingTag;
+    TStaticString TraceLoggingTagsPayload;
     TStaticBacktrace Backtrace;
     TThreadName ThreadName = {};
 
@@ -124,7 +132,9 @@ void SignalHandler(int sig, siginfo_t* /*info*/, void* threadContext)
     SignalHandlerContext->ThreadName = GetCurrentThreadName();
     if (const auto* traceContext = TryGetCurrentTraceContext()) {
         SignalHandlerContext->TraceId = traceContext->GetTraceId();
-        SignalHandlerContext->TraceLoggingTag = TStaticString(traceContext->GetLoggingTag());
+        SignalHandlerContext->TraceLoggingTagsPayload = TStaticString::FromWholeBytesOrFallback(
+            traceContext->GetLoggingTags().GetPayload().Underlying(),
+            OverflowTraceLoggingTags.GetPayload().Underlying());
     }
 
     auto cursorContext = FramePointerCursorContextFromUcontext(*static_cast<const ucontext_t*>(threadContext));
@@ -151,7 +161,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
         YT_VERIFY(IntrospectionLock.exchange(false));
     });
 
-    YT_LOG_INFO("Thread introspection started");
+    YT_TLOG_INFO("Thread introspection started");
 
     {
         struct sigaction action;
@@ -161,7 +171,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
@@ -169,38 +179,41 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
     for (auto threadId : GetCurrentProcessThreadIds()) {
         try {
             if (!IsUserspaceThread(threadId)) {
-                YT_LOG_DEBUG("Skipping a non-userspace thread (ThreadId: %v)",
-                    threadId);
+                YT_TLOG_DEBUG("Skipping a non-userspace thread")
+                    .With("ThreadId", threadId);
                 continue;
             }
         } catch (const std::exception& ex) {
-            YT_LOG_DEBUG(ex, "Failed to get thread flags (ThreadId: %v)",
-                threadId);
+            YT_TLOG_DEBUG("Failed to get thread flags")
+                .With("ThreadId", threadId)
+                .With(ex);
             continue;
         }
 
         TSignalHandlerContext signalHandlerContext;
         if (::syscall(SYS_tkill, threadId, SIGUSR1) != 0) {
-            YT_LOG_DEBUG(TError::FromSystem(), "Failed to signal to thread (ThreadId: %v)",
-                threadId);
+            YT_TLOG_DEBUG("Failed to signal to thread")
+                .With("ThreadId", threadId)
+                .With(TError::FromSystem());
             continue;
         }
 
-        YT_LOG_DEBUG("Sent signal to thread (ThreadId: %v)",
-            threadId);
+        YT_TLOG_DEBUG("Sent signal to thread")
+            .With("ThreadId", threadId);
 
         signalHandlerContext.WaitUntilFinished();
 
-        YT_LOG_DEBUG("Signal handler finished (ThreadId: %v, FiberId: %x)",
-            threadId,
-            signalHandlerContext.FiberId);
+        YT_TLOG_DEBUG("Signal handler finished")
+            .With("ThreadId", threadId)
+            .WithFormat("FiberId", "%x", signalHandlerContext.FiberId);
 
         infos.push_back(TThreadIntrospectionInfo{
             .ThreadId = threadId,
             .FiberId = signalHandlerContext.FiberId,
             .ThreadName = std::string(signalHandlerContext.ThreadName.Buffer.data(), static_cast<size_t>(signalHandlerContext.ThreadName.Length)),
             .TraceId = signalHandlerContext.TraceId,
-            .TraceLoggingTag = signalHandlerContext.TraceLoggingTag,
+            .TraceLoggingTags = NLogging::TLoggingTagListPayload(
+                std::string(signalHandlerContext.TraceLoggingTagsPayload)),
             .Backtrace = signalHandlerContext.Backtrace,
         });
     }
@@ -213,11 +226,11 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to de-install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
-    YT_LOG_INFO("Thread introspection completed");
+    YT_TLOG_INFO("Thread introspection completed");
 
     return infos;
 }

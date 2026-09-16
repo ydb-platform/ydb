@@ -1,11 +1,12 @@
 #pragma once
 
-#include "property.h"
 #include "public.h"
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT {
 

@@ -112,6 +112,7 @@ private:
             case ELogicalMetatype::Optional:
             case ELogicalMetatype::List:
             case ELogicalMetatype::Tagged:
+            case ELogicalMetatype::AggregateState:
                 return result = CheckAndCacheTriviality(logicalType->GetElement(), config);
 
             case ELogicalMetatype::Tuple:
@@ -1064,6 +1065,8 @@ TYsonCursorConverter CreateYsonConverterImpl(
         }
         case ELogicalMetatype::Tagged:
             return CreateYsonConverterImpl(descriptor.TaggedElement(), cache, config);
+        case ELogicalMetatype::AggregateState:
+            return CreateYsonConverterImpl(descriptor.AggregateStateElement(), cache, config);
     }
     YT_ABORT();
 }

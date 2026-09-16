@@ -1,5 +1,4 @@
 #include "protobuf_helpers.h"
-#include "mpl.h"
 
 #include <yt/yt/core/compression/codec.h>
 
@@ -10,6 +9,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -27,7 +28,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
+[[maybe_unused]] static YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };
@@ -40,7 +41,7 @@ i32 CheckedCastToI32(ui64 length)
 {
     if (length >= std::numeric_limits<i32>::max()) {
         THROW_ERROR_EXCEPTION("Protobuf message size exceeds 2GB")
-            << TErrorAttribute("length", length);
+            .With("length", length);
     }
     return static_cast<i32>(length);
 }
@@ -54,8 +55,8 @@ void SerializeProtoToRef(
 {
 #ifdef YT_VALIDATE_REQUIRED_PROTO_FIELDS
     if (!partial && !message.IsInitialized()) {
-        YT_LOG_FATAL("Missing required protobuf fields (Error: %v)",
-            message.InitializationErrorString());
+        YT_TLOG_FATAL("Missing required protobuf fields")
+            .With("Error", message.InitializationErrorString());
     }
 #endif
     auto* begin = reinterpret_cast<google::protobuf::uint8*>(ref.begin());

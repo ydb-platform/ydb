@@ -19,15 +19,18 @@ namespace NKikimr {
         TOutOfSpaceLogic(TIntrusivePtr<TVDiskContext> vctx, std::shared_ptr<THull> hull);
         ~TOutOfSpaceLogic();
 
-        // Check if we allow this write
-        bool AllowVPutLikeWrite(const TActorContext& ctx, bool ignoreBlock, bool isZeroEntry, ui32 size) const;
-        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev) const;
-        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev) const;
-        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const;
+        // TEvVPut / TEvVMultiPut: local color is the one this disk would be in after
+        // compacting Fresh (this blob included); neighbors contribute only their
+        // current color. Blocks, GC and sync are judged by the color right now.
+        bool AllowVPutLikeWrite(const TActorContext& ctx, bool ignoreBlock, bool isZeroEntry, ui32 size,
+            NKikimrBlobStorage::TDataKind::E dataKind, ui64 freshChunks) const;
+        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVPut::TPtr &ev, ui64 freshChunks) const;
         bool Allow(const TActorContext &ctx, TEvLocalSyncData::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvRecoveredHugeBlob::TPtr &ev) const;
         bool Allow(const TActorContext &ctx, TEvDetectedPhantomBlob::TPtr &ev) const;
+        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVBlock::TPtr &ev, bool hasExistingEntry) const;
+        bool Allow(const TActorContext &ctx, TEvBlobStorage::TEvVCollectGarbage::TPtr &ev) const;
 
         // output details about allows/rejects
         void RenderHtml(IOutputStream &str) const;
@@ -42,6 +45,9 @@ namespace NKikimr {
 
         template <typename TEvPtr>
         friend bool AllowPut(const TOutOfSpaceLogic &logic, ESpaceColor color, TEvPtr &ev);
+
+        static bool AllowByLocalColor(ESpaceColor color, bool system, bool unavoidable);
+        static bool AllowByGlobalColor(ESpaceColor color, bool system, bool unavoidable);
 
         ESpaceColor GetSpaceColor() const;
     };

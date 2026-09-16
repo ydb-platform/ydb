@@ -4,8 +4,6 @@
 #include "ypath_service.h"
 #include "attribute_filter.h"
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/rpc/client.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
@@ -13,6 +11,8 @@
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/logging/logger.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 namespace NYT::NYTree {
 
@@ -34,7 +34,7 @@ public:
     NRpc::TRealmId GetRealmId() const override;
     std::string GetMethod() const override;
     std::string GetService() const override;
-    const std::string& GetRequestInfo() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;

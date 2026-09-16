@@ -1,0 +1,60 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "tld";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "known";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "well_known";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "ru";
+                        %true;
+                        %true
+                    ];
+                    [
+                        "123";
+                        %false;
+                        %false
+                    ];
+                    [
+                        "yandex";
+                        %true;
+                        %false
+                    ];
+                    [
+                        "sdfsdfsdf";
+                        %false;
+                        %false
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

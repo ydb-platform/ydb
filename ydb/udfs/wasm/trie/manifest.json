@@ -1,0 +1,53 @@
+{
+  "module_name": "Trie",
+  "calling_convention": "bridge",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "Lookup",
+      "export": "lookup",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"},
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "LookupWithString",
+      "export": "lookup_with_string",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"},
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "string", "tag": "concrete_type"}
+    },
+    {
+      "name": "LookupCachedBlob",
+      "export": "lookup_cached_blob",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"},
+        {"value": "string", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "LookupDict",
+      "export": "lookup_dict",
+      "argument_types": [
+        {"value": "string", "tag": "concrete_type"},
+        {
+          "value": "dict",
+          "tag": "concrete_type",
+          "key": {"value": "string", "tag": "concrete_type"},
+          "payload": {"value": "int64", "tag": "concrete_type"}
+        }
+      ],
+      "result_type": {
+        "value": "optional",
+        "tag": "concrete_type",
+        "item": {"value": "int64", "tag": "concrete_type"}
+      }
+    }
+  ]
+}

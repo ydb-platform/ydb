@@ -79,7 +79,7 @@ Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     const auto* consumer = NPQ::GetConsumer(topic.Info->Description.GetPQTabletConfig(), DEFAULT_STREAMING_CONSUMER);
     UNIT_ASSERT(consumer);
@@ -93,6 +93,11 @@ Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-shared");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings settings;
     settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
@@ -121,7 +126,7 @@ Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     const auto& config = topic.Info->Description.GetPQTabletConfig();
     const auto* consumer = NPQ::GetConsumer(config, DEFAULT_SHARED_CONSUMER);
@@ -146,6 +151,11 @@ Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-describe-shared");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings settings;
     settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
@@ -271,6 +281,11 @@ Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionMove) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-dlp-move");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings settings;
     settings.ReadRules({

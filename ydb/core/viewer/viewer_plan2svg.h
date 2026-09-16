@@ -26,7 +26,7 @@ public:
 
         TRequestState state(Event->Get());
         try {
-            TPlanVisualizer planViz;
+            NPlan2Svg::TPlanVisualizer planViz;
             planViz.LoadPlans(plan);
             result = Viewer->GetHTTPOK(state, "image/svg+xml", planViz.PrintSvg());
         } catch (std::exception& e) {

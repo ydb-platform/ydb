@@ -140,6 +140,7 @@ bool IsVersionedType(EObjectType type)
         case EObjectType::Pipeline:
         case EObjectType::QueueConsumer:
         case EObjectType::QueueProducer:
+        case EObjectType::QueueMultiConsumer:
         case EObjectType::CypressProxyMap:
             return true;
 

@@ -70,7 +70,8 @@ struct TKqpExecuterEvents {
         EvStreamDataAck,
         EvTableResolveStatus,
         EvShardsResolveStatus,
-        EvDelayedExecution
+        EvDelayedExecution,
+        EvPqTopicResolveStatus
     };
 };
 
@@ -189,17 +190,7 @@ struct TKqpResourceInfoExchangerEvents {
     };
 };
 
-struct TKqpWorkloadServiceEvents {
-    enum EKqpWorkloadServiceEvents {
-        EvPlaceRequestIntoPool = EventSpaceBegin(TKikimrEvents::ES_KQP) + 700,
-        EvContinueRequest,
-        EvCleanupRequest,
-        EvCleanupResponse,
-        EvUpdatePoolInfo,
-        EvSubscribeOnPoolChanges,
-        EvFetchDatabaseResponse,
-    };
-};
+
 
 struct TKqpBufferWriterEvents {
     enum EKqpBufferWriterEvents {

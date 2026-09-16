@@ -6,7 +6,7 @@ namespace NYql::NDq {
 
 inline void RegisterS3ReadActorFactory(
     TDqAsyncIoFactory& factory,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy = GetHTTPDefaultRetryPolicy(),
     const TS3ReadActorFactoryConfig& factoryConfig = {},

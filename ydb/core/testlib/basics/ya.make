@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/testlib/actors
     ydb/core/tx/columnshard
+    ydb/core/tx/general_cache
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util

@@ -9,11 +9,17 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/testlib
     ydb/core/testlib/basics
+    ydb/library/superlemmer_stub
     yql/essentials/sql/pg_dummy
+)
+
+RESOURCE(
+    word_break_test.json word_break_test.json
 )
 
 SRCS(
     blobstorage_grouptype_ut.cpp
+    database_kind_ut.cpp
     fulltext_ut.cpp
     kmeans_ut.cpp
     localdb_ut.cpp

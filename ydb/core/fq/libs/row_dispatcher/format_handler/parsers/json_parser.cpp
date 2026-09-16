@@ -5,9 +5,10 @@
 #include <contrib/libs/simdjson/include/simdjson.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <util/generic/scope.h>
 #include <util/string/join.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -16,6 +17,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <sstream>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -40,12 +43,28 @@ static std::string JsonTypeToString(const simdjson::builtin::ondemand::json_type
     const simdjson::error_code error = value;   \
     if (Y_UNLIKELY(error))                      \
 
-struct TJsonParserBuffer {
+template <typename T>
+using TParserVector = TVector<T, NKikimr::NMiniKQL::TMKQLAllocator<T>>;
+using TParserString = std::basic_string<char, std::char_traits<char>, NKikimr::NMiniKQL::TMKQLAllocator<char>>;
+
+struct TJsonParserBuffer : public TNonCopyable {
+    explicit TJsonParserBuffer(NKikimr::NMiniKQL::TScopedAlloc& alloc)
+        : Alloc(alloc)
+    {}
+
+    ~TJsonParserBuffer() {
+        with_lock(Alloc) {
+            decltype(Values)().swap(Values);
+            decltype(MessageOffsets)().swap(MessageOffsets);
+            decltype(Offsets)().swap(Offsets);
+        }
+    }
+
     ui16 NumberValues = 0;
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
-    TVector<ui64> Offsets = {};             // Offsets in topics (seqno).
-    TVector<ui32> MessageOffsets = {};      // Message positions in Values.
+    TParserVector<ui64> Offsets = {};             // Offsets in topics (seqno).
+    TParserVector<ui32> MessageOffsets = {};      // Message positions in Values.
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -66,13 +85,24 @@ struct TJsonParserBuffer {
 
         const auto offset = message.GetOffset();
         if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
-            LOG_ROW_DISPATCHER_WARN("Got message with offset " << offset << " which is less than previous offset " << Offsets.back());
+            YDB_LOG_WARN("Got message with offset which is less than previous offset",
+                {"logPrefix", LogPrefix},
+                {"offset", offset},
+                {"offsetsBack", Offsets.back()});
         }
 
-        NumberValues++;
-        MessageOffsets.emplace_back(Values.size());
-        Values += message.GetData();
-        Offsets.emplace_back(offset);
+        const auto& data = message.GetData();
+        try {
+            MessageOffsets.emplace_back(Values.size());
+            Offsets.emplace_back(offset);
+            Values.append(data.data(), data.size());
+        } catch (...) {
+            // Preserve already buffered messages if an allocation fails.
+            MessageOffsets.resize(NumberValues);
+            Offsets.resize(NumberValues);
+            throw;
+        }
+        ++NumberValues;
     }
 
     std::pair<const char*, size_t> Finish() {
@@ -83,7 +113,6 @@ struct TJsonParserBuffer {
     }
 
     void Clear() {
-        Y_ENSURE(Finished, "Cannot clear not finished buffer");
         NumberValues = 0;
         Finished = false;
         CreationStartTime = TInstant::Now();
@@ -93,27 +122,34 @@ struct TJsonParserBuffer {
     }
 
 private:
-    TString Values = {};
+    NKikimr::NMiniKQL::TScopedAlloc& Alloc;
+    TParserString Values = {};
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
-class TColumnParser {
+class TColumnParser : public TMoveOnly {
+    template <typename K, typename V>
+    using TColumnMap = THashMap<K, V, THash<K>, TEqualTo<K>, NKikimr::NMiniKQL::TMKQLAllocator<std::pair<const K, V>>>;
+    using TMemberNames = TColumnMap<std::string_view, size_t>;
+    using TStructMembers = TColumnMap<const NKikimr::NMiniKQL::TStructType*, TMemberNames>;
+
 public:
-    std::string Name;  // Used for column index by std::string_view
-    TString TypeYson;
+    TParserString Name;
+    TParserString TypeYson;
 
 public:
     TStatus InitParser(const TString& name, const TString& typeYson, std::span<ui16> parsedRows, const NKikimr::NMiniKQL::TType* typeMkql, bool skipErrors, NKikimr::NMiniKQL::THolderFactory* holderFactory) {
-        Name = name;
-        TypeYson = typeYson;
+        ClearParsedRows();
+        StructMembers = TStructMembers();
+        Name = TParserString(name.data(), name.size());
+        TypeYson = TParserString(typeYson.data(), typeYson.size());
         IsOptional = false;
         SkipErrors = skipErrors;
-        Status = TStatus::Success();
-        ParsedRowsCount = 0;
         ParsedRows = parsedRows;
         TypeMkql = nullptr;
         HolderFactory = holderFactory;
-        return Status = ExtractDataSlot(typeMkql);
+        Status = ExtractDataSlot(typeMkql);
+        return Status;
     }
 
     bool GetIsOptional() {
@@ -358,18 +394,18 @@ public:
         resultValue = LockObject(std::move(resultValue));
 
         if (Y_UNLIKELY(!SkipErrors && Status.IsFail())) {
-            Status.AddParentIssue(TStringBuilder() << "Failed to parse json string at offset " << offset << ", got parsing error for column '" << Name << "' with type " << TypeYson);
+            Status.AddParentIssue(TStringBuilder() << "Failed to parse json string at offset " << offset << ", got parsing error for column '" << TStringBuf(Name) << "' with type " << TStringBuf(TypeYson));
             return false;
         }
         return success;
     }
 
-    void ValidateNumberValues(ui16 expectedNumberValues, const TVector<ui64>& offsets) {
+    void ValidateNumberValues(ui16 expectedNumberValues, std::span<const ui64> offsets) {
         if (Status.IsFail()) {
             return;
         }
         if (Y_UNLIKELY(!IsOptional && ParsedRowsCount < expectedNumberValues)) {
-            Status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found " << expectedNumberValues - ParsedRowsCount << " missing values in non optional column '" << Name << "' with type " << TypeYson << ", buffered offsets: " << JoinSeq(' ' , offsets));
+            Status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json messages, found " << expectedNumberValues - ParsedRowsCount << " missing values in non optional column '" << TStringBuf(Name) << "' with type " << TStringBuf(TypeYson) << ", buffered offsets: " << JoinSeq(' ' , offsets));
         }
     }
 
@@ -785,7 +821,13 @@ private:
             return;
         }
 
-        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(jsonNumber.value()));
+        const double number = jsonNumber.value();
+        if (Y_UNLIKELY(number < std::numeric_limits<TResult>::lowest() || number > std::numeric_limits<TResult>::max())) {
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, "Floating point number is out of range");
+            return;
+        }
+
+        resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
     }
 
     static void SetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status) {
@@ -794,10 +836,10 @@ private:
 
 private:
     NKikimr::NMiniKQL::THolderFactory* HolderFactory;
-    THashMap<const NKikimr::NMiniKQL::TStructType*, THashMap<std::string_view, size_t>> StructMembers;
+    TStructMembers StructMembers;
     const NKikimr::NMiniKQL::TType* TypeMkql = nullptr; // for complex types
     NYql::NUdf::EDataSlot DataSlot;
-    TString DataTypeName;
+    TStringBuf DataTypeName;
     bool IsOptional = false;
     bool SkipErrors = false;
 
@@ -816,33 +858,55 @@ public:
 
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)
-        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters)
+        : TBase(std::move(consumer), __LOCATION__, config.FunctionRegistry, counters, config.MemoryQuotaManager, "JsonParserAlloc")
         , Config(config)
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
+        , ColumnIndexMemory(config.MemoryQuotaManager, "ColumnIndexMemory", counters.ReadGroupSubgroup)
+        , SimdJsonMemory(config.MemoryQuotaManager, "SimdJsonMemory", counters.ReadGroupSubgroup)
+        , Buffer(Alloc)
         , Counters(counters.CountersSubgroup)
         , PartitionParsingErrors(Counters->GetCounter("ParsingErrors", true))
         , ReadGroupParsingErrors(counters.ReadGroupSubgroup->GetCounter("JsonParsingErrors", true))
     {
-        FillColumnsBuffers();
-        Buffer.Reserve(Config.BatchSize, MaxNumberRows);
-
-        LOG_ROW_DISPATCHER_INFO("JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name() 
-            << " (" << simdjson::get_active_implementation()->description() << ")"
-            << ", config: error skip mode: " << Config.SkipErrors << ", batch size: " << Config.BatchSize << ", latency limit " << Config.LatencyLimit
-            << ", buffer cell count: " << Config.BufferCellCount
-            << ", max number rows: " << MaxNumberRows );
         Parser.threaded = false;
     }
 
+    TStatus Init() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
+        FillColumnsBuffers();
+        Buffer.Reserve(Config.BatchSize, MaxNumberRows);
+
+        YDB_LOG_INFO("JsonParser was created",
+            {"logPrefix", LogPrefix},
+            {"activeImplementationName", simdjson::get_active_implementation()->name()},
+            {"activeImplementationDescription", simdjson::get_active_implementation()->description()},
+            {"skipErrors", Config.SkipErrors},
+            {"batchSize", Config.BatchSize},
+            {"latencyLimit", Config.LatencyLimit},
+            {"bufferCellCount", Config.BufferCellCount},
+            {"maxNumberRows", MaxNumberRows});
+        return InitColumnsParsers();
+    }
+
+    ~TJsonParser() override {
+        with_lock(Alloc) {
+            // Release capacities here: member destructors run after this guard.
+            decltype(Columns)().swap(Columns);
+            decltype(ParsedValues)().swap(ParsedValues);
+            decltype(ParsedValuesBuffer)().swap(ParsedValuesBuffer);
+            decltype(ParsedRowsIdxBuffer)().swap(ParsedRowsIdxBuffer);
+            decltype(OutputOffsets)().swap(OutputOffsets);
+        }
+    }
+
     TStatus InitColumnsParsers() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         const auto& consumerColumns = Consumer->GetColumns();
 
-        ParsedRowsIdxBuffer.resize(consumerColumns.size() * MaxNumberRows);
         const std::span parsedRowsIdxSpan(ParsedRowsIdxBuffer);
 
         NonOptionalColumnsCount = 0;
-        Columns.resize(consumerColumns.size());
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
             const auto& name = consumerColumns[i].Name;
             const auto& typeYson = consumerColumns[i].TypeYson;
@@ -864,11 +928,17 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
+        YDB_LOG_TRACE("Add messages to parse",
+            {"logPrefix", LogPrefix},
+            {"messages", messages.size()});
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
-        for (const auto& message : messages) {
-            Buffer.AddMessage(message);
+        for (auto message = messages.begin(); message != messages.end();) {
+            with_lock(Alloc) {
+                do {
+                    Buffer.AddMessage(*message++);
+                } while (message != messages.end() && Buffer.NumberValues < MaxNumberRows && Buffer.GetSize() < Config.BatchSize);
+            }
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
                 ParseBuffer();
             }
@@ -878,7 +948,9 @@ public:
             if (!Config.LatencyLimit) {
                 ParseBuffer();
             } else {
-                LOG_ROW_DISPATCHER_TRACE("Collecting data to parse, skip parsing, current buffer size: " << Buffer.GetSize());
+                YDB_LOG_TRACE("Collecting data to parse, skip parsing",
+                    {"logPrefix", LogPrefix},
+                    {"currentBufferSize", Buffer.GetSize()});
             }
         }
     }
@@ -894,7 +966,9 @@ public:
         if (force || creationDuration > Config.LatencyLimit) {
             ParseBuffer();
         } else {
-            LOG_ROW_DISPATCHER_TRACE("Refresh, skip parsing, buffer creation duration: " << creationDuration);
+            YDB_LOG_TRACE("Refresh, skip parsing",
+                {"logPrefix", LogPrefix},
+                {"bufferCreationDuration", creationDuration});
         }
     }
 
@@ -907,12 +981,15 @@ public:
 
         MaxNumberRows = CalculateMaxNumberRows();
         FillColumnsBuffers();
-        LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
+        YDB_LOG_DEBUG("Parser columns count changed",
+            {"logPrefix", LogPrefix},
+            {"columns", Columns.size()},
+            {"consumerColumns", Consumer->GetColumns().size()});
 
         return InitColumnsParsers();
     }
 
-    const TVector<ui64>& GetOffsets() const override {
+    std::span<const ui64> GetOffsets() const override {
         return !ParsingFailedRowCount ? Buffer.Offsets : OutputOffsets;
     }
 
@@ -928,9 +1005,13 @@ protected:
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");
 
+        SimdJsonMemory.Reserve(12 * std::max<size_t>(Buffer.GetSize(), simdjson::ondemand::MINIMAL_BATCH_SIZE) + 64_KB); // Approximated upper bound for simdjson memory
         auto [values, size] = Buffer.Finish();
         OutputOffsets.resize(Buffer.Offsets.size());
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
+        YDB_LOG_TRACE("Do parsing",
+            {"logPrefix", LogPrefix},
+            {"offset", Buffer.Offsets.front()},
+            {"firstValues", values});
 
          if (Config.SkipErrors) {
             OutputOffsets = Buffer.Offsets;
@@ -942,7 +1023,7 @@ protected:
             if (status == EParsingStatus::Finish) {
                 break;
             }
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount; 
+            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
             if (inputRowId < Buffer.MessageOffsets.size()) {
                 auto nextJsonOffset = Buffer.MessageOffsets[inputRowId];
                 state.CurrentBufferPtr = values + nextJsonOffset;
@@ -990,7 +1071,7 @@ protected:
         ParsingFailedRowCount = 0;
     }
 
-private: 
+private:
     struct TParsingState {
         const char* InitialBufferPtr;
         const char* CurrentBufferPtr;
@@ -1016,7 +1097,7 @@ private:
         }
 
         auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
-        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];        
+        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];
         ui16 parsedNonOptional = 0;
         auto len = nextJsonOffset - currentJsonOffset;
 
@@ -1059,7 +1140,11 @@ private:
             state.Status = status;
             return EParsingStatus::Finish;
         }
-        LOG_ROW_DISPATCHER_DEBUG("Unbatched parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << ", recovering from " << status.GetErrorMessage());
+        YDB_LOG_DEBUG("Unbatched parser, skipped outputRowId recovering",
+            {"logPrefix", LogPrefix},
+            {"errorsCount", state.ErrorsCount},
+            {"outputRowId", state.OutputRowId},
+            {"error", status.GetErrorMessage()});
         ClearRowBuffer(state.OutputRowId);
         if (TryParseOneJson(state)) {
             state.OutputRowId++;
@@ -1071,7 +1156,11 @@ private:
     };
 
     EParsingStatus ParseRows(TParsingState& state) {
-        LOG_ROW_DISPATCHER_TRACE("Init parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << " size " << state.Size);
+        YDB_LOG_TRACE("Init parser, skipped outputRowId size",
+            {"logPrefix", LogPrefix},
+            {"errorsCount", state.ErrorsCount},
+            {"outputRowId", state.OutputRowId},
+            {"stateSize", state.Size});
 
         /*
            Batch size must be at least maximum of document size.
@@ -1169,18 +1258,29 @@ private:
     }
 
     void FillColumnsBuffers() {
+        const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Alloc);
         const auto& consumerColumns = Consumer->GetColumns();
 
-        ColumnsIndex.clear();
-        if (2 * ColumnsIndex.capacity() < consumerColumns.size()) {
-            ColumnsIndex.reserve(consumerColumns.size());
+        if (consumerColumns.size() > ColumnsIndex.size()) {
+            constexpr size_t indexSlotSize = sizeof(decltype(ColumnsIndex)::value_type) + 1;
+            constexpr size_t indexOverhead = 128;
+            ColumnIndexMemory.Reserve(3 * (std::max(ColumnsIndex.capacity(), consumerColumns.size()) + 1) * indexSlotSize + indexOverhead);
         }
 
+        ColumnsIndex.clear();
+        ColumnsIndex.reserve(consumerColumns.size());
         for (ui64 i = 0; i < consumerColumns.size(); ++i) {
             ColumnsIndex.emplace(std::string_view(consumerColumns[i].Name), i);
         }
 
-        ParsedValuesBuffer.resize(consumerColumns.size() * MaxNumberRows);
+        const auto columns = consumerColumns.size();
+        const auto cells = columns * MaxNumberRows;
+        ParsedValuesBuffer.resize(cells);
+        ParsedRowsIdxBuffer.resize(cells);
+        Columns.resize(columns);
+        if (MaxNumberRows > OutputOffsets.capacity()) {
+            OutputOffsets.reserve(std::max<size_t>(MaxNumberRows, 2 * OutputOffsets.capacity()));
+        }
         const std::span valuesBufferSpan(ParsedValuesBuffer);
 
         ParsedValues.resize(consumerColumns.size());
@@ -1198,15 +1298,17 @@ private:
     ui16 MaxNumberRows = 0;
     const TString LogPrefix;
 
-    TVector<ui64> OutputOffsets = {};
-    TVector<TColumnParser> Columns;
-    TVector<ui16> ParsedRowsIdxBuffer;
+    TMemoryQuota ColumnIndexMemory;
+    TMemoryQuota SimdJsonMemory;
+    TParserVector<ui64> OutputOffsets = {};
+    TParserVector<TColumnParser> Columns;
+    TParserVector<ui16> ParsedRowsIdxBuffer;
     absl::flat_hash_map<std::string_view, size_t> ColumnsIndex;
 
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
-    TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
-    TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
+    TParserVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
+    TParserVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TDynamicCounters::TCounterPtr PartitionParsingErrors;
     NMonitoring::TDynamicCounters::TCounterPtr ReadGroupParsingErrors;
@@ -1218,7 +1320,7 @@ private:
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters) {
     TJsonParser::TPtr parser = MakeIntrusive<TJsonParser>(consumer, config, counters);
-    if (auto status = parser->InitColumnsParsers(); status.IsFail()) {
+    if (auto status = parser->Init(); status.IsFail()) {
         return status;
     }
 

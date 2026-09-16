@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
-    
+
             // tx1 writes (1, 1) and commits
             auto result = session1.ExecuteQuery(Q1_(R"(
                 upsert into KV2 (Key, Value) values (1u, "1");
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
                 )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[1u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-    
+
             // tx3 reads (1, 1)
             result = session1.ExecuteQuery(Q1_(R"(
                 select * from KV2;
@@ -104,45 +104,9 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             CompareYson(R"([[1u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
-    
+
     Y_UNIT_TEST_TWIN(TxReadsCommitted, IsOlap) {
         TTxReadsCommitted tester;
-        tester.SetIsOlap(IsOlap);
-        tester.Execute();
-    }
-
-    class TTxReadsItsOwnWrites : public TTableDataModificationTester {
-    protected:
-        void DoExecute() override {
-            auto client = Kikimr->GetQueryClient();
-
-            auto session1 = client.GetSession().GetValueSync().GetSession();
-    
-            // tx1 writes (1, 1)
-            auto result = session1.ExecuteQuery(Q1_(R"(
-                upsert into KV2 (Key, Value) values (1u, "1");
-                )"), TTxControl::BeginTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            auto tx1 = result.GetTransaction();
-
-            // tx1 reads (1, 1)
-            result = session1.ExecuteQuery(Q1_(R"(
-                select * from KV2 where Key = 1u;
-                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[1u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-    
-            // tx1 reads (1, 1)
-            result = session1.ExecuteQuery(Q1_(R"(
-                select * from KV2;
-                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[1u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    };
-    
-    Y_UNIT_TEST_TWIN(TxReadsItsOwnWrites, IsOlap) {
-        TTxReadsItsOwnWrites tester;
         tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
@@ -154,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
-    
+
             // tx1 writes (1, 1)
             auto result = session1.ExecuteQuery(Q1_(R"(
                 upsert into KV2 (Key, Value) values (1u, "1");
@@ -209,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
-    
+
     Y_UNIT_TEST_TWIN(TxDeleteOwnUncommitted, IsOlap) {
         if (IsOlap) {
             // muted until this is fixed: https://github.com/ydb-platform/ydb/issues/28447
@@ -265,7 +229,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             tx2 = result.GetTransaction();
 
             // bonus checks 1: tx1's reads do not affect the visibility of its writes to other concurrent txs
-            
+
             // tx1 sees (0, 1), (1, 1)
             result = session1.ExecuteQuery(Q1_(R"(
                 select * from KV2 order by Key;
@@ -370,7 +334,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetIsOlap(IsOlap);
         tester.Execute();
     }
-    
+
     class TLostUpdate : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -446,11 +410,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class TTransactionFailsAsSoonAsItIsClearItCannotCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
-            if (GetIsOlap()) {
-                // will be fixed in https://github.com/ydb-platform/ydb/issues/25661
-                return;
-            }
-
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
@@ -496,6 +455,112 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    class TReadFailsIfWriteLockIsBroken : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // Everything below stays on one key, so the read set, tx1's write and tx2's write all land on
+            // the same shard: a lock has writes, or is broken, only on the shard that saw them.
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            auto tx1 = result.GetTransaction();
+
+            // tx1 writes, so from now on its lock has writes
+            result = session1.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "1");
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx2 writes the same key and commits, so tx1 can no longer commit
+            result = session2.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "2");
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // a broken write lock means the rows tx1 would read are inconsistent, so the read must abort
+            // right away rather than return them and wait for the commit to fail
+            result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(ReadFailsIfWriteLockIsBroken, IsOlap) {
+        TReadFailsIfWriteLockIsBroken tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
+    class TInsertExistingKeyOnBrokenLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads the very row it will insert later, so the write below really does break its lock
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+            )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+
+            // tx2 writes that row and commits: tx1's lock is broken from here on
+            result = session2.ExecuteQuery(Q1_(R"(
+                UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed Other");
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx1 inserts a key that already exists at its own snapshot: both a constraint violation and a
+            // broken lock apply. Which one is reported is what this test pins.
+            result = session1.ExecuteQuery(Q1_(R"(
+                INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed");
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            // Both engines report the broken lock rather than the constraint violation: the transaction is
+            // finished either way, and the lock is the reason it cannot go on.
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(InsertExistingKeyOnBrokenLock, IsOlap) {
+        TInsertExistingKeyOnBrokenLock tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
+    class TInsertExistingKeyWithoutConflict : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            // The row was written long before and nobody else touches it, so the duplicate key is the only
+            // thing wrong. This is the counterpart of TInsertExistingKeyOnBrokenLock: without a conflict the
+            // answer is the constraint violation, not a broken lock.
+            auto result = session.ExecuteQuery(Q1_(R"(
+                INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed");
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(InsertExistingKeyWithoutConflict, IsOlap) {
+        TInsertExistingKeyWithoutConflict tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
     class TWriteSkew : public TTableDataModificationTester {
         YDB_ACCESSOR(TString, WriteOp, "replace");
     protected:
@@ -522,7 +587,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[1u;["1"]];[2u;["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             auto tx1 = result.GetTransaction();
-            
+
             // tx1 writes (3, 1), so the sum = 3, which is ok
             result = session1.ExecuteQuery(
                 GetWriteOp() + " into KV2 (Key, Value) values (3u, \"1\");",
@@ -588,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.SetWriteOp("replace");
         tester.Execute();
     }
-    
+
     class TReadOnlyTxCommitsOnConcurrentWrite : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
@@ -888,6 +953,40 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
         tester.Execute();
     }
 
+    class TMultiSinksCompacted: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "1");
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "2");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            // wait for general compaction of the inserted portions
+            Sleep(TDuration::Seconds(5));
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT Value FROM `/Root/KV` WHERE Key = 1u;
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                // For now the assertion is disabled because CS cannot order the two writes without their WriteID
+                // may return "1"
+                // CompareYson(R"([[["2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(OlapMultiSinksAfterCompaction) {
+        TMultiSinksCompacted tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TInsertConflictingKey: public TTableDataModificationTester {
         YDB_ACCESSOR(bool, CommitOnInsert, false);
     protected:
@@ -971,7 +1070,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             auto client = Kikimr->GetQueryClient();
             auto session1 = client.GetSession().GetValueSync().GetSession();
             auto session2 = client.GetSession().GetValueSync().GetSession();
-            
+
             auto insertResult1 = session1.ExecuteQuery(R"(
                         UPSERT INTO `/Root/Test` (Group, Name, Amount) VALUES (1u, "Anna", 7000ul)
                 )", NQuery::TTxControl::BeginTx()) .GetValueSync();

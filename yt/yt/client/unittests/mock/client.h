@@ -591,6 +591,17 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (override));
@@ -1023,6 +1034,11 @@ public:
     MOCK_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
         NChaosClient::TChaosLeaseId chaosLeaseId,
         const TChaosLeaseAttachOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options),
         (override));
 
 private:

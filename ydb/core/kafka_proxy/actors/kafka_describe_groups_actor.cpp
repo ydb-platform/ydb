@@ -15,7 +15,10 @@
 
 #include "actors.h"
 #include "kafka_describe_groups_actor.h"
+#include "kafka_metadata_service.h"
 #include "kafka_state_name_to_int.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
 namespace NKafka {
@@ -26,8 +29,20 @@ NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, co
 
 void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
-        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+                {LogPrefix()});
+            SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
         } else {
@@ -40,7 +55,8 @@ void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
             new IEventHandle(SelfId(), SelfId(), wakeup.release())
         );
     } else {
-        KAFKA_LOG_ERROR("No EnableKafkaNativeBalancing FeatureFlag set.");
+        YDB_LOG_ERROR("No EnableKafkaNativeBalancing FeatureFlag set",
+            {LogPrefix()});
         TDescribeGroupsResponseData groupsDescriptionResponseWithError;
         Send(Context->ConnectionId,
             new TEvKafka::TEvResponse(CorrelationId,
@@ -50,7 +66,8 @@ void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaDescribeGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
-    KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
+    YDB_LOG_DEBUG("Received TEvManagerPrepared. Sending create session request to KQP",
+        {LogPrefix()});
     InitedTablesCount++;
     if (InitedTablesCount == TABLES_TO_INIT_COUNT) {
         StartKqpSession(ctx);
@@ -59,7 +76,8 @@ void TKafkaDescribeGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared:
 
 
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("KQP session created");
+    YDB_LOG_DEBUG("KQP session created",
+        {LogPrefix()});
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
         Die(ctx);
@@ -69,9 +87,17 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::T
 }
 
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("Received query response from KQP DescribeGroups request");
+    YDB_LOG_DEBUG("Received query response from KQP DescribeGroups request",
+        {LogPrefix()});
+    if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
+        Die(ctx);
+        return;
+    }
+
     if (auto error = GetErrorFromYdbResponse(ev)) {
-        KAFKA_LOG_W(error);
+        YDB_LOG_WARN(error,
+            {LogPrefix()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, *error);
         Die(ctx);
         return;
@@ -80,30 +106,42 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
 }
 
 void TKafkaDescribeGroupsActor::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
-    KAFKA_LOG_W("Sending fail response because of request timeout " << WAIT_REQUESTS_SECONDS << " sec");
+    YDB_LOG_WARN("Sending fail response because of request timeout sec",
+        {LogPrefix()},
+        {"timeout", WAIT_REQUESTS_SECONDS});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, BuildResponse(), EKafkaErrors::REQUEST_TIMED_OUT));
     Die(ctx);
 }
 
 void TKafkaDescribeGroupsActor::Die(const TActorContext &ctx) {
-    KAFKA_LOG_D("Dying.");
+    YDB_LOG_DEBUG("Dying",
+        {LogPrefix()});
     if (Kqp) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
 }
 
+TString TKafkaDescribeGroupsActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
+}
+
 void TKafkaDescribeGroupsActor::StartKqpSession(const TActorContext& ctx) {
-    KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
+    YDB_LOG_DEBUG("Sending create session request to KQP for database",
+        {LogPrefix()},
+        {"databasePath", DatabasePath});
     Kqp->SendCreateSessionRequest(ctx);
 }
 
 void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
-    KAFKA_LOG_D("Handling Select Response for DescribeGroups. SELECT result size: " << response.Record.GetResponse().GetYdbResults().size());
+    YDB_LOG_DEBUG("Handling Select Response for DescribeGroups. SELECT result",
+        {LogPrefix()},
+        {"size", response.Record.GetResponse().GetYdbResults().size()});
     if (response.Record.GetResponse().GetYdbResults().size() != 2) {
-        TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
-        KAFKA_LOG_W(errorMessage);
+        YDB_LOG_WARN("KQP returned wrong number of result sets size!=2 on SELECT query",
+            {LogPrefix()},
+            {"size",  response.Record.GetResponse().GetYdbResults().size()});
         return;
     }
     ParseGroupDescriptionMetadata(response);
@@ -115,9 +153,11 @@ void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQuer
 }
 
 void TKafkaDescribeGroupsActor::ParseGroupDescriptionMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
-    KAFKA_LOG_D("Parsing Groups metadata");
+    YDB_LOG_DEBUG("Parsing Groups metadata",
+        {LogPrefix()});
     ParseGroupMetadata(response);
-    KAFKA_LOG_D("Parsing Members metadata");
+    YDB_LOG_DEBUG("Parsing Members metadata",
+        {LogPrefix()});
     ParseMembersMetadata(response);
 }
 
@@ -181,7 +221,9 @@ NYdb::TParams TKafkaDescribeGroupsActor::BuildSelectParams() {
     params.AddParam("$Database").Utf8(DatabasePath).Build();
     auto& groupIds = params.AddParam("$GroupIds").BeginList();
 
-    KAFKA_LOG_D(TStringBuilder() << "Groups count: " << DescribeGroupsRequestData->Groups.size());
+    YDB_LOG_DEBUG("Groups",
+        {LogPrefix()},
+        {"count", DescribeGroupsRequestData->Groups.size()});
 
     for (auto& groupId: DescribeGroupsRequestData->Groups) {
         groupIds.AddListItem().Utf8(*groupId);
@@ -195,13 +237,13 @@ TString TKafkaDescribeGroupsActor::GetYqlWithTableNames(const TString& templateS
     TString templateWithCorrectTableNames = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_members_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
     );
 
     templateWithCorrectTableNames = std::regex_replace(
         templateWithCorrectTableNames.c_str(),
         std::regex("<consumer_groups_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
     );
 
     return templateWithCorrectTableNames;
@@ -241,17 +283,28 @@ void TKafkaDescribeGroupsActor::SendToKqpDescribeGroupsMetadataRequest(const TAc
 }
 
 void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage) {
+    TDescribeGroupsResponseData response;
     for (auto& groupId : DescribeGroupsRequestData->Groups) {
-        GroupIdToDescription[*groupId].ErrorCode = errorCode;
+        TDescribeGroupsResponseData::TDescribedGroup groupDescription;
+        groupDescription.ErrorCode = errorCode;
+        groupDescription.GroupId = groupId;
+        response.Groups.push_back(std::move(groupDescription));
     }
     if (errorMessage.has_value()) {
-        KAFKA_LOG_W("Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+        YDB_LOG_WARN("Sending fail response with error",
+            {LogPrefix()},
+            {"code", errorCode},
+            {"reason", errorMessage});
     } else {
-        KAFKA_LOG_W("Sending fail response with error code: " << errorCode);
+        YDB_LOG_WARN("Sending fail response with error",
+            {LogPrefix()},
+            {"code", errorCode});
     }
 
     Send(Context->ConnectionId,
-        new TEvKafka::TEvResponse(CorrelationId, BuildResponse(), errorCode));
+        new TEvKafka::TEvResponse(CorrelationId,
+            std::make_shared<TDescribeGroupsResponseData>(std::move(response)),
+            errorCode));
 }
 
 TMaybe<TString> TKafkaDescribeGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {

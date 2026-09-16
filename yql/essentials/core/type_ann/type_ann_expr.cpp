@@ -357,8 +357,9 @@ private:
                     return argStatus;
                 }
 
-                if (argStatus.Level == TStatus::Repeat)
+                if (argStatus.Level == TStatus::Repeat) {
                     return TStatus::Ok;
+                }
 
                 TStatus combinedStatus = TStatus::Ok;
                 TExprNode::TListType newChildren;
@@ -1256,11 +1257,13 @@ bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langve
         TOptimizeExprSettings settings(&typeCtx);
         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx){
             if (node->IsCallable("FormatCode")) {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable("String")
                         .Atom(0, "")
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             return node;

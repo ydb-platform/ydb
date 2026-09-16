@@ -96,7 +96,7 @@ public:
                 auto enableSolomonClientPostApi = State_->Configuration->_EnableSolomonClientPostApi.Get().OrElse(false);
                 source.MutableSettings()->insert({ "enableSolomonClientPostApi", ToString(enableSolomonClientPostApi) });
 
-                auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
+                auto providerFactory = State_->CredentialsFactory->Create(State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
                 auto readConfig = NSo::ParseSolomonReadActorConfig(source.settings());
 

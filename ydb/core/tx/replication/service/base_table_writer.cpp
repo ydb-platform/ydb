@@ -1,5 +1,5 @@
 #include "base_table_writer.h"
-#include "logging.h"
+#include "json_change_record.h"
 #include "service.h"
 #include "worker.h"
 
@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/hash.h>
@@ -22,19 +23,17 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
+
 namespace NKikimr::NReplication::NService {
 
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TablePartitionWriter]"
-                << TableId
-                << "[" << TabletId << "]"
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+         return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TTablePartitionWriter"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
     }
 
     void GetProxyServices() {
@@ -43,6 +42,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateGetProxyServices) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateGetProxyServices"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
         default:
@@ -51,7 +52,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Ready();
@@ -63,6 +65,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateWaitingRecords) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWaitingRecords"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
         default:
@@ -71,7 +75,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
@@ -100,6 +105,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateWaitingStatus) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWaitingStatus"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvApplyReplicationChangesResult, Handle);
         default:
@@ -108,17 +115,18 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
         case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
             return Ready();
         default:
-            LOG_E("Apply result"
-                << ": status# " << static_cast<ui32>(record.GetStatus())
-                << ", reason# " << static_cast<ui32>(record.GetReason())
-                << ", error# " << record.GetErrorDescription());
+            YDB_LOG_ERROR("Apply result",
+                {"status", static_cast<ui32>(record.GetStatus())},
+                {"reason", static_cast<ui32>(record.GetReason())},
+                {"error", record.GetErrorDescription()});
             if (IsHardError(record.GetReason())) {
                 return Leave(true);
             } else {
@@ -150,8 +158,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Leave(bool hardError = false) {
-        LOG_I("Leave"
-            << ": hard error# " << hardError);
+        YDB_LOG_INFO("Leave",
+            {"hardError", hardError});
 
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();
@@ -164,6 +172,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Unlink();
         TActorBootstrapped::PassAway();
     }
@@ -185,10 +194,13 @@ public:
     {}
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         GetProxyServices();
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvWakeup, Leave);
@@ -200,7 +212,6 @@ private:
     const TActorId Parent;
     const ui64 TabletId;
     const TTableId TableId;
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
@@ -216,15 +227,12 @@ class TLocalTableWriter
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[LocalTableWriter]"
-                << TablePathId
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTableWriter"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()},
+            {"tablePathId", TablePathId});
     }
 
     static TSerializedTableRange GetFullRange(ui32 keyColumnsCount) {
@@ -234,12 +242,12 @@ class TLocalTableWriter
     }
 
     void LogCritAndLeave(const TString& error) {
-        LOG_C(error);
+        YDB_LOG_CRIT(error);
         Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        YDB_LOG_WARN(error);
         Retry();
     }
 
@@ -278,6 +286,7 @@ class TLocalTableWriter
     }
 
     void Resolve() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         ResolveTable();
     }
 
@@ -291,27 +300,32 @@ class TLocalTableWriter
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_D("Handshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("Handshake",
+            {"worker", Worker});
 
         ResolveTable();
     }
 
     void ResolveTable() {
         Resolving = true;
+        const auto generation = ++ResolveGeneration;
 
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = Database;
 
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()), 0, generation);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ev->Cookie != ResolveGeneration) {
+            return;
+        }
+
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -335,7 +349,8 @@ class TLocalTableWriter
             return;
         }
 
-        if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+        const auto generalVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        if (TableVersion && TableVersion == generalVersion) {
             Y_ABORT_UNLESS(Initialized);
             Resolving = false;
             return CreateSenders();
@@ -362,6 +377,39 @@ class TLocalTableWriter
             }
         }
 
+        if (RefreshingSchema) {
+            Y_ABORT_UNLESS(PendingSchemaChange);
+
+            THashMap<TString, TString> expectedColumns;
+            for (const auto& column : PendingSchemaChange->Schema.GetColumns()) {
+                expectedColumns.emplace(column.GetName(), column.GetType());
+            }
+
+            TVector<TString> actualPrimaryKey(schema->KeyColumns.size());
+            for (const auto& [_, column] : entry.Columns) {
+                const auto expected = expectedColumns.find(column.Name);
+                if (expected == expectedColumns.end()
+                    || expected->second != NScheme::TypeName(column.PType, column.PTypeMod))
+                {
+                    return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
+                }
+                expectedColumns.erase(expected);
+
+                if (column.KeyOrder >= 0) {
+                    actualPrimaryKey[column.KeyOrder] = column.Name;
+                }
+            }
+
+            const auto& expectedPrimaryKey = PendingSchemaChange->Schema.GetPrimaryKeyColumnNames();
+            bool samePrimaryKey = actualPrimaryKey.size() == static_cast<size_t>(expectedPrimaryKey.size());
+            for (size_t i = 0; samePrimaryKey && i < actualPrimaryKey.size(); ++i) {
+                samePrimaryKey = actualPrimaryKey[i] == expectedPrimaryKey[i];
+            }
+            if (expectedColumns || !samePrimaryKey) {
+                return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
+            }
+        }
+
         Schema = schema;
         Parser->SetSchema(Schema);
         KeyDesc = MakeHolder<TKeyDesc>(
@@ -373,21 +421,25 @@ class TLocalTableWriter
         );
 
         TChangeSender::SetPartitionResolver(CreateResolverFn(*KeyDesc.Get()));
-        ResolveKeys();
+        ResolveKeys(ev->Cookie);
     }
 
-    void ResolveKeys() {
+    void ResolveKeys(ui64 generation) {
         auto request = MakeHolder<TResolve>();
         request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(KeyDesc));
-        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()), 0, generation);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        if (ev->Cookie != ResolveGeneration) {
+            return;
+        }
+
         const auto& result = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult",
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -416,22 +468,32 @@ class TLocalTableWriter
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
-            LOG_D("Send handshake"
-                << ": worker# " << Worker);
+            YDB_LOG_DEBUG("Send handshake",
+                {"worker", Worker});
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }
 
         Resolving = false;
+
+        if (RefreshingSchema) {
+            RefreshingSchema = false;
+            Y_ABORT_UNLESS(PendingSchemaChange);
+            Send(Worker, new TEvWorker::TEvSchemaChangeApplied(PendingSchemaChange->Schema));
+            LastAppliedSchema = MakeHolder<NKikimrReplication::TSchemaChange>(PendingSchemaChange->Schema);
+            PendingSchemaChange.Reset();
+        }
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         const auto tableId = TTableId(TablePathId, Schema->Version);
         return new TTablePartitionWriter(SelfId(), partitionId, tableId, Serializer->Clone());
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(PendingRecords.empty());
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
@@ -440,8 +502,24 @@ class TLocalTableWriter
         for (auto& r : ev->Get()->Records) {
             auto offset = r.GetOffset();
             auto& data = r.GetData();
-
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
+
+            TString error;
+            NKikimrReplication::TSchemaChange schema;
+            switch (Parser->ParseSchemaChange(*record, schema, error)) {
+            case IChangeRecordParser::ESchemaChangeResult::Error:
+                return LogCritAndLeave(TStringBuilder() << "Malformed CDC record: " << error);
+            case IChangeRecordParser::ESchemaChangeResult::SchemaChange:
+                // The worker must replay the schema record after the barrier
+                // is released.  Keep its raw topic payload in InFlightData;
+                PendingSchemaChange = MakeHolder<TEvWorker::TEvSchemaChange>(schema, offset);
+                break;
+            case IChangeRecordParser::ESchemaChangeResult::NotSchemaChange:
+                break;
+            }
+            if (PendingSchemaChange) {
+                break;
+            }
 
             if (Mode == EWriteMode::Consistent) {
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
@@ -480,17 +558,13 @@ class TLocalTableWriter
         } else if (PendingTxId.empty()) {
             Y_ABORT_UNLESS(PendingRecords.empty());
 
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
-
-            Send(Worker, new TEvWorker::TEvPoll());
+            FinishBatch();
         }
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         Terminating = true;
         if (IsAllSendersReadyOrUninit()) {
@@ -499,7 +573,8 @@ class TLocalTableWriter
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
@@ -565,7 +640,8 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -579,24 +655,66 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         for (const auto& record : ev->Get()->Records) {
             PendingRecords.erase(record);
         }
 
         if (PendingRecords.empty() && PendingTxId.empty()) {
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
+            FinishBatch();
+        }
+    }
 
+    void FinishBatch() {
+        if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+            TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+            Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+        }
+        if (PendingSchemaChange) {
+            Send(Worker, new TEvWorker::TEvSchemaChange(PendingSchemaChange->Schema, PendingSchemaChange->Offset));
+        } else {
             Send(Worker, new TEvWorker::TEvPoll());
         }
     }
 
+    void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
+        if (!ev->Get()->Record.HasSchema()) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        const auto& schema = ev->Get()->Record.GetSchema();
+        if (!PendingSchemaChange) {
+            if (LastAppliedSchema && schema.SerializeAsString() == LastAppliedSchema->SerializeAsString()) {
+                return;
+            }
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (RefreshingSchema) {
+            return; // duplicate controller release while the refresh is in flight
+        }
+
+        RefreshingSchema = true;
+        // A restarted worker may already have the post-DDL destination
+        // version. Exact schema verification below is then the safety check;
+        // requiring a newer version would park replay forever.
+        TableVersion = 0;
+        Schema = {};
+        Parser->SetSchema({});
+        KeyDesc.Reset();
+        KillSenders();
+        ResolveTable();
+    }
+
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
 
         if (Terminating && IsAllSendersReadyOrUninit()) {
@@ -605,7 +723,8 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->HardError) {
             Leave(TEvWorker::TEvGone::SCHEME_ERROR, "Cannot apply changes");
@@ -620,13 +739,14 @@ class TLocalTableWriter
 
     template <typename... Args>
     void Leave(Args&&... args) {
-        LOG_I("Leave");
+        YDB_LOG_INFO("Leave");
 
         Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         KillSenders();
         TActor::PassAway();
     }
@@ -659,11 +779,14 @@ public:
     }
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvSchemaChangeResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -686,17 +809,21 @@ private:
 
     TActorId Worker;
     ui64 TableVersion = 0;
+    ui64 ResolveGeneration = 0;
     THolder<TKeyDesc> KeyDesc;
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
     bool Initialized = false;
     bool Terminating = false;
+    bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
+    THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    THolder<NKikimrReplication::TSchemaChange> LastAppliedSchema;
 
 }; // TLocalTableWriter
 

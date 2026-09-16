@@ -510,6 +510,7 @@ public:
                 tablet.ChannelProfileReassignReason = tabletRowset.GetValueOrDefault<Schema::Tablet::ReassignReason>();
                 tablet.Statistics = tabletRowset.GetValueOrDefault<Schema::Tablet::Statistics>();
                 tablet.StoppedByTenant = tabletRowset.GetValueOrDefault<Schema::Tablet::StoppedByTenant>();
+                tablet.IsBackup = tabletRowset.GetValueOrDefault<Schema::Tablet::IsBackup>();
 
                 TDomainInfo* domain = Self->FindDomain(objectDomain);
                 if (domain) {
@@ -538,6 +539,8 @@ public:
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
+                tablet.ConfirmedStorageVersion =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())
@@ -797,7 +800,7 @@ public:
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
                         leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
-                        leaderOrFollower->UsageImpact = metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>();
+                        leaderOrFollower->SetUsageImpact(metricsRowset.GetValueOrDefault<Schema::Metrics::UsageImpact>());
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }

@@ -14,8 +14,36 @@ items:
   items:
   - name: General schema
     href: general-schema.md
+  - name: Actor System
+    href: actor-system/index.md
+    items:
+    - name: Actor Lifecycle
+      href: actor-system/actor-lifecycle.md
+    - name: Events and Messaging
+      href: actor-system/events-and-messaging.md
+    - name: Failure and Shutdown
+      href: actor-system/failure-and-shutdown.md
+    - name: Coroutine Actors
+      href: actor-system/coroutine-actors.md
+    - name: Coroutine Primitives
+      href: actor-system/coroutine-primitives.md
+    - name: Coroutine Integration
+      href: actor-system/coroutine-integration.md
+    - name: Testing Actors
+      href: actor-system/testing.md
   - name: Distributed storage
     href: distributed-storage.md
+    items:
+    - name: NodeWarden
+      href: distributed-storage/node-warden.md
+    - name: Direct Block Groups
+      href: distributed-storage/direct-block-groups.md
+    - name: DDisk
+      href: distributed-storage/ddisk.md
+    - name: PersistentBuffer
+      href: distributed-storage/persistent-buffer.md
+  - name: Metadata Distribution Subsystems
+    href: metadata-distribution.md
   - name: LocalDB
     items:
     - name: Persistent uncommitted changes
@@ -46,6 +74,8 @@ items:
       href: load-actors-key-value.md
     - name: StorageLoad
       href: load-actors-storage.md
+    - name: NbsDbgLikeLoad
+      href: load-actors-nbs-dbg-like.md
     - name: VDiskLoad
       href: load-actors-vdisk.md
     - name: PDiskWriteLoad

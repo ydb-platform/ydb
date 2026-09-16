@@ -42,7 +42,6 @@ namespace {
 
 static constexpr size_t MAC_SIZE = 16;
 static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
-static constexpr size_t MAX_BLOCK_SIZE = 50_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format. // Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm", "AES-128-GCM"},
@@ -217,6 +216,19 @@ public:
     }
 
     TBuffer AddBlock(TStringBuf data, bool last) {
+        if (data.size() > MAX_BLOCK_SIZE) {
+            throw yexception() << "Block size " << data.size() << " is greater than the maximum"
+                " supported encrypted backup block size " << MAX_BLOCK_SIZE
+                << ": such a file could not be restored."
+                   " Check the export batch size: data_shard_config.backup_bytes_batch_size"
+                   " (default 32 MB) and, if set, ScanSettings.BytesBatchSize must be <= "
+                << MAX_BLOCK_SIZE
+                << ". Also check s3_settings.limits.min_write_batch_size /"
+                   " fs_settings.limits.min_write_batch_size (default 5 MB): it must be <= "
+                << MAX_BLOCK_SIZE
+                << ".";
+        }
+
         TBuffer buffer;
         ReserveBufferSize(buffer, data, last);
         if (CurrentChunkNumber == 0) {

@@ -7,7 +7,7 @@
 - [{#T}](../../performance/schemas/overloaded-shards.md);
 - [{#T}](../../performance/hardware/cpu-bottleneck.md).
 
-Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
+Статья начинается с [описания возникшей проблемы](#initial-issue). Затем мы проанализируем графики в Grafana и информацию на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md), чтобы [найти решение](#solution), и проверим [его эффективность](#aftermath).
 
 В конце статьи приводятся шаги по [воспроизведению проблемы](#testbed).
 
@@ -75,9 +75,9 @@
 
 Мы видим рост нагрузки на CPU [в пуле ресурсов пользователей (красный) и интерконнекта (жёлтый)](../../../concepts/glossary.md#actor-system-pool).
 
-Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [Embedded UI](../../../reference/embedded-ui/index.md):
+Мы также можем взглянуть на общее использование CPU на вкладке **Diagnostics** в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md):
 
-![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-diagnostics.png)
+![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-diagnostics.png)
 
 Кластер {{ ydb-short-name }} не использует все ресурсы CPU.
 
@@ -93,15 +93,15 @@
 
 {% endcut %}
 
-Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** во встроенном UI:
+Чтобы определить, какую таблицу обслуживает перегруженный data shard, откроем вкладку **Diagnostics > Top shards** в {{ ydb-ui-name }}:
 
-![Diagnostics > shards](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-top-shards.png)
+![Diagnostics > shards](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-top-shards.png)
 
 Мы видим, что один из data shard'ов, обслуживающих таблицу `kv_test`, нагружен на 73%.
 
 Далее давайте взглянем на информацию о таблице `kv_test` на вкладке **Info**:
 
-![stock table info](./_assets/overloaded-shard-insufficient-cpu/incident-embeddedui-table-info.png)
+![stock table info](./_assets/overloaded-shard-insufficient-cpu/incident-ydb-ui-table-info.png)
 
 {% note warning %}
 
@@ -115,7 +115,7 @@
 
 Нам необходимо увеличить лимит на максимальное количество партиций для таблицы `kv_test`:
 
-1. Во встроенном UI выберите базу данных.
+1. В {{ ydb-ui-name }} выберите базу данных.
 2. Откройте вкладку **Query**.
 3. Выполните следующий запрос:
 
@@ -139,7 +139,7 @@
 
 Теперь шесть data shard'ов обрабатывают запросы к таблице `kv_test`, и ни один из них не перегружен:
 
-![Overloaded shard count](./_assets/overloaded-shard-insufficient-cpu/fixed-embeddedui-top-shards.png)
+![Overloaded shard count](./_assets/overloaded-shard-insufficient-cpu/fixed-ydb-ui-top-shards.png)
 
 Давайте убедимся, что задержки транзакций вернулись к прежним значениям:
 
@@ -171,9 +171,9 @@
 
 ## Проблема с недостаточным количеством ядер CPU
 
-Однако, если мы откроем диагностику во встроенном UI, то мы увидим предупреждение о том, что кластеру {{ ydb-short-name }} не хватает ресурсов процессора в пользовательском пуле:
+Однако, если мы откроем диагностику в {{ ydb-ui-name }}, то мы увидим предупреждение о том, что кластеру {{ ydb-short-name }} не хватает ресурсов процессора в пользовательском пуле:
 
-![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/fixed-embeddedui-diagnostics-cpu.png)
+![CPU diagnostics](./_assets/overloaded-shard-insufficient-cpu/fixed-ydb-ui-diagnostics-cpu.png)
 
 Загрузка CPU еще раз увеличилась, что видно на графике **CPU by execution pool**.
 

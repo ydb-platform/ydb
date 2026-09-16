@@ -83,11 +83,7 @@ struct TGrafanaLoggingTestContext {
     }
 };
 
-void AssertPanesQuery(
-    const TString& url,
-    TStringBuf expectedBaseUrl,
-    TStringBuf expectedExpr,
-    TStringBuf expectedDatasource) {
+void AssertPanesQuery(const TString& url, TStringBuf expectedBaseUrl, TStringBuf expectedExpr, TStringBuf expectedDatasource) {
     const TStringBuf actualUrl = url;
     UNIT_ASSERT_VALUES_EQUAL(actualUrl.Before('?'), expectedBaseUrl);
 

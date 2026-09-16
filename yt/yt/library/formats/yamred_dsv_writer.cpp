@@ -46,7 +46,7 @@ public:
             }
         } catch (const std::exception& ex) {
             auto error = TError("Failed to add columns to name table for YAMRed DSV format")
-                << ex;
+                .With(ex);
             SetError(error);
         }
 
@@ -241,7 +241,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForYamredDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for YAMRed DSV format").With(ex);
     }
 }
 

@@ -135,6 +135,30 @@ Y_UNIT_TEST_F(The_TxWriteInfo_Is_Deleted_After_The_Immediate_Transaction, TFixtu
     WaitForTheTabletToDeleteTheWriteInfo("topic_A", 0);
 }
 
+// SDK reconnect after CommitOffset mid tx-renamed blob (FillBatchedData / FormAnswer FindPos).
+// Seed advances parent so Key.Offset = S while BatchHeader stays in supportive space → Key≠Header.
+Y_UNIT_TEST_F(TxWriteMidCommitReconnectAssertsParentOffsets_Table, TFixtureTable)
+{
+    TestTxWriteMidCommitReconnectAssertsParentOffsets();
+}
+
+Y_UNIT_TEST_F(TxWriteMidCommitReconnectAssertsParentOffsets_Query, TFixtureQuery)
+{
+    TestTxWriteMidCommitReconnectAssertsParentOffsets();
+}
+
+// Same Key≠Header mid-blob path, but MaxMemoryUsageBytes forces the server/proxy to split
+// delivery across GetEvents without an explicit CommitOffset mid-batch.
+Y_UNIT_TEST_F(TxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets_Table, TFixtureTable)
+{
+    TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets();
+}
+
+Y_UNIT_TEST_F(TxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets_Query, TFixtureQuery)
+{
+    TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets();
+}
+
 Y_UNIT_TEST_F(WriteToTopic_Demo_24_Table, TFixtureTable)
 {
     TestWriteToTopic24();

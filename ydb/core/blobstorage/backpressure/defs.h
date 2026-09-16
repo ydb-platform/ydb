@@ -8,7 +8,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/core/interconnect.h>

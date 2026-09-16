@@ -26,6 +26,7 @@ class ExitCodes(object):
     # For more info see https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html
     _ = 2
     UNHANDLED_EXCEPTION = 3
+    USAGE_ERROR = 4
     CONFIGURE_ERROR = 8
     NO_TESTS_COLLECTED = 9
     TEST_FAILED = 10

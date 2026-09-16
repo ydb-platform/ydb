@@ -74,6 +74,11 @@ message TKqpExecutionExtraStats {
     NYql.NDqProto.TDqStatsAggr ComputeCpuTimeUs = 2;   // compute actors time
     NYql.NDqProto.TDqStatsAggr ShardsCpuTimeUs = 3;    // datashards time
 
+    // Executer transaction id of this execution phase. Matches the TxId reported by
+    // LWTrace probes (e.g. columnshard scan probes), so query stats can be correlated
+    // with traces. Not set for literal-only phases and for batch (partitioned) operations.
+    uint64 TxId = 4;
+
     // Profile stats
     uint64 ResolveCpuTimeUs = 100;
     uint64 ResolveWallTimeUs = 101;

@@ -2,8 +2,7 @@
 #include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLMapNextTest) {
 Y_UNIT_TEST_LLVM(OverStream) {
@@ -121,5 +120,4 @@ Y_UNIT_TEST_LLVM(OverEmptyFlow) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMapNextTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

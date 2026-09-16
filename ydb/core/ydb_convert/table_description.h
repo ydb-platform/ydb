@@ -34,7 +34,9 @@ enum class EAlterOperationKind {
     // compact table, possibly with indices
     Compact,
     // set column constraint (not null)
-    SetColumnConstraint
+    SetColumnConstraint,
+    // rebuild index
+    RebuildIndex,
 };
 
 struct TPathId;
@@ -105,7 +107,7 @@ void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,

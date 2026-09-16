@@ -1,25 +1,25 @@
 # Common streaming query patterns
 
-This section collects minimal examples of [streaming queries](../../concepts/streaming-query.md) for typical scenarios. It starts with a basic topic read, then shows end-to-end processing: handling data and writing results to a topic as JSON, to a topic as a plain string, and to a table. Each example can be used as a starting point for your own workloads.
+This section collects minimal examples of [streaming queries](../../concepts/streaming-query/streaming-query.md) for typical scenarios. It starts with a basic topic read, then shows end-to-end processing: handling data and writing results to a topic as JSON, to a topic as a plain string, and to a table. Each example can be used as a starting point for your own workloads.
 
-## Reading from a topic {#topic-read}
+## ⟦C1⟧ — topic to read from; {#topic-read}
 
-Read from a topic using `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. The `WITH` block specifies the input format and schema—the fields expected in each message and their types. This pattern appears in all examples below.
+Data is read from a topic using `SELECT ... FROM ... WITH (FORMAT, SCHEMA)`. The `WITH` block specifies the input data format and schema — which fields are expected in each message and their types. This pattern is used in all subsequent examples.
 
 {% note info %}
 
-The examples use [local and external topics](local-and-external-topics.md).
+Working with [local and external topics](local-and-external-topics.md) is shown.
 
 In the examples:
 
-- `ext_source` — a pre-created external data source;
-- `input_topic` — topic to read from;
-- `output_topic` — topic to write results to;
-- `output_table` — {{ ydb-short-name }} table to write results to.
+- `ext_source` — a pre-created `external data source`.
+- `input_topic` — the topic from which data is read.
+- `output_topic` — the topic where results are written.
+- `output_table` — the {{ ydb-short-name }} table where results are written.
 
 {% endnote %}
 
-The following snippet reads JSON events from a topic. Use it inside [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) in a `DO BEGIN ... END DO` block:
+The following fragment shows reading events from a topic in JSON format. It is used inside [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) in the `DO BEGIN ... END DO` block:
 
 
 ```yql
@@ -37,7 +37,7 @@ WITH (
 ```
 
 
-For more on formats, see [{#T}](streaming-query-formats.md).
+The following snippet reads JSON events from a topic. Use it inside [CREATE STREAMING QUERY](streaming-query-formats.md) in a ⟦C1⟧ block:
 
 ## Writing to a topic (JSON) {#topic-json}
 
@@ -50,7 +50,7 @@ DO BEGIN
 
 INSERT INTO ext_source.output_topic -- or local topic output_topic
 SELECT
-    -- Build JSON from fields
+    -- Forming JSON from individual fields
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
         AsStruct(Id AS id, Name AS name)
     ))))
@@ -58,7 +58,7 @@ FROM
     input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
-    SCHEMA = (               -- Input schema
+    SCHEMA = (               -- Input data schema
         Id Uint64 NOT NULL,
         Name Utf8 NOT NULL
     )
@@ -92,7 +92,7 @@ FROM
     ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
-    SCHEMA = (               -- Input schema
+    SCHEMA = (               -- Input data schema
         Id Uint64 NOT NULL,
         Name Utf8 NOT NULL
     )
@@ -110,7 +110,7 @@ The query reads events from a topic and writes them to `output_table`. Create th
 
 {% note warning %}
 
-Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../concepts/streaming-query.md#guarantees) delivery, retries would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a new row is inserted, while `INSERT INTO` fails.
+Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../concepts/streaming-query/streaming-query.md#guarantees) delivery, retries would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a new row is inserted, while `INSERT INTO` fails.
 
 {% endnote %}
 
@@ -119,7 +119,7 @@ Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not 
 CREATE STREAMING QUERY write_table_example AS
 DO BEGIN
 
--- Write to table (UPSERT only; INSERT is not supported)
+-- Writing to table (only UPSERT, INSERT not supported)
 UPSERT INTO output_table
 SELECT
     Id,
@@ -128,7 +128,7 @@ FROM
     ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,  -- Input data format
-    SCHEMA = (               -- Input schema
+    SCHEMA = (               -- Input data schema
         Id Uint64 NOT NULL,
         Name Utf8 NOT NULL
     )

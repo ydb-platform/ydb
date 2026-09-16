@@ -4,13 +4,15 @@ import array
 import re
 import zoneinfo
 from abc import abstractmethod
-from collections.abc import MutableSequence, Sequence
+from collections.abc import Callable, MutableSequence, Sequence
 from datetime import date, datetime, time, timedelta, tzinfo
-from typing import TYPE_CHECKING, Any, NamedTuple
+from math import floor
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     import numpy
 
+from clickhouse_connect import common
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.driver import ctypes as driver_ctypes
 from clickhouse_connect.driver import options, tzutil
@@ -23,6 +25,12 @@ from clickhouse_connect.driver.types import ByteSource
 
 epoch_start_date = date(1970, 1, 1)
 epoch_start_datetime = datetime(1970, 1, 1)
+
+
+def _localized_timestamp(value: datetime, target_tz: tzinfo) -> float:
+    if value.utcoffset() is None:
+        value = value.replace(tzinfo=target_tz)
+    return value.timestamp()
 
 
 class Date(ClickHouseType):
@@ -50,6 +58,7 @@ class Date(ClickHouseType):
             if self.nullable:
                 column = [x if x else 0 for x in column]
         else:
+            esd: date
             if isinstance(first, datetime):
                 esd = epoch_start_datetime
             else:
@@ -112,6 +121,7 @@ class Date32(Date):
 
 class DateTimeBase(ClickHouseType, registered=False):
     __slots__ = ("tzinfo",)
+    tzinfo: tzinfo | None
     valid_formats = "native", "int"
     python_type = datetime
 
@@ -143,12 +153,13 @@ class DateTimeBase(ClickHouseType, registered=False):
                 if isinstance(column, list):
                     column = options.pd.DatetimeIndex(column)
 
-                if column.tz is None:
-                    result = column.astype(self.pandas_dtype)
+                dti = cast(Any, column)
+                if dti.tz is None:
+                    result = dti.astype(self.pandas_dtype)
                     return options.pd.array(result) if self.nullable else result
 
-                naive_ns = column.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
-                tz_aware_result = naive_ns.tz_localize("UTC").tz_convert(column.tz)
+                naive_ns = dti.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
+                tz_aware_result = naive_ns.tz_localize("UTC").tz_convert(dti.tz)
                 return options.pd.array(tz_aware_result) if self.nullable else tz_aware_result
 
             if self.nullable:
@@ -190,6 +201,12 @@ class DateTime(DateTimeBase):
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
+        elif common.get_setting("naive_datetime_insert") == "server":
+            active_tz = self.tzinfo or ctx.server_tz
+            if self.nullable:
+                column = [int(_localized_timestamp(x, active_tz)) if x else 0 for x in column]
+            else:
+                column = [int(_localized_timestamp(x, active_tz)) for x in column]
         else:
             if self.nullable:
                 column = [int(x.timestamp()) if x else 0 for x in column]
@@ -262,24 +279,35 @@ class DateTime64(DateTimeBase):
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
-        elif isinstance(first, str):
-            original_column = column
-            column = []
-
-            for x in original_column:
-                if not x and self.nullable:
-                    v = 0
-                else:
-                    dt = datetime.fromisoformat(x)
-                    v = ((int(dt.timestamp()) * 1000000 + dt.microsecond) * self.prec) // 1000000
-
-                column.append(v)
         else:
             prec = self.prec
-            if self.nullable:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0 for x in column]
+            server_mode = common.get_setting("naive_datetime_insert") == "server"
+            active_tz = (self.tzinfo or ctx.server_tz) if server_mode else None
+            if isinstance(first, str):
+                original_column = column
+                column = []
+
+                for x in original_column:
+                    if not x and self.nullable:
+                        v = 0
+                    else:
+                        dt = datetime.fromisoformat(x)
+                        timestamp = _localized_timestamp(dt, active_tz) if active_tz is not None else dt.timestamp()
+                        v = ((floor(timestamp) * 1000000 + dt.microsecond) * prec) // 1000000
+
+                    column.append(v)
+            elif active_tz is not None:
+                if self.nullable:
+                    column = [
+                        ((floor(_localized_timestamp(x, active_tz)) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0
+                        for x in column
+                    ]
+                else:
+                    column = [((floor(_localized_timestamp(x, active_tz)) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
+            elif self.nullable:
+                column = [((floor(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0 for x in column]
             else:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
+                column = [((floor(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
         write_array("q", column, dest, ctx.column_name)
 
 
@@ -329,7 +357,6 @@ class TimeBase(ClickHouseType, registered=False):
 
     _array_type: str
     byte_size: int
-    np_type: str
     valid_formats = ("native", "string", "int", "time")
     python_type = timedelta
 
@@ -403,7 +430,7 @@ class TimeBase(ClickHouseType, registered=False):
                 return [0] * len(column)
             return []
 
-        converter_map = {
+        converter_map: dict[type, Callable[..., int]] = {
             timedelta: self._timedelta_to_ticks,
             time: self._time_to_ticks,
             float: self._numerical_to_ticks,
@@ -509,7 +536,7 @@ class TimeBase(ClickHouseType, registered=False):
         raise NotImplementedError
 
     @abstractmethod
-    def _ticks_to_np_timedelta(self, ticks: int) -> timedelta:
+    def _ticks_to_np_timedelta(self, ticks: int) -> timedelta | numpy.timedelta64:
         """Convert integer ticks into an np.timedelta."""
         raise NotImplementedError
 
@@ -638,7 +665,7 @@ class Time64(TimeBase):
         return self._SECONDS_PER_DAY * self.precision - 1
 
     @property
-    def np_type(self) -> str:
+    def np_type(self):
         return f"timedelta64{self.unit}"
 
     @property

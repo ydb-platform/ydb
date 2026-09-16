@@ -3,62 +3,108 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_async_io.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 
-#include <ydb/library/actors/core/log.h>
-
 #include <util/generic/ptr.h>
 
-#include <algorithm>
-#include <deque>
-#include <type_traits>
+#include <unordered_set>
 
-namespace NYql::NDqProto {
+namespace NYql {
+
+namespace NDqProto {
+
 enum ECheckpointingMode : int;
-} // namespace NYql::NDqProto
 
-namespace NYql::NDq {
+} // namespace NDqProto
 
-class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
-{
+namespace NDq {
+
+/*
+
+Requirements for MKQL Node Compatibility with Checkpoints
+
+- A node must either support checkpoint creation or be stateless.
+- When a node returns `Yield`, any state not saved in the checkpoint must already have been drained from the MKQL node. (e.g. nodes that use spilling are not compatible)
+- A node may return `Yield` only after receiving `Yield` from all streaming inputs initialized during the current run.
+
+  **Note:** If a stateful operator is located in an uninitialized input, checkpoint creation will not succeed, and the coordinator will wait for the next checkpoint.
+
+These requirements also ensure compatibility with watermarks.
+
+*/
+
+class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints> {
     struct TCheckpointCoordinatorId {
         NActors::TActorId ActorId;
         ui64 Generation;
 
         TCheckpointCoordinatorId(NActors::TActorId actorId, ui64 generation)
             : ActorId(actorId)
-            , Generation(generation) {
-        }
+            , Generation(generation)
+        {}
     };
 
-    struct TPendingCheckpoint {
-        TPendingCheckpoint(const TDqTaskSettings& task)
-            : SinksCount(GetSinksCount(task))
-        {
-        }
+    class TPendingCheckpointBase {
+    public:
+        const size_t SinksCount = 0;
+        size_t ProcessedSinksCount = 0;
+        TMaybe<NDqProto::TCheckpoint> Checkpoint;
+        TInstant CheckpointStartTime;
+
+        explicit TPendingCheckpointBase(const TDqTaskSettings& task);
+
+        virtual ~TPendingCheckpointBase() = default;
 
         // New checkpoint (clears previously saved data).
-        TPendingCheckpoint& operator=(const NDqProto::TCheckpoint& checkpoint);
+        TPendingCheckpointBase& operator=(const NDqProto::TCheckpoint& checkpoint);
 
-        operator bool() const {
-            return Checkpoint.Defined();
-        }
+        operator bool() const;
 
-        void Clear();
+        bool IsSlowCheckpoint(TString& diagnostics) const;
 
-        bool IsReady() const {
-            Y_ABORT_UNLESS(Checkpoint);
-            return SavedComputeActorState && SinksCount == SavedSinkStatesCount;
-        }
+        virtual void Clear();
 
+        virtual bool IsReady() const;
+
+    protected:
+        virtual TString GetDiagnostics() const;
+
+    private:
         static size_t GetSinksCount(const TDqTaskSettings& task);
+    };
 
-        const size_t SinksCount;
-        TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    class TPendingStateSavingCheckpoint final : public TPendingCheckpointBase {
+        using TBase = TPendingCheckpointBase;
+
+    public:
         TComputeActorState ComputeActorState;
-        size_t SavedSinkStatesCount = 0;
         bool SavedComputeActorState = false;
+        bool SavingToDatabase = false;
+
+        using TBase::TBase;
+        using TBase::operator=;
+
+        void Clear() final;
+
+        bool IsReady() const final;
+
+    private:
+        TString GetDiagnostics() const final;
+    };
+
+    class TPendingCommitCheckpoint final : public TPendingCheckpointBase {
+        using TBase = TPendingCheckpointBase;
+
+    public:
+        ui64 Cookie = 0;
+        std::unordered_set<ui64> CommittedOutputs;
+
+        void Clear() final;
+
+        using TBase::TBase;
+        using TBase::operator=;
     };
 
 public:
@@ -71,12 +117,13 @@ public:
         virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void ResumeInputsByCheckpoint() = 0;
+        virtual TString GetTaskDebugState() const = 0;
 
         virtual void Start() = 0;
         virtual void Stop() = 0;
         virtual void ResumeExecution(EResumeSource source) = 0;
 
-        virtual void LoadState(TComputeActorState&& state) = 0;
+        virtual void LoadState(TComputeActorState&& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         virtual ~ICallbacks() = default;
     };
@@ -88,32 +135,34 @@ public:
     };
 
     TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor);
-    void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
-    [[nodiscard]]
-    bool HasPendingCheckpoint() const;
+
+    // Public API methods, which may be called from compute actor
+
+    [[nodiscard]] bool HasPendingCheckpoint() const;
     bool ComputeActorStateSaved() const;
-    void DoCheckpoint();
-    bool SaveState();
     NDqProto::TCheckpoint GetPendingCheckpoint() const;
+
+    // Checkpoint saving.
+    void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
-    void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
-    void AbortCheckpoint();
+    void DoCheckpoint();
 
-    // Sink support.
+    // Sink/Transform checkpointing support.
     void OnSinkStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnSinkStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
+    void OnTransformStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
-    void OnTransformStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) {
-        Y_UNUSED(state);
-        Y_UNUSED(outputIndex); // Note that we can have both sink and transform on one output index
-        Y_UNUSED(checkpoint);
-        Y_ABORT("Transform states are unimplemented");
-    }
-
-    void TryToSavePendingCheckpoint();
-
+    // Checkpoint restore.
     void AfterStateLoading(const TMaybe<TString>& error);
 
 private:
+    bool SaveState();
+    void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
+    void StartSlowCheckpointsMonitoring();
+    void TryToSavePendingCheckpoint();
+    void TryToFinishPendingCommitCheckpoint();
+
     STATEFN(StateFunc);
     void Handle(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr&);
     void Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&);
@@ -148,26 +197,26 @@ private:
     ICallbacks* ComputeActor = nullptr;
 
     TMaybe<TCheckpointCoordinatorId> CheckpointCoordinator;
-    TPendingCheckpoint PendingCheckpoint;
+    TPendingStateSavingCheckpoint PendingSaveStateCheckpoint;
+    TPendingCommitCheckpoint PendingCommitCheckpoint;
     TRetryEventsQueue EventsQueue;
 
     // Restore
-    NYql::NDqProto::NDqStateLoadPlan::TTaskPlan StateLoadPlan;
+    NDqProto::NDqStateLoadPlan::TTaskPlan StateLoadPlan;
     NDqProto::TCheckpoint RestoringTaskRunnerForCheckpoint;
     ui64 RestoringTaskRunnerForEvent;
 
     bool SlowCheckpointsMonitoringStarted = false;
-    TInstant CheckpointStartTime;
-    bool SavingToDatabase = false;
 };
 
-NYql::NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NYql::NDq::TDqTaskSettings& task);
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 
-bool IsIngress(const NYql::NDq::TDqTaskSettings& task);
+bool IsIngress(const TDqTaskSettings& task);
 
-bool IsEgress(const NYql::NDq::TDqTaskSettings& task);
+bool IsEgress(const TDqTaskSettings& task);
 
-bool HasState(const NYql::NDq::TDqTaskSettings& task);
+bool HasState(const TDqTaskSettings& task);
 
+} // namespace NDq
 
-} // namespace NYql::NDq
+} // namespace NYql

@@ -811,7 +811,6 @@ TVector<TString> TokenizeBinaryJson(TStringBuf text) {
     if (text.empty()) {
         return tokens;
     }
-    tokens.emplace_back();
     auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(text);
     TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
     return tokens;

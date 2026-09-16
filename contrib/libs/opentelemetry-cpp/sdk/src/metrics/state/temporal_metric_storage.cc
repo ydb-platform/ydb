@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -34,7 +35,8 @@ TemporalMetricStorage::TemporalMetricStorage(InstrumentDescriptor instrument_des
                                              const AggregationConfig *aggregation_config)
     : instrument_descriptor_(std::move(instrument_descriptor)),
       aggregation_type_(aggregation_type),
-      aggregation_config_(aggregation_config)
+      aggregation_config_(aggregation_config),
+      instrument_creation_ts_(std::chrono::system_clock::now())
 {}
 
 bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
@@ -45,26 +47,42 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
                                          nostd::function_ref<bool(MetricData)> callback) noexcept
 {
   std::lock_guard<opentelemetry::common::SpinLockMutex> guard(lock_);
-  opentelemetry::common::SystemTimestamp last_collection_ts = sdk_start_ts;
   AggregationTemporality aggregation_temporarily =
       collector->GetAggregationTemporality(instrument_descriptor_.type_);
+  // Per OTel spec (issue #4062): the start_ts for the first delta collection
+  // interval must be the instrument creation time, not the MeterProvider
+  // start time (which is what sdk_start_ts carries). For cumulative, sdk_start_ts
+  // is acceptable per spec ("creation of the instrument or the timestamp from
+  // when the SDK was started, whichever happened first").
+  opentelemetry::common::SystemTimestamp last_collection_ts =
+      (aggregation_temporarily == AggregationTemporality::kDelta) ? instrument_creation_ts_
+                                                                  : sdk_start_ts;
 
-  // Fast path for single collector with delta temporality and counter, updown-counter, histogram
+  // Fast path for single collector with delta temporality.
   // This path doesn't need to aggregated-with/contribute-to the unreported_metric_, as there is
   // no other reader configured to collect those data.
+  // For synchronous gauge this provides window-scoped last-value semantics: only values recorded
+  // since the previous collection are emitted; stale values are not re-exported.
   if (collectors.size() == 1 && aggregation_temporarily == AggregationTemporality::kDelta)
   {
+    if (!has_last_delta_collection_ts_)
+    {
+      last_delta_collection_ts_     = instrument_creation_ts_;
+      has_last_delta_collection_ts_ = true;
+    }
     // If no metrics, early return
     if (delta_metrics->Size() == 0)
     {
+      last_delta_collection_ts_ = collection_ts;
       return true;
     }
     // Create MetricData directly
     MetricData metric_data;
     metric_data.instrument_descriptor   = instrument_descriptor_;
     metric_data.aggregation_temporality = AggregationTemporality::kDelta;
-    metric_data.start_ts                = sdk_start_ts;
+    metric_data.start_ts                = last_delta_collection_ts_;
     metric_data.end_ts                  = collection_ts;
+    last_delta_collection_ts_           = collection_ts;
 
     // Direct conversion of delta metrics to point data
     delta_metrics->GetAllEntries(
@@ -92,7 +110,6 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
   auto present = unreported_metrics_.find(collector);
   if (present == unreported_metrics_.end())
   {
-    // no unreported metrics for the collector, return.
     return true;
   }
   auto unreported_list = std::move(present->second);
@@ -167,6 +184,10 @@ bool TemporalMetricStorage::buildMetrics(CollectorHandle *collector,
   // Generate the MetricData from the final merged_metrics, and invoke callback over it.
 
   AttributesHashMap *result_to_export = (last_reported_metrics_[collector]).attributes_map.get();
+  if (result_to_export->Size() == 0)
+  {
+    return true;
+  }
   MetricData metric_data;
   metric_data.instrument_descriptor   = instrument_descriptor_;
   metric_data.aggregation_temporality = aggregation_temporarily;

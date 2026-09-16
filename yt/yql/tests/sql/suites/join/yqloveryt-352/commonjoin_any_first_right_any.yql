@@ -1,0 +1,5 @@
+use plato;
+
+pragma yt.JoinCommonAnySideFirst = "1";
+
+select * from Input2 as b join any Input1 as a on a.k1 = b.k2;

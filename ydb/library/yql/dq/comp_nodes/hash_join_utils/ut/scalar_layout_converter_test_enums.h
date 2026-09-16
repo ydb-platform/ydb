@@ -4,7 +4,7 @@ namespace NKikimr::NMiniKQL {
 
 enum EFixedSizeScalarType {
     INT64,
-    // UUID,
+    UUID,
     DECIMAL,
 };
 

@@ -19,6 +19,8 @@ PEERDIR(
     yql/essentials/utils
 )
 
+GENERATE_ENUM_SERIALIZATION(translation_settings.h)
+
 END()
 
 RECURSE(

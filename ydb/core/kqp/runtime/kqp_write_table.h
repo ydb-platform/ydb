@@ -96,6 +96,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
 
 IDataBatchProjectionPtr CreateFulltextTokenizeProjection(
     TConstArrayRef<NScheme::TTypeInfo> columnTypes,
+    ui32 dataColumnCount,
     bool withFreq,
     bool added,
     const Ydb::Table::FulltextIndexSettings& settings,
@@ -115,7 +116,8 @@ bool IsEqual(
     TConstArrayRef<NScheme::TTypeInfo> types);
 
 std::vector<TConstArrayRef<TCell>> GetRows(
-    const NKikimr::NKqp::IDataBatchPtr& batch);
+    const NKikimr::NKqp::IDataBatchPtr& batch,
+    const size_t offset = 0);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
@@ -181,7 +183,10 @@ public:
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         const ui32 defaultColumnsCount,
-        const i64 priority) = 0;
+        const i64 priority,
+        // MvccSnapshot of the operation that opened this write token. Each write
+        // token belongs to exactly one operation, so the snapshot travels with it.
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot) = 0;
     virtual void Write(
         const TWriteToken token,
         IDataBatchPtr&& data) = 0;
@@ -196,6 +201,9 @@ public:
     virtual void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) = 0;
     // Get the QuerySpanId of the first pending batch for a shard (0 if none).
     virtual ui64 GetFirstBatchQuerySpanId(ui64 shardId) const = 0;
+    // Get the MvccSnapshot that must be attached to the next message for a shard.
+    // All in-flight batches of the message must share the same snapshot.
+    virtual std::optional<NKikimrDataEvents::TMvccSnapshot> GetMessageMvccSnapshot(ui64 shardId) const = 0;
 
     virtual void Close() = 0;
 
@@ -227,7 +235,7 @@ public:
         TVector<ui64> PayloadIndexes;
     };
 
-    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) = 0;
 
     struct TMessageAcknowledgedResult {
         ui64 DataSize = 0;
@@ -253,7 +261,10 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
+    i64 ColumnShardMaxOperationBytes = 0;
     bool Inconsistent = false;
+    bool EnableWriteSeqNum = false;
+    ui64 WriterIndex = 0;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

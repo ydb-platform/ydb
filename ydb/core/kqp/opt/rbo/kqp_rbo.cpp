@@ -109,7 +109,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         for (const auto& iter : root) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
-                if (!rule->QuickMatch(op)) {
+                if (!rule->QuickMatch(op, root.PlanProps)) {
                     continue;
                 }
 
@@ -145,7 +145,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         }
                         // Finally, it's a subplan, so update the subplan
                         else {
-                            root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
+                            root.PlanProps.Subplans.ReplacePlan(*iter.SubplanIU, op);
                         }
                     }
 
@@ -205,7 +205,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics;
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
+        | ERuleProperties::RequireLiveness;
     ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
     if (needToLog) {
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);

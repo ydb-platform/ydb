@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
             duration = TDuration::Seconds(FromString<ui64>(durationStr));
         }
 
-        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, inflights, duration);
+        TActorBenchmark::RunSendActivateReceiveCSV(threadsList, actorPairsList, inflights, duration, 1);
     }
 
     Y_UNIT_TEST(StarSendActivateReceiveCSVManual) {
@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
         std::vector<ui32> threadsList;
         std::vector<ui32> actorPairsList;
         std::vector<ui32> starsList;
+        TDuration duration = TDuration::Seconds(1);
 
         auto parseUintList = [](const char* envVar) -> std::vector<ui32> {
             std::vector<ui32> result;
@@ -83,7 +84,11 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
         actorPairsList = parseUintList("ACTORSYSTEM_ACTOR_PAIRS");
         starsList = parseUintList("ACTORSYSTEM_STARS");
 
-        TActorBenchmark::RunStarSendActivateReceiveCSV(threadsList, actorPairsList, starsList);
+        if (const char* durationStr = getenv("ACTORSYSTEM_DURATION")) {
+            duration = TDuration::Seconds(FromString<ui64>(durationStr));
+        }
+
+        TActorBenchmark::RunStarSendActivateReceiveCSV(threadsList, actorPairsList, starsList, duration, 1);
     }
 
     Y_UNIT_TEST(SendActivateReceiveCSV) {

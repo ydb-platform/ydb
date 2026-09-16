@@ -34,10 +34,20 @@ private:
 
         for (auto&& dsColumn : dsDescription.GetColumns()) {
             NKikimrSchemeOp::TAlterColumnTableSchema* alterSchema = olapDescription.MutableAlterSchema();
-            NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
-            auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
-            if (parse.IsFail()) {
-                return parse;
+            // Columns with Type are additions; columns without Type are alterations of existing columns
+            // (e.g. DROP NOT NULL).
+            if (dsColumn.HasType()) {
+                NKikimrSchemeOp::TOlapColumnDescription* olapColumn = alterSchema->AddAddColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
+            } else {
+                NKikimrSchemeOp::TOlapColumnDiff* olapColumn = alterSchema->AddAlterColumns();
+                auto parse = ParseFromDSRequest(dsColumn, *olapColumn);
+                if (parse.IsFail()) {
+                    return parse;
+                }
             }
         }
 
@@ -93,6 +103,9 @@ private:
         }
         if (dsColumn.HasFamilyName()) {
             olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
+        }
+        if (dsColumn.HasNotNull()) {
+            olapColumn.SetNotNull(dsColumn.GetNotNull());
         }
         return TConclusionStatus::Success();
     }

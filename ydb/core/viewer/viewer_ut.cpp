@@ -16,6 +16,7 @@
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "query_autocomplete_helper.h"
+#include "viewer_database_stats.h"
 #include "viewer_groups.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -36,6 +37,9 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/simple_tablet.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/string/builder.h>
 #include <regex>
@@ -725,6 +729,68 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetExpectedSlotSize(100);
+        pdisk.SetEnforcedDynamicSlotSize(1000);
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(10000);
+        pdisk.SetSlotSizeInUnits(1);
+
+        stats.AddVDisk(vdisk, pdisk, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 100);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithDynamicSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetEnforcedDynamicSlotSize(100);
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(10000);
+        pdisk.SetSlotSizeInUnits(2);
+
+        stats.AddVDisk(vdisk, pdisk, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 200);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotCount)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetExpectedSlotCount(10);
+        pdisk.SetTotalSize(1000);
+        pdisk.SetSlotSizeInUnits(3);
+
+        stats.AddVDisk(vdisk, pdisk, 5);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 200);
+        UNIT_ASSERT(!stats.UnknownSlotSize);
+    }
+
+    Y_UNIT_TEST(DatabaseStatsStorageLimitWithUnknownSlotSize)
+    {
+        TDatabaseStorageStats stats;
+        NKikimrWhiteboard::TVDiskStateInfo vdisk;
+        vdisk.SetAvailableSize(75);
+        NKikimrWhiteboard::TPDiskStateInfo pdisk;
+        pdisk.SetTotalSize(1000);
+
+        stats.AddVDisk(vdisk, pdisk, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 75);
+        UNIT_ASSERT(stats.UnknownSlotSize);
+    }
+
     Y_UNIT_TEST(StorageGroupDiskSpaceDoesNotDependOnUsage)
     {
         TStorageGroups::TGroup group;
@@ -765,6 +831,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
         UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
         UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 50.0, 1e-6);
+    }
+
+    Y_UNIT_TEST(StorageGroupUsageWithExpectedSlotSize)
+    {
+        TStorageGroups::TGroup group;
+        group.GroupSizeInUnits = 2;
+        auto& vdisk = group.VDisks.emplace_back();
+        vdisk.VSlotId = TVSlotId(1, 1, 1);
+        vdisk.AllocatedSize = 25;
+        vdisk.AvailableSize = 900;
+
+        TStorageGroups::TPDisk pdisk;
+        pdisk.ExpectedSlotSize = 100;
+        pdisk.EnforcedDynamicSlotSize = 1000;
+        pdisk.SlotSizeInUnits = 1;
+        pdisk.TotalSize = 10000;
+        pdisk.AvailableSize = 9000;
+        pdisk.SlotCount = 10;
+
+        group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 100);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 25.0, 1e-6);
     }
 
     Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)
@@ -1310,6 +1398,97 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& vdiskMap = vdisks[0].GetMap();
         UNIT_ASSERT_C(vdiskMap.contains("VDiskState"), NJson::WriteJson(vdisks[0], false));
         UNIT_ASSERT_VALUES_EQUAL_C(vdiskMap.at("VDiskState").GetString(), "LocalRecoveryError", NJson::WriteJson(vdisks[0], false));
+    }
+
+    NJson::TJsonValue GetTabletInfo(TTestActorRuntime& runtime, const TActorId& sender) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tabletinfo?enums=true&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        return json;
+    }
+
+    std::optional<NJson::TJsonValue> FindTabletInfo(const NJson::TJsonValue& json, ui64 tabletId) {
+        const NJson::TJsonValue* tablets = nullptr;
+        if (!json.GetValuePointer("TabletStateInfo", &tablets) || !tablets->IsArray()) {
+            return std::nullopt;
+        }
+        for (const auto& tablet : tablets->GetArray()) {
+            if (tablet["TabletId"].GetStringRobust() == ToString(tabletId)) {
+                return tablet;
+            }
+        }
+        return std::nullopt;
+    }
+
+    NJson::TJsonValue WaitTabletInfoActive(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
+        NJson::TJsonValue json;
+        for (int i = 0; i < 60; ++i) {
+            json = GetTabletInfo(runtime, sender);
+            auto tablet = FindTabletInfo(json, tabletId);
+            if (tablet && (*tablet)["State"].GetStringRobust() == "Active") {
+                return *tablet;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Tablet " << tabletId << " never became active: " << NJson::WriteJson(json, false));
+        return {};
+    }
+
+    void RunOutdatedBootAttempt(TTestActorRuntime& runtime, ui64 tabletId) {
+        auto launcher = runtime.AllocateEdgeActor(0);
+        auto setup = MakeIntrusive<TTabletSetupInfo>(&CreateSimpleTablet,
+            TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
+
+        runtime.Register(CreateTablet(launcher,
+                CreateTestTabletInfo(tabletId, TTabletTypes::Hive),
+                setup.Get(), /* suggestedGeneration */ 1),
+            0);
+
+        auto dead = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(launcher);
+        UNIT_ASSERT_VALUES_EQUAL(dead->Get()->TabletID, tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(dead->Get()->Reason, TEvTablet::TEvTabletDead::ReasonBootSuggestOutdated);
+
+        // wait for whiteboard update
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(TestTabletInfoAfterOutdatedBoot)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ui64 tabletId = runtime.GetAppData().DomainsInfo->GetHive();
+        auto running = WaitTabletInfoActive(runtime, sender, tabletId);
+
+        RunOutdatedBootAttempt(runtime, tabletId);
+
+        auto current = FindTabletInfo(GetTabletInfo(runtime, sender), tabletId);
+        UNIT_ASSERT(current);
+        UNIT_ASSERT_VALUES_EQUAL_C((*current)["State"].GetStringRobust(), "Active",
+            NJson::WriteJson(*current, false));
+        UNIT_ASSERT_VALUES_EQUAL_C((*current)["Generation"].GetStringRobust(),
+            running["Generation"].GetStringRobust(), NJson::WriteJson(*current, false));
     }
 
     Y_UNIT_TEST(ServerlessWithExclusiveNodes)
@@ -2222,6 +2401,85 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(response.StartsWith("<svg"), response);
     }
 
+    Y_UNIT_TEST(ComputationGraphPost) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString plan = R"json({
+    "meta": {"version": "0.2", "type": "query"},
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [{
+            "PlanNodeId": 5,
+            "Node Type": "Sink",
+            "Operators": [{"Name": "Write pq", "SinkType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
+            "Stats": {
+                "Tasks": 1, "FinishedTasks": 1,
+                "EgressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                "EgressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
+            },
+            "Plans": [{
+                "PlanNodeId": 4,
+                "Node Type": "Stage",
+                "Stats": {"Tasks": 0, "FinishedTasks": 0},
+                "Plans": [{
+                    "PlanNodeId": 3,
+                    "Node Type": "HashShuffle",
+                    "PlanNodeType": "Connection",
+                    "Plans": [{
+                        "PlanNodeId": 2,
+                        "Node Type": "Stage",
+                        "Stats": {
+                            "Tasks": 2, "FinishedTasks": 0,
+                            "OutputRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                            "OutputBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2},
+                            "CpuTimeUs":   {"Min": 1000, "Max": 3000, "Sum": 4000, "Count": 2}
+                        },
+                        "Plans": [{
+                            "PlanNodeId": 1,
+                            "Node Type": "Source",
+                            "Operators": [{"Name": "Read pq", "SourceType": "pq", "ExternalDataSource": "pq", "Inputs": []}],
+                            "Stats": {
+                                "Tasks": 2, "FinishedTasks": 0,
+                                "IngressRows":  {"Min": 40, "Max": 60, "Sum": 100, "Count": 2},
+                                "IngressBytes": {"Min": 400, "Max": 600, "Sum": 1000, "Count": 2}
+                            }
+                        }]
+                    }]
+                }]
+            }]
+        }]
+    }
+})json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = VALID_TOKEN;
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/computation_graph", plan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+        UNIT_ASSERT_C(response.Contains("Read pq"), response);
+        UNIT_ASSERT_C(response.Contains("<circle"), response);
+    }
+
     Y_UNIT_TEST(CommitOffsetTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -2242,6 +2500,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
         securityConfig.AddAdministrationAllowedSIDs(ROOT_TOKEN);
         securityConfig.AddViewerAllowedSIDs("username");
+        securityConfig.AddRegisterDynamicNodeAllowedSIDs(ROOT_TOKEN);
 
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};

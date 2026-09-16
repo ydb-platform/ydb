@@ -51,10 +51,10 @@ Y_UNIT_TEST(TupleVariantScalarRoundtrip) {
         UNIT_ASSERT_EQUAL(datum.type()->id(), arrow::Type::DENSE_UNION);
         const auto* vs = dynamic_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
         UNIT_ASSERT_C(vs != nullptr, "Expected TDenseUnionScalar");
-        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 0U);
         UNIT_ASSERT(vs->value != nullptr);
         UNIT_ASSERT_EQUAL(vs->value->type->id(), arrow::Type::UINT32);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt32Scalar&>(*vs->value).value, 42u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt32Scalar&>(*vs->value).value, 42U);
     }
 
     {
@@ -63,9 +63,9 @@ Y_UNIT_TEST(TupleVariantScalarRoundtrip) {
         UNIT_ASSERT(datum.is_scalar());
         const auto* vs = dynamic_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
         UNIT_ASSERT_C(vs != nullptr, "Expected TDenseUnionScalar");
-        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 1U);
         UNIT_ASSERT_EQUAL(vs->value->type->id(), arrow::Type::UINT64);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*vs->value).value, 99u);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Scalar&>(*vs->value).value, 99U);
     }
 }
 
@@ -102,9 +102,9 @@ Y_UNIT_TEST(StructVariantRoundtrip) {
         auto iterator = graph->GetValue().GetListIterator();
 
         NUdf::TUnboxedValue val;
-        for (size_t i = 0; i < values.size(); ++i) {
+        for (const auto& i : values) {
             UNIT_ASSERT(iterator.Next(val));
-            NYql::NUdf::AssertUnboxedValueElementEqual(val, std::variant<ui32>{values[i]});
+            NYql::NUdf::AssertUnboxedValueElementEqual(val, std::variant<ui32>{i});
         }
         UNIT_ASSERT(!iterator.Next(val));
     }
@@ -125,15 +125,15 @@ Y_UNIT_TEST(AsScalarSameArrowTypeAlternatives) {
     TBlockHelper helper;
 
     {
-        auto [graph, value, itemType, blockType] = helper.GetScalarBlock(TVar(std::in_place_index<1>, 99u));
+        auto [graph, value, itemType, blockType] = helper.GetScalarBlock(TVar(std::in_place_index<1>, 99U));
         const auto& datum = TArrowBlock::From(value).GetDatum();
         UNIT_ASSERT(datum.is_scalar());
         UNIT_ASSERT_EQUAL(datum.type()->id(), arrow::Type::DENSE_UNION);
         const auto* vs = dynamic_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
         UNIT_ASSERT_C(vs != nullptr, "Expected TDenseUnionScalar");
-        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(vs->Index, 1U);
         auto blockReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
-        NYql::NUdf::AssertUnboxedValueElementEqual(blockReader->GetScalarItem(*datum.scalar()), TVar(std::in_place_index<1>, 99u));
+        NYql::NUdf::AssertUnboxedValueElementEqual(blockReader->GetScalarItem(*datum.scalar()), TVar(std::in_place_index<1>, 99U));
     }
 
     {
@@ -559,7 +559,7 @@ Y_UNIT_TEST(StructVariantScalarRoundtrip) {
 
     auto structType = pb.NewStructType({{"x", pb.NewDataType(NUdf::TDataType<ui32>::Id)}});
     auto varType = pb.NewVariantType(structType);
-    auto varNode = pb.AsScalar(pb.NewVariant(pb.NewDataLiteral<ui32>(7u), "x", varType));
+    auto varNode = pb.AsScalar(pb.NewVariant(pb.NewDataLiteral<ui32>(7U), "x", varType));
     auto blockType = varNode.GetStaticType();
     auto itemType = AS_TYPE(TBlockType, blockType)->GetItemType();
     auto graph = setup.BuildGraph(varNode);
@@ -571,14 +571,14 @@ Y_UNIT_TEST(StructVariantScalarRoundtrip) {
     UNIT_ASSERT_EQUAL(datum.type()->id(), arrow::Type::DENSE_UNION);
     const auto* vs = dynamic_cast<const NYql::NUdf::TDenseUnionScalar*>(datum.scalar().get());
     UNIT_ASSERT_C(vs != nullptr, "Expected TDenseUnionScalar for struct-backed variant");
-    UNIT_ASSERT_VALUES_EQUAL(vs->Index, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(vs->Index, 0U);
     UNIT_ASSERT(vs->value != nullptr);
     UNIT_ASSERT_EQUAL(vs->value->type->id(), arrow::Type::UINT32);
-    UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt32Scalar&>(*vs->value).value, 7u);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt32Scalar&>(*vs->value).value, 7U);
 
     auto blockReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
     NYql::NUdf::AssertUnboxedValueElementEqual(
-        blockReader->GetScalarItem(*datum.scalar()), std::variant<ui32>{ui32{7u}});
+        blockReader->GetScalarItem(*datum.scalar()), std::variant<ui32>{ui32{7U}});
 }
 
 Y_UNIT_TEST(DataWeightArray) {
@@ -660,14 +660,14 @@ Y_UNIT_TEST(SaveItemAndAddFromInputBuffer) {
             reader->SaveItem(*arrayData, srcRow, out);
         }
         auto buf = out.Finish();
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), subsize, nullptr);
+        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), subsize, /*pgBuilder=*/nullptr);
         NYql::NUdf::TInputBuffer in(buf);
         for (size_t srcRow = 0; srcRow < subsize; ++srcRow) {
             builder->Add(in);
         }
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, subsize);
         for (size_t i = 0; i < subsize; ++i) {
             NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, i), data[startOffset + i]);
@@ -710,11 +710,11 @@ Y_UNIT_TEST(SaveScalarItemAndAddFromInputBuffer) {
     auto buf = out.Finish();
     NYql::NUdf::TInputBuffer in(buf);
 
-    auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), 10, nullptr);
+    auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), 10, /*pgBuilder=*/nullptr);
     builder->Add(in);
     auto resultDatum = builder->Build(true);
     helper.ValidateDatum(resultDatum, Nothing(), blockType);
-    auto resultData = resultDatum.array();
+    const auto& resultData = resultDatum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 1);
     NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, 0), TVar{ui32{7}});
@@ -730,7 +730,7 @@ Y_UNIT_TEST(BuilderAddDefault) {
     auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
     auto sourceItem = reader->GetItem(*sourceData, 0);
 
-    auto iBuilder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), 10, nullptr);
+    auto iBuilder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), 10, /*pgBuilder=*/nullptr);
     auto* builder = static_cast<NYql::NUdf::TArrayBuilderBase*>(iBuilder.get());
     builder->Add(sourceItem);
     builder->AddDefault();
@@ -738,7 +738,7 @@ Y_UNIT_TEST(BuilderAddDefault) {
     auto datum = builder->Build(true);
     helper.ValidateDatum(datum, Nothing(), blockType);
 
-    auto resultData = datum.array();
+    const auto& resultData = datum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 2);
     const auto* typeCodes = resultData->GetValues<i8>(1);
@@ -747,7 +747,7 @@ Y_UNIT_TEST(BuilderAddDefault) {
     UNIT_ASSERT_VALUES_EQUAL(resultData->child_data[0]->length, expectedAlt0Length);
 
     NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, 0), data[0]);
-    NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, 1), TVar{ui32{0u}});
+    NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, 1), TVar{ui32{0U}});
 }
 
 Y_UNIT_TEST(BuilderAddManyContiguous) {
@@ -765,12 +765,12 @@ Y_UNIT_TEST(BuilderAddManyContiguous) {
         const size_t count = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - beginIndex + 1}, 1)[0];
 
         NYql::NUdf::IArrayBuilder::TArrayDataItem item = {.Data = sourceData.get(), .StartOffset = 0};
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, nullptr);
+        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, /*pgBuilder=*/nullptr);
         builder->AddMany(&item, 1, beginIndex, count);
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, count);
         for (size_t i = 0; i < count; ++i) {
@@ -794,12 +794,12 @@ Y_UNIT_TEST(BuilderAddManySparseBitmap) {
         const TVector<ui8> bitmap(bitmapBools.begin(), bitmapBools.end());
         const size_t popCount = static_cast<size_t>(std::ranges::count(bitmapBools, true));
 
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, nullptr);
+        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, /*pgBuilder=*/nullptr);
         builder->AddMany(*sourceData, popCount, bitmap.data(), dataSize);
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, popCount);
         size_t resultIdx = 0;
@@ -826,12 +826,12 @@ Y_UNIT_TEST(BuilderAddManyIndexed) {
         TVector<ui64> indexes = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, indexCount);
         indexes.reserve(dataSize);
         NYql::NUdf::IArrayBuilder::TArrayDataItem item = {.Data = sourceData.get(), .StartOffset = 0};
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, nullptr);
+        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, /*pgBuilder=*/nullptr);
         builder->AddMany(&item, 1, indexes.data(), indexCount);
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, indexCount);
         for (size_t i = 0; i < indexCount; ++i) {

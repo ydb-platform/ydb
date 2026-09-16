@@ -32,6 +32,8 @@ namespace NKikimr {
 #undef DEFINE_TRACING_LEVELS
 
         enum : ui8 {
+            // Detalisation level that doesn't reach storage nodes
+            DynamicNodesOnly = 4,
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
             // The most verbose detalisation level
@@ -101,6 +103,13 @@ namespace NKikimr {
                 VectorResolveActor = TComponentTracingLevels::TQueryProcessor::Basic,
 
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
+        };
+    };
+
+    struct TWilsonBlobDepot {
+        enum {
+            AgentQuery = TComponentTracingLevels::TDistributedStorage::TopLevel,
+            AgentInternals = TComponentTracingLevels::TDistributedStorage::Basic,
         };
     };
 

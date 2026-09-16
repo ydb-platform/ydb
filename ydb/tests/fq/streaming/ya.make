@@ -22,6 +22,7 @@ PY_SRCS(
 )
 
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -29,6 +30,8 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
+    REQUIREMENTS(ram:12)
+    SPLIT_FACTOR(20)
 ENDIF()
 
 PEERDIR(
@@ -44,8 +47,13 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    streaming_large
+    generic
+    logbroker
+)

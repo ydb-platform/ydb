@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/pack_num.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -54,8 +53,8 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TVector<NUdf::TUnboxedValue> values;
     TraverseGraph(roots, rootCount, values);
 
-    for (ui32 i = 0; i < values.size(); ++i) {
-        auto state = values[i].Save();
+    for (const auto& value : values) {
+        auto state = value.Save();
         if (state.IsString() || state.IsEmbedded()) {
             auto strRef = state.AsStringRef();
             auto size = strRef.Size();
@@ -91,17 +90,16 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TVector<NUdf::TUnboxedValue> values;
     TraverseGraph(roots, rootCount, values);
 
-    for (ui32 i = 0; i < values.size(); ++i) {
+    for (auto& value : values) {
         auto size = ReadUi64(state);
         if (size) {
             MKQL_ENSURE(size <= state.size(), "Serialized state is corrupted");
-            values[i].Load(NUdf::TStringRef(state.data(), size));
+            value.Load(NUdf::TStringRef(state.data(), size));
             state.Skip(size);
         }
     }
 
-    MKQL_ENSURE(state.size() == 0, "State was not loaded correctly");
+    MKQL_ENSURE(state.empty(), "State was not loaded correctly");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

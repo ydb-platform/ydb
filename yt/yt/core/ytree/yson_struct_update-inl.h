@@ -255,19 +255,19 @@ TMapFieldConfigurator<TMap>::TMapFieldConfigurator()
     OnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/)
         -> TConfigurator<TStruct> {
         THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
-            << TErrorAttribute("created_key", key);
+            .With("created_key", key);
     });
     OnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
         THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
-            << TErrorAttribute("removed_key", key);
+            .With("removed_key", key);
     });
     ValidateOnAdded_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*newValue*/) {
         THROW_ERROR_EXCEPTION("Cannot create a new element in the map")
-            << TErrorAttribute("created_key", key);
+            .With("created_key", key);
     });
     ValidateOnRemoved_ = BIND_NO_PROPAGATE([] (const TKey& key, const TStructPtr& /*oldValue*/) {
         THROW_ERROR_EXCEPTION("Cannot remove elements from the map")
-            << TErrorAttribute("removed_key", key);
+            .With("removed_key", key);
     });
 
     TFieldConfigurator<TMap>::Updater(

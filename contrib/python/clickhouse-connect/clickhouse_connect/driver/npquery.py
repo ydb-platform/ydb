@@ -1,6 +1,7 @@
 import itertools
 import logging
 from collections.abc import Generator, Sequence
+from typing import Any
 
 from clickhouse_connect.driver import options
 from clickhouse_connect.driver.common import StreamContext, empty_gen
@@ -13,19 +14,19 @@ logger = logging.getLogger(__name__)
 class NumpyResult(Closable):
     def __init__(
         self,
-        block_gen: Generator[Sequence, None, None] = None,
+        block_gen: Generator[Sequence, None, None] | None = None,
         column_names: tuple = (),
         column_types: tuple = (),
         d_types: Sequence = (),
-        source: Closable = None,
+        source: Closable | None = None,
     ):
         self.column_names = column_names
         self.column_types = column_types
         self.np_types = d_types
         self.source = source
         self.query_id = ""
-        self.summary = {}
-        self._block_gen = block_gen or empty_gen()
+        self.summary: dict[str, Any] = {}
+        self._block_gen: Generator[Sequence, None, None] | None = block_gen or empty_gen()
         self._numpy_result = None
         self._df_result = None
 

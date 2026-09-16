@@ -126,16 +126,13 @@ def parallel_allure_test_description(
             _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 
-    iterations_table = __create_parallel_test_table(execution_result)
-    logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
-    if iterations_table:
-        html += f'''
-        <h3>Workload Iterations</h3>
-        {iterations_table}
-        '''
-        logging.info("Added iterations table to description HTML")
+    iterations_html = __create_workload_iterations_report(execution_result)
+    logging.info(f"iterations report created, length: {len(iterations_html) if iterations_html else 0}")
+    if iterations_html:
+        html += iterations_html
+        logging.info("Added iterations report to description HTML")
     else:
-        logging.warning("iterations_table is empty, not adding to HTML")
+        logging.warning("iterations report is empty, not adding to HTML")
 
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)
@@ -294,83 +291,86 @@ def _escape_html(text: str) -> str:
     return html.escape(text, quote=True)
 
 
-def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str:
-    """Creates an HTML table showing workload iteration results per host
+# Colors for workload status cells
+_COLOR_OK = '#ccffcc'
+_COLOR_PARTIAL = '#fff3cd'
+_COLOR_FAIL = '#ffcccc'
+_COLOR_EMPTY = '#fafafa'
+_COLOR_HEADER = '#f0f0f0'
 
-    Args:
-        execution_result: Stress test execution results containing node run data
 
-    Returns:
-        str: HTML string containing the formatted results table
+def _cell_status_color(successful: int, total: int) -> str:
+    """Return background color for ok/total cell."""
+    if total <= 0:
+        return _COLOR_EMPTY
+    if successful == total:
+        return _COLOR_OK
+    if successful == 0:
+        return _COLOR_FAIL
+    return _COLOR_PARTIAL
+
+
+def __create_workload_iterations_report(execution_result: StressUtilTestResults) -> str:
+    """Create a summary table of workload success per stress type.
+
+    Shows overall ok/total, success rate, host count, and recoverability
+    status when present.
     """
-    table_html = """
-    <div>
-    <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
-        <tr style='background-color: #f0f0f0;'>
-            <th>Stress type</th>
-    """
-    # Group nodes by host
+    if not execution_result or not execution_result.stress_util_runs:
+        return ''
 
-    all_nodes = set([node_host for run_result in execution_result.stress_util_runs.values() for node_host in run_result.node_runs.keys()])
-    all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
-    hosts_to_nodes = {}
-    for node in all_cluster_nodes:
-        if node.host not in hosts_to_nodes:
-            hosts_to_nodes[node.host] = []
-        hosts_to_nodes[node.host].append(node)
+    has_recoverability = execution_result.recoverability_result is not None
+    html_parts = ['<div>']
 
-    # For each host, take the first node as representative
-    unique_hosts = sorted(all_nodes)
-    for host in unique_hosts:
-        table_html += f'<th>{host.split('.')[0]}</th>'
-    if execution_result.recoverability_result:
-        table_html += '<th>Recovered</th>'
-
-    logging.info(f"unique_hosts: {unique_hosts}")
-
-    table_html += """
-        </tr>
-    """
+    html_parts.append('<h3>Workload Summary</h3>')
+    html_parts.append(
+        '<table border="1" cellpadding="4px" style="border-collapse: collapse; font-size: 13px;">'
+        f'<tr style="background-color: {_COLOR_HEADER};">'
+        '<th>Stress type</th>'
+        '<th>Main ok/total</th>'
+        '<th>Success rate</th>'
+        '<th>Hosts</th>'
+    )
+    if has_recoverability:
+        html_parts.append('<th>Recoverability</th>')
+    html_parts.append('</tr>')
 
     for stress_name, stress_result in execution_result.stress_util_runs.items():
-        table_html += '<tr>'
-        stress_color = '#ccffcc'
-        if stress_result.get_successful_runs() == 0:
-            stress_color = "#f3f3f3"
-        elif len(list(filter(lambda x: x.is_all_success(), stress_result.node_runs.values()))) < len(unique_hosts):
-            stress_color = "#f3f3f3"
-        table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
-
-        for host in unique_hosts:
-            color = '#ccffcc'
-            if host not in stress_result.node_runs:
-                color = "#ffcccc"
-                table_html += f'<td style="background-color: {color};">Not deployed</td>'
+        ok = stress_result.get_successful_runs()
+        total = stress_result.get_total_runs()
+        rate = f'{(ok / total):.0%}' if total else '—'
+        hosts_count = len(stress_result.node_runs)
+        color = _cell_status_color(ok, total)
+        html_parts.append('<tr>')
+        html_parts.append(f'<td>{_escape_html(stress_name)}</td>')
+        html_parts.append(
+            f'<td style="background-color: {color}; text-align: center;">{ok}/{total}</td>'
+        )
+        html_parts.append(f'<td style="text-align: center;">{rate}</td>')
+        html_parts.append(f'<td style="text-align: center;">{hosts_count}</td>')
+        if has_recoverability:
+            rec = execution_result.recoverability_result.stress_util_runs.get(stress_name)
+            if rec is None:
+                html_parts.append(f'<td style="background-color: {_COLOR_EMPTY};">—</td>')
             else:
-                host_successes = stress_result.node_runs[host].get_successful_runs()
-                host_total = stress_result.node_runs[host].get_total_runs()
-                if host_successes == 0:
-                    color = "#f3f3f3"
-                elif host_successes != host_total:
-                    color = "#f3f3f3"
-                table_html += f'<td style="background-color: {color};">{host_successes}/{host_total}</td>'
+                rec_ok = rec.get_successful_runs()
+                rec_total = rec.get_total_runs()
+                rec_color = _cell_status_color(rec_ok, rec_total)
+                if rec_total == 0:
+                    rec_text = '—'
+                elif rec_ok == rec_total:
+                    rec_text = f'Recovered ({rec_ok}/{rec_total})'
+                elif rec_ok == 0:
+                    rec_text = f'All failed ({rec_ok}/{rec_total})'
+                else:
+                    rec_text = f'Some failed ({rec_ok}/{rec_total})'
+                html_parts.append(
+                    f'<td style="background-color: {rec_color}; text-align: center;">{rec_text}</td>'
+                )
+        html_parts.append('</tr>')
 
-        if execution_result.recoverability_result:
-            result_for_util = execution_result.recoverability_result.stress_util_runs[stress_name]
-            color = '#ccffcc'
-            text = 'Recovered'
-            if result_for_util.get_successful_runs() == 0:
-                color = "#f3f3f3"
-                text = 'All failed'
-            elif result_for_util.get_successful_runs() != result_for_util.get_total_runs():
-                color = "#f3f3f3"
-                text = 'Some failed'
-            table_html += f'<td style="background-color: {color};">{text}</td>'
-
-        table_html += '</tr>'
-    table_html += '</table></div>'
-
-    return table_html
+    html_parts.append('</table></div>')
+    return '\n'.join(html_parts)
 
 
 def __set_nemesis_dashboard(test_info: dict[str, str], start_time: float, end_time: float) -> None:

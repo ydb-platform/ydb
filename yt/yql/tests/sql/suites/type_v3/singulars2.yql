@@ -1,0 +1,16 @@
+USE plato;
+
+INSERT INTO singulars
+SELECT NULL AS null_column, Void() AS void_column;
+
+INSERT INTO singulars_with_struct
+SELECT AsStruct("key" AS key, 123 AS value) AS struct_column, NULL AS null_column, Void() AS void_column;
+
+INSERT INTO inner_singulars
+SELECT AsStruct("key" AS key, 123 AS value, NULL AS `null`, Void() AS `void`) AS struct_column;
+
+COMMIT;
+
+SELECT * FROM singulars;
+SELECT * FROM singulars_with_struct;
+SELECT * FROM inner_singulars;

@@ -10,6 +10,7 @@
 
 #include <util/generic/array_ref.h>
 #include <util/string/builder.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -302,7 +303,9 @@ bool TTopicSqsMetricsHandler::IsApplicable(const NKikimrPQ::TPQTabletConfig& tab
 }
 
 TTopicSqsMetricsHandler::TTopicSqsMetricsHandler(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
-    Y_ABORT_UNLESS(IsApplicable(tabletConfig));
+    AFL_ENSURE(IsApplicable(tabletConfig))
+        ("sqs_queue", tabletConfig.GetSqsQueueName())
+        ("sqs_export_metrics", tabletConfig.GetSqsExportMetrics());
 
     const TString& account = tabletConfig.GetSqsAccountName();
     const TString& queueName = tabletConfig.GetSqsQueueName();

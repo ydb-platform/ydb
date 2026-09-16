@@ -163,7 +163,7 @@ class TGrpcMetadataArray
     : public TGrpcObject<grpc_metadata_array, grpc_metadata_array_init, grpc_metadata_array_destroy>
 {
 public:
-    TStringBuf Find(const char* key) const;
+    std::optional<TStringBuf> Find(const char* key) const;
 
     THashMap<std::string, std::string> ToMap() const;
 };

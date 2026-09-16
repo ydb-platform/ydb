@@ -84,22 +84,22 @@ static constexpr const char *kCicdPipelineTaskRunUrlFull = "cicd.pipeline.task.r
 static constexpr const char *kCicdPipelineTaskType = "cicd.pipeline.task.type";
 
 /**
-  The name of a component of the CICD system.
+  The name of a component of the CI/CD system.
  */
 static constexpr const char *kCicdSystemComponent = "cicd.system.component";
 
 /**
-  The unique identifier of a worker within a CICD system.
+  The unique identifier of a worker within a CI/CD system.
  */
 static constexpr const char *kCicdWorkerId = "cicd.worker.id";
 
 /**
-  The name of a worker within a CICD system.
+  The name of a worker within a CI/CD system.
  */
 static constexpr const char *kCicdWorkerName = "cicd.worker.name";
 
 /**
-  The state of a CICD worker / agent.
+  The state of a CI/CD worker / agent.
  */
 static constexpr const char *kCicdWorkerState = "cicd.worker.state";
 
@@ -142,7 +142,7 @@ static constexpr const char *kSuccess = "success";
 static constexpr const char *kFailure = "failure";
 
 /**
-  The pipeline run failed due to an error in the CICD system, eg. due to the worker being killed.
+  The pipeline run failed due to an error in the CI/CD system, eg. due to the worker being killed.
  */
 static constexpr const char *kError = "error";
 
@@ -198,7 +198,7 @@ static constexpr const char *kSuccess = "success";
 static constexpr const char *kFailure = "failure";
 
 /**
-  The task run failed due to an error in the CICD system, eg. due to the worker being killed.
+  The task run failed due to an error in the CI/CD system, eg. due to the worker being killed.
  */
 static constexpr const char *kError = "error";
 
@@ -241,18 +241,18 @@ static constexpr const char *kDeploy = "deploy";
 namespace CicdWorkerStateValues
 {
 /**
-  The worker is not performing work for the CICD system. It is available to the CICD system to
+  The worker is not performing work for the CI/CD system. It is available to the CI/CD system to
   perform work on (online / idle).
  */
 static constexpr const char *kAvailable = "available";
 
 /**
-  The worker is performing work for the CICD system.
+  The worker is performing work for the CI/CD system.
  */
 static constexpr const char *kBusy = "busy";
 
 /**
-  The worker is not available to the CICD system (disconnected / down).
+  The worker is not available to the CI/CD system (disconnected / down).
  */
 static constexpr const char *kOffline = "offline";
 

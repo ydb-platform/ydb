@@ -14,6 +14,7 @@
 #include "viewer_describe_topic.h"
 #include "viewer_describe_transfer.h"
 #include "viewer_commit_offset.h"
+#include "viewer_computation_graph.h"
 #include "viewer_feature_flags.h"
 #include "viewer_topic_data.h"
 #include "viewer_graph.h"
@@ -290,7 +291,7 @@ void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()), 2);
+    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()), 3);
 }
 
 void InitViewerGraphJsonHandler(TJsonHandlers &handlers) {
@@ -315,6 +316,10 @@ void InitViewerFeatureFlagsJsonHandler(TJsonHandlers& handlers) {
 
 void InitViewerPlan2SvgJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/plan2svg", new TJsonHandler<TJsonPlanToSvg>(TJsonPlanToSvg::GetSwagger()));
+}
+
+void InitViewerComputationGraphJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/computation_graph", new TJsonHandler<TJsonComputationGraph>(TJsonComputationGraph::GetSwagger()));
 }
 
 void InitViewerSimpleCounterHandler(TJsonHandlers& handlers) {
@@ -374,6 +379,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerCheckAccessJsonHandler(jsonHandlers);
     InitViewerFeatureFlagsJsonHandler(jsonHandlers);
     InitViewerPlan2SvgJsonHandler(jsonHandlers);
+    InitViewerComputationGraphJsonHandler(jsonHandlers);
     InitViewerSimpleCounterHandler(jsonHandlers);
     InitViewerMultipartCounterHandler(jsonHandlers);
     InitViewerTextStreamCounterHandler(jsonHandlers);

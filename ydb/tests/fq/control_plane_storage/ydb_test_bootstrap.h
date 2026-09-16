@@ -6,7 +6,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/testlib/tablet_helpers.h>

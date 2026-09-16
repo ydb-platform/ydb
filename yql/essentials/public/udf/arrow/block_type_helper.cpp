@@ -2,7 +2,6 @@
 
 namespace NYql::NUdf {
 
-IBlockTypeHelper::IBlockTypeHelper() {
-}
+IBlockTypeHelper::IBlockTypeHelper() = default;
 
 } // namespace NYql::NUdf

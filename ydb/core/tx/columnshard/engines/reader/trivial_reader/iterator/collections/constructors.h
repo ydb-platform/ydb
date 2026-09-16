@@ -19,11 +19,11 @@ private:
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
+    virtual ui64 DoGetSourceRecordsCount() const override {
         return RecordsCount;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
+    virtual ui64 DoGetSourceId() const override {
         return Portion->GetPortionId();
     }
 
@@ -36,12 +36,9 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting)
-        : NCommon::TDataSourceConstructor(
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                  sorting == NReader::ERequestSorting::DESC),
-              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC), !isVisible)
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isConflicting, const NReader::ERequestSorting sorting)
+        : NCommon::TDataSourceConstructor(NCommon::TReplaceKeyAdapter::BuildStart(*portion, sorting),
+              NCommon::TReplaceKeyAdapter::BuildFinish(*portion, sorting), isConflicting)
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {
@@ -53,16 +50,12 @@ public:
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
     }
-
-    void ValidateCursor(const ISimpleScanCursor& cursor) const {
-        AFL_VERIFY(cursor.GetPortionId() && GetPortion()->GetPortionId() == *cursor.GetPortionId())("expected", GetPortion()->GetPortionId())(
-                                                                            "cursor", cursor.GetPortionId().value_or(0));
-    }
 };
 
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
+    std::deque<std::shared_ptr<TPortionInfo>> DuplicateFilterPortions;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -87,7 +80,7 @@ private:
 
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override;
 
-    virtual std::vector<TInsertWriteId> GetUncommittedWriteIds() const override;
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const override;
 
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
@@ -95,15 +88,29 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, const bool sortByFinish = false)
-        : TBase(sorting, sortByFinish)
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ESourcesSorting sourcesSorting, const bool needDuplicateFiltering = false)
+        : TBase(sourcesSorting)
     {
+        if (needDuplicateFiltering) {
+            // Cursor drops already processed portions.
+            // But DuplicateFilter needs all the portions selected for the scan.
+            // So we have to materialize portions for DuplicateFilter before they get filtered by cursor.
+            for (const auto& source : sources) {
+                if (!source.IsConflicting()) {
+                    DuplicateFilterPortions.emplace_back(source.GetPortion());
+                }
+            }
+        }
         InitializeConstructors(std::move(sources));
+    }
+
+    std::deque<std::shared_ptr<TPortionInfo>> ExtractDuplicateFilterPortions() {
+        return std::move(DuplicateFilterPortions);
     }
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
         std::deque<TSourceConstructor> sources;
-        return std::make_unique<TPortionsSources>(std::move(sources), ERequestSorting::NONE);
+        return std::make_unique<TPortionsSources>(std::move(sources), ESourcesSorting::SourceIdAsc);
     }
 };
 

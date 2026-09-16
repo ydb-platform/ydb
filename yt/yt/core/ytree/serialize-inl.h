@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/string.h>
@@ -370,7 +371,7 @@ void Serialize(T value, NYson::IYsonConsumer* consumer)
 {
     if constexpr (TEnumTraits<T>::IsBitEnum) {
         consumer->OnBeginList();
-        for (auto scalarValue : TEnumTraits<T>::GetDomainValues()) {
+        for (auto scalarValue : TEnumTraits<T>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
             if (Any(value & scalarValue)) {
                 consumer->OnListItem();
                 consumer->OnStringScalar(FormatEnum(scalarValue));
@@ -486,7 +487,7 @@ template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (!vector.IsValidIndex(key)) {
             continue;
         }
@@ -517,7 +518,7 @@ void Serialize(
     const T& message,
     NYson::IYsonConsumer* consumer)
 {
-    consumer->OnStringScalar(message.SerializeAsStringOrThrow());
+    consumer->OnStringScalar(SerializeProtoToString(message));
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>
@@ -746,7 +747,10 @@ void Deserialize(
 {
     std::string string;
     Deserialize(string, node);
-    message.ParseFromStringOrThrow(string);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            .With("protobuf_type", message.GetTypeName());
+    }
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

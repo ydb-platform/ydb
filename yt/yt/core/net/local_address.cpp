@@ -125,7 +125,7 @@ void UpdateLocalHostName(const TAddressResolverConfigPtr& config)
     std::array<char, 256> hostName{};
 
     auto onFail = [&] (const std::vector<TError>& errors) {
-        THROW_ERROR_EXCEPTION("Failed to update localhost name") << errors;
+        THROW_ERROR_EXCEPTION("Failed to update localhost name").With(errors);
     };
 
     auto runWithRetries = [&] (auto func, auto onError) {

@@ -60,7 +60,30 @@ struct TNbsDbgLikeFinishStats {
     NHdr::THistogram ReadDDiskUs{kLatencyHistMaxUs, kLatencyHistPrecision};
 };
 
-using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats>;
+// Aggregated statistics parsed from the interconnect load actor's final
+// result summary (see NInterconnect::TLoadActor::PublishResults() in
+// ydb/library/actors/interconnect/load.cpp), used to render a Speed/IOPS/
+// latency-percentiles table for the stress tool (see
+// ydb/tools/stress_tool/device_test_tool_interconnect_test.h).
+struct TInterconnectLoadFinishStats {
+    bool Valid = false;              // whether stats were successfully parsed
+    TDuration ThroughputWindow;      // window over which throughput was measured
+    ui64 ThroughputBytes = 0;        // bytes transferred within ThroughputWindow
+    ui64 ThroughputSamples = 0;      // number of messages accounted within ThroughputWindow
+    ui64 BytesPerSecond = 0;         // throughput, bytes/sec (as reported by the load actor)
+    TDuration RttWindow;             // window over which RTT samples were collected
+    ui64 RttSamples = 0;             // number of RTT samples within RttWindow
+    ui64 NumDropped = 0;             // number of dropped (timed out) messages
+
+    // Latency (RTT) percentiles; pair of {quantile in [0..1], value in microseconds}.
+    TVector<std::pair<double, ui64>> LatencyPercentilesUs;
+
+    double GetIops() const {
+        return RttWindow != TDuration::Zero() ? RttSamples / RttWindow.SecondsFloat() : 0.0;
+    }
+};
+
+using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats, TInterconnectLoadFinishStats>;
 
 struct TEvLoad {
     enum EEv {
@@ -81,8 +104,8 @@ struct TEvLoad {
         // TNbsLoadTabletListPageActor -> TLoadActor with rendered HTML.
         EvNbsTabletListPageReady,
 
-        // In-process (load-actor <-> worker, worker <-> tablet) events.
-        // See spec §12.1.
+        // Load-worker/tablet I/O and configuration, plus local readiness events.
+        // See rfc/nbs_dbg_like/architecture.md for the load-tablet protocol.
         EvNbsWrite,
         EvNbsWriteResult,
         EvNbsRead,
@@ -115,6 +138,12 @@ struct TEvLoad {
         ui32 InFlight;
         TVector<ui64> RwSpeedBps;
         ELoadType LoadType;
+        ui64 MeasuredReadsSent = 0;
+        ui64 BackgroundWritesSent = 0;
+        // Count actual outgoing PB requests, including warmup and background writes.
+        ui64 PBWriteRequestsSent = 0;
+        ui64 PBChecksummedWriteRequestsSent = 0;
+        ui64 PBPayloadChecksumsSent = 0;
         NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB
 
         double GetAverageSpeed() const {
@@ -224,14 +253,13 @@ struct TEvLoad {
         TString HtmlFragment;
     };
 
-    // ---- In-process load-actor <-> worker contract (spec §12.1) -------
+    // ---- Load-worker <-> load-tablet I/O contract --------------------
     //
-    // These messages travel between actors registered on the same node
-    // (the per-Run load actor and the long-lived worker that lives on the
-    // parent tablet's mailbox). The load actor times every request itself
-    // from its own Send/receive timestamps and keys its in-flight map by
-    // the event cookie; the worker's reply carries only Status. The read
-    // payload travels as a TRope attached to TEvNbsReadResult.
+    // Load workers send these serializable messages through a tablet pipe,
+    // potentially across nodes. The tablet forwards to its per-DBG actor while
+    // preserving sender and cookie. The load worker times requests using its
+    // cookie-keyed in-flight map. Results carry status/reason and, for reads,
+    // an attached TRope payload. See rfc/nbs_dbg_like/architecture.md.
 
     struct TEvNbsWrite : public TEventPB<TEvNbsWrite,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>
@@ -342,6 +370,22 @@ inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
 inline void SetNbsDbgLikeFinishStats(
     TEvLoad::TEvLoadTestFinished& ev,
     TNbsDbgLikeFinishStats stats)
+{
+    ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+inline const TInterconnectLoadFinishStats* GetInterconnectLoadFinishStats(
+    const TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TInterconnectLoadFinishStats>(&*ev.WorkerStats);
+}
+
+inline void SetInterconnectLoadFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev,
+    TInterconnectLoadFinishStats stats)
 {
     ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
 }

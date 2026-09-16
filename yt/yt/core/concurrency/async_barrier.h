@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

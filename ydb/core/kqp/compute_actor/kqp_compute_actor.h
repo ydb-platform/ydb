@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/runtime/kqp_vector_index_levels_cache.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_base.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -68,7 +68,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqPr
     const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    NScheduler::TSchedulableActorOptions schedulableOptions,
+    NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database
@@ -78,14 +78,15 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::N
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NYql::NDq::TComputeRuntimeSettings& settings,
     const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    NScheduler::TSchedulableActorOptions schedulableOptions,
+    NScheduler::TSchedulableOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode);
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
     const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
     TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
-    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits);
+    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
+    bool useBatchPool = false);
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,

@@ -229,7 +229,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         // json_idx must preserve UseRowIdAsDocId=true through the copy.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -241,16 +243,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // Auto-provisioned unique index must have been copied.
         TestDescribeResult(DescribePrivatePath(runtime,
@@ -259,6 +268,130 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
+    }
+
+    // Compact fulltext indexes on a custom PK own three shared row-id objects on the main table: a
+    // generated column, its sequence and one Ready unique index. ConsistentCopyTables must preserve that
+    // infrastructure together with the physical compact index type and UseRowIdAsDocId metadata; otherwise
+    // subsequent DML either cannot allocate doc ids or creates duplicate row-id infrastructure.
+    void TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(bool relevance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableCompactFulltextIndex(true);
+        ff.SetEnableFulltextIndexRowId(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        const auto expectedType = relevance
+            ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
+        const TString type = relevance
+            ? "EIndexTypeGlobalFulltextCompactRelevance"
+            : "EIndexTypeGlobalFulltextCompact";
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "fulltext_idx"
+                KeyColumnNames: ["text"]
+                Type: %s
+                FulltextIndexDescription {
+                    Settings {
+                        columns: {
+                            column: "text"
+                            analyzers: {
+                                tokenizer: STANDARD
+                                use_filter_lowercase: true
+                            }
+                        }
+                    }
+                }
+            }
+        )", type.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/texts"
+                DstPath: "/MyRoot/texts_copy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Exactly the compact fulltext index and the shared unique row-id index were copied.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_copy"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(2),
+        });
+
+        // The generated Uint64 NOT NULL column still uses the copied table-local sequence.
+        {
+            const auto tableDesc = DescribePath(runtime, "/MyRoot/texts_copy");
+            ui32 rowIdColumns = 0;
+            for (const auto& column : tableDesc.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetName() == NTableIndex::NFulltext::RowIdColumn) {
+                    ++rowIdColumns;
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "Uint64");
+                    UNIT_ASSERT(column.GetNotNull());
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(),
+                        NTableIndex::NFulltext::RowIdSequenceName);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(rowIdColumns, 1u,
+                "consistent copy must contain exactly one auto-provisioned __ydb_row_id column");
+        }
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({TString(NTableIndex::NFulltext::RowIdColumn)}),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/fulltext_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(expectedType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+            NLs::IndexKeys({"text"}),
+        });
+        {
+            const auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/texts_copy/fulltext_idx");
+            const auto& index = indexDesc.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(index.HasFulltextIndexDescription(),
+                "copied compact fulltext index must preserve FulltextIndexDescription");
+            UNIT_ASSERT_C(index.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "copied compact fulltext index must preserve UseRowIdAsDocId=true");
+        }
+
+        const TVector<TString> indexKeys = {"text"};
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedType, indexKeys)) {
+            TestDescribeResult(DescribePrivatePath(runtime,
+                    TString::Join("/MyRoot/texts_copy/fulltext_idx/", implTable)), {
+                NLs::PathExist, NLs::IsTable,
+            });
+        }
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithCompactFulltextPlainRowIdAutoProvision) {
+        TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(/*relevance=*/false);
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithCompactFulltextRelevanceRowIdAutoProvision) {
+        TestConsistentCopyTableWithCompactFulltextRowIdAutoProvision(/*relevance=*/true);
     }
 
     Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonRowIdManualInfraIndex) {
@@ -314,7 +447,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -326,15 +461,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
         }
 
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // User-created unique index must have been copied.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/uniq_rowid"), {
@@ -896,4 +1039,74 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
+    Y_UNIT_TEST(ConsistentCopyTableWithGeneratedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+                Name: "sum"
+                Type: "Int32"
+                DefaultFromExpression {
+                    ExprText: "a + b"
+                    Stored: true
+                    DependencyColumnNames: ["a", "b"]
+                    Context: "USE `/MyRoot`;"
+                }
+            }
+            Columns {
+                Name: "diff"
+                Type: "Int32"
+                DefaultFromExpression {
+                    ExprText: "a - b"
+                    Stored: false
+                    DependencyColumnNames: ["a", "b"]
+                    Context: ""
+                }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableCopy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto findColumn = [](const NKikimrScheme::TEvDescribeSchemeResult& describe,
+                             const TString& name) -> const NKikimrSchemeOp::TColumnDescription* {
+            for (const auto& column : describe.GetPathDescription().GetTable().GetColumns()) {
+                if (column.GetName() == name) {
+                    return &column;
+                }
+            }
+            return nullptr;
+        };
+
+        auto describe = DescribePath(runtime, "/MyRoot/TableCopy");
+
+        const auto* sum = findColumn(describe, "sum");
+        UNIT_ASSERT_C(sum && sum->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetExprText(), "a + b");
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetStored(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
+        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().DependencyColumnNamesSize(), 2u);
+
+        const auto* diff = findColumn(describe, "diff");
+        UNIT_ASSERT_C(diff && diff->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
+        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetStored(), false);
+    }
 }

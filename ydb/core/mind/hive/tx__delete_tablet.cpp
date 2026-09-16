@@ -169,7 +169,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxDeleteTablet::Complete",
             {"logPrefix", GetLogPrefix()},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 
@@ -239,7 +239,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"ownerId", Event->Get()->Record.GetOwner()},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

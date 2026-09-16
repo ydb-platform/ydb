@@ -8,11 +8,11 @@ namespace NHive {
 
 class TTxUpdateTabletGroups : public TTransactionBase<THive> {
     TTabletId TabletId;
-    TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> Groups;
+    TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> Groups;
     TSideEffects SideEffects;
 
 public:
-    TTxUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups, THive *hive)
+    TTxUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , Groups(std::move(groups))
@@ -20,7 +20,7 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_GROUPS; }
 
-    static bool MaySkipChannelReassign(const TLeaderTabletInfo* tablet, const TTabletChannelInfo* channel, const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* group) {
+    static bool MaySkipChannelReassign(const TLeaderTabletInfo* tablet, const TTabletChannelInfo* channel, const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* group) {
         if (tablet->ChannelProfileReassignReason == NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_BALANCE) {
             // Only a reassign for balancing may be skipped
             if (channel->History.back().GroupID == group->GetGroupID()) {
@@ -104,7 +104,7 @@ public:
             }
 
             TDuration timeSinceLastReassign = ctx.Now() - lastChangeTimestamp;
-            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign()) {
+            if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign() && !tablet->HasUnconfirmedStorage()) {
                 YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute space reassign too soon, ignored",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", tablet->Id});
@@ -124,7 +124,7 @@ public:
                 continue;
             }
 
-            const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* group;
+            const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* group;
 
             if (Groups.size() > orderNumber) {
                 group = &Groups[orderNumber];
@@ -195,6 +195,12 @@ public:
             }
 
             if (!changed) {
+                if (tablet->ConfirmedStorageVersion == Max<ui32>()) {
+                    tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                        tablet->ConfirmedStorageVersion);
+                }
+                Y_ABORT_UNLESS(tabletStorageInfo->Version < Max<ui32>());
                 ++tabletStorageInfo->Version;
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
             }
@@ -277,7 +283,7 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
-            if (hasEmptyChannel) {
+            if (hasEmptyChannel || tablet->HasUnconfirmedStorage()) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
             } else {
@@ -307,6 +313,12 @@ public:
 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         tablet->State = newTabletState;
+        if (changed && newTabletState == ETabletState::ReadyToWork) {
+            // initial group assignment is considered automatically confirmed
+            tablet->ConfirmedStorageVersion = tabletStorageInfo->Version;
+            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::ConfirmedStorageVersion>(
+                tablet->ConfirmedStorageVersion);
+        }
 
         if (!tabletBootState.empty()) {
             tablet->BootState = tabletBootState;
@@ -315,7 +327,9 @@ public:
         }
 
         if (changed) {
-            tablet->NotifyStorageInfo(SideEffects);
+            if (!tablet->HasUnconfirmedStorage()) {
+                tablet->NotifyStorageInfo(SideEffects);
+            }
             if (tablet->IsReadyToBlockStorage()) {
                 if (!tablet->InitiateBlockStorage(SideEffects)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute failed to initiate storage block",
@@ -351,11 +365,11 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 
-ITransaction* THive::CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups) {
+ITransaction* THive::CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups) {
     return new TTxUpdateTabletGroups(tabletId, std::move(groups), this);
 }
 

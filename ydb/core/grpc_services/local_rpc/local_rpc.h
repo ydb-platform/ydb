@@ -11,6 +11,8 @@
 
 namespace NKikimr::NRpcService {
 
+Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status);
+
 template<typename TResponse>
 class TPromiseWrapper {
 public:
@@ -261,11 +263,19 @@ public:
     void SetRuHeader(ui64) override {
     }
 
-    // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    void ReplyWithRpcStatus(grpc::StatusCode status, const TString& reason, const TString& details) override {
+        if (reason) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(reason));
+        }
+
+        if (details) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(TStringBuilder() << "gRPC Details: " << details));
+        }
+
+        ReplyWithYdbStatus(GrpcStatusToYdbStatus(status));
     }
 
+    // Unimplemented methods
     void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }
@@ -477,7 +487,7 @@ public:
         }
 
         Y_ABORT_UNLESS(!Finished, "Try to read from finished stream");
-        Y_ABORT_UNLESS(!OnResponseCallback, "Can not multiply read from stream");
+        Y_ABORT_UNLESS(!OnResponseCallback, "Cannot read from stream multiple times");
         OnResponseCallback = callback;
     }
 
@@ -530,8 +540,10 @@ protected:
     }
 
     void Reply(NProtoBuf::Message* proto, ui32 status = 0) override {
-        Y_UNUSED(proto, status);
-        Y_ABORT("Expected TLocalGrpcContext::Reply only for stream");
+        Y_UNUSED(status);
+        auto resp = dynamic_cast<TResponsePart*>(proto);
+        Y_ABORT_UNLESS(resp);
+        DoPushResponse(TResponsePart(*resp), EStreamCtrl::CONT);
     }
 
     void Reply(grpc::ByteBuffer* bytes, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) override {

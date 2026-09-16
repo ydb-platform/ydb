@@ -9,6 +9,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/")
+
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy

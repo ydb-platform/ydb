@@ -7,11 +7,10 @@
 
 #include <yt/yt/core/actions/callback.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <yt/yt/core/net/public.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/memory/ref.h>
 

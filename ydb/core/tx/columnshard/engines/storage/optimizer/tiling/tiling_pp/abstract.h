@@ -71,6 +71,8 @@ struct ICompactionUnit {
 
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
 
+    virtual NJson::TJsonValue DoSerializeToJsonVisual() const = 0;
+
 protected:
     virtual void DoAddPortion(typename TPortion::TPtr p) = 0;
     virtual void DoRemovePortion(typename TPortion::TConstPtr p) = 0;

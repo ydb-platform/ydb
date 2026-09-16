@@ -100,6 +100,10 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
         .Default(100'000);
     registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
         .Default(100_MB);
+    registrar.Parameter("max_in_flight_flush_count", &TThis::MaxInFlightFlushCount)
+        .Default(1)
+        .GreaterThanOrEqual(1)
+        .DontSerializeDefault();
 
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Default(true);
@@ -129,13 +133,13 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxBatchRowCount > config->MaxFlushRowCount) {
             THROW_ERROR_EXCEPTION("\"max_batch_row_count\" cannot be greater than \"max_flush_row_count\"")
-                << TErrorAttribute("max_batch_row_count", config->MaxBatchRowCount)
-                << TErrorAttribute("max_flush_row_count", config->MaxFlushRowCount);
+                .With("max_batch_row_count", config->MaxBatchRowCount)
+                .With("max_flush_row_count", config->MaxFlushRowCount);
         }
         if (config->MaxBatchDataSize > config->MaxFlushDataSize) {
             THROW_ERROR_EXCEPTION("\"max_batch_data_size\" cannot be greater than \"max_flush_data_size\"")
-                << TErrorAttribute("max_batch_data_size", config->MaxBatchDataSize)
-                << TErrorAttribute("max_flush_data_size", config->MaxFlushDataSize);
+                .With("max_batch_data_size", config->MaxBatchDataSize)
+                .With("max_flush_data_size", config->MaxFlushDataSize);
         }
     });
 }

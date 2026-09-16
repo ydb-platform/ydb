@@ -1,16 +1,18 @@
 PY3TEST()
 
-FORK_TEST_FILES()
-FORK_TESTS()
-FORK_SUBTESTS()
-SPLIT_FACTOR(8)
 
 TEST_SRCS(
     test_sql_negative.py
     test_sql_streaming.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+    FORK_SUBTESTS()
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 

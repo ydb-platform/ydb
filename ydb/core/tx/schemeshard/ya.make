@@ -35,6 +35,7 @@ RECURSE_FOR_TESTS(
     ut_incremental_restore
     ut_incremental_restore_reboots
     ut_full_backup
+    ut_generated_columns
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -119,6 +120,7 @@ SRCS(
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
+    schemeshard_operation_registry.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
     schemeshard__operation_alter_bsv.cpp
@@ -302,6 +304,7 @@ SRCS(
     schemeshard_path.h
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
+    schemeshard_path_db_ref.cpp
     schemeshard_path_element.h
     schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
@@ -403,6 +406,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/aclib/protos/identity
+    ydb/library/backup/proto
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

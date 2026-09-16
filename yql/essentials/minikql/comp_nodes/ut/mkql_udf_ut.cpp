@@ -6,8 +6,11 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
+
+namespace {
 
 using NTest::TSingularVoid;
 // XXX: Emulate type transformations similar to the one made by
@@ -17,13 +20,13 @@ using NTest::TSingularVoid;
 // compilation) differs from the type, resolved for the underline
 // function at runtime.
 template <typename TUdf>
-static TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
-                           const TTypeEnvironment& env)
+TType* TweakUdfType(const NYql::NUdf::TStringRef& name, TType* userType,
+                    const TTypeEnvironment& env)
 {
     NYql::TRuntimeSettings::TConstPtr runtimeSettings = NYql::MakeRuntimeSettings();
     TFunctionTypeInfoBuilder typeInfoBuilder(NYql::UnknownLangVersion, *runtimeSettings, env,
                                              new TTypeInfoHelper(),
-                                             "", nullptr, NYql::NUdf::TSourcePosition());
+                                             "", /*countersProvider=*/nullptr, NYql::NUdf::TSourcePosition());
 
     // Obtain the callable type of the particular UDF.
     TFunctionTypeInfo funcInfo;
@@ -89,8 +92,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -133,8 +136,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -195,8 +198,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Test");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Test");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -256,7 +259,7 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TRunConfigUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TRunConfigUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -280,7 +283,7 @@ Y_UNIT_TEST_LLVM(RunconfigToCurrying) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TCurryingUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TCurryingUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
 
     // Move the graph from the one setup to another as a
@@ -298,7 +301,7 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TCurryingUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TCurryingUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -324,7 +327,7 @@ Y_UNIT_TEST_LLVM(CurryingToRunconfig) {
     // for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TRunConfigUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TRunConfigUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -341,7 +344,7 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TOldUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TOldUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -359,7 +362,7 @@ Y_UNIT_TEST_LLVM(OldToIncremental) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -376,7 +379,7 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -394,7 +397,7 @@ Y_UNIT_TEST_LLVM(IncrementalToOld) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TOldUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TOldUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -411,7 +414,7 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -429,7 +432,7 @@ Y_UNIT_TEST_LLVM(IncrementalToNew) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TNewUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TNewUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -446,7 +449,7 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
     // TestModule.Test UDF.
     TVector<TUdfModuleInfo> compileModules;
     compileModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TNewUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TNewUTModule()});
     TSetup<LLVM> compileSetup(GetTestFactory(), std::move(compileModules));
     TProgramBuilder& pb = *compileSetup.PgmBuilder;
 
@@ -464,7 +467,7 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
     // implementation for TestModule.Test UDF.
     TVector<TUdfModuleInfo> runModules;
     runModules.emplace_back(
-        TUdfModuleInfo{"", "TestModule", new TIncrementalUTModule()});
+        TUdfModuleInfo{.LibraryPath = "", .ModuleName = "TestModule", .Module = new TIncrementalUTModule()});
     TSetup<LLVM> runSetup(GetTestFactory(), std::move(runModules));
     // Move the graph from the one setup to another as a
     // serialized bytecode sequence.
@@ -481,8 +484,6 @@ Y_UNIT_TEST_LLVM(NewToIncremental) {
 // call of the Datetime::Format UDF with the basic date resource
 // parameter against the underline function, expecting the
 // extended date resource as an argument.
-
-namespace {
 
 extern const char TMResourceName[] = "DateTime2.TM";
 extern const char TM64ResourceName[] = "DateTime2.TM64";
@@ -514,11 +515,11 @@ const TStorage& Reference(const TValue& value) {
     return *reinterpret_cast<const TStorage*>(value.GetRawPtr());
 }
 
-static TRuntimeNode NewDateTimeNode(const NYql::NUdf::TStringRef& dateLiteral,
-                                    const TTypeEnvironment& env)
+TRuntimeNode NewDateTimeNode(const NYql::NUdf::TStringRef& dateLiteral,
+                             const TTypeEnvironment& env)
 {
     const auto dtval = ValueFromString(NYql::NUdf::EDataSlot::Datetime, dateLiteral);
-    return TRuntimeNode(BuildDataLiteral(dtval, NUdf::TDataType<NYql::NUdf::TDatetime>::Id, env), true);
+    return TRuntimeNode(BuildDataLiteral(dtval, NUdf::TDataType<NYql::NUdf::TDatetime>::Id, env), /*isImmediate=*/true);
 }
 
 template <enum EBuilds Build, bool LoweredRuntimeVersion>
@@ -528,8 +529,8 @@ class TTestDateTime2Format: public NYql::NUdf::TBoxedValue {
 
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Format");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Format");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -593,7 +594,7 @@ private:
     class TTestDateTime2Formatter: public NYql::NUdf::TBoxedValue {
     public:
         TTestDateTime2Formatter(NYql::NUdf::TUnboxedValue format, bool alwaysWriteFractionalSeconds)
-            : Format_(format)
+            : Format_(std::move(format))
         {
             UNIT_ASSERT(!alwaysWriteFractionalSeconds);
         }
@@ -627,8 +628,8 @@ template <bool LoweredRuntimeVersion>
 class TTestDateTime2Convert: public NYql::NUdf::TBoxedValue {
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Convert");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Convert");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -676,8 +677,8 @@ public:
     }
 
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("Split");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("Split");
+        return Name;
     }
 
     static bool DeclareSignature(const NYql::NUdf::TStringRef& name,
@@ -740,7 +741,7 @@ SIMPLE_MODULE(TTestC2DateTime2Module, TTestDateTime2Format<EBuilds::C, false>,
               TTestDateTime2Split)
 
 template <bool LLVM, class TCompileModule, class TRunModule>
-static void TestDateTimeFormat() {
+void TestDateTimeFormat() {
     // Create the test setup, using compileModule implementation
     // for DateTime2 UDF.
     TVector<TUdfModuleInfo> modules;
@@ -842,5 +843,4 @@ Y_UNIT_TEST_LLVM(C2toC1) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLDatetimeFormatTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

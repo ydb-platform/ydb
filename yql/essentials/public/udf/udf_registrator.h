@@ -136,7 +136,6 @@ public:
         };
     };
 
-public:
     virtual ~IUdfModule() = default;
 
     virtual void GetAllFunctions(IFunctionsSink& sink) const = 0;
@@ -164,7 +163,6 @@ public:
         };
     };
 
-public:
     virtual ~IRegistrator() = default;
 
     virtual void AddModule(

@@ -14,8 +14,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
             Columns { Name: "id" Type: "Uint64" }
@@ -48,7 +46,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
                 if (!firstProposeTransactionResultHandled) {
                     firstProposeTransactionResultHandled = true;
-                    
+
                     TestDropTable(runtime, ++txId, "/MyRoot", "TestTable",
                                                 {NKikimrScheme::StatusMultipleModifications});
                     env.TestWaitNotification(runtime, txId);
@@ -63,7 +61,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
-        
+
         {
             auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(rows, 0);
@@ -74,8 +72,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -109,7 +105,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
                 if (!firstProposeTransactionResultHandled) {
                     firstProposeTransactionResultHandled = true;
-                    
+
                     TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
                                      {NKikimrScheme::StatusMultipleModifications});
                     env.TestWaitNotification(runtime, txId);
@@ -124,7 +120,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
-        
+
         {
             auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(rows, 0);
@@ -136,8 +132,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -202,8 +196,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
-
         TestTruncateTable(runtime, ++txId, "/MyRoot", "NonExistentTable",
                          {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
@@ -213,8 +205,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -245,8 +235,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -355,9 +343,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     void TruncateTableWithIndex(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance);
         ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
@@ -367,17 +356,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             KeyColumnNames: [ "id" ]
         )");
         env.TestWaitNotification(runtime, txId);
-
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TestTable",
-            TBuildIndexConfig{"TextIndex", indexType, {"text"}, {}, {}});
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
-            {NLs::PathExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
-            {NLs::PathExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
-            {NLs::PathExist});
 
         TVector<TCell> mainTableCells = {
             TCell::Make((ui64)1), TCell(TStringBuf("hello")), TCell(TStringBuf("data one")),
@@ -389,21 +367,49 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
             {1, 2, 3}, TSerializedCellMatrix(mainTableCells, 4, 3), true);
 
-        TVector<TCell> indexTableCells = {
-            TCell(TStringBuf("hello")), TCell::Make((ui64)1),
-            TCell(TStringBuf("world")), TCell::Make((ui64)2),
-            TCell(TStringBuf("test")), TCell::Make((ui64)3),
-            TCell(TStringBuf("index")), TCell::Make((ui64)4),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TextIndex/indexImplTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2}, TSerializedCellMatrix(indexTableCells, 4, 2), true);
+        Ydb::Table::TableIndex index;
+        index.set_name("TextIndex");
+        index.add_index_columns("text");
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+            auto& fulltext = *index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
+            auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
+            fulltext.mutable_columns()->at(0).set_column("text");
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        } else if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact) {
+            auto& fulltext = *index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
+            auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
+            fulltext.mutable_columns()->at(0).set_column("text");
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        } else if (indexType == NKikimrSchemeOp::EIndexTypeGlobal) {
+            index.mutable_global_index();
+        } else if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            index.mutable_global_unique_index();
+        }
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TestTable", index);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
+            {NLs::PathExist});
 
         {
             auto mainRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(mainRows, 4);
             auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(indexRows, 4);
+        }
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+            auto docsRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplDocsTable");
+            UNIT_ASSERT_VALUES_EQUAL(docsRows, 4);
+            auto statsRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplStatsTable");
+            UNIT_ASSERT_VALUES_EQUAL(statsRows, 1);
         }
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
@@ -415,35 +421,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(indexRows, 0);
         }
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
-            {NLs::PathExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
-            {NLs::PathExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
-            {NLs::PathExist});
-
-        TVector<TCell> newMainTableCells = {
-            TCell::Make((ui64)10), TCell(TStringBuf("new")), TCell(TStringBuf("new data one")),
-            TCell::Make((ui64)20), TCell(TStringBuf("fresh")), TCell(TStringBuf("new data two")),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2, 3}, TSerializedCellMatrix(newMainTableCells, 2, 3), true);
-
-        TVector<TCell> newIndexTableCells = {
-            TCell(TStringBuf("new")), TCell::Make((ui64)10),
-            TCell(TStringBuf("fresh")), TCell::Make((ui64)20),
-        };
-        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TextIndex/indexImplTable",
-            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-            {1, 2}, TSerializedCellMatrix(newIndexTableCells, 2, 2), true);
-
-        {
-            auto mainRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(mainRows, 2);
-            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(indexRows, 2);
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+            auto docsRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplDocsTable");
+            UNIT_ASSERT_VALUES_EQUAL(docsRows, 0);
+            auto statsRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplStatsTable");
+            UNIT_ASSERT_VALUES_EQUAL(statsRows, 0);
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
@@ -455,11 +438,27 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     }
 
     Y_UNIT_TEST(TruncateTableWithSecondaryIndex) {
-        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobal);   
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobal);
     }
 
     Y_UNIT_TEST(TruncateTableWithUniqueIndex) {
-        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);   
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithFulltextIndex) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithFulltextCompactIndex) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithFulltextRelevance) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+    }
+
+    Y_UNIT_TEST(TruncateTableWithFulltextCompactRelevanceIndex) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance);
     }
 }
 

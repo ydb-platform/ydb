@@ -378,8 +378,8 @@ namespace {
         "Cannot compare values of types %Qlv and %Qlv; only scalar types are allowed for key columns",
         lhs.Type,
         rhs.Type)
-        << TErrorAttribute("lhs_value", lhs)
-        << TErrorAttribute("rhs_value", rhs);
+        .With("lhs_value", lhs)
+        .With("rhs_value", rhs);
 }
 
 } // namespace
@@ -408,9 +408,9 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
                 "Cannot compare complex values")
-                << TErrorAttribute("lhs_value", lhs)
-                << TErrorAttribute("rhs_value", rhs)
-                << ex;
+                .With("lhs_value", lhs)
+                .With("rhs_value", rhs)
+                .With(ex);
         }
     }
 
@@ -431,9 +431,9 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
                 "Cannot compare complex values")
-                << TErrorAttribute("lhs_value", lhs)
-                << TErrorAttribute("rhs_value", rhs)
-                << ex;
+                .With("lhs_value", lhs)
+                .With("rhs_value", rhs)
+                .With(ex);
         }
     }
 
@@ -1171,7 +1171,7 @@ void ValidateValueType(
             NTableClient::EErrorCode::SchemaViolation,
             "Error validating column %v",
             columnSchema.GetDiagnosticNameString())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -1311,12 +1311,16 @@ bool ValidateNonKeyColumnsAgainstLock(
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
             if (value.Id >= size) {
-                THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
+                THROW_ERROR_EXCEPTION(
+                    NTableClient::EErrorCode::SchemaViolation,
+                    "Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);
             }
 
-            THROW_ERROR_EXCEPTION("Unexpected column %Qv",
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::SchemaViolation,
+                "Unexpected column %Qv",
                 nameTable->GetName(value.Id));
         }
 
@@ -1331,7 +1335,9 @@ bool ValidateNonKeyColumnsAgainstLock(
             hasNonKeyColumns = true;
 
             if (lockType != ELockType::Exclusive && lockType != ELockType::SharedWrite) {
-                THROW_ERROR_EXCEPTION("No write lock taken for column %Qv",
+                THROW_ERROR_EXCEPTION(
+                    NTableClient::EErrorCode::RequiredWriteLockMissing,
+                    "No write lock taken for column %Qv",
                     nameTable->GetName(value.Id));
             }
         }
@@ -1852,7 +1858,7 @@ void Deserialize(TLegacyOwningKey& key, INodePtr node)
             }
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error deserializing key component #%v", id)
-                << ex;
+                .With(ex);
         }
         ++id;
     }

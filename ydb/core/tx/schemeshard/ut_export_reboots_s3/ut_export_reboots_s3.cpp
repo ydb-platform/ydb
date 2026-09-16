@@ -904,7 +904,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::ColumnTable()
         }, TTestData::Items(EPathTypeColumnTable));
     }
-    
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnTablesAndColumnTables, 2, 1, false, IsFs) {
+        if (IsFs) {
+            return; // Column table FS export is not supported yet
+        }
+        RunExport<IsFs>(t, {
+            TTestData::Table(),
+            TTestData::ColumnTable()
+        }, {{"/MyRoot/Table", "table"}, {"/MyRoot/ColumnTable", "column_table"}});
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
         if (IsFs) {
             return; // It is not supported yet
@@ -1198,9 +1208,36 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 Columns { Name: "double_value" Type: "Double" }
                 Columns { Name: "bool_value" Type: "Bool" }
                 Columns { Name: "timestamp_value" Type: "Timestamp" }
+                Columns { Name: "interval_value" Type: "Interval" }
+                Columns { Name: "uuid_value" Type: "Uuid" }
+                Columns { Name: "dynumber_value" Type: "DyNumber" }
                 KeyColumnNames: ["key"]
             )",
         }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithComplexTypesColumnTable, 2, 1, false) {
+        RunExport<false>(t, {
+            TTypedScheme{
+                EPathTypeColumnTable,
+                R"(
+                    Name: "ColumnTable"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key" Type: "Utf8" NotNull: true }
+                        Columns { Name: "value" Type: "Utf8" }
+                        Columns { Name: "int_value" Type: "Int32" }
+                        Columns { Name: "double_value" Type: "Double" }
+                        Columns { Name: "bool_value" Type: "Bool" }
+                        Columns { Name: "timestamp_value" Type: "Timestamp" }
+                        Columns { Name: "interval_value" Type: "Interval" }
+                        Columns { Name: "uuid_value" Type: "Uuid" }
+                        Columns { Name: "dynumber_value" Type: "DyNumber" }
+                        KeyColumnNames: "key"
+                    }
+                )"
+            },
+        }, {{"/MyRoot/ColumnTable", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {

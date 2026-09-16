@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 
 from ydb.tests.library.nemesis.network.client import NetworkClient
+
+logger = logging.getLogger(__name__)
 
 
 class LocalNetworkClient(NetworkClient):
@@ -13,15 +16,10 @@ class LocalNetworkClient(NetworkClient):
     def __init__(self, port: int = 19001, *, ipv6: bool = True) -> None:
         super().__init__("localhost", port=port, ssh_username=None, ipv6=ipv6)
 
-    def _exec_command(self, command):
-        if "|" in command:
-            ib = self._iptables_bin
-            save = self._iptables_save_bin
-            script = (
-                f"sudo {save} | grep -e statistic -e probability | sed -e 's/-A/-D/g' | "
-                f"while read line; do sudo {ib} $line; done"
-            )
-            r = subprocess.run(script, shell=True, check=False)
-            return int(r.returncode)
-        r = subprocess.run(command, check=False)
-        return int(r.returncode)
+    def _run(self, command):
+        r = subprocess.run(command, check=False, capture_output=True, text=True)
+        if r.returncode and r.stderr:
+            logger.error("%s", r.stderr.strip())
+        elif r.stderr:
+            logger.warning("%s", r.stderr.strip())
+        return int(r.returncode), r.stdout or ''

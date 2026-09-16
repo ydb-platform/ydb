@@ -23,7 +23,7 @@ T IAttributeDictionary::Get(TKeyView key) const
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
             key)
-            << ex;
+            .With(ex);
     }
 }
 
@@ -65,7 +65,7 @@ typename TOptionalTraits<T>::TOptional IAttributeDictionary::Find(TKeyView key) 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
             key)
-            << ex;
+            .With(ex);
     }
 }
 
@@ -94,7 +94,7 @@ void IAttributeDictionary::Set(TKeyView key, const T& value)
 
 namespace NMergeableRangeImpl {
 
-inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const NYTree::IAttributeDictionary& dict)
+inline TMergeableRange TagInvoke(NMpl::TTagInvokeTag<AsMergeableRange>, const NYTree::IAttributeDictionary& dict)
 {
     auto pairs = dict.ListPairs();
 

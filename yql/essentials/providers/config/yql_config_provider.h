@@ -4,6 +4,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 #include <functional>
 
@@ -17,7 +18,8 @@ using TAllowSettingPolicy = std::function<bool(TStringBuf settingName)>;
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
                                                   const TAllowSettingPolicy& policy = TAllowSettingPolicy(), // allow all settings by default
-                                                  bool forPartialTypeCheck = false);
+                                                  bool forPartialTypeCheck = false,
+                                                  const TVector<TString>& activatedGroups = {});
 
 const THashSet<TStringBuf>& ConfigProviderFunctions();
 

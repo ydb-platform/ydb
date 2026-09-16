@@ -11,6 +11,8 @@
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/metering/stream_ru_calculator.h>
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/services/sqs_topic/billing.h>
@@ -20,6 +22,7 @@
 #include <memory>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -104,6 +107,49 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
+    TString GetCapturedAuthenticateService(THttpProxyTestMock& fixture) {
+        TString capturedService;
+        with_lock (fixture.AccessServiceMock.MetadataMutex) {
+            capturedService = fixture.AccessServiceMock.CapturedAuthenticateService;
+        }
+        if (capturedService.empty()) {
+            with_lock (fixture.AccessServiceMockV2.MetadataMutex) {
+                capturedService = fixture.AccessServiceMockV2.CapturedAuthenticateService;
+            }
+        }
+        return capturedService;
+    }
+
+    NJson::TJsonMap SendSqsJsonWithHost(
+        THttpProxyTestMock& fixture,
+        const TString& host,
+        const TString& method,
+        NJson::TJsonMap request,
+        const TVector<std::pair<TString, TString>>& extraHeaders = {},
+        const TString& authorizationStr = "")
+    {
+        TString authorization = authorizationStr;
+        constexpr TStringBuf authorizationPrefix = "Authorization: ";
+        if (authorization.StartsWith(authorizationPrefix)) {
+            authorization = authorization.substr(authorizationPrefix.size());
+        }
+        auto res = fixture.SendHttpRequestSpecified(
+            "/Root",
+            TStringBuilder() << "AmazonSQS." << method,
+            request,
+            host,
+            "20150830T123600Z",
+            "sqs-topic-ut",
+            "",
+            authorization,
+            "application/json",
+            extraHeaders);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        return json;
+    }
+
     NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
@@ -145,6 +191,11 @@ namespace {
                 .DefaultProcessingTimeout(TDuration::Seconds(20))
             .EndAddConsumer());
 
+    }
+
+    bool CreateDlqTopic(NYdb::TDriver& driver, const TString& dlqTopicName = "DeadLetterQueue") {
+        NYdb::NTopic::TCreateTopicSettings settings;
+        return CreateTopic(driver, dlqTopicName, settings);
     }
 
     TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> GetNextDataMessage(const std::shared_ptr<NYdb::NTopic::IReadSession>& reader, TInstant deadline) {
@@ -253,19 +304,6 @@ namespace {
             .EndAddConsumer());
     }
 
-    // Replicates TStreamRequestUnitsCalculator::CalcConsumption for a freshly
-    // constructed calculator (Remainder == blockSize). Each RU-metered request
-    // uses its own actor and therefore its own fresh calculator, so a single
-    // charge maps its payload onto blocks with this formula. Used by the
-    // metering tests to predict the block-based part of a write/read charge.
-    ui64 RuPayloadBlocks(ui64 payloadSize, ui64 blockSize) {
-        if (payloadSize <= blockSize) {
-            return 0;
-        }
-        payloadSize -= blockSize;
-        return payloadSize / blockSize + ((payloadSize % blockSize) ? 1 : 0);
-    }
-
     struct TRuCharge {
         TString Quoter;
         TString Resource;
@@ -285,11 +323,13 @@ namespace {
     public:
         TRuQuoterServiceMock(std::shared_ptr<TMutex> lock,
                              std::shared_ptr<TVector<TRuCharge>> charges,
-                             TString resourceFilter)
+                             TString resourceFilter,
+                             TEvQuota::TEvClearance::EResult result)
             : TActor(&TRuQuoterServiceMock::StateWork)
             , Lock_(std::move(lock))
             , Charges_(std::move(charges))
             , ResourceFilter_(std::move(resourceFilter))
+            , Result_(result)
         {}
 
         STFUNC(StateWork) {
@@ -308,7 +348,7 @@ namespace {
                 }
             }
             Send(ev->Sender,
-                 new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success),
+                 new TEvQuota::TEvClearance(Result_),
                  0, ev->Cookie);
         }
 
@@ -316,6 +356,7 @@ namespace {
         std::shared_ptr<TMutex> Lock_;
         std::shared_ptr<TVector<TRuCharge>> Charges_;
         TString ResourceFilter_;
+        TEvQuota::TEvClearance::EResult Result_;
     };
 
     // Registers a TRuQuoterServiceMock in place of the real quoter service and
@@ -326,13 +367,16 @@ namespace {
     // polls briefly to be robust against cross-thread memory ordering.
     class TRuRecorder {
     public:
-        TRuRecorder(TTestActorRuntime* runtime, TString resourceFilter)
+        TRuRecorder(
+            TTestActorRuntime* runtime,
+            TString resourceFilter,
+            TEvQuota::TEvClearance::EResult result = TEvQuota::TEvClearance::EResult::Success)
             : Lock_(std::make_shared<TMutex>())
             , Charges_(std::make_shared<TVector<TRuCharge>>())
         {
             const ui32 nodeIndex = 0;
             const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
-            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter));
+            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter), result);
             const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
             runtime->RegisterService(MakeQuoterServiceID(), actorId);
         }
@@ -356,6 +400,95 @@ namespace {
         std::shared_ptr<TMutex> Lock_;
         std::shared_ptr<TVector<TRuCharge>> Charges_;
     };
+
+    class TMeteringServiceMock : public TActor<TMeteringServiceMock> {
+    public:
+        TMeteringServiceMock(std::shared_ptr<TMutex> lock, std::shared_ptr<TVector<TString>> records)
+            : TActor(&TMeteringServiceMock::StateWork)
+            , Lock_(std::move(lock))
+            , Records_(std::move(records))
+        {}
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NMetering::TEvMetering::TEvWriteMeteringJson, Handle);
+            }
+        }
+
+        void Handle(NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& ev) {
+            TGuard<TMutex> guard(*Lock_);
+            Records_->push_back(ev->Get()->MeteringJson);
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TString>> Records_;
+    };
+
+    class TMeteringRecorder {
+    public:
+        TMeteringRecorder(TTestActorRuntime* runtime)
+            : Lock_(std::make_shared<TMutex>())
+            , Records_(std::make_shared<TVector<TString>>())
+        {
+            const ui32 nodeIndex = 0;
+            const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
+            auto* actor = new TMeteringServiceMock(Lock_, Records_);
+            const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
+            runtime->RegisterService(NMetering::MakeMeteringServiceID(), actorId);
+        }
+
+        TVector<TString> Take(size_t expected = 1, TDuration timeout = TDuration::Seconds(10)) {
+            const TInstant deadline = TInstant::Now() + timeout;
+            for (;;) {
+                {
+                    TGuard<TMutex> guard(*Lock_);
+                    if (Records_->size() >= expected || TInstant::Now() >= deadline) {
+                        TVector<TString> result = std::move(*Records_);
+                        Records_->clear();
+                        return result;
+                    }
+                }
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TString>> Records_;
+    };
+
+    void AssertYdsRequestUnitsBill(const TString& jsonLine, ui64 expectedRu) {
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(jsonLine, &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["schema"].GetString(), "yds.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_UNEQUAL(json["schema"].GetString(), "ydb.serverless.requests.v1");
+        UNIT_ASSERT_VALUES_EQUAL(json["cloud_id"].GetString(), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(json["folder_id"].GetString(), "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(json["resource_id"].GetString(), "database4");
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["unit"].GetString(), "request_unit");
+        UNIT_ASSERT_VALUES_EQUAL(json["usage"]["quantity"].GetInteger(), static_cast<i64>(expectedRu));
+    }
+
+    void AssertDefaultRequestUnitsCharge(TRuRecorder& recorder, TMeteringRecorder& metering, const TRuTopicSetup& ru) {
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one RU charge");
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, NKikimr::NSqsTopic::V1::NBilling::RoundRu(
+            NKikimr::NSqsTopic::V1::NBilling::DEFAULT_REQUEST_COST));
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one metering record");
+        AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+    }
+
+    void AssertNoRequestUnitsCharge(TRuRecorder& recorder, TMeteringRecorder& metering) {
+        auto charges = recorder.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 0, "expected no RU charge");
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "expected no metering record");
+    }
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
@@ -383,6 +516,94 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnEndpoint, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            auto res = SendHttpRequest(
+                "/Root/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", topicName}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedPath, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesRequestHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "GetQueueUrl", {{"QueueName", topicName}});
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "http://" << host << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesForwardedHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "GetQueueUrl",
+                {{"QueueName", topicName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesRequestHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueHost";
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "CreateQueue", {{"QueueName", queueName}});
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "http://" << host << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesForwardedHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueForwardedHost";
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "CreateQueue",
+                {{"QueueName", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "https://" << publicHost << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, TFixture) {
@@ -456,6 +677,38 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
             TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithTrailingSlashOnFederationEndpoint, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                TStringBuf("my/consumer").size(),
+                "my/consumer");
+            auto res = SendHttpRequest(
+                database + "/",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
         }
 
         Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {
@@ -1081,6 +1334,52 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
         }
 
+        Y_UNIT_TEST_F(TestListQueuesConvertsConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            auto json = FederationSqsRequest(*this, database, "ListQueues", {});
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            const TString listPath = GetPathFromFullQueueUrl(urls[0]);
+            UNIT_ASSERT(listPath.Contains("my/consumer"));
+            UNIT_ASSERT(!listPath.Contains("my@consumer"));
+
+            auto getJson = FederationSqsRequest(*this, database, "GetQueueUrl", {
+                {"QueueName", "my_topic@my/consumer"},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(listPath, GetPathFromQueueUrlMap(getJson));
+        }
+
+        Y_UNIT_TEST_F(TestListQueuesUsesForwardedHost, TFixture) {
+            const TString queueName = "ListQueuesForwardedHost";
+            const TString consumer = "ydb-sqs-consumer";
+            {
+                auto driver = MakeDriver(*this);
+                Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            }
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "ListQueues",
+                {{"QueueNamePrefix", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                },
+                FormAuthorizationStr("ru-central1"));
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                urls[0].GetString(),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
+        }
+
         struct TSqsTopicPaths {
             TString Database = "/Root";
             TString TopicName = "topic1";
@@ -1121,6 +1420,98 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "MessageBody-0");
             UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "");
+        }
+
+        TString FormatCounterLabels(const TVector<std::pair<TString, TString>>& labels) {
+            TStringBuilder out;
+            for (size_t i = 0; i < labels.size(); ++i) {
+                if (i > 0) {
+                    out << ", ";
+                }
+                out << labels[i].first << "=" << labels[i].second;
+            }
+            return out;
+        }
+
+        const NJson::TJsonValue* FindCounterSensor(
+            const NJson::TJsonValue& counters,
+            const TVector<std::pair<TString, TString>>& requiredLabels)
+        {
+            const NJson::TJsonValue* found = nullptr;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto& labels = sensor["labels"].GetMapSafe();
+                bool match = true;
+                for (const auto& [key, value] : requiredLabels) {
+                    auto it = labels.find(key);
+                    if (it == labels.end() || it->second.GetStringRobust() != value) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    UNIT_ASSERT_C(!found, "duplicate sensor for " << FormatCounterLabels(requiredLabels));
+                    found = &sensor;
+                }
+            }
+            return found;
+        }
+
+        TString DumpSqsSensors(const NJson::TJsonValue& counters) {
+            TStringBuilder out;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto name = sensor["labels"]["name"].GetStringRobust();
+                if (name.StartsWith("api.sqs.")) {
+                    out << NJson::WriteJson(sensor, true, true, true) << "\n";
+                }
+            }
+            return out;
+        }
+
+        void AssertSqsHttpSensor(
+            const NJson::TJsonValue& counters,
+            const TSqsTopicPaths& path,
+            const TString& name,
+            const TString& method,
+            const TVector<std::pair<TString, TString>>& extraLabels = {})
+        {
+            TVector<std::pair<TString, TString>> required{
+                {"name", name},
+                {"method", method},
+                {"cloud_id", "cloud4"},
+                {"folder_id", "folder4"},
+                {"database_id", "database4"},
+                {"database", path.Database},
+                {"topic", path.TopicName},
+                {"consumer", path.ConsumerName},
+            };
+            required.insert(required.end(), extraLabels.begin(), extraLabels.end());
+            const auto* sensor = FindCounterSensor(counters, required);
+            UNIT_ASSERT_C(sensor, "missing sensor " << name << " method=" << method
+                << " extra=[" << FormatCounterLabels(extraLabels) << "]\nSQS sensors:\n"
+                << DumpSqsSensors(counters));
+        }
+
+        Y_UNIT_TEST_F(TestCounters, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+            SendMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"MessageBody", "MessageBody-0"},
+            });
+
+            const auto counters = NKikimr::NPersQueueTests::SendQuery(MonPort, "/counters/json");
+            AssertSqsHttpSensor(counters, path, "api.sqs.request.count", "SendMessage");
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.count", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.bytes", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.duration_milliseconds", "SendMessage");
         }
 
         Y_UNIT_TEST_F(TestSendMessageBadQueueUrl, TFixture) {
@@ -1436,6 +1827,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 });
 
             const TVector<char> expectedFills = {'a', 'b', 'c'};
+            const TVector<ui64> expectedBaseOffsets = {0, 3, 6};
             size_t receivedCount = 0;
             while (receivedCount < 3) {
                 auto jsonReceived = ReceiveMessage({
@@ -1451,7 +1843,12 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     UNIT_ASSERT_VALUES_EQUAL(
                         message["Attributes"]["BodyEncoding"].GetString(),
                         ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
-                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    NKafka::NTest::AssertKafkaBatchPayload(
+                        Base64Decode(message["Body"].GetString()),
+                        3,
+                        expectedFills[receivedCount],
+                        dataSize,
+                        expectedBaseOffsets[receivedCount]);
                     ++receivedCount;
                 }
             }
@@ -1489,7 +1886,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
             UNIT_ASSERT_C(messageId.has_value(), messageId.error());
 
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize, 0);
 
             const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
                 .PartitionId = messageId->PartitionId,
@@ -1508,7 +1905,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"WaitTimeSeconds", 20},
             });
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize, 0);
 
             DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
 
@@ -1954,6 +2351,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         // Send several messages (total payload > 8 KiB) in a single SendMessage
         // (batch) call. The whole batch produces exactly one write RU charge.
@@ -1969,14 +2367,18 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
         // blocks by a fresh calculator. 
         // => Cost = base + blocks
-        const ui64 blocks = RuPayloadBlocks(
+        const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
         UNIT_ASSERT_VALUES_EQUAL(expected, 7);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one write metering record");
+        AssertYdsRequestUnitsBill(bills[0], expected);
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageChargesRequestUnits, TFixture) {
@@ -1990,6 +2392,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         const auto bodies = MakeRuMeteringBodies();
         SendMessageBatch({
@@ -1998,6 +2401,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         // Drop the single write charge; we only assert on the read charges below.
         recorder.Take();
+        metering.Take();
 
         // Receive all messages. Each ReceiveMessage call returns at least one
         // message (they are all available) and produces exactly one read RU
@@ -2019,6 +2423,10 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
             UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
 
+            auto bills = metering.Take(1);
+            UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one read metering record");
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+
             totalReadRu += charges[0].Amount;
             collected += k;
         }
@@ -2026,9 +2434,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
         // blocks by a fresh calculator. 
         // => Cost = base + blocks
-        const ui64 blocks = RuPayloadBlocks(
+        const ui64 blocks = NBilling::PayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
     }
 
@@ -2043,6 +2451,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
 
         TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
 
         const auto bodies = MakeRuMeteringBodies();
         SendMessageBatch({
@@ -2051,6 +2460,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         // Drop the single write charge.
         recorder.Take();
+        metering.Take();
 
         // Receive all messages, collecting their receipt handles and dropping the
         // per-response read charges.
@@ -2068,6 +2478,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
             // Each non-empty receive produces exactly one read charge; drop it.
             recorder.Take(1);
+            metering.Take(1);
         }
         UNIT_ASSERT_VALUES_EQUAL(receipts.size(), RuMetering_MessageCount);
 
@@ -2091,11 +2502,390 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
         // adjunct 0.
         // Cost = base(2).
-        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
         UNIT_ASSERT_VALUES_EQUAL(expected, 2);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "expected exactly one delete metering record");
+        AssertYdsRequestUnitsBill(bills[0], expected);
+    }
+
+    Y_UNIT_TEST_F(TestControlPlaneChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto urlJson = GetQueueUrl({{"QueueName", path.TopicName + "@" + path.ConsumerName}});
+        UNIT_ASSERT(!urlJson["QueueUrl"].GetString().empty());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto listJson = ListQueues({});
+        UNIT_ASSERT(listJson["QueueUrls"].GetArray().size() >= 1);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto attrsJson = GetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"FifoQueue"}},
+        });
+        UNIT_ASSERT(attrsJson["Attributes"].IsMap());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        PurgeQueue({{"QueueUrl", path.QueueUrl}});
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto createJson = CreateQueue({{"QueueName", "RuMeteringCreatedQueue"}});
+        UNIT_ASSERT(!createJson["QueueUrl"].GetString().empty());
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        DeleteQueue({{"QueueUrl", createJson["QueueUrl"].GetString()}});
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "cmv-billing"}});
+        recorder.Take();
+        metering.Take();
+
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        recorder.Take();
+        metering.Take();
+
+        ChangeMessageVisibility({
+            {"QueueUrl", path.QueueUrl},
+            {"ReceiptHandle", json["Messages"][0]["ReceiptHandle"].GetString()},
+            {"VisibilityTimeout", 120},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestSingleMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto emptyJson = ReceiveMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"WaitTimeSeconds", 0},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(emptyJson["Messages"].GetArray().size(), 0);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "single-ru"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+        {
+            auto charges = recorder.Take();
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
+            UNIT_ASSERT_VALUES_EQUAL(
+                charges[0].Amount,
+                NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false));
+            auto bills = metering.Take();
+            UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+        }
+
+        auto receiveJson = ReceiveMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArray().size(), 1);
+        {
+            auto charges = recorder.Take();
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
+            UNIT_ASSERT_VALUES_EQUAL(
+                charges[0].Amount,
+                NBilling::CalcRu(0, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false));
+            auto bills = metering.Take();
+            UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+            AssertYdsRequestUnitsBill(bills[0], charges[0].Amount);
+        }
+
+        DeleteMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"ReceiptHandle", receiveJson["Messages"][0]["ReceiptHandle"].GetString()},
+        });
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchChargesRequestUnits, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "cmv-batch-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "cmv-batch-2"}},
+            }},
+        });
+        recorder.Take();
+        metering.Take();
+
+        TVector<TString> receipts;
+        while (receipts.size() < 2) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", 10},
+            });
+            for (const auto& message : json["Messages"].GetArray()) {
+                receipts.push_back(message["ReceiptHandle"].GetString());
+            }
+            recorder.Take(1);
+            metering.Take(1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(receipts.size(), 2);
+
+        auto changeJson = ChangeMessageVisibilityBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "change-1"},
+                    {"ReceiptHandle", receipts[0]},
+                    {"VisibilityTimeout", 120},
+                },
+                NJson::TJsonMap{
+                    {"Id", "change-2"},
+                    {"ReceiptHandle", receipts[1]},
+                    {"VisibilityTimeout", 60},
+                },
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(changeJson["Successful"].GetArray().size(), 2);
+        AssertDefaultRequestUnitsCharge(recorder, metering, ru);
+    }
+
+    Y_UNIT_TEST_F(TestFifoSendMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto createJson = CreateQueue({
+            {"QueueName", "RuMeteringFifo.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}},
+        });
+        const TString queueUrl = GetPathFromQueueUrlMap(createJson);
+        UNIT_ASSERT(!queueUrl.empty());
+        recorder.Take();
+        metering.Take();
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "fifo-ru"},
+            {"MessageGroupId", "group-1"},
+            {"MessageDeduplicationId", "dedup-1"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one fifo write RU charge");
+        const ui64 expected = NBilling::CalcRu(0, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, true);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 3);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL(bills.size(), 1);
+        AssertYdsRequestUnitsBill(bills[0], expected);
+    }
+
+    Y_UNIT_TEST_F(TestNoChargesRequestUnitsOnValidationErrors, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        GetQueueUrl({}, 400);
+        SendMessage({{"QueueUrl", ""}, {"MessageBody", "x"}}, 400);
+        ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"MaxNumberOfMessages", 0}}, 400);
+        DeleteMessage({{"QueueUrl", path.QueueUrl}}, 400);
+        ChangeMessageVisibility({{"QueueUrl", path.QueueUrl}}, 400);
+        ListQueues({{"MaxResults", 0}}, 400);
+        GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
+        SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "-1"}}},
+        }, 400);
+        CreateQueue({}, 400);
+        DeleteQueue({{"QueueUrl", "InvalidExistentQueue"}}, 400);
+        PurgeQueue({{"QueueUrl", ""}}, 400);
+        TagQueue({{"QueueUrl", path.QueueUrl}}, 400);
+
+        AssertNoRequestUnitsCharge(recorder, metering);
+    }
+
+    Y_UNIT_TEST_F(TestNoChargesChangeMessageVisibilityOnMissingQueue, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        const auto receipt = NKikimr::NSqsTopic::V1::SerializeReceipt({.PartitionId = 0, .Offset = 0});
+        auto json = ChangeMessageVisibility({
+            {"QueueUrl", NON_EXISTING_QUEUE_URL},
+            {"ReceiptHandle", receipt},
+            {"VisibilityTimeout", 30},
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        AssertNoRequestUnitsCharge(recorder, metering);
+    }
+
+    Y_UNIT_TEST_F(TestNoKesusAcquireWithoutServerlessRtAttrs, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "no-rl-attrs"},
+        });
+        UNIT_ASSERT(!sendJson["MessageId"].GetString().empty());
+
+        auto charges = recorder.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 0, "kesus acquire requires serverless_rt_* attrs");
+
+        auto bills = metering.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 1, "metering ids are present on /Root even without RL attrs");
+        AssertYdsRequestUnitsBill(bills[0], NBilling::RoundRu(NBilling::WRITE_BASE_COST));
+    }
+
+    Y_UNIT_TEST_F(TestThrottlingExceptionOnKesusDeadline, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath, TEvQuota::TEvClearance::EResult::Deadline);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto json = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "throttled"},
+        }, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ThrottlingException");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Request was throttled by the rate limiter");
+
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "throttled requests must not write a bill");
+    }
+
+    Y_UNIT_TEST_F(TestControlPlaneThrottleBeforeMutation, TFixture) {
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        TTopicClient client(driver);
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath, TEvQuota::TEvClearance::EResult::Deadline);
+        TMeteringRecorder metering(ActorRuntime);
+
+        auto createJson = CreateQueue({{"QueueName", "ThrottleCreateQueue"}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(createJson, "__type"), "ThrottlingException");
+        UNIT_ASSERT_C(!client.DescribeTopic("ThrottleCreateQueue").GetValueSync().IsSuccess(),
+            "CreateQueue must not create the topic before quota is granted");
+
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+        auto deleteJson = DeleteQueue({{"QueueUrl", path.QueueUrl}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "ThrottlingException");
+        UNIT_ASSERT_C(client.DescribeTopic(path.TopicName).GetValueSync().IsSuccess(),
+            "DeleteQueue must not drop the topic before quota is granted");
+
+        auto setJson = SetQueueAttributes({
+            {"QueueUrl", path.QueueUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+        }, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(setJson, "__type"), "ThrottlingException");
+
+        auto purgeJson = PurgeQueue({{"QueueUrl", path.QueueUrl}}, 403);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purgeJson, "__type"), "ThrottlingException");
+
+        auto bills = metering.Take(1, TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL_C(bills.size(), 0, "throttled requests must not write a bill");
+    }
+
+    Y_UNIT_TEST_F(TestSendAndGetQueueUrlOnTablePath, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        NYdb::NTable::TTableClient tableClient(driver, NYdb::NTable::TClientSettings().UseQueryCache(false));
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto createTable = session.ExecuteSchemeQuery(R"-(
+            --!syntax_v1
+            CREATE TABLE `/Root/topic1` (
+                id Uint64,
+                PRIMARY KEY (id)
+            );
+        )-").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createTable.GetStatus(), NYdb::EStatus::SUCCESS, createTable.GetIssues().ToString());
+
+        auto urlJson = GetQueueUrl({{"QueueName", path.TopicName}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(urlJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(urlJson, "message"), "Queue name used by another scheme object");
+
+        auto sendJson = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "x"},
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(sendJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(sendJson, "message"), "Queue name used by another scheme object");
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityInvalid, TFixture) {
@@ -2367,6 +3157,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        if (params.Dlq) {
+            UNIT_ASSERT(CreateDlqTopic(driver));
+        }
         {
             NYdb::NTopic::TCreateTopicSettings settings;
             settings.RetentionPeriod(retentionPeriod);
@@ -2670,6 +3463,43 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(TestSqsSigV4ServiceIsForwardedToAccessService, TFixture) {
+        auto res = SendHttpRequest(
+            "/Root",
+            "AmazonSQS.ListQueues",
+            NJson::TJsonMap{},
+            FormAuthorizationStr("ru-central1", "sqs"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetCapturedAuthenticateService(*this), "sqs");
+    }
+
+    Y_UNIT_TEST_F(TestSqsSigV4EmptyServiceIsRejected, TFixture) {
+        const TString authorization =
+            "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1, "
+            "SignedHeaders=host;x-amz-date, Signature="
+            "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
+        auto res = SendHttpRequest(
+            "/Root",
+            "AmazonSQS.ListQueues",
+            NJson::TJsonMap{},
+            authorization);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Service name should be provided");
+    }
+
+    Y_UNIT_TEST_F(TestKinesisSigV4ServiceIsForwardedToAccessService, TFixture) {
+        auto res = SendHttpRequest(
+            "/Root",
+            "kinesisApi.ListStreams",
+            NJson::TJsonMap{},
+            FormAuthorizationStr("ru-central1", "kinesis"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetCapturedAuthenticateService(*this), "kinesis");
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {
         const TString queueName = "CreateQueueDefaultRateLimit";
 
@@ -2700,7 +3530,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", queueName},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
         });
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
 
@@ -2713,11 +3543,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2747,11 +3577,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2781,11 +3611,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);

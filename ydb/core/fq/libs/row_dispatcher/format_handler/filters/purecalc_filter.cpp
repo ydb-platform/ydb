@@ -2,11 +2,13 @@
 
 #include <fmt/format.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -73,14 +75,20 @@ struct TInputType {
 
 class TInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
-    explicit TInputSpec(const NYT::TNode& schema)
-        : Schemas({schema})
+    TInputSpec(const NYT::TNode& schema, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, NMonitoring::TDynamicCounterPtr memoryQuotaCounters)
+        : MemoryQuotaManager(std::move(memoryQuotaManager))
+        , MemoryQuotaCounters(std::move(memoryQuotaCounters))
+        , Schemas({schema})
     {}
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override {
         return Schemas;
     }
+
+public:
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    const NMonitoring::TDynamicCounterPtr MemoryQuotaCounters;
 
 private:
     const TVector<NYT::TNode> Schemas;
@@ -91,6 +99,7 @@ public:
     TInputConsumer(const TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker))
     {
+        LimitAllocator(Worker->GetScopedAlloc(), spec.MemoryQuotaManager, "FilterAlloc", spec.MemoryQuotaCounters);
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const ui64 count = structType->GetMembersCount();
 
@@ -274,12 +283,16 @@ public:
         IProcessedDataConsumer::TPtr consumer,
         NYT::TNode inputSchema,
         NYT::TNode outputSchema,
-        TString query
+        TString query,
+        NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
+        NMonitoring::TDynamicCounterPtr memoryQuotaCounters
     )
         : Consumer_(std::move(consumer))
         , InputSchema_(std::move(inputSchema))
         , OutputSchema_(std::move(outputSchema))
         , Query_(std::move(query))
+        , MemoryQuotaManager_(std::move(memoryQuotaManager))
+        , MemoryQuotaCounters_(std::move(memoryQuotaCounters))
     {}
 
     NYql::NPureCalc::IConsumer<TInputType>& GetConsumer() {
@@ -292,7 +305,7 @@ public:
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         Program_ = programFactory->MakePushStreamProgram(
-            TInputSpec(InputSchema_),
+            TInputSpec(InputSchema_, MemoryQuotaManager_, MemoryQuotaCounters_),
             TOutputSpec(OutputSchema_),
             Query_,
             NYql::NPureCalc::ETranslationMode::SQL
@@ -309,6 +322,8 @@ private:
     NYT::TNode InputSchema_;
     NYT::TNode OutputSchema_;
     TString Query_;
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager_;
+    const NMonitoring::TDynamicCounterPtr MemoryQuotaCounters_;
 
     THolder<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
@@ -338,7 +353,9 @@ public:
     }
 
     void Compile() override {
-        LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send compile request",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
 
         auto compileRequest = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::exchange(ProgramHolder_, nullptr), Consumer_->GetPurecalcSettings());
         NActors::TActivationContext::ActorSystem()->Send(
@@ -353,7 +370,9 @@ public:
     }
 
     void AbortCompilation() override {
-        LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send abort compile request",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
         NActors::TActivationContext::ActorSystem()->Send(
             new NActors::IEventHandle(
                 CompileServiceId_,
@@ -367,12 +386,15 @@ public:
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         ProgramHolder_ = ev->Get()->ProgramHolder.Release();
-        LOG_ROW_DISPATCHER_TRACE("Program compilation finished");
+        YDB_LOG_TRACE("Program compilation finished",
+            {"logPrefix", LogPrefix});
     }
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        LOG_ROW_DISPATCHER_ERROR("Program compilation error: " << status.GetErrorMessage());
+        YDB_LOG_ERROR("Program compilation failed",
+            {"logPrefix", LogPrefix},
+            {"error", status.GetErrorMessage()});
         CompileErrors_->Inc();
         Consumer_->OnError(status.AddParentIssue("Failed to compile client program"));
     }
@@ -405,10 +427,15 @@ public:
     }
 
     void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
-        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
+        YDB_LOG_TRACE("ProcessData for rows",
+            {"logPrefix", LogPrefix},
+            {"numberRows", numberRows});
 
         if (!ProgramHolder_) {
-            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
+            YDB_LOG_TRACE("Add rows to client without processing",
+                {"logPrefix", LogPrefix},
+                {"numberRows", numberRows},
+                {"clientId", Consumer_->GetClientId()});
             for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
                 NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
                 Consumer_->OnData(&value);
@@ -436,7 +463,8 @@ private:
     const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
     if (!filterExpr && !watermarkExpr) {
-        LOG_ROW_DISPATCHER_TRACE("No sql was generated");
+        YDB_LOG_TRACE("No sql was generated",
+            {"logPrefix", LogPrefix});
         return {};
     }
 
@@ -458,13 +486,15 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
+    YDB_LOG_DEBUG("Generated program sql",
+        {"logPrefix", LogPrefix},
+        {"result", result});
     return result;
 }
 
 }  // anonymous namespace
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) {
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, NMonitoring::TDynamicCounterPtr memoryQuotaCounters) {
     auto query = GenerateSql(consumer);
 
     if (!query) {
@@ -475,7 +505,9 @@ IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) 
         consumer,
         MakeInputSchema(consumer),
         MakeOutputSchema(consumer),
-        std::move(query)
+        std::move(query),
+        std::move(memoryQuotaManager),
+        std::move(memoryQuotaCounters)
     );
 }
 

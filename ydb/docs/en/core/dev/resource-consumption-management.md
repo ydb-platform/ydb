@@ -23,14 +23,14 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=10,
     QUEUE_SIZE=1000,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=50,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
 )
 ```
 
 
-You can find the full list of resource pool parameters in the [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters) reference. Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), while others apply only to a single compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). CPU can be shared among all pools in case of oversubscription on a single compute node using `RESOURCES_WEIGHT`.
+You can find the full list of resource pool parameters in the [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters) reference. Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), while others apply only to a single compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). CPU can be shared among all pools in case of oversubscription on a single compute node using `RESOURCE_WEIGHT`.
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -68,18 +68,18 @@ When a query enters a resource pool for which `DATABASE_LOAD_CPU_THRESHOLD` is s
 
 As with `CONCURRENT_QUERY_LIMIT`, when the specified load threshold is exceeded, queries are sent to the waiting queue.
 
-### Resource allocation according to RESOURCES_WEIGHT {#resources_weight}
+### Resource allocation according to RESOURCE_WEIGHT {#resources_weight}
 
 ![resource_pools](../_assets/resources_weight.png)
 
-The `RESOURCES_WEIGHT` parameter only takes effect in case of oversubscription and when there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources. When queries appear in a resource pool, it starts participating in resource allocation. For this, the pools recalculate their limits according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The actual resource redistribution is performed on each compute node individually, as shown in the figure above.
+The `RESOURCE_WEIGHT` parameter only takes effect in case of oversubscription and when there is more than one resource pool in the system. In the current implementation, `RESOURCE_WEIGHT` only affects the allocation of `vCPU` resources. When queries appear in a resource pool, it starts participating in resource allocation. For this, the pools recalculate their limits according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The actual resource redistribution is performed on each compute node individually, as shown in the figure above.
 
 Suppose we have a node in the system with $10 vCPU$ available. The following limits are set:
 
 - $TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 30$,
 - $QUERY_CPU_LIMIT_PERCENT_PER_NODE = 50$.
 
-In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in this pool (figure *a*). If there are 4 such pools in the system and they all try to use maximum resources, this would amount to $12 vCPU$, which exceeds the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` takes effect, and each pool will be allocated $2.5 vCPU$ (figure *b*).
+In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in this pool (figure *a*). If there are 4 such pools in the system and they all try to use maximum resources, this would amount to $12 vCPU$, which exceeds the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCE_WEIGHT` takes effect, and each pool will be allocated $2.5 vCPU$ (figure *b*).
 
 If you need to increase the allocated resources for a specific pool, you can change its weight, for example, to 200. Then this pool will get $3 vCPU$, and the remaining pools will equally share the remaining $7 vCPU$, which amounts to $\frac{7}{3} vCPU$ per pool (figure *c*).
 
@@ -99,7 +99,7 @@ CREATE RESOURCE POOL default WITH (
     CONCURRENT_QUERY_LIMIT=-1,
     QUEUE_SIZE=-1,
     DATABASE_LOAD_CPU_THRESHOLD=-1,
-    RESOURCES_WEIGHT=-1,
+    RESOURCE_WEIGHT=-1,
     TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=-1,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=-1,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=-1
@@ -200,7 +200,7 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=20,
+    RESOURCE_WEIGHT=20,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=80,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
@@ -208,7 +208,7 @@ CREATE RESOURCE POOL olap WITH (
 CREATE RESOURCE POOL the_ceo WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=100,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
@@ -232,17 +232,13 @@ A weight of 80 for `the_ceo` effectively means that when competing for resources
 
 If necessary, the user can explicitly specify in which pool a given query should be executed. Currently, this can be done as follows:
 
-- **Embedded UI** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
+- **{{ ydb-ui-name }}** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
 - **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
 - **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
 - **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
 - **YDB GO SDK** — in the query launch settings `ExecuteOption` via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
-
-{% note warning %}
-
-The current version of **YDB Python SDK** does not allow specifying the resource pool in which the query should be executed.
-
-{% endnote %}
+- **YDB Java SDK** — in the query launch settings `ExecuteQuerySettings` via the [withResourcePool](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.3.12/query/src/main/java/tech/ydb/query/settings/ExecuteQuerySettings.java#L65) call, available since version 2.3.12.
+- **YDB Python SDK** — via the [pool_id](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.2/ydb/query/session.py#L478) parameter of the `QuerySession.execute()`, `QueryTxContext.execute()` and `QuerySessionPool.execute_with_retries()` methods, available since version 3.31.2.
 
 ## Diagnostics
 
@@ -303,11 +299,11 @@ The following query outputs information about all active queries in the system:
 
 ```yql
 select
-    Query,          -- Запрос
-    WmPoolId,       -- Идентификатор пула
-    WmState,        -- Статус запроса в WM
-    WmEnterTime,    -- Время, когда запрос перешел в статус PENDING или DELAYED
-    WmExitTime      -- Время, когда запрос передан на выполнение
+    Query,          -- Query
+    WmPoolId,       -- Pool ID
+    WmState,        -- Query status in WM
+    WmEnterTime,    -- Time when the query transitioned to PENDING or DELAYED status
+    WmExitTime      -- Time when the query was submitted for execution
 from `.sys/query_sessions`
 where State = 'EXECUTING'
 ```
@@ -319,7 +315,7 @@ Information about resource pool metrics can be found in the [metrics reference](
 
 ### System views
 
-Information about system views related to resource pools and resource pool classifiers can be found on the [{#T}](system-views.md#resource_pools) page.
+Information about system views related to resource pools and resource pool classifiers can be found on the [Resource pool information](system-views.md#resource_pools) page.
 
 ## See also
 

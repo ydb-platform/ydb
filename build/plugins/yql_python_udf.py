@@ -5,6 +5,13 @@ import ymake
 def REGISTER_YQL_PYTHON_UDF(
     unit: ymake.Unit, *, NAME: str = 'CustomPython', RESOURCE_NAME: str = '', ADD_LIBRA_MODULES: str = 'no'
 ):
+    if (
+        NAME not in ('Python3', 'Python2', 'ArcPython2')
+        and not NAME.startswith('SystemPython')
+        and 'CustomPython' not in NAME
+    ):
+        ymake.report_configure_error('Invalid python UDF module name')
+
     if not RESOURCE_NAME:
         RESOURCE_NAME = NAME
     add_libra_modules = ADD_LIBRA_MODULES == 'yes'

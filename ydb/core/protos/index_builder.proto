@@ -61,6 +61,8 @@ message TIndexBuildSettings {
     optional google.protobuf.Any AlterMainTablePayload = 10;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+
+    optional bool is_rebuild = 12 [ default = false ];
 }
 
 message TIndexBuild {

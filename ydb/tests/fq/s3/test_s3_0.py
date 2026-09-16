@@ -795,3 +795,69 @@ Banana,3'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+    @yq_v1
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_hopping_some_tablerow_flatten_alias_projection_yq5620(
+        self, kikimr, s3, client, unique_prefix
+    ):
+        self.init_topics("pq_yq5620_hopping")
+        bucket_name = "yq5620"
+        resource = boto3.resource(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key",
+        )
+        bucket = resource.Bucket(bucket_name)
+        bucket.create(ACL="public-read")
+
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key",
+        )
+
+        s3_client.put_object(
+            Body=("class"),
+            Bucket=bucket_name,
+            Key="lookup.txt",
+            ContentType="text/plain",
+        )
+
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = "s3"
+        client.create_storage_connection(storage_connection_name, bucket_name)
+
+        sql = Rf'''
+                $s3 = (
+                    SELECT *
+                    FROM `{storage_connection_name}`.`lookup.txt`
+                    WITH (
+                        FORMAT=raw,
+                        SCHEMA (class String)
+                    )
+                );
+
+                $parsed = SELECT * FROM AS_TABLE([<|hostid:"123", time:"xxx"|>]);
+                $parsed = (
+                    SELECT
+                        $s3 AS s3,
+                        p.*
+                    FROM
+                        $parsed AS p
+                );
+
+                SELECT
+                    SOME(AsStruct(hostid AS hostid)) AS hostid
+                FROM
+                    $parsed
+                GROUP BY
+                    HoppingWindow(CurrentUtcTimestamp(time), "PT900S", "PT900S")
+        '''
+
+        query_id = client.create_query("query", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
+
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)

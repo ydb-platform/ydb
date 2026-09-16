@@ -1,6 +1,6 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.4
 Name: docker
-Version: 7.1.0
+Version: 7.2.0
 Summary: A Python library for the Docker Engine API.
 Project-URL: Changelog, https://docker-py.readthedocs.io/en/stable/change-log.html
 Project-URL: Documentation, https://docker-py.readthedocs.io

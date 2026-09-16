@@ -1,6 +1,7 @@
 #pragma once
 
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_work_factory.h"
+#include "kqp_schedulable_base.h"
 #include "kqp_schedulable_task.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
@@ -8,21 +9,28 @@
 namespace NKikimr::NKqp::NScheduler {
 
     template <class TDerived>
-    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived>, TSchedulableActorBase {
+    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived> {
         using TBase = NYql::NDq::TDqSyncComputeActorBase<TDerived>;
 
     public:
         template<typename ... TArgs>
-        TSchedulableComputeActorBase(const TSchedulableActorOptions& options, TArgs&& ... args)
+        TSchedulableComputeActorBase(const TSchedulableOptions& options, TArgs&& ... args)
             : TBase(std::forward<TArgs>(args) ...)
-            , TSchedulableActorBase(options)
+            , Schedulable(options)
+            , WorkFactory(options.Query
+                ? std::make_shared<TSchedulableWorkFactory>(options.Query, options.IsSchedulable)
+                : nullptr)
         {
         }
 
     protected:
+        NYql::NDq::IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const override {
+            return WorkFactory;
+        }
+
         void DoBootstrap() {
-            if (IsAccountable()) {
-                RegisterForResume(this->SelfId());
+            if (Schedulable.IsAccountable()) {
+                Schedulable.RegisterForResume(this->SelfId());
             }
         }
 
@@ -39,9 +47,11 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void PassAway() override {
-            if (!PassedAway && IsAccountable()) {
+            if (!PassedAway && Schedulable.IsAccountable()) {
                 PassedAway = true;
-                StopExecution(ForcedResume);
+                if (Schedulable.IsExecuting() || Schedulable.IsThrottled()) {
+                    Schedulable.StopExecution();
+                }
             }
 
             TBase::PassAway();
@@ -50,8 +60,8 @@ namespace NKikimr::NKqp::NScheduler {
     private:
         void Handle(TSchedulableTask::TResumeEventType::TPtr& ev) {
             if (TSchedulableTask::IsResumeEvent(ev)) {
-                if (IsThrottled()) {
-                    ForcedResume = ev->Sender != this->SelfId();
+                if (Schedulable.IsThrottled()) {
+                    Schedulable.NotifyResumed(/* byScheduler = */ ev->Sender != this->SelfId());
                     TBase::DoExecute();
                 }
             } else {
@@ -60,28 +70,27 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void DoExecuteImpl() override {
-            if (!IsAccountable()) {
+            if (!Schedulable.IsAccountable()) {
                 return TBase::DoExecuteImpl();
             }
 
             // TODO: account waiting on mailbox?
 
-            const auto now = Now();
-
-            if (StartExecution(now)) {
-                TBase::DoExecuteImpl();
-                if (!PassedAway) {
-                    StopExecution(ForcedResume);
-                }
+            if (const auto delay = Schedulable.TryStartExecution(TMonotonic::Now())) {
+                this->Schedule(*delay, TSchedulableTask::GetResumeEvent().release());
                 return;
             }
 
-            this->Schedule(CalculateDelay(now), TSchedulableTask::GetResumeEvent().release());
+            TBase::DoExecuteImpl();
+            if (!PassedAway) {
+                Schedulable.StopExecution();
+            }
         }
 
     private:
+        TSchedulableBase Schedulable;
+        const NYql::NDq::IDqSchedulableWorkFactoryPtr WorkFactory;
         bool PassedAway = false;
-        bool ForcedResume = false;
     };
 
 } // namespace NKikimr::NKqp::NScheduler

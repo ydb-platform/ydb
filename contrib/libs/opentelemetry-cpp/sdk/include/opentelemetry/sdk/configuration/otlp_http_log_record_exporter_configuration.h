@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -24,6 +25,8 @@ namespace configuration
 class OtlpHttpLogRecordExporterConfiguration : public LogRecordExporterConfiguration
 {
 public:
+  static constexpr std::size_t kDefaultTimeoutMs = 10000;
+
   void Accept(LogRecordExporterConfigurationVisitor *visitor) const override
   {
     visitor->VisitOtlpHttp(this);
@@ -34,7 +37,7 @@ public:
   std::unique_ptr<HeadersConfiguration> headers;
   std::string headers_list;
   std::string compression;
-  std::size_t timeout{0};
+  std::size_t timeout{kDefaultTimeoutMs};
   OtlpHttpEncoding encoding{OtlpHttpEncoding::protobuf};
 };
 

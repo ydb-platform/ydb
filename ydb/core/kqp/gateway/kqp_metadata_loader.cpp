@@ -17,6 +17,8 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -313,9 +315,11 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             defaultFromSequencePathId = sequenceIt->second;
         } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        } else if (columnDesc.IsDefaultFromExpression()) {
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
         }
 
-        tableMeta->Columns.emplace(
+        auto emplaceResult = tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
                 columnDesc.Name,
@@ -332,6 +336,15 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.SetNotNullInProgress
             )
         );
+        if (columnDesc.IsDefaultFromExpression()) {
+            auto& columnMeta = emplaceResult.first->second;
+            columnMeta.DefaultExpression.ConstructInPlace();
+            columnMeta.DefaultExpression->Context = columnDesc.DefaultExpression->Context;
+            columnMeta.DefaultExpression->ExprText = columnDesc.DefaultExpression->ExprText;
+            columnMeta.DefaultExpression->Stored = columnDesc.DefaultExpression->Stored;
+            columnMeta.DefaultExpression->Dependencies.assign(
+                columnDesc.DefaultExpression->Dependencies.begin(), columnDesc.DefaultExpression->Dependencies.end());
+        }
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;
         }
@@ -387,6 +400,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
 
     tableMeta->Attributes = entry.Attributes;
 
+    TMap<ui32, TString> columnOrder;
     for (auto& columnDesc : description.GetColumns()) {
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
             columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
@@ -399,6 +413,16 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
                 columnDesc.GetDefaultFromSequence()
             )
         );
+        columnOrder[columnDesc.GetId()] = columnDesc.GetName();
+    }
+
+    // ColumnOrder must cover every column, the same way it does for tables and
+    // system views: reads of external tables are normally rewritten into reads
+    // of the underlying source before type annotation, but SHOW CREATE EXTERNAL
+    // TABLE reads reach it and rely on the order being filled in.
+    tableMeta->ColumnOrder.reserve(columnOrder.size());
+    for (const auto& columnName : std::views::values(columnOrder)) {
+        tableMeta->ColumnOrder.push_back(columnName);
     }
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;
@@ -981,18 +1005,19 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadIndexMeta
         const auto implTablePaths = NSchemeHelpers::CreateIndexTablePath(tableName, index);
         for (const auto& implTablePath : implTablePaths) {
             if (!index.SchemaVersion) {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata without schema version check index: " << index.Name);
+                YDB_LOG_DEBUG_CTX(*ActorSystem, "Load index metadata without schema version check",
+                    {"index", index.Name});
                 children.push_back(
                     LoadTableMetadata(cluster, implTablePath,
                         TLoadTableMetadataSettings().WithPrivateTables(true), database, userToken)
                 );
             } else {
-                LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load index metadata with schema version check"
-                    << "index: " << index.Name
-                    << "pathId: " << index.LocalPathId
-                    << "ownerId: " << index.PathOwnerId
-                    << "schemaVersion: " << index.SchemaVersion
-                    << "tableOwnerId: " << tableOwnerId);
+                YDB_LOG_DEBUG_CTX(*ActorSystem, "Load index metadata with schema version check",
+                    {"index", index.Name},
+                    {"pathId", index.LocalPathId},
+                    {"ownerId", index.PathOwnerId},
+                    {"schemaVersion", index.SchemaVersion},
+                    {"tableOwnerId", tableOwnerId});
                 auto ownerId = index.PathOwnerId ? index.PathOwnerId : tableOwnerId; //for compat with 20-2
                 children.push_back(
                     LoadIndexMetadataByPathId(cluster,
@@ -1172,7 +1197,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const auto externalEntry = resolveEntityInsideDataSource ? std::optional<NavigateEntryResult>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(entityName);
 
-    LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(entityName));
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Loading table metadata from cache",
+        {"entityName", GetDebugString(entityName)});
 
     auto navigate = MakeHolder<TNavigate>();
     navigate->ResultSet.emplace_back(entry);

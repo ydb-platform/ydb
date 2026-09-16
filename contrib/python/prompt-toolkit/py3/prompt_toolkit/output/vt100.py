@@ -12,7 +12,8 @@ from __future__ import annotations
 import io
 import os
 import sys
-from typing import Callable, Dict, Hashable, Iterable, Sequence, TextIO, Tuple
+from collections.abc import Callable, Hashable, Iterable, Sequence
+from typing import TextIO
 
 from prompt_toolkit.cursor_shapes import CursorShape
 from prompt_toolkit.data_structures import Size
@@ -139,7 +140,7 @@ def _get_closest_ansi_color(r: int, g: int, b: int, exclude: Sequence[str] = ())
     return match
 
 
-_ColorCodeAndName = Tuple[int, str]
+_ColorCodeAndName = tuple[int, str]
 
 
 class _16ColorCache:
@@ -183,7 +184,7 @@ class _16ColorCache:
         return code, match
 
 
-class _256ColorCache(Dict[Tuple[int, int, int], int]):
+class _256ColorCache(dict[tuple[int, int, int], int]):
     """
     Cache which maps (r, g, b) tuples to 256 colors.
     """
@@ -210,17 +211,17 @@ class _256ColorCache(Dict[Tuple[int, int, int], int]):
         colors.append((0x00, 0xFF, 0xFF))  # 14
         colors.append((0xFF, 0xFF, 0xFF))  # 15
 
-        # colors 16..232: the 6x6x6 color cube
+        # colors 16..231: the 6x6x6 color cube
         valuerange = (0x00, 0x5F, 0x87, 0xAF, 0xD7, 0xFF)
 
-        for i in range(217):
+        for i in range(216):
             r = valuerange[(i // 36) % 6]
             g = valuerange[(i // 6) % 6]
             b = valuerange[i % 6]
             colors.append((r, g, b))
 
-        # colors 233..253: grayscale
-        for i in range(1, 22):
+        # colors 232..255: grayscale
+        for i in range(24):
             v = 8 + i * 10
             colors.append((v, v, v))
 
@@ -254,7 +255,7 @@ _16_bg_colors = _16ColorCache(bg=True)
 _256_colors = _256ColorCache()
 
 
-class _EscapeCodeCache(Dict[Attrs, str]):
+class _EscapeCodeCache(dict[Attrs, str]):
     """
     Cache for VT100 escape codes. It maps
     (fgcolor, bgcolor, bold, underline, strike, italic, blink, reverse, hidden, dim) tuples to VT100

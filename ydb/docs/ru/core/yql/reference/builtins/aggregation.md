@@ -612,7 +612,7 @@ TWeightedValue CalcWardQuality(const TWeightedValue& left, const TWeightedValue&
 
 Чем отличается Adaptive и Block:
 
-{% block info %}
+{% note info %}
 
 Contrary to adaptive histogram, block histogram doesn't rebuild bins after the addition of each point. Instead, it accumulates points and in case the amount of points overflows specified limits, it shrinks all the points at once to produce histogram. Indeed, there exist two limits and two shrinkage operations:
 
@@ -621,7 +621,7 @@ Contrary to adaptive histogram, block histogram doesn't rebuild bins after the a
 
 While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
 
-{% endblock %}
+{% endnote %}
 
 {% endif %}
 

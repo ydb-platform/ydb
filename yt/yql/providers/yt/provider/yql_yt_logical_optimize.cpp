@@ -16,6 +16,7 @@
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
@@ -43,7 +44,16 @@ public:
         AddHandler(0, &TCoWithWorld::Match, HNDL(WithWorld));
         AddHandler(0, &TYtMap::Match, HNDL(DirectRow));
         AddHandler(0, Names({TYtReduce::CallableName(), TYtMapReduce::CallableName()}), HNDL(IsKeySwitch));
+        AddHandler(0, Names({
+            TYtMap::CallableName(),
+            TYtReduce::CallableName(),
+            TYtMapReduce::CallableName(),
+            TYtFill::CallableName()}), HNDL(RemoveRedundantWithWorldFromOperationLambdas));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
+        if (State_->Configuration->_ReplaceEmptyOpWithTouch.Get().GetOrElse(false)) {
+            AddHandler(0, &TYtTransientOpBase::Match, HNDL(ReplaceEmptyOpWithTouch));
+            AddHandler(0, &TYtTouch::Match, HNDL(FuseNestedTouches));
+        }
         AddHandler(1, &TCoRight::Match, HNDL(RightOverPersist));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(CalcOverWindow));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(CalcOverWindow));
@@ -56,6 +66,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(TrimQlFilters));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
         AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
@@ -78,6 +89,7 @@ public:
         AddHandler(1, &TCoExtendBase::Match, HNDL(ExtendOverSameMap));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(1, &TCoTake::Match, HNDL(TakeOverExtend));
+        AddHandler(1, &TCoSqlCombine::Match, HNDL(SqlCombine));
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
@@ -406,6 +418,42 @@ protected:
     }
 
 protected:
+    TMaybeNode<TExprBase> SqlCombine(TExprBase node, TExprContext& ctx) const {
+        auto sqlCombine = node.Cast<TCoSqlCombine>();
+
+        TString usedCluster;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        TSyncMap syncList;
+        bool hasYtInput = false;
+        for (auto input : { sqlCombine.LeftInput(), sqlCombine.RightInput() }) {
+            if (IsYtProviderInput(input.Input())) {
+                hasYtInput = true;
+                auto cluster = DeriveClusterFromInput(input.Input(), selectionMode);
+                if (!cluster || !UpdateUsedCluster(usedCluster, *cluster, selectionMode)) {
+                    return node;
+                }
+            }
+
+            for (auto lambda : { input.PresortKeyLambda().Raw(), input.KeyExtractLambda().Raw(), input.ArgMapLambda().Raw() }) {
+                if (!IsYtCompleteIsolatedLambda(*lambda, syncList, usedCluster, false, selectionMode)) {
+                    return node;
+                }
+            }
+        }
+
+        if (!hasYtInput) {
+            return node;
+        }
+
+        if (!IsYtCompleteIsolatedLambda(sqlCombine.UsingLambda().Ref(), syncList, usedCluster, false, selectionMode)) {
+            return node;
+        }
+
+        return ExpandSqlCombine(node.Ptr(), ctx, *State_->Types);
+    }
+
     TMaybeNode<TExprBase> Aggregate(TExprBase node, TExprContext& ctx) const {
         auto aggregate = node.Cast<TCoAggregateBase>();
 
@@ -730,6 +778,76 @@ protected:
         return node;
     }
 
+    TVector<std::pair<TCoLambda, size_t>> GetOperationLambdas(TExprBase node) const {
+        if (auto mapReduce = node.Maybe<TYtMapReduce>()) {
+            TVector<std::pair<TCoLambda, size_t>> lambdas;
+            if (auto mapper = mapReduce.Mapper().Maybe<TCoLambda>()) {
+                lambdas.emplace_back(mapper.Cast(), size_t(TYtMapReduce::idx_Mapper));
+            }
+            lambdas.emplace_back(mapReduce.Reducer().Cast(), size_t(TYtMapReduce::idx_Reducer));
+            return lambdas;
+        }
+        if (auto reduce = node.Maybe<TYtReduce>()) {
+            return {{reduce.Reducer().Cast(), size_t(TYtReduce::idx_Reducer)}};
+        }
+        if (auto fill = node.Maybe<TYtFill>()) {
+            return {{fill.Content().Cast(), size_t(TYtFill::idx_Content)}};
+        }
+        return {{node.Maybe<TYtMap>().Mapper().Cast(), size_t(TYtMap::idx_Mapper)}};
+    }
+
+    static bool IsRedundantWithWorld(TCoWithWorld withWorld, TExprBase operationWorld) {
+        const auto world = withWorld.World();
+        const auto maybeRead = world.Maybe<TCoLeft>().Input().Maybe<TYtReadTable>();
+        if (maybeRead && maybeRead.Cast().World().Ref().IsWorld()) {
+            return true;
+        }
+        const auto maybeOperation = world.Maybe<TCoLeft>().Input().Maybe<TYtOutputOpBase>();
+        return maybeOperation && IsDepended(operationWorld.Ref(), world.Ref());
+    }
+
+    TMaybeNode<TCoLambda> CleanupOperationLambda(TCoLambda lambda, TExprBase operationWorld, TExprContext& ctx) const {
+        TNodeOnNodeOwnedMap remaps;
+        VisitExpr(lambda.Ptr(), [&remaps, operationWorld](const TExprNode::TPtr& lambdaNode) {
+            if (TYtOutput::Match(lambdaNode.Get())) {
+                return false;
+            }
+            if (TCoWithWorld::Match(lambdaNode.Get())) {
+                if (IsRedundantWithWorld(TCoWithWorld(lambdaNode), operationWorld)) {
+                    remaps.emplace(lambdaNode.Get(), lambdaNode->HeadPtr());
+                }
+            }
+            return true;
+        });
+        if (remaps.empty()) {
+            return lambda;
+        }
+        TExprNode::TPtr cleanedLambda;
+        const TOptimizeExprSettings settings(State_->Types);
+        if (RemapExpr(lambda.Ptr(), cleanedLambda, remaps, ctx, settings).Level == IGraphTransformer::TStatus::Error) {
+            return {};
+        }
+        return TCoLambda(cleanedLambda);
+    }
+
+    TMaybeNode<TExprBase> RemoveRedundantWithWorldFromOperationLambdas(TExprBase node, TExprContext& ctx) const {
+        if (!IsOptimizerEnabled<KeepWorldOptName>(*State_->Types) || IsOptimizerDisabled<KeepWorldOptName>(*State_->Types)) {
+            return node;
+        }
+        const auto operationWorld = node.Cast<TYtOutputOpBase>().World();
+        auto result = node.Ptr();
+        for (const auto& [lambda, index] : GetOperationLambdas(node)) {
+            const auto cleanedLambda = CleanupOperationLambda(lambda, operationWorld, ctx);
+            if (!cleanedLambda) {
+                return {};
+            }
+            if (cleanedLambda.Cast().Raw() != lambda.Raw()) {
+                result = ctx.ChangeChild(*result, index, cleanedLambda.Cast().Ptr());
+            }
+        }
+        return TExprBase(result);
+    }
+
     TMaybeNode<TExprBase> RightOverPersist(TExprBase node, TExprContext& ctx) const {
         auto maybePersist = node.Cast<TCoRight>().Input().Maybe<TYtPersist>();
         if (!maybePersist) {
@@ -762,6 +880,48 @@ protected:
         }
 
         return TExprBase(worlds.size() == 1 ? worlds.front() : ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds)));
+    }
+
+    TMaybeNode<TExprBase> ReplaceEmptyOpWithTouch(TExprBase node, TExprContext& ctx) const {
+        auto op = node.Cast<TYtTransientOpBase>();
+        if (op.Ref().StartsExecution() || op.Input().Size() != 1) {
+            return node;
+        }
+
+        auto input = op.Input().Item(0);
+        if (!input.Ref().GetConstraint<TEmptyConstraintNode>()) {
+            return node;
+        }
+
+        TSyncMap syncList;
+        for (const auto path : input.Paths()) {
+            if (auto output = path.Table().Maybe<TYtOutput>()) {
+                syncList.emplace(output.Cast().Operation().Ptr(), syncList.size());
+            }
+        }
+
+        return Build<TYtTouch>(ctx, node.Pos())
+            .World(ApplySyncListToWorld(op.World().Ptr(), syncList, ctx))
+            .DataSink(op.DataSink())
+            .Output(op.Output())
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> FuseNestedTouches(TExprBase node, TExprContext& ctx) const {
+        auto touch = node.Cast<TYtTouch>();
+        if (touch.Ref().StartsExecution()) {
+            return node;
+        }
+
+        auto innerTouch = touch.World().Maybe<TCoLeft>().Input().Maybe<TYtTouch>();
+        if (!innerTouch || innerTouch.Cast().Ref().StartsExecution()) {
+            return node;
+        }
+
+        return Build<TYtTouch>(ctx, node.Pos())
+            .InitFrom(touch)
+            .World(innerTouch.Cast().World())
+            .Done();
     }
 
     TMaybeNode<TExprBase> TrimResPullWorld(TExprBase node, TExprContext& ctx) const {
@@ -2437,7 +2597,7 @@ protected:
             }
 
             // derive common type for all join keys in key set
-            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx);
+            const TTypeAnnotationNode* commonType = UnifyJoinKeyType(equiJoin.Pos(), srcKeyTypes, ctx, *State_->Types);
             YQL_ENSURE(commonType);
 
             const TTypeAnnotationNode* commonTypeNoOpt = RemoveOptionalType(commonType);
@@ -2929,6 +3089,16 @@ protected:
 
         return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
             State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
+    }
+
+    TMaybeNode<TExprBase> TrimQlFilters(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+        auto input = RemoveYtQLFilters(read.Input(), ctx);
+        if (input.Raw() == read.Input().Raw()) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input, input.Ptr());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

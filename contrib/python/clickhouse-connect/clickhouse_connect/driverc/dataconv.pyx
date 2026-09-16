@@ -1,3 +1,4 @@
+# cython: freethreading_compatible = True
 import struct
 from typing import Sequence, Optional
 

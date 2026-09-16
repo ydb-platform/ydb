@@ -2,10 +2,17 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>  // for TTabletId
+
+#include <ydb/library/actors/core/actor.h>
 
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+// Parses a raw TEvDataShard::TEvPeriodicTableStats off the schemeshard's thread and bounces it
+// back as TEvPrivate::TEvPeriodicTableStatsParsed. See schemeshard__table_stats.cpp.
+IActor* CreateStatsParserActor(const TActorId& selfActorId);
 
 struct TStatsId {
     TPathId PathId;
@@ -20,7 +27,7 @@ struct TStatsId {
     }
 
     bool operator==(const TStatsId& rhs) const {
-        return PathId == rhs.PathId && Datashard == rhs.Datashard & FollowerId == rhs.FollowerId;
+        return PathId == rhs.PathId && Datashard == rhs.Datashard && FollowerId == rhs.FollowerId;
     }
 
     struct THash {

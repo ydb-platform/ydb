@@ -12,11 +12,11 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -31,8 +31,8 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
+#include <yql/essentials/providers/common/config/yql_activation_groups.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
-#include <yql/essentials/providers/common/activation/yql_activation.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
 #include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
@@ -156,6 +156,37 @@ TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
     return flags;
 }
 
+void WriteEvaluationStatistics(NYson::TYsonWriter& writer, const TEvaluationStats& stats) {
+    writer.OnKeyedItem("Evaluation");
+    writer.OnBeginMap();
+
+    writer.OnKeyedItem("Count");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.Count);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CacheHits");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CacheHits);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderCalls");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("count");
+    writer.OnInt64Scalar(stats.CalcProviderCalls);
+    writer.OnEndMap();
+
+    writer.OnKeyedItem("CalcProviderDurationUs");
+    writer.OnBeginMap();
+    writer.OnKeyedItem("sum");
+    writer.OnInt64Scalar(stats.CalcProviderDurationSum.MicroSeconds());
+    writer.OnEndMap();
+
+    writer.OnEndMap();
+}
+
 } // namespace
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
@@ -212,6 +243,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::EnableAutoUseYqlLibs() {
+    AutoUseYqlLibs_ = true;
 }
 
 void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
@@ -279,6 +314,10 @@ void TProgramFactory::SetUdfResolverLogfile(const TString& path) {
     UdfResolverLogfile_ = path;
 }
 
+void TProgramFactory::SetUdfBridgeBinaryPath(const TString& path) {
+    BridgeBinaryPath_ = path;
+}
+
 void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager) {
     UrlListerManager_ = std::move(urlListerManager);
 }
@@ -317,8 +356,9 @@ TProgramPtr TProgramFactory::Create(
     return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
-                        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, RemoteLayersProviders_);
+                        GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
+                        filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
+                        qContext, RemoteLayersProviders_, BridgeBinaryPath_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -343,16 +383,18 @@ TProgram::TProgram(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet,
     const TFileStoragePtr& fileStorage,
     const IUrlPreprocessing::TPtr& urlPreprocessing,
-    const TGatewaysConfig* gatewaysConfig,
+    THolder<TGatewaysConfig> gatewaysConfig,
     TString filename,
     TString sourceCode,
     TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
+    bool autoUseYqlLibs,
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
+    TString bridgeBinaryPath)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(std::move(randomProvider))
@@ -372,7 +414,7 @@ TProgram::TProgram(
     , FileStorage_(fileStorage)
     , UrlPreprocessing_(urlPreprocessing)
     , SavedUserDataTable_(std::move(userDataTable))
-    , GatewaysConfig_(gatewaysConfig)
+    , GatewaysConfig_(std::move(gatewaysConfig))
     , Filename_(std::move(filename))
     , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
@@ -382,6 +424,7 @@ TProgram::TProgram(
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
+    , BridgeBinaryPath_(std::move(bridgeBinaryPath))
     , EnableRangeComputeFor_(enableRangeComputeFor)
     , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
@@ -438,6 +481,12 @@ TProgram::TProgram(
                     YQL_ENSURE(SavedUserDataTable_.emplace(TUserDataKey::File(alias.AsString()), block).second);
                 }
             }
+        }
+    }
+
+    for (auto& [key, block] : SavedUserDataTable_) {
+        if (autoUseYqlLibs && key.Alias().StartsWith(NYql::GetDefaultFilePrefix() + "yql_libs/")) {
+            block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
         }
     }
 
@@ -505,6 +554,16 @@ void TProgram::SetUseTableMetaFromGraph(bool use) {
     UseTableMetaFromGraph_ = use;
 }
 
+void TProgram::SetOperationTitle(const TString& title) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    if (title.Contains("YQL")) {
+        OperationOptions_.Title = title;
+        return;
+    }
+
+    OperationOptions_.Title = (title.empty() ? "" : title + " ") + "[Powered by YQL]";
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;
@@ -517,6 +576,7 @@ TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& user
         TypeCtx_->ValidateMode = ValidateMode_;
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
+        TypeCtx_->UdfBridgeBinaryPath = BridgeBinaryPath_;
     }
 
     return TypeCtx_;
@@ -687,6 +747,11 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
     if (UrlListerManager_) {
         UrlListerManager_->SetCredentials(Credentials_);
     }
+}
+
+void TProgram::SetUserCredentials(const TUserCredentials& userCredentials) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    Credentials_->SetUserCredentials(userCredentials);
 }
 
 void TProgram::ClearCredentials() {
@@ -879,8 +944,14 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/false,
+        /*isAmbiguityDebugging=*/false,
+        currentSettings.MaxParseTreeDepth);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -1834,6 +1905,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     writer.OnEndMap(); // system
 
+    if (TypeCtx_->EvaluationStats.Count > 0) {
+        WriteEvaluationStatistics(writer, TypeCtx_->EvaluationStats);
+    }
+
     if (TypeCtx_->Modules) {
         writer.OnKeyedItem("moduleResolver");
             writer.OnBeginMap();
@@ -2075,6 +2150,10 @@ TString TProgram::ResultsAsString() const {
 TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& username) {
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
+    const auto activatedGroups = GatewaysConfig_
+                                     ? NCommon::ApplyActivationGroupsInplace(*GatewaysConfig_, username, Credentials_, QContext_)
+                                     : TVector<TString>{};
+
     typeAnnotationContext->LangVer = LangVer_;
     typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
@@ -2113,7 +2192,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         auto dp = dpi(
             username,
             SessionId_,
-            GatewaysConfig_,
+            GatewaysConfig_.Get(),
             FunctionRegistry_,
             RandomProvider_,
             typeAnnotationContext,
@@ -2194,7 +2273,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     {
-        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_, username);
+        auto configProvider = CreateConfigProvider(
+            *typeAnnotationContext,
+            GatewaysConfig_.Get(),
+            username,
+            {},
+            /*forPartialTypeCheck=*/false,
+            activatedGroups);
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 

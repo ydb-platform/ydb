@@ -79,11 +79,7 @@
 
 {% endif %}
 
-{% if backend_name != "YDB" %}
-
 * [DISCARD](discard.md)
-
-{% endif %}
 
 * [INTO RESULT](into_result.md)
 

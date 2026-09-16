@@ -203,7 +203,10 @@ private:
             MakeError(Response_.MutableReceiveMessage(), NErrors::OVER_LIMIT);
         } else {
             if (ev->Get()->Messages.empty()) {
-                if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                // Fall through to the topic path only when the migration topic exists.
+                // Otherwise Compatibility with TopicCreated=false would hit a missing topic
+                // and surface as an error instead of an empty AWS-compatible receive.
+                if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
                     if (FeatureFlags_.EnableSQSMigrationFinished_ || !IsFifo_) {
                         return DoActionTopicImplementation();
                     } else {
@@ -279,10 +282,10 @@ private:
         const auto status = ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS) {
             if (status == Ydb::StatusIds::SCHEME_ERROR) {
-                // The topic is temporarily missing (the queue is being deleted or recreated
-                // and the leader is not updated yet). Report a generic retryable internal
-                // failure instead of leaking the internal topic path so clients retry.
-                MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
+                // The topic (and therefore the queue) no longer exists: the queue is being
+                // deleted or recreated. Match AWS SQS / GetQueueAttributes and report
+                // NonExistentQueue without leaking the internal topic path.
+                MakeError(Response_.MutableReceiveMessage(), NErrors::NON_EXISTENT_QUEUE);
             } else {
                 MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
             }

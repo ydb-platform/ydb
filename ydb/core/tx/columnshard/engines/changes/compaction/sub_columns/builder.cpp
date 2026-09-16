@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount, const EValueType valueType) const {
-    if (!NArrow::NAccessor::NSubColumns::DictionaryApplicableForValueType(valueType)) {
+    if (!NArrow::NAccessor::NSubColumns::CanBeDictionaryEncoded(valueType)) {
         return accessor;
     }
     const auto enumerateNotNull = [&accessor](const auto& consumer) {
@@ -37,8 +37,9 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionar
     if (!Settings.IsDictionary(filledRecordsCount, enumerateNotNull)) {
         return accessor;
     }
-    const NArrow::NAccessor::TChunkConstructionData cData(
-        accessor->GetRecordsCount(), nullptr, arrow::binary(), NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
+    const NArrow::NAccessor::TChunkConstructionData cData(accessor->GetRecordsCount(), nullptr,
+        NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType),
+        NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     return NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
 }
 
@@ -84,13 +85,10 @@ void TMergedBuilder::Initialize() {
         const auto valueType = ResultColumnStats.GetValueType(i);
         switch (ResultColumnStats.GetAccessorType(i)) {
             case NArrow::NAccessor::IChunkedArray::EType::Array:
-                ColumnBuilders.emplace_back(
-                    TPlainRuntimeBuilder(NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType)), valueType);
+                ColumnBuilders.emplace_back(TEncodingPlainBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                // Native scalars are never sparsed, so a sparsed column is always binary-backed.
-                AFL_VERIFY(valueType == EValueType::BinaryJson || valueType == EValueType::String)("value_type", (ui32)valueType);
-                ColumnBuilders.emplace_back(TSparsedBuilder(nullptr, 0, 0), valueType);
+                ColumnBuilders.emplace_back(TEncodingSparsedBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:

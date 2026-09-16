@@ -71,6 +71,7 @@ SRCS(
     counters_testshard.proto
     counters_tx_allocator.proto
     counters_tx_proxy.proto
+    counters_wasm_compile_controller.proto
     data_events.proto
     data_format_settings.proto
     data_integrity_trails.proto
@@ -106,6 +107,7 @@ SRCS(
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
+    kqp_lookup_source.proto
     labeled_counters.proto
     load_test.proto
     local.proto
@@ -154,6 +156,7 @@ SRCS(
     subdomains.proto
     sys_view.proto
     sys_view_types.proto
+    table_metrics_settings.proto
     table_service_config.proto
     table_stats.proto
     tablet.proto

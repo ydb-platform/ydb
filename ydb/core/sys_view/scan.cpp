@@ -25,11 +25,14 @@
 #include <ydb/core/sys_view/storage/vslots.h>
 #include <ydb/core/sys_view/streaming_queries/streaming_queries.h>
 #include <ydb/core/sys_view/tablets/tablets.h>
+#include <ydb/core/sys_view/udf_modules/udf_modules.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr {
 namespace NSysView {
@@ -80,8 +83,8 @@ public:
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
             hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -125,13 +128,13 @@ public:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Got abort execution event, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerId
-                << ", scan id: " << ScanId
-                << ", table id: " << TableId
-                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Handle NKqp::TEvKqp::TEvAbortExecution: scan aborted",
+            {"actorId", TBase::SelfId()},
+            {"ownerId", OwnerId},
+            {"scanId", ScanId},
+            {"tableId", TableId},
+            {"statusCode", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {
             Send(*ScanActorId, THolder(ev->Release().Release()));
@@ -272,6 +275,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateShowCreate(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EStreamingQueries:
         return CreateStreamingQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
+    case ESysViewType::EUdfModules:
+        return CreateUdfModulesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken), reverse);
     default:
         return {};
     }

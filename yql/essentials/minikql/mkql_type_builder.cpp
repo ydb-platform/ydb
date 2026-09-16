@@ -275,7 +275,6 @@ private:
         Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
     }
 
-private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
     const NMiniKQL::TType* KeyType_ = nullptr;
     const NMiniKQL::TType* ValueType_ = nullptr;
@@ -327,7 +326,6 @@ private:
         Y_ABORT_UNLESS(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
     }
 
-private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
     const NMiniKQL::TType* KeyType_ = nullptr;
 };

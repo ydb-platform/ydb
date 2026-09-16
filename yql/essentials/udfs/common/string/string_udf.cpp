@@ -1,6 +1,7 @@
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -118,7 +119,7 @@ TString ReverseBits(const TStringRef input) {
 // NOTE: The functions below are marked as deprecated, so block implementation
 // is not required for them
 SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
-                          builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1))) {
+                          builder.SetMaxLangVer(NYql::NFeature::StringReverse.MaxLangVer)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0)
     const TStringBuf input(args[0].AsStringRef());
     try {
@@ -180,17 +181,17 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
         }                                                          \
     }
 
-#define STRING_TWO_ARGS_UDF_DEPRECATED_2025_02(udfName, function)                      \
-    SIMPLE_STRICT_UDF_OPTIONS(T##udfName, bool(TOptional<char*>, char*),               \
-                              builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1))) { \
-        Y_UNUSED(valueBuilder);                                                        \
-        if (args[0]) {                                                                 \
-            const TStringBuf haystack(args[0].AsStringRef());                          \
-            const TStringBuf needle(args[1].AsStringRef());                            \
-            return TUnboxedValuePod(function(haystack, needle));                       \
-        } else {                                                                       \
-            return TUnboxedValuePod(false);                                            \
-        }                                                                              \
+#define STRING_TWO_ARGS_UDF_DEPRECATED_2025_02(udfName, function)                                \
+    SIMPLE_STRICT_UDF_OPTIONS(T##udfName, bool(TOptional<char*>, char*),                         \
+                              builder.SetMaxLangVer(NYql::NFeature::StringTwoArgs.MaxLangVer)) { \
+        Y_UNUSED(valueBuilder);                                                                  \
+        if (args[0]) {                                                                           \
+            const TStringBuf haystack(args[0].AsStringRef());                                    \
+            const TStringBuf needle(args[1].AsStringRef());                                      \
+            return TUnboxedValuePod(function(haystack, needle));                                 \
+        } else {                                                                                 \
+            return TUnboxedValuePod(false);                                                      \
+        }                                                                                        \
     }
 
 #define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function, minVersion)        \
@@ -382,21 +383,21 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
                                                                                         \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define STRING_UDF_MAP(XX)                                         \
-    XX(Base32Encode, Base32Encode, NYql::UnknownLangVersion)       \
-    XX(Base64Encode, Base64Encode, NYql::UnknownLangVersion)       \
-    XX(Base64EncodeUrl, Base64EncodeUrl, NYql::UnknownLangVersion) \
-    XX(EscapeC, EscapeC, NYql::UnknownLangVersion)                 \
-    XX(UnescapeC, UnescapeC, NYql::UnknownLangVersion)             \
-    XX(HexEncode, HexEncode, NYql::UnknownLangVersion)             \
-    XX(EncodeHtml, EncodeHtmlPcdata, NYql::UnknownLangVersion)     \
-    XX(DecodeHtml, DecodeHtmlPcdata, NYql::UnknownLangVersion)     \
-    XX(CgiEscape, CGIEscapeRet, NYql::UnknownLangVersion)          \
-    XX(CgiUnescape, CGIUnescapeRet, NYql::UnknownLangVersion)      \
-    XX(Strip, StripString, NYql::UnknownLangVersion)               \
-    XX(Collapse, Collapse, NYql::UnknownLangVersion)               \
-    XX(ReverseBytes, ReverseBytes, NYql::MakeLangVersion(2025, 2)) \
-    XX(ReverseBits, ReverseBits, NYql::MakeLangVersion(2025, 2))
+#define STRING_UDF_MAP(XX)                                                        \
+    XX(Base32Encode, Base32Encode, NYql::UnknownLangVersion)                      \
+    XX(Base64Encode, Base64Encode, NYql::UnknownLangVersion)                      \
+    XX(Base64EncodeUrl, Base64EncodeUrl, NYql::UnknownLangVersion)                \
+    XX(EscapeC, EscapeC, NYql::UnknownLangVersion)                                \
+    XX(UnescapeC, UnescapeC, NYql::UnknownLangVersion)                            \
+    XX(HexEncode, HexEncode, NYql::UnknownLangVersion)                            \
+    XX(EncodeHtml, EncodeHtmlPcdata, NYql::UnknownLangVersion)                    \
+    XX(DecodeHtml, DecodeHtmlPcdata, NYql::UnknownLangVersion)                    \
+    XX(CgiEscape, CGIEscapeRet, NYql::UnknownLangVersion)                         \
+    XX(CgiUnescape, CGIUnescapeRet, NYql::UnknownLangVersion)                     \
+    XX(Strip, StripString, NYql::UnknownLangVersion)                              \
+    XX(Collapse, Collapse, NYql::UnknownLangVersion)                              \
+    XX(ReverseBytes, ReverseBytes, NYql::NFeature::StringReverseBytes.MinLangVer) \
+    XX(ReverseBits, ReverseBits, NYql::NFeature::StringReverseBytes.MinLangVer)
 
 #define STRING_UNSAFE_UDF_MAP(XX)              \
     XX(Base32Decode, Base32Decode)             \
@@ -436,10 +437,10 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
 
-#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)                                            \
-    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase, NYql::MakeLangVersion(2025, 1)) \
-    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase, NYql::MakeLangVersion(2025, 1))   \
-    XX(AsciiEqualsIgnoreCase, AsciiEqualsIgnoreCase, NYql::MakeLangVersion(2025, 2))
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)                                                                          \
+    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase, NYql::NFeature::StringAsciiPrefixSuffixIgnoreCase.MinLangVer) \
+    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase, NYql::NFeature::StringAsciiPrefixSuffixIgnoreCase.MinLangVer)   \
+    XX(AsciiEqualsIgnoreCase, AsciiEqualsIgnoreCase, NYql::NFeature::StringAsciiEqualsContainsIgnoreCase.MinLangVer)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
 // is not required for them. Hence, STROKA_UDF provides only the scalar one at
@@ -560,7 +561,7 @@ TUnboxedValuePod AsciiContainsIgnoreCaseImpl(const TUnboxedValuePod* args) {
 }
 
 BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*),
-                                      builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))
+                                      builder.SetMinLangVer(NYql::NFeature::StringAsciiEqualsContainsIgnoreCase.MinLangVer))
 {
     Y_UNUSED(valueBuilder);
     return AsciiContainsIgnoreCaseImpl(args);

@@ -11,6 +11,7 @@ RECURSE(
     select
     secondary_index
     s3
+    set_column_constraint
     truncate
     ttl
     vector_index

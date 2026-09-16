@@ -102,7 +102,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         queries[num] = r.Data;
     }
     for (auto& query : queries) {
-        PatchQuery(query);
+        PatchQuery(query, &query - queries.cbegin());
         result.emplace_back();
         result.back().Query = query;
         if (Params.GetCheckCanonical()) {
@@ -117,7 +117,8 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     return result;
 }
 
-void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
+void TTpcBaseWorkloadGenerator::PatchQuery(TString& query, size_t index) const {
+    query = (TStringBuilder() << "--# " << Params.GetWorkloadName() << " Scale " << Params.GetScale() << " Query " << index << Endl << Endl) + query;
     SubstGlobal(query, "{% include 'header.sql.jinja' %}", GetHeader(query));
     SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
     const auto tableJson = GetTablesJson();

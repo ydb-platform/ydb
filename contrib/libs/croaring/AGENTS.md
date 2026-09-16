@@ -14,9 +14,9 @@ The library's documented contract is explicit and consistent across the public A
 
 Relevant documentation locations:
 
-- [include/roaring/roaring.h](/Users/dlemire/CVS/github/CRoaring/include/roaring/roaring.h) (around lines 671-678, 726-738, 1067-1082): detailed comments on `roaring_bitmap_*_deserialize*` and `roaring_bitmap_internal_validate`.
-- [include/roaring/roaring64.h](/Users/dlemire/CVS/github/CRoaring/include/roaring/roaring64.h) (around lines 615-631, 365-376): equivalent guidance for 64-bit bitmaps.
-- [README.md](/Users/dlemire/CVS/github/CRoaring/README.md) (lines 357-375, 645-678): API summary and example code showing the required validate-after-deserialize pattern for untrusted input.
+- include/roaring/roaring.h: detailed comments on `roaring_bitmap_*_deserialize*` and `roaring_bitmap_internal_validate`.
+- include/roaring/roaring64.h: equivalent guidance for 64-bit bitmaps.
+- README.md: API summary and example code showing the required validate-after-deserialize pattern for untrusted input.
 
 The robust deserialization tests in `tests/robust_deserialization_unit.c` and fuzzing harnesses exist precisely to ensure the safe deserializers and the validators behave correctly under adversarial input. A report that treats "deserializing attacker-controlled bytes and then using the result without validation" as a bug in the deserializer is a misunderstanding of the stated API contract.
 

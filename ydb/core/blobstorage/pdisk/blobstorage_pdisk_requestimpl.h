@@ -137,7 +137,8 @@ public:
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
-    bool GetDiskFd;
+    bool GetUringRouterClient;
+    ui32 UringIdleSpinUs;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -147,7 +148,8 @@ public:
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
         , GroupSizeInUnits(ev.GroupSizeInUnits)
-        , GetDiskFd(ev.GetDiskFd)
+        , GetUringRouterClient(ev.GetUringRouterClient)
+        , UringIdleSpinUs(ev.UringIdleSpinUs)
     {}
 
     ERequestType GetType() const override {
@@ -167,7 +169,8 @@ public:
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
         str << " GroupSizeInUnits# " << GroupSizeInUnits;
-        str << " GetDiskFd# " << GetDiskFd;
+        str << " GetUringRouterClient# " << GetUringRouterClient;
+        str << " UringIdleSpinUs# " << UringIdleSpinUs;
         str << "}";
         return str.Str();
     }
@@ -752,10 +755,12 @@ public:
 class TChunkReserve : public TRequestBase {
 public:
     ui32 SizeChunks;
+    bool ForHousekeeping;
 
     TChunkReserve(const NPDisk::TEvChunkReserve &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChunkReserve, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
         , SizeChunks(ev.SizeChunks)
+        , ForHousekeeping(ev.ForHousekeeping)
     {}
 
     ERequestType GetType() const override {
@@ -1286,11 +1291,13 @@ class TChangeExpectedSlotCount : public TRequestBase {
 public:
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
     TChangeExpectedSlotCount(const NPDisk::TEvChangeExpectedSlotCount &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::ChangeExpectedSlotCount, reqIdx), OwnerSystem, 0, NPriInternal::Other)
         , ExpectedSlotCount(ev.ExpectedSlotCount)
         , SlotSizeInUnits(ev.SlotSizeInUnits)
+        , ExpectedSlotSize(ev.ExpectedSlotSize)
     {}
 
     ERequestType GetType() const override {
@@ -1302,6 +1309,7 @@ public:
         str << "TChangeExpectedSlotCount {"
             << " ExpectedSlotCount# " << ExpectedSlotCount
             << " SlotSizeInUnits# " << SlotSizeInUnits
+            << " ExpectedSlotSize# " << ExpectedSlotSize
             << " }";
         return str.Str();
     }

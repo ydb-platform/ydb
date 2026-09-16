@@ -322,7 +322,12 @@ Choosing the correct number of partitions is an important aspect of data schema 
 - Initial number of partitions: for a basic estimate of the number of partitions, you can use the formula `(number of nodes * 4)`. This will maximize cluster resource utilization when executing parallel queries.
 - Choose the number of partitions considering the expected growth of data volume and increase in the number of nodes in the cluster.
 - The total number of partitions across all tables in a single database must not exceed **2000**.
-- If you need to increase the number of partitions, you can create a new table and move data into it using the `CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a) WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;` query.
+- If you need to increase the number of partitions, you can create a new table and move data into it using the query:
+
+```yql
+CREATE TABLE (PRIMARY KEY (a, b)) PARTITION BY HASH(a)
+WITH(STORE=COLUMN, PARTITION_COUNT=96) new_table AS SELECT * FROM old_table;
+```
 
 ## No secondary indexes or skip indexes
 

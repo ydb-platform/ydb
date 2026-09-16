@@ -64,6 +64,10 @@ from __future__ import annotations
 # std imports
 from functools import lru_cache
 
+__lazy_modules__ = [
+    "wcwidth.bisearch",
+    "wcwidth._constants",
+]
 # local
 from .bisearch import bisearch
 from ._constants import _LATEST_VERSION, _AMBIGUOUS_TABLE, _ZERO_WIDTH_TABLE, _WIDE_EASTASIAN_TABLE

@@ -3,15 +3,15 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#include <ydb/library/actors/core/log.h>
 
-namespace {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-using namespace NKikimr;
-using namespace NSchemeShard;
+namespace NKikimr::NSchemeShard {
 
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+// Used by CREATE SECRET and CREATE OR REPLACE SECRET (which converts to ALTER) to ensure that
+// secrets do not inherit permissions from their parent directory by default.
 TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     NACLib::TACL secObj(initialAcl);
     NACLib::TACL resultSecObj;
@@ -32,15 +32,17 @@ TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     return resultAcl;
 }
 
-class TPropose : public TSubOperationState {
-private:
-    const TOperationId OperationId;
+} // namespace NKikimr::NSchemeShard
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateSecret::TPropose"
-            << ", opId: " << OperationId;
-    }
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
+
+class TPropose : public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
+    const TOperationId OperationId;
 
 public:
     explicit TPropose(TOperationId id)
@@ -49,7 +51,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "Propose to coordinator");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -62,8 +64,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "Operation plan received",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -86,7 +89,7 @@ public:
         secretPath->StepCreated = step;
         context.SS->PersistCreateStep(db, secretPathId, step);
 
-        context.SS->Secrets[secretPathId] = alterData;
+        context.SS->Secrets.Set(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 
@@ -137,6 +140,8 @@ class TCreateSecret : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+    virtual const char* Name() const override final { return "TCreateSecret"; }
+
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -146,17 +151,15 @@ public:
 
         const TString& secretName = createSecretProto.GetName();
 
-        LOG_N("TCreateSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + secretName},
         );
 
         auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
-        LOG_D("TCreateSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
-            << ", secretDescription (without secret parts): " << secretDescrWithoutSecretParts.ShortDebugString()
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + secretName},
+            {"secretDescription", secretDescrWithoutSecretParts.ShortDebugString()},
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -275,13 +278,12 @@ public:
         secretDescription.SetValue(createSecretProto.GetValue());
 
         const auto secretInfo = TSecretInfo::Create(std::move(secretDescription));
-        context.SS->Secrets[secretPathId] = secretInfo;
+        context.SS->Secrets.Set(secretPathId, secretInfo);
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPath(db, dstPath->PathId);
         context.SS->PersistSecret(db, dstPath->PathId, *secretInfo);
         context.SS->PersistSecretAlter(db, dstPath->PathId, *secretInfo->AlterData);
-        context.SS->IncrementPathDbRefCount(dstPath->PathId);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSecret, secretPathId);
         txState.State = TTxState::Propose;
@@ -297,11 +299,15 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortPropose" << ", opId: " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateSecret AbortUnsafe" << ", opId: " << OperationId << ", forceDropId: " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -328,7 +334,40 @@ bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
 
 }
 
-ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    const auto& createSecretProto = tx.GetCreateSecret();
+    const auto replaceIfExists = tx.GetReplaceIfExists();
+
+    if (replaceIfExists) {
+        const TString& parentPathStr = tx.GetWorkingDir();
+        const TString& secretName = createSecretProto.GetName();
+        const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        const TPath dstPath = parentPath.Child(secretName);
+
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsSecret();
+
+        if (isAlreadyExists) {
+            // Convert to alter: build an alter transaction from the create transaction
+            TTxTransaction alterTx = tx;
+            alterTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSecret);
+            auto* alterSecret = alterTx.MutableAlterSecret();
+            alterSecret->SetName(createSecretProto.GetName());
+            if (createSecretProto.HasValue()) {
+                alterSecret->SetValue(createSecretProto.GetValue());
+            }
+            if (createSecretProto.HasInheritPermissions()) {
+                alterSecret->SetInheritPermissions(createSecretProto.GetInheritPermissions());
+            }
+            return CreateAlterSecret(id, alterTx);
+        }
+    }
+
     return MakeSubOperation<TCreateSecret>(id, tx);
 }
 
@@ -338,3 +377,5 @@ ISubOperation::TPtr CreateNewSecret(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

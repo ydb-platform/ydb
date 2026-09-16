@@ -5,6 +5,9 @@ VERSION(1.0.1)
 LICENSE(Apache-2.0)
 
 JAR_RESOURCE(840516708)
+
 SRC_RESOURCE(840517584)
+
+ORIGINAL_SOURCE(https://github.com/google/guava)
 
 END()

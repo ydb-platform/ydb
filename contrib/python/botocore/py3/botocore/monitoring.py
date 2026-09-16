@@ -535,7 +535,7 @@ class CSMSerializer:
     def _truncate(self, text, max_length):
         if len(text) > max_length:
             logger.debug(
-                'Truncating following value to maximum length of ' '%s: %s',
+                'Truncating following value to maximum length of %s: %s',
                 text,
                 max_length,
             )

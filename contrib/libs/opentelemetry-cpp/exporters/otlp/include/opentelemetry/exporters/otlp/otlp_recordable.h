@@ -23,6 +23,7 @@
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/recordable.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/span_metadata.h"
@@ -37,17 +38,25 @@ namespace otlp
 class OtlpRecordable final : public opentelemetry::sdk::trace::Recordable
 {
 public:
+  /**
+   * Construct with optional span limits parameters.
+   *
+   * @deprecated Configure span limits via TracerProviderFactory::Create(), SpanLimitsConfiguration,
+   * or the YAML `tracer_provider.limits` node instead. These optional span limit params will be
+   * removed in a future release.
+   */
   explicit OtlpRecordable(
       std::uint32_t max_attributes           = (std::numeric_limits<std::uint32_t>::max)(),
       std::uint32_t max_events               = (std::numeric_limits<std::uint32_t>::max)(),
       std::uint32_t max_links                = (std::numeric_limits<std::uint32_t>::max)(),
       std::uint32_t max_attributes_per_event = (std::numeric_limits<std::uint32_t>::max)(),
       std::uint32_t max_attributes_per_link  = (std::numeric_limits<std::uint32_t>::max)())
-      : max_attributes_(max_attributes),
-        max_events_(max_events),
-        max_links_(max_links),
-        max_attributes_per_event_(max_attributes_per_event),
-        max_attributes_per_link_(max_attributes_per_link)
+      : span_limits_{max_attributes,
+                     (std::numeric_limits<std::size_t>::max)(),
+                     max_events,
+                     max_links,
+                     max_attributes_per_event,
+                     max_attributes_per_link}
   {}
 
   proto::trace::v1::Span &span() noexcept { return span_; }
@@ -92,6 +101,17 @@ public:
 
   void SetDuration(std::chrono::nanoseconds duration) noexcept override;
 
+  /**
+   * Set span limits.
+   *
+   * Until the deprecated OTLP exporter option values are removed, the effective limit for each
+   * field is the minimum (most restrictive) of the deprecated otlp exporter option values (passed
+   * to the constructor) and the values set by calling this method.
+   *
+   * @param limits The span limits to set.
+   */
+  void SetSpanLimits(const opentelemetry::sdk::trace::SpanLimits &limits) noexcept override;
+
   void SetInstrumentationScope(const opentelemetry::sdk::instrumentationscope::InstrumentationScope
                                    &instrumentation_scope) noexcept override;
 
@@ -100,11 +120,8 @@ private:
   const opentelemetry::sdk::resource::Resource *resource_ = nullptr;
   const opentelemetry::sdk::instrumentationscope::InstrumentationScope *instrumentation_scope_ =
       nullptr;
-  std::uint32_t max_attributes_;
-  std::uint32_t max_events_;
-  std::uint32_t max_links_;
-  std::uint32_t max_attributes_per_event_;
-  std::uint32_t max_attributes_per_link_;
+  opentelemetry::sdk::trace::SpanLimits span_limits_{
+      opentelemetry::sdk::trace::SpanLimits::NoLimits()};
 };
 }  // namespace otlp
 }  // namespace exporter

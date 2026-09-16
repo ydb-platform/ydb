@@ -90,12 +90,15 @@ class TGrabActor: public TActorBootstrapped<TGrabActor> {
     std::deque<TAutoPtr<IEventHandle>> Inputs;
     TMutex Mutex;
     std::unique_ptr<NColumnShard::NBackup::TExportDriver> Driver;
-    std::unique_ptr<NTable::IScan> Exporter;
+
+    // non-owning pointer to the exporter actor
+    NTable::IScan* Exporter = nullptr;
 
 public:
-    TRuntimePtr Runtime;
+    // Non-owning pointer to the actor runtime
+    TTestActorRuntime* Runtime;
 
-    TGrabActor(TRuntimePtr runtime)
+    TGrabActor(TTestActorRuntime* runtime)
         : Runtime(runtime)
     {
     }
@@ -107,12 +110,14 @@ public:
 
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
 
-        Exporter =
+        std::unique_ptr<NTable::IScan> exporter =
             NColumnShard::NBackup::CreateIScanExportUploader(SelfId(), MakeBackupTask("test"), exportFactory.get(), columns, 0).DetachResult();
-        UNIT_ASSERT(Exporter);
+        UNIT_ASSERT(exporter);
+        Exporter = exporter.get();
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         auto initialState = Exporter->Prepare(Driver.get(), MakeSchema());
         UNIT_ASSERT_VALUES_EQUAL(initialState.Scan, NTable::EScan::Feed);
+        Y_UNUSED(exporter.release());
 
         NTable::TLead lead;
         auto seekState = Exporter->Seek(lead, 0);
@@ -189,11 +194,11 @@ Y_UNIT_TEST_SUITE(IScan) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);
 
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
 
-        auto grabActor = new TGrabActor(runtime);
+        auto grabActor = new TGrabActor(runtime.get());
         runtime->Register(grabActor);
 
         while (true) {
@@ -297,7 +302,7 @@ Y_UNIT_TEST_SUITE(IScan) {
     }
 
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        TRuntimePtr runtime(new TTestBasicRuntime());
         SetupTabletServices(*runtime);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 

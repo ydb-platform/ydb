@@ -2,7 +2,7 @@
 
 In this guide, you will install a single-node local [{{ ydb-short-name }} cluster](concepts/glossary.md#cluster) and execute simple queries against your [database](concepts/glossary.md#database).
 
-Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [documentation for DevOps Engineers](devops/index.md) to learn how to run {{ ydb-short-name }} in a production environment.
+Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk devices without any filesystem. However, for simplicity, this guide emulates disks in RAM or using a file in a regular filesystem. Thus, this setup is unsuitable for any production usage or even benchmarks. See the [Cluster Administration](devops/index.md) documentation to learn how to run {{ ydb-short-name }} in a production environment.
 
 ## Install and start {{ ydb-short-name }} {#install}
 
@@ -184,7 +184,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
 ## Run your first "Hello, world!" query
 
-The simplest way to launch your first {{ ydb-short-name }} query is via the built-in web interface. It is launched by default on port 8765 of the {{ ydb-short-name }} server. If you have launched it locally, open [localhost:8765](http://localhost:8765) in your web browser. If not, replace `localhost` with your server's hostname in this URL or use `ssh -L 8765:localhost:8765 my-server-hostname-or-ip.example.com` to set up port forwarding and still open [localhost:8765](http://localhost:8765). You'll see a page like this:
+The simplest way to launch your first {{ ydb-short-name }} query is via [{{ ydb-ui-name }}](reference/ydb-ui/index.md). It is launched by default on port 8765 of the {{ ydb-short-name }} server. If you have launched it locally, open [localhost:8765](http://localhost:8765) in your web browser. If not, replace `localhost` with your server's hostname in this URL or use `ssh -L 8765:localhost:8765 my-server-hostname-or-ip.example.com` to set up port forwarding and still open [localhost:8765](http://localhost:8765). You'll see a page like this:
 
 ![Web UI home page](_assets/web-ui-home.png)
 

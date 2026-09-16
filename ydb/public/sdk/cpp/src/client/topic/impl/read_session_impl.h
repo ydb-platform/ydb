@@ -27,7 +27,9 @@
 #include <util/digest/numeric.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <vector>
 
 
@@ -1263,6 +1265,9 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
+    void OnDecompressionTaskFinished();
+    bool WaitAllDecompressionTasks(TInstant deadline) const;
+    void ClearAllPartitionStreamEvents();
     void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
     void OnDecompressionInfoDestroyImpl(i64 compressedSize,
                                         i64 decompressedSize,
@@ -1547,6 +1552,8 @@ private:
     bool Closing = false;
     std::function<void()> CloseCallback;
     std::atomic<int> DecompressionTasksInflight = 0;
+    mutable std::mutex DecompressionTasksInflightMutex;
+    mutable std::condition_variable DecompressionTasksInflightCondVar;
     i64 ReadSizeBudget;
     i64 ReadSizeServerDelta = 0;
 

@@ -67,9 +67,12 @@ static constexpr const char *kInterrupt = "interrupt";
 static constexpr const char *kSteal = "steal";
 
 /**
-  Kernel
+  Deprecated. Use @code system @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code system @endcode.", "reason": "renamed", "renamed_to": "system"}
  */
-static constexpr const char *kKernel = "kernel";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kKernel = "kernel";
 
 }  // namespace CpuModeValues
 

@@ -7,7 +7,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         {"event", "scan_data"});
     LastAck = std::nullopt;
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        AbortScanIfKnown();
         return;
     }
     SwitchStage(EStage::WaitData, EStage::WaitData);
@@ -46,14 +46,14 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "init_actor"});
     LastAck = std::nullopt;
-    if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
-        return;
-    }
-    SwitchStage(EStage::Initialization, EStage::WaitData);
     AFL_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
+    if (!CheckActivity()) {
+        AbortScanIfKnown();
+        return;
+    }
+    SwitchStage(EStage::Initialization, EStage::WaitData);
     TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1), NActors::IEventHandle::FlagTrackDelivery);
     LastAck = TMonotonic::Now();
 }
@@ -63,7 +63,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "problem_on_restore_data"},
         {"reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues())});
-    RestoreTask->OnError(NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    RestoreTask->OnError(ev->Get()->Record.GetStatus(), NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
     PassAway();
 }
 
@@ -72,13 +72,13 @@ void TActor::HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
         {"event", "problem_on_event_undelivered"},
         {"reason", ev->Get()->Reason});
-    RestoreTask->OnError("cannot delivery event: " + ::ToString(ev->Get()->Reason));
+    RestoreTask->OnError(Ydb::StatusIds::INTERNAL_ERROR, "cannot delivery event: " + ::ToString(ev->Get()->Reason));
     PassAway();
 }
 
 void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        AbortScanIfKnown();
         return;
     }
 
@@ -86,8 +86,8 @@ void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         SwitchStage(std::nullopt, EStage::Finished);
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_RESTORE, "",
             {"event", "problem_timeout"});
-        RestoreTask->OnError("timeout on restore data");
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        RestoreTask->OnError(Ydb::StatusIds::TIMEOUT, "timeout on restore data");
+        AbortScanIfKnown();
         PassAway();
         return;
     }
@@ -109,6 +109,12 @@ void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
 }
 
+void TActor::AbortScanIfKnown() {
+    if (ScanActorId) {
+        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+    }
+}
+
 bool TActor::CheckActivity() {
     if (AbortedFlag) {
         return false;
@@ -120,7 +126,7 @@ bool TActor::CheckActivity() {
     YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"event", "restoring_cancelled_from_operation"});
     SwitchStage(std::nullopt, EStage::Finished);
-    RestoreTask->OnError("restore task aborted through operation cancelled");
+    RestoreTask->OnError(Ydb::StatusIds::CANCELLED, "restore task aborted through operation cancelled");
     PassAway();
     return false;
 }

@@ -34,6 +34,9 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
     };
     auto it = Tasks.find(features.GetRWAddress());
     if (it == Tasks.end()) {
+        if (!Controller->IsNewTaskAvailable(features.GetRWAddress(), 0)) {
+            return EAddPortionResult::TASK_LIMIT_EXCEEDED;
+        }
         std::vector<TTaskConstructor> tasks = { buildNewTask() };
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }

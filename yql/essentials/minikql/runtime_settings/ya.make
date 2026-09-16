@@ -12,6 +12,7 @@ PEERDIR(
     yql/essentials/providers/common/config
     yql/essentials/providers/common/activation
     contrib/libs/openssl
+    library/cpp/hyperloglog
 )
 
 YQL_LAST_ABI_VERSION()

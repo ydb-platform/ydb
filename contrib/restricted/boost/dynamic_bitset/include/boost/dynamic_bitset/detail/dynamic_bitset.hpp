@@ -17,7 +17,6 @@
 #define BOOST_DETAIL_DYNAMIC_BITSET_HPP
 
 #include <cstddef>
-#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -70,7 +69,7 @@ template< typename T, int amount, int width /* = default */ >
 struct shifter
 {
     static BOOST_DYNAMIC_BITSET_CONSTEXPR20 void
-    left_shift( T & v )
+    right_shift( T & v )
     {
         amount >= width ? ( v = 0 )
                         : ( v >>= BOOST_DYNAMIC_BITSET_WRAP_CONSTANT( amount ) );
@@ -102,49 +101,7 @@ struct allowed_block_type< bool >
 };
 
 template< typename T >
-struct is_numeric
-{
-    enum
-    {
-        value = false
-    };
-};
-
-#define BOOST_dynamic_bitset_is_numeric( x ) \
-    template<>                               \
-    struct is_numeric< x >                   \
-    {                                        \
-        enum                                 \
-        {                                    \
-            value = true                     \
-        };                                   \
-    } /**/
-
-BOOST_dynamic_bitset_is_numeric( bool );
-BOOST_dynamic_bitset_is_numeric( char );
-
-#if ! defined( BOOST_NO_INTRINSIC_WCHAR_T )
-BOOST_dynamic_bitset_is_numeric( wchar_t );
-#endif
-
-BOOST_dynamic_bitset_is_numeric( signed char );
-BOOST_dynamic_bitset_is_numeric( short );
-BOOST_dynamic_bitset_is_numeric( int );
-BOOST_dynamic_bitset_is_numeric( long );
-BOOST_dynamic_bitset_is_numeric( long long );
-
-BOOST_dynamic_bitset_is_numeric( unsigned char );
-BOOST_dynamic_bitset_is_numeric( unsigned short );
-BOOST_dynamic_bitset_is_numeric( unsigned int );
-BOOST_dynamic_bitset_is_numeric( unsigned long );
-BOOST_dynamic_bitset_is_numeric( unsigned long long );
-
-// intentionally omitted
-// BOOST_dynamic_bitset_is_numeric(float);
-// BOOST_dynamic_bitset_is_numeric(double);
-// BOOST_dynamic_bitset_is_numeric(long double);
-
-#undef BOOST_dynamic_bitset_is_numeric
+using is_numeric = std::is_integral< T >; // floating points intentionally excluded
 
 } // dynamic_bitset_impl
 } // namespace detail

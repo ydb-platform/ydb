@@ -1,0 +1,36 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$branch_a = (
+    select
+        string_field || "_a" as string_field,
+        int64_field
+    from InputA
+);
+
+$branch_b = (
+    select
+        string_field || "_b" as string_field,
+        int64_field
+    from InputB
+);
+
+$union = (
+    select * from $branch_a
+    union all
+    select * from $branch_a
+    union all
+    select * from $branch_b
+);
+
+insert into Output
+select
+    string_field || "_out" as string_field,
+    int64_field
+from $union;

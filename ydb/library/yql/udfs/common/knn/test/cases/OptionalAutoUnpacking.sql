@@ -1,4 +1,6 @@
 select Knn::ToBinaryStringFloat(Nothing(List<Float>?)) is null;
+select Knn::ToBinaryStringFloat16(Nothing(List<Float>?)) is null;
+select Knn::ToBinaryStringBFloat16(Nothing(List<Float>?)) is null;
 select Knn::ToBinaryStringUint8(Nothing(List<Uint8>?)) is null;
 select Knn::ToBinaryStringBit(Nothing(List<Float>?)) is null;
 select Knn::FloatFromBinaryString(Nothing(String?)) is null;

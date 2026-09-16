@@ -55,7 +55,6 @@ public:
         return *this;
     }
 
-    void SetTilingPlanner(const TString& storeName = "olapStore");
     void SetForcedCompaction(const TString& storeName = "olapStore");
 
     static constexpr const char* TILING_NO_COMPACTION_FEATURES_JSON =

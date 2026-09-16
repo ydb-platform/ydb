@@ -1,3 +1,4 @@
+#include <yt/yt/library/tracing/jaeger/config.h>
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
 #include <yt/yt/core/concurrency/scheduler_api.h>

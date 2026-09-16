@@ -19,12 +19,20 @@ namespace NYdbWorkload {
     }
 
     void TFulltextWorkloadGenerator::Init() {
-        if (!Params.ModelPath.empty() && TFsPath(Params.ModelPath).Exists()) {
-            Evaluator = TMarkovModelEvaluator::LoadFromFile(Params.ModelPath);
+        if (!Params.ModelPath.empty()) {
+            if (TFsPath(Params.ModelPath).Exists()) {
+                Evaluator = TMarkovModelEvaluator::LoadFromFile(Params.ModelPath);
+            } else {
+                Cerr << "Markov model file '" << Params.ModelPath << "' not found, queries will be taken from a table." << Endl;
+            }
         }
 
         if (!Params.QueryTable.empty()) {
-            LoadQueries();
+            LoadQueries(Params.QueryTable);
+        } else if (!Evaluator && Params.RunWorkloadType == static_cast<int>(EFulltextWorkloadType::Select)) {
+            // No query generator and no explicit query table: fall back to the queries table
+            // filled by `workload fulltext import`, otherwise there would be nothing to run.
+            LoadQueries(Params.QueriesTable);
         }
 
         if (!Params.UpsertQueryTable.empty()) {
@@ -37,7 +45,7 @@ namespace NYdbWorkload {
         }
     }
 
-    void TFulltextWorkloadGenerator::LoadQueries() {
+    void TFulltextWorkloadGenerator::LoadQueries(const TString& queryTable) {
         const TString limitClause = Params.TopSize != 0 ? std::format("LIMIT {}", Params.TopSize) : "";
         const TString selectQuery = std::format(
             R"sql(
@@ -45,17 +53,18 @@ namespace NYdbWorkload {
             FROM `{}`
             {}
         )sql",
-            Params.GetFullTableName(Params.QueryTable.c_str()).c_str(),
+            Params.GetFullTableName(queryTable.c_str()).c_str(),
             limitClause.c_str());
 
         std::optional<NYdb::TResultSet> resultSet;
-        NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet](NYdb::NQuery::TSession session) {
+        NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet, &queryTable](NYdb::NQuery::TSession session) {
             const auto result = session.ExecuteQuery(
                                            selectQuery,
                                            NYdb::NQuery::TTxControl::NoTx())
                                     .GetValueSync();
 
-            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table: {}", result.GetIssues().ToString().c_str()));
+            Y_ENSURE(result.IsSuccess(), std::format("Failed to read query table '{}': {}. Specify --query-table or --model.",
+                queryTable.c_str(), result.GetIssues().ToString().c_str()));
 
             resultSet = result.GetResultSet(0);
             return result;
@@ -87,8 +96,8 @@ namespace NYdbWorkload {
             }
         }
 
-        Y_ENSURE(!Queries.empty(), std::format("Query table '{}' is empty or has no 'query' column", Params.QueryTable.c_str()));
-        Cout << "Loaded " << Queries.size() << " queries from table " << Params.QueryTable << Endl;
+        Y_ENSURE(!Queries.empty(), std::format("Query table '{}' is empty or has no 'query' column", queryTable.c_str()));
+        Cout << "Loaded " << Queries.size() << " queries from table " << queryTable << Endl;
     }
 
     void TFulltextWorkloadGenerator::LoadUpsertQueries() {
@@ -209,15 +218,13 @@ namespace NYdbWorkload {
             for (int attempt = 0; queryText.empty() && attempt < 10; ++attempt) {
                 queryText = Evaluator->GenerateSentence(queryLenDist(rng), rng);
             }
-            if (queryText.empty()) {
-                return {};
-            }
-        } else {
+        }
+
+        if (queryText.empty()) {
             if (Queries.empty()) {
                 return {};
             }
-            queryText = Queries[CurrentIndex];
-            CurrentIndex = (CurrentIndex + 1) % Queries.size();
+            queryText = Queries[CurrentIndex.fetch_add(1) % Queries.size()];
         }
 
         const TString tablePath = Params.GetFullTableName(Params.TableName.c_str());
@@ -278,9 +285,9 @@ namespace NYdbWorkload {
         auto& listBuilder = paramsBuilder.AddParam("$rows").BeginList();
 
         if (!UpsertData.empty()) {
+            const size_t baseIndex = UpsertCurrentIndex.fetch_add(batchSize);
             for (size_t i = 0; i < batchSize; ++i) {
-                const TString& text = UpsertData[UpsertCurrentIndex];
-                UpsertCurrentIndex = (UpsertCurrentIndex + 1) % UpsertData.size();
+                const TString& text = UpsertData[(baseIndex + i) % UpsertData.size()];
 
                 auto& item = listBuilder.AddListItem().BeginStruct();
                 item.AddMember("id").Uint64(idDist(rng));

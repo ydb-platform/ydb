@@ -87,17 +87,17 @@ struct TSerializableColumnSchema
                 } else if (*LogicalTypeV1_ != CastToV1Type()) {
                     auto versionedType = Format("type_v%v", setTypeVersion);
                     THROW_ERROR_EXCEPTION("%Qv does not match \"type\"", versionedType)
-                        << TErrorAttribute(versionedType, Format("%v", *LogicalType()))
-                        << TErrorAttribute("type", *LogicalTypeV1_)
-                        << TErrorAttribute("expected_type", CastToV1Type());
+                        .With(versionedType, Format("%v", *LogicalType()))
+                        .With("type", *LogicalTypeV1_)
+                        .With("expected_type", CastToV1Type());
                 }
             }
 
             if (RequiredV1_ && setTypeVersion > 1 && *RequiredV1_ != Required()) {
                 auto versionedType = Format("type_v%v", setTypeVersion);
                 THROW_ERROR_EXCEPTION("%Qv does not match \"required\"", versionedType)
-                    << TErrorAttribute(versionedType, Format("%v", *LogicalType()))
-                    << TErrorAttribute("required", *RequiredV1_);
+                    .With(versionedType, Format("%v", *LogicalType()))
+                    .With("required", *RequiredV1_);
             }
 
             if (setTypeVersion == 0) {
@@ -126,7 +126,7 @@ struct TSerializableColumnSchema
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %Qv in table schema",
                 GetDiagnosticNameString())
-                << ex;
+                .With(ex);
         }
     }
 
@@ -216,8 +216,8 @@ void ThrowDuplicateConstraintsForColumn(
     THROW_ERROR_EXCEPTION(
         "Received duplicate constraints for column %Qv",
         column)
-        << TErrorAttribute("first_conflicting_constraint", firstConstraint)
-        << TErrorAttribute("second_conflicting_constraint", secondConstraint);
+        .With("first_conflicting_constraint", firstConstraint)
+        .With("second_conflicting_constraint", secondConstraint);
 }
 
 void Serialize(const TTableSchema& schema, const TColumnNameToConstraintMap& columnNameToConstraint, IYsonConsumer* consumer)

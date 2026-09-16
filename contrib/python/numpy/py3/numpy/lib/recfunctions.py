@@ -6,15 +6,12 @@ matplotlib.  They have been rewritten and extended for convenience.
 
 """
 import itertools
+
 import numpy as np
 import numpy.ma as ma
-from numpy import ndarray, recarray
-from numpy.ma import MaskedArray
-from numpy.ma.mrecords import MaskedRecords
-from numpy.core.overrides import array_function_dispatch
+import numpy.ma.mrecords as mrec
+from numpy._core.overrides import array_function_dispatch
 from numpy.lib._iotools import _is_string_like
-
-_check_fill_value = np.ma.core._check_fill_value
 
 
 __all__ = [
@@ -51,6 +48,7 @@ def recursive_fill_fields(input, output):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> a = np.array([(1, 10.), (2, 20.)], dtype=[('A', np.int64), ('B', np.float64)])
     >>> b = np.zeros((3,), dtype=a.dtype)
@@ -83,6 +81,7 @@ def _get_fieldspec(dtype):
 
     Examples
     --------
+    >>> import numpy as np
     >>> dt = np.dtype([(('a', 'A'), np.int64), ('b', np.double, 3)])
     >>> dt.descr
     [(('a', 'A'), '<i8'), ('b', '<f8', (3,))]
@@ -114,6 +113,7 @@ def get_names(adtype):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> rfn.get_names(np.empty((1,), dtype=[('A', int)]).dtype)
     ('A',)
@@ -147,6 +147,7 @@ def get_names_flat(adtype):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> rfn.get_names_flat(np.empty((1,), dtype=[('A', int)]).dtype) is None
     False
@@ -172,6 +173,7 @@ def flatten_descr(ndtype):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> ndtype = np.dtype([('a', '<i4'), ('b', [('ba', '<f8'), ('bb', '<i4')])])
     >>> rfn.flatten_descr(ndtype)
@@ -235,10 +237,11 @@ def get_fieldstructure(adtype, lastname=None, parents=None,):
     lastname : optional
         Last processed field name (used internally during recursion).
     parents : dictionary
-        Dictionary of parent fields (used interbally during recursion).
+        Dictionary of parent fields (used internally during recursion).
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> ndtype =  np.dtype([('A', int),
     ...                     ('B', [('BA', int),
@@ -260,7 +263,7 @@ def get_fieldstructure(adtype, lastname=None, parents=None,):
                 parents[name] = []
             parents.update(get_fieldstructure(current, name, parents))
         else:
-            lastparent = [_ for _ in (parents.get(lastname, []) or [])]
+            lastparent = list((parents.get(lastname, []) or []))
             if lastparent:
                 lastparent.append(lastname)
             elif lastname:
@@ -327,15 +330,15 @@ def _fix_output(output, usemask=True, asrecarray=False):
     Private function: return a recarray, a ndarray, a MaskedArray
     or a MaskedRecords depending on the input parameters
     """
-    if not isinstance(output, MaskedArray):
+    if not isinstance(output, ma.MaskedArray):
         usemask = False
     if usemask:
         if asrecarray:
-            output = output.view(MaskedRecords)
+            output = output.view(mrec.MaskedRecords)
     else:
         output = ma.filled(output)
         if asrecarray:
-            output = output.view(recarray)
+            output = output.view(np.recarray)
     return output
 
 
@@ -379,6 +382,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> rfn.merge_arrays((np.array([1, 2]), np.array([10., 20., 30.])))
     array([( 1, 10.), ( 2, 20.), (-1, 30.)],
@@ -410,7 +414,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
     if (len(seqarrays) == 1):
         seqarrays = np.asanyarray(seqarrays[0])
     # Do we have a single ndarray as input ?
-    if isinstance(seqarrays, (ndarray, np.void)):
+    if isinstance(seqarrays, (np.ndarray, np.void)):
         seqdtype = seqarrays.dtype
         # Make sure we have named fields
         if seqdtype.names is None:
@@ -421,13 +425,13 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
             # Find what type of array we must return
             if usemask:
                 if asrecarray:
-                    seqtype = MaskedRecords
+                    seqtype = mrec.MaskedRecords
                 else:
-                    seqtype = MaskedArray
+                    seqtype = ma.MaskedArray
             elif asrecarray:
-                seqtype = recarray
+                seqtype = np.recarray
             else:
-                seqtype = ndarray
+                seqtype = np.ndarray
             return seqarrays.view(dtype=seqdtype, type=seqtype)
         else:
             seqarrays = (seqarrays,)
@@ -451,8 +455,8 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
             mask = ma.getmaskarray(a).ravel()
             # Get the filling value (if needed)
             if nbmissing:
-                fval = _check_fill_value(fill_value, a.dtype)
-                if isinstance(fval, (ndarray, np.void)):
+                fval = mrec._check_fill_value(fill_value, a.dtype)
+                if isinstance(fval, (np.ndarray, np.void)):
                     if len(fval.dtype) == 1:
                         fval = fval.item()[0]
                         fmsk = True
@@ -470,15 +474,15 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
         output = ma.array(np.fromiter(data, dtype=newdtype, count=maxlength),
                           mask=list(_izip_records(seqmask, flatten=flatten)))
         if asrecarray:
-            output = output.view(MaskedRecords)
+            output = output.view(mrec.MaskedRecords)
     else:
         # Same as before, without the mask we don't need...
         for (a, n) in zip(seqarrays, sizes):
             nbmissing = (maxlength - n)
             data = a.ravel().__array__()
             if nbmissing:
-                fval = _check_fill_value(fill_value, a.dtype)
-                if isinstance(fval, (ndarray, np.void)):
+                fval = mrec._check_fill_value(fill_value, a.dtype)
+                if isinstance(fval, (np.ndarray, np.void)):
                     if len(fval.dtype) == 1:
                         fval = fval.item()[0]
                     else:
@@ -489,7 +493,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False,
         output = np.fromiter(tuple(_izip_records(seqdata, flatten=flatten)),
                              dtype=newdtype, count=maxlength)
         if asrecarray:
-            output = output.view(recarray)
+            output = output.view(np.recarray)
     # And we're done...
     return output
 
@@ -504,10 +508,6 @@ def drop_fields(base, drop_names, usemask=True, asrecarray=False):
     Return a new array with fields in `drop_names` dropped.
 
     Nested fields are supported.
-
-    .. versionchanged:: 1.18.0
-        `drop_fields` returns an array with 0 fields if all fields are dropped,
-        rather than returning ``None`` as it did previously.
 
     Parameters
     ----------
@@ -525,6 +525,7 @@ def drop_fields(base, drop_names, usemask=True, asrecarray=False):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> a = np.array([(1, (2, 3.0)), (4, (5, 6.0))],
     ...   dtype=[('a', np.int64), ('b', [('ba', np.double), ('bb', np.int64)])])
@@ -620,6 +621,7 @@ def rename_fields(base, namemapper):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> a = np.array([(1, (2, [3.0, 30.])), (4, (5, [6.0, 60.]))],
     ...   dtype=[('a', int),('b', [('ba', float), ('bb', (float, 2))])])
@@ -691,7 +693,7 @@ def append_fields(base, names, data, dtypes=None,
         data = [data, ]
     #
     if dtypes is None:
-        data = [np.array(a, copy=False, subok=True) for a in data]
+        data = [np.array(a, copy=None, subok=True) for a in data]
         data = [a.view([(name, a.dtype)]) for (name, a) in zip(names, data)]
     else:
         if not isinstance(dtypes, (tuple, list)):
@@ -702,7 +704,7 @@ def append_fields(base, names, data, dtypes=None,
             else:
                 msg = "The dtypes argument must be None, a dtype, or a list."
                 raise ValueError(msg)
-        data = [np.array(a, copy=False, subok=True, dtype=d).view([(n, d)])
+        data = [np.array(a, copy=None, subok=True, dtype=d).view([(n, d)])
                 for (a, n, d) in zip(data, names, dtypes)]
     #
     base = merge_arrays(base, usemask=usemask, fill_value=fill_value)
@@ -804,6 +806,7 @@ def repack_fields(a, align=False, recurse=False):
 
     Examples
     --------
+    >>> import numpy as np
 
     >>> from numpy.lib import recfunctions as rfn
     >>> def print_offsets(d):
@@ -956,8 +959,8 @@ def structured_to_unstructured(arr, dtype=None, copy=False, casting='unsafe'):
     copy : bool, optional
         If true, always return a copy. If false, a view is returned if
         possible, such as when the `dtype` and strides of the fields are
-        suitable and the array subtype is one of `np.ndarray`, `np.recarray`
-        or `np.memmap`.
+        suitable and the array subtype is one of `numpy.ndarray`,
+        `numpy.recarray` or `numpy.memmap`.
 
         .. versionchanged:: 1.25.0
             A view can now be returned if the fields are separated by a
@@ -974,6 +977,7 @@ def structured_to_unstructured(arr, dtype=None, copy=False, casting='unsafe'):
 
     Examples
     --------
+    >>> import numpy as np
 
     >>> from numpy.lib import recfunctions as rfn
     >>> a = np.zeros(4, dtype=[('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
@@ -1109,6 +1113,7 @@ def unstructured_to_structured(arr, dtype=None, names=None, align=False,
 
     Examples
     --------
+    >>> import numpy as np
 
     >>> from numpy.lib import recfunctions as rfn
     >>> dt = np.dtype([('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
@@ -1183,7 +1188,7 @@ def apply_along_fields(func, arr):
     """
     Apply function 'func' as a reduction across fields of a structured array.
 
-    This is similar to `apply_along_axis`, but treats the fields of a
+    This is similar to `numpy.apply_along_axis`, but treats the fields of a
     structured array as an extra axis. The fields are all first cast to a
     common type following the type-promotion rules from `numpy.result_type`
     applied to the field's dtypes.
@@ -1192,17 +1197,18 @@ def apply_along_fields(func, arr):
     ----------
     func : function
        Function to apply on the "field" dimension. This function must
-       support an `axis` argument, like np.mean, np.sum, etc.
+       support an `axis` argument, like `numpy.mean`, `numpy.sum`, etc.
     arr : ndarray
        Structured array for which to apply func.
 
     Returns
     -------
     out : ndarray
-       Result of the recution operation
+       Result of the reduction operation
 
     Examples
     --------
+    >>> import numpy as np
 
     >>> from numpy.lib import recfunctions as rfn
     >>> b = np.array([(1, 2, 5), (4, 5, 7), (7, 8 ,11), (10, 11, 12)],
@@ -1293,6 +1299,7 @@ def require_fields(array, required_dtype):
 
     Examples
     --------
+    >>> import numpy as np
 
     >>> from numpy.lib import recfunctions as rfn
     >>> a = np.ones(4, dtype=[('a', 'i4'), ('b', 'f8'), ('c', 'u1')])
@@ -1337,6 +1344,7 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> x = np.array([1, 2,])
     >>> rfn.stack_arrays(x) is x
@@ -1351,11 +1359,11 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
                  mask=[(False, False,  True), (False, False,  True),
                        (False, False, False), (False, False, False),
                        (False, False, False)],
-           fill_value=(b'N/A', 1.e+20, 1.e+20),
+           fill_value=(b'N/A', 1e+20, 1e+20),
                 dtype=[('A', 'S3'), ('B', '<f8'), ('C', '<f8')])
 
     """
-    if isinstance(arrays, ndarray):
+    if isinstance(arrays, np.ndarray):
         return arrays
     elif len(arrays) == 1:
         return arrays[0]
@@ -1426,6 +1434,7 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
 
     Examples
     --------
+    >>> import numpy as np
     >>> from numpy.lib import recfunctions as rfn
     >>> ndtype = [('a', int)]
     >>> a = np.ma.array([1, 1, 1, 2, 2, 3, 3],
@@ -1671,3 +1680,6 @@ def rec_join(key, r1, r2, jointype='inner', r1postfix='1', r2postfix='2',
     kwargs = dict(jointype=jointype, r1postfix=r1postfix, r2postfix=r2postfix,
                   defaults=defaults, usemask=False, asrecarray=True)
     return join_by(key, r1, r2, **kwargs)
+
+
+del array_function_dispatch

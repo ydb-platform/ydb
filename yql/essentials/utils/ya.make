@@ -72,8 +72,10 @@ IF (OPENSOURCE_PROJECT != "yt")
         docs
         failure_injector
         fetch
+        json
         log
         memory_profiling
+        meta
         network
         oom_helper
         signals

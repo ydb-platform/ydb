@@ -55,12 +55,12 @@ public:
 const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
     {"create_time", TPqMetadataField(EMetaFieldType::Timestamp)},
     {"write_time", TPqMetadataField(EMetaFieldType::Timestamp, /* transparent */ true)},
-    {"partition_id", TPqMetadataField(EMetaFieldType::Uint64)},
+    {"partition_id", TPqMetadataField(EMetaFieldType::Uint64, /* transparent */ true)},
     {"offset", TPqMetadataField(EMetaFieldType::Uint64)},
     {"message_group_id", TPqMetadataField(EMetaFieldType::String)},
     {"seq_no", TPqMetadataField(EMetaFieldType::Uint64)},
     {"user_attributes", TPqMetadataField(EMetaFieldType::DictStringString)},
-    {"cluster", TPqMetadataField(EMetaFieldType::String)},
+    {"cluster", TPqMetadataField(EMetaFieldType::String, /* transparent */ true)},
 };
 
 } // anonymous namespace

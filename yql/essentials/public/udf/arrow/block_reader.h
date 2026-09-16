@@ -134,7 +134,8 @@ public:
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -155,7 +156,8 @@ public:
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -259,7 +261,8 @@ public:
         Y_DEBUG_ABORT_UNLESS(data.buffers.size() == 3);
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -274,7 +277,8 @@ public:
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -353,7 +357,8 @@ public:
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -364,7 +369,8 @@ public:
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
-                return out.PushChar(0);
+                out.PushChar(0);
+                return;
             }
             out.PushChar(1);
         }
@@ -704,7 +710,8 @@ public:
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if (IsNull(data, index)) {
-            return out.PushChar(0);
+            out.PushChar(0);
+            return;
         }
         out.PushChar(1);
 
@@ -713,7 +720,8 @@ public:
 
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
         if (!scalar.is_valid) {
-            return out.PushChar(0);
+            out.PushChar(0);
+            return;
         }
         out.PushChar(1);
 

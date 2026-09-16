@@ -295,10 +295,9 @@ struct TListJobsContinuationToken
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TListJobsContinuationTokenSerializer
+struct TListJobsContinuationTokenSerializer
     : public virtual NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TListJobsContinuationToken, TListJobsContinuationTokenSerializer);
 
     static void Register(TRegistrar registrar);
@@ -403,6 +402,8 @@ struct TOperation
     NYson::TYsonString TaskNames;
 
     NYson::TYsonString ControllerFeatures;
+
+    NYson::TYsonString CumulativeSpecPatch;
 
     NYTree::IAttributeDictionaryPtr OtherAttributes;
 };

@@ -11,6 +11,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -191,8 +192,8 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
-            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re"},
-            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re"},
+            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re('')re"},
+            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re("")re"},
             {.BeginPlain = TRangePattern::EmbeddedPythonBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
             {.BeginPlain = TRangePattern::EmbeddedJavaScriptBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
             {.BeginPlain = R"(@@)", .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
@@ -269,8 +270,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
 
 } // namespace NSQLHighlight
 
-template <>
-void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind value) {
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLHighlight::EUnitKind, out, value) {
     switch (value) {
         case NSQLHighlight::EUnitKind::Keyword:
             out << "keyword";

@@ -17,6 +17,11 @@ PEERDIR(
     yql/essentials/sql/v1/ide/completion/name/service/schema
     yql/essentials/sql/v1/ide/completion/name/service/static
     yql/essentials/sql/v1/ide/completion/name/service/union
+    yql/essentials/utils/string
+    library/cpp/unicode/utf8_char
+    library/cpp/unicode/utf8_iter
 )
+
+SIZE(MEDIUM)
 
 END()

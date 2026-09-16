@@ -65,6 +65,24 @@
       "output_token": "nextToken",
       "limit_key": "maxResults",
       "result_key": "managedWorkgroups"
+    },
+    "ListTracks": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "tracks"
+    },
+    "ListReservationOfferings": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "reservationOfferingsList"
+    },
+    "ListReservations": {
+      "input_token": "nextToken",
+      "output_token": "nextToken",
+      "limit_key": "maxResults",
+      "result_key": "reservationsList"
     }
   }
 }

@@ -1,4 +1,24 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value: "http://"|>,
+    <|value: "http://lenta.ru"|>,
+    <|value: "http://someone.livejournal.com/blog"|>,
+    <|value: "http://bbc.co.uk/"|>,
+    <|value: "https://www.yandex.com.tr/search"|>,
+    <|value: "https://www2.yandex.com.tr/search"|>,
+    <|value: "lenta.ru"|>,
+    <|value: "bbc.co.uk/news"|>,
+    <|value: "yandex.com.tr/maps?foo="|>,
+    <|value: "someone.livejournal.com?foo=bar#top"|>,
+    <|value: "a.b.c.d.e.f.g.h.i.j.k#l.m.n"|>,
+    <|value: "foo.tl.md/+%D1%8E%D0%BD%D0%B8%D0%BA%D0%BE%D0%B4"|>,
+    <|value: "xn--d1acpjx3f.xn--p1ai"|>,
+    <|value: "https://ya.ru:80/search/?text=test&lr=213#top"|>,
+    <|value: "https://ya.ru/search/?text=%2B"|>,
+    <|value: "goal://market.yandex.ru/product-page_scroll-box_product_visible"|>,
+    <|value: "Http://ya.ru"|>,
+    <|value: "ftp://someone.livejournal.com:80/blog"|>,
+);
+
 SELECT
     value,
     Url::Parse(value) AS parse,
@@ -26,4 +46,4 @@ SELECT
     Url::GetDomain(value, 3) as domain3,
     Url::GetDomainLevel(value) as domain_level,
     Url::Normalize(value) as norm
-FROM Input;
+FROM AS_TABLE($input);

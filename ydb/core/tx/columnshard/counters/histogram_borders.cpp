@@ -11,8 +11,10 @@ const std::map<i64, TString> THistorgamBorders::BytesBorders = [] {
     std::map<i64, TString> map;
     map[0] = "0";
     ui64 base = 1024;
-    for (auto i = 0; i < 20; i++, base *= 2) {
-        if (base >= 1024 * 1024) {
+    for (auto i = 0; i < 30; i++, base *= 2) {
+        if (base >= 1024 * 1024 * 1024) {
+            map[base] = ToString(base / 1024 / 1024 / 1024) + "Gb";
+        } else if (base >= 1024 * 1024) {
             map[base] = ToString(base / 1024 / 1024) + "Mb";
         } else {
             map[base] = ToString(base / 1024) + "Kb";
@@ -41,11 +43,12 @@ const std::set<i64> THistorgamBorders::PortionRecordBorders = { 0, 2500, 5000, 7
     1024000 };
 const std::set<i64> THistorgamBorders::PortionWidthBorders = [] {
     std::set<i64> result{ 0 };
-    for (auto i = 1ULL; i <= 10'000'000'000ULL; i *= 10) {
+    for (auto i = 1ULL; i <= 1'000'000ULL; i *= 10) {
         for (auto j = 1; j < 10; j++) {
             result.insert(i * j);
         }
     }
     return result;
 }();
+
 }   // namespace NKikimr::NColumnShard

@@ -44,6 +44,7 @@ void TIamAuthFactory::Initialize(
     }
     NActors::IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(
         config,
+        "ydb-http_proxy-datastreams",
         appData.FeatureFlags.GetEnableAccessServiceV2Interface());
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeAccessServiceID(),
@@ -66,7 +67,7 @@ void TIamAuthFactory::Initialize(
     const NYdb::TCredentialsProviderPtr credentialsProvider = credentialsProviderFactory->CreateProvider(coreFacility);
 
 
-    actor = NKikimr::NHttpProxy::CreateIamTokenServiceActor(config);
+    actor = NKikimr::NHttpProxy::CreateIamTokenServiceActor(config, "ydb-http_proxy-datastreams");
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeIamTokenServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));

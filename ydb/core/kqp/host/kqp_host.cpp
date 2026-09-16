@@ -1918,8 +1918,12 @@ private:
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
             configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
-        } else if (queryType != EKikimrQueryType::Script) {
-            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+        } else {
+            if (queryType != EKikimrQueryType::Script) {
+                configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+            }
+
+            configuration.ChangeDefaultPragmaValue(configuration.UseRuntimeListing, true);
         }
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
@@ -2022,7 +2026,8 @@ private:
     }
 
     void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))
+            && !AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations()) {
             return;
         }
 
@@ -2030,11 +2035,16 @@ private:
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
+        state->EnableSettingsValidation = true;
         state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
+        state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2044,7 +2054,13 @@ private:
         state->Gateway->OpenSession(sessionId, "username");
 
         if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
-            state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
+            if (requestContext->IsStreamingQuery) {
+                state->StreamingTopicsReadByDefault = true;
+
+                if (Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting()) {
+                    state->DeferredPublicationExtIdPrefix = TStringBuilder() << "__ydb_streaming:" << requestContext->StreamingQueryPath << ":" << requestContext->CurrentExecutionId;
+                }
+            }
 
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
@@ -2099,18 +2115,21 @@ private:
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
-        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
-        if (addExternalDataSources && FederatedQuerySetup) {
-            InitS3Provider(queryType);
-            InitGenericProvider();
-            InitSolomonProvider();
-
+        bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
+        if (isSupportedQueryType && FederatedQuerySetup) {
             TVector<std::function<TFuture<void>()>> finalizers;
-            if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider(finalizers);
+            if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
+                InitS3Provider(queryType);
+                InitGenericProvider();
+                InitSolomonProvider();
+
+                if (FederatedQuerySetup->YtGateway) {
+                    InitYtProvider(finalizers);
+                }
             }
-            if (FederatedQuerySetup->PqGatewayFactory) {
+            if (FederatedQuerySetup->PqGatewayFactory
+                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations())) {
                 InitPqProvider(finalizers);
             }
 
@@ -2153,6 +2172,7 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "DecimalCommonTypeConversionMode"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 || settingName == "RotateJoinTree"

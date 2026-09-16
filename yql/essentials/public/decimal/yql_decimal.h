@@ -1,11 +1,14 @@
 #pragma once
 
-#include <util/generic/strbuf.h>
 #include "yql_wide_int.h"
 
+#include <util/generic/strbuf.h>
+#include <util/generic/yexception.h>
+
 #include <array>
-#include <type_traits>
+#include <compare>
 #include <limits>
+#include <type_traits>
 
 namespace NYql::NDecimal {
 
@@ -25,19 +28,6 @@ using TUint128 = unsigned __int128;
 
 constexpr ui8 MaxPrecision = 35;
 
-namespace NDetail {
-
-inline constexpr auto DividersTable = []() {
-    std::array<TUint128, MaxPrecision + 1> arr{};
-    arr[0] = TUint128(1U);
-    for (ui8 i = 1; i <= MaxPrecision; ++i) {
-        arr[i] = arr[i - 1] * TUint128(10U);
-    }
-    return arr;
-}();
-
-} // namespace NDetail
-
 static_assert(sizeof(TInt128) == 16, "Wrong size of TInt128, expected 16");
 
 constexpr TInt128 Inf() {
@@ -52,11 +42,152 @@ constexpr TInt128 Err() {
     return Nan() + TInt128(1);
 }
 
+constexpr bool IsNormal(TInt128 value) {
+    return value < Inf() && value > -Inf();
+}
+
+constexpr bool IsComparable(TInt128 value) {
+    return value <= Inf() && value >= -Inf();
+}
+
+constexpr TUint128 GetDivider(ui8 scale);
+
+constexpr bool IsNan(TInt128 value);
+
+constexpr bool IsInf(TInt128 value);
+
+constexpr bool IsNormal(TInt128 value, ui8 precision);
+
+constexpr TInt128 GetIntegralAddSubOverflowThreshold(ui8 precision, ui8 scale) {
+    return static_cast<TInt128>(GetDivider(precision - scale)) * TInt128(2);
+}
+
+namespace NDetail {
+
+enum class EDecimalAdditiveOperation {
+    Add,
+    Subtract,
+};
+
+template <EDecimalAdditiveOperation Operation, typename TRight>
+class TDecimalAdditive {
+public:
+    TDecimalAdditive(ui8 precision, ui8 scale)
+        : Precision_(precision)
+        , IntegralOverflowThreshold_(GetIntegralAddSubOverflowThreshold(precision, scale))
+        , ScaleMultiplier_(GetDivider(scale))
+    {
+    }
+
+    TInt128 Do(TInt128 left, TRight right) const {
+        if (IsNan(left)) {
+            return Nan();
+        }
+        if (IsInf(left)) {
+            return left;
+        }
+
+        const TInt128 extendedRight = static_cast<TInt128>(right);
+        if (extendedRight <= -IntegralOverflowThreshold_ || extendedRight >= IntegralOverflowThreshold_) {
+            return GetUnavoidableOverflow(extendedRight);
+        }
+
+        const TInt128 decimalRight = extendedRight * ScaleMultiplier_;
+        const TInt128 result = Operation == EDecimalAdditiveOperation::Add
+                                   ? left + decimalRight
+                                   : left - decimalRight;
+        if (IsNormal(result, Precision_)) {
+            return result;
+        }
+        return result > 0 ? Inf() : -Inf();
+    }
+
+private:
+    static TInt128 GetUnavoidableOverflow(TInt128 right) {
+        if constexpr (Operation == EDecimalAdditiveOperation::Subtract) {
+            return right > 0 ? -Inf() : Inf();
+        }
+        return right > 0 ? Inf() : -Inf();
+    }
+
+    const ui8 Precision_;
+    const TInt128 IntegralOverflowThreshold_;
+    const TInt128 ScaleMultiplier_;
+};
+
+inline constexpr auto DividersTable = []() {
+    std::array<TUint128, MaxPrecision + 1> arr{};
+    arr[0] = TUint128(1U);
+    for (ui8 i = 1; i <= MaxPrecision; ++i) {
+        arr[i] = arr[i - 1] * TUint128(10U);
+    }
+    return arr;
+}();
+
+inline constexpr auto MultiplicationLimitsTable = []() {
+    std::array<TUint128, MaxPrecision + 1> arr{};
+    const TUint128 maxCoefficient = static_cast<TUint128>(Inf() - TInt128(1));
+    for (ui8 i = 0; i <= MaxPrecision; ++i) {
+        arr[i] = maxCoefficient / DividersTable[i];
+    }
+    return arr;
+}();
+
+Y_FORCE_INLINE constexpr std::strong_ordering CompareMantissas(TInt128 left, TInt128 right) {
+    return left < right   ? std::strong_ordering::less
+           : left > right ? std::strong_ordering::greater
+                          : std::strong_ordering::equal;
+}
+
+Y_FORCE_INLINE constexpr std::strong_ordering CompareScaledMagnitudes(
+    TInt128 lowerScaleMagnitude, TInt128 higherScaleMagnitude, ui8 scaleDifference) {
+    const TInt128 multiplicationLimit =
+        static_cast<TInt128>(MultiplicationLimitsTable[scaleDifference]);
+    if (lowerScaleMagnitude > multiplicationLimit) {
+        return std::strong_ordering::greater;
+    }
+    const TInt128 scaledMagnitude =
+        lowerScaleMagnitude * static_cast<TInt128>(DividersTable[scaleDifference]);
+    return CompareMantissas(scaledMagnitude, higherScaleMagnitude);
+}
+
+Y_FORCE_INLINE constexpr std::strong_ordering Reverse(std::strong_ordering comparison) {
+    return comparison < 0   ? std::strong_ordering::greater
+           : comparison > 0 ? std::strong_ordering::less
+                            : std::strong_ordering::equal;
+}
+
+Y_FORCE_INLINE constexpr std::strong_ordering Compare(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    const bool signsDiffer = (left < 0) != (right < 0);
+    if (signsDiffer || scaleDifference == 0 || !IsNormal(left) || !IsNormal(right)) {
+        return CompareMantissas(left, right);
+    }
+    const bool negative = left < 0;
+    const TInt128 leftMagnitude = negative ? -left : left;
+    const TInt128 rightMagnitude = negative ? -right : right;
+    const ui8 difference =
+        static_cast<ui8>(scaleDifference > 0 ? scaleDifference : -scaleDifference);
+    const auto magnitudeComparison = scaleDifference > 0
+                                         ? CompareScaledMagnitudes(leftMagnitude, rightMagnitude, difference)
+                                         : Reverse(CompareScaledMagnitudes(rightMagnitude, leftMagnitude, difference));
+    return negative ? Reverse(magnitudeComparison) : magnitudeComparison;
+}
+
+} // namespace NDetail
+
 constexpr TUint128 GetDivider(ui8 scale) {
     if (scale > MaxPrecision) {
         return static_cast<TUint128>(Inf());
     }
     return NDetail::DividersTable[scale];
+}
+
+constexpr TUint128 GetMultiplicationLimit(ui8 scale) {
+    if (scale > MaxPrecision) {
+        throw yexception() << "Scale is too large";
+    }
+    return NDetail::MultiplicationLimitsTable[scale];
 }
 
 template <ui8 Precision>
@@ -85,14 +216,6 @@ constexpr bool IsNan(TInt128 v) {
 
 constexpr bool IsInf(TInt128 v) {
     return v == Inf() || v == -Inf();
-}
-
-constexpr bool IsNormal(TInt128 v) {
-    return v < Inf() && v > -Inf();
-}
-
-constexpr bool IsComparable(TInt128 v) {
-    return v <= Inf() && v >= -Inf();
 }
 
 constexpr bool IsNormal(TInt128 v, ui8 precision) {
@@ -211,28 +334,70 @@ Y_FORCE_INLINE constexpr TInt128 Sub(TInt128 l, TInt128 r, ui8 precision) {
     return s > 0 ? +Inf() : -Inf();
 }
 
-Y_FORCE_INLINE constexpr bool IsLess(TInt128 l, TInt128 r) {
-    return IsComparable(l) && IsComparable(r) && l < r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsLess(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(left) || !IsComparable(right)) {
+            return false;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) < 0;
 }
 
-Y_FORCE_INLINE constexpr bool IsGreater(TInt128 l, TInt128 r) {
-    return IsComparable(l) && IsComparable(r) && l > r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsGreater(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(left) || !IsComparable(right)) {
+            return false;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) > 0;
 }
 
-Y_FORCE_INLINE constexpr bool IsEqual(TInt128 l, TInt128 r) {
-    return IsComparable(l) && l == r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsEqual(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(left)) {
+            return false;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) == 0;
 }
 
-Y_FORCE_INLINE constexpr bool IsLessOrEqual(TInt128 l, TInt128 r) {
-    return IsComparable(l) && IsComparable(r) && l <= r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsLessOrEqual(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(left) || !IsComparable(right)) {
+            return false;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) <= 0;
 }
 
-Y_FORCE_INLINE constexpr bool IsGreaterOrEqual(TInt128 l, TInt128 r) {
-    return IsComparable(l) && IsComparable(r) && l >= r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsGreaterOrEqual(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(left) || !IsComparable(right)) {
+            return false;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) >= 0;
 }
 
-Y_FORCE_INLINE constexpr bool IsNotEqual(TInt128 l, TInt128 r) {
-    return !IsComparable(r) || l != r;
+template <bool Aggregate = false>
+Y_FORCE_INLINE constexpr bool IsNotEqual(
+    TInt128 left, TInt128 right, i8 scaleDifference) {
+    if constexpr (!Aggregate) {
+        if (!IsComparable(right)) {
+            return true;
+        }
+    }
+    return NDetail::Compare(left, right, scaleDifference) != 0;
 }
 
 Y_FORCE_INLINE constexpr TInt128 Negate(TInt128 v) {
@@ -346,6 +511,12 @@ public:
         return IsNan(mul) ? Nan() : (mul > 0 ? +Inf() : -Inf());
     }
 };
+
+template <typename TRight>
+using TDecimalAdd = NDetail::TDecimalAdditive<NDetail::EDecimalAdditiveOperation::Add, TRight>;
+
+template <typename TRight>
+using TDecimalSub = NDetail::TDecimalAdditive<NDetail::EDecimalAdditiveOperation::Subtract, TRight>;
 
 template <typename TRight>
 class TDecimalDivisor {

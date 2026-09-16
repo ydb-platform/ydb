@@ -15,14 +15,16 @@ class TUserToken;
 
 namespace NKikimr::NPQ::NSchema {
 
-enum EEv : ui32 {
+enum class EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvSchemaOperationResponse,
     EvSchemaResponse,
+    EvDescribeOperationResponse,
+    EvCheckDlqTopicsResponse,
     EvEnd
 };
 
-struct TEvSchemaOperationResponse: public NActors::TEventLocal<TEvSchemaOperationResponse, EEv::EvSchemaOperationResponse> {
+struct TEvSchemaOperationResponse: public NActors::TEventLocal<TEvSchemaOperationResponse, static_cast<ui32>(EEv::EvSchemaOperationResponse)> {
     TEvSchemaOperationResponse(
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         TString&& errorMessage = {}
@@ -43,7 +45,7 @@ struct TSchemaResponse {
     NKikimrSchemeOp::TModifyScheme ModifyScheme;
 };
 
-struct TEvSchemaResponse: public NActors::TEventLocal<TEvSchemaResponse, EEv::EvSchemaResponse>
+struct TEvSchemaResponse: public NActors::TEventLocal<TEvSchemaResponse, static_cast<ui32>(EEv::EvSchemaResponse)>
                         , public TSchemaResponse {
     TEvSchemaResponse(
         const TString& path,

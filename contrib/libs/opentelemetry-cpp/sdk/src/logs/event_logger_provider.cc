@@ -5,6 +5,7 @@
 
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
 #  include "opentelemetry/nostd/shared_ptr.h"
+#  include "opentelemetry/nostd/string_view.h"
 #  include "opentelemetry/sdk/common/global_log_handler.h"
 #  include "opentelemetry/sdk/logs/event_logger.h"
 #endif

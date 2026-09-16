@@ -1,6 +1,9 @@
 #include "impl.h"
 #include "config.h"
 
+#include <ydb/core/util/format.h>
+#include <ydb/core/blobstorage/base/utility.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 
 namespace NKikimr::NBsController {
@@ -397,13 +400,16 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
-                NKikimrBridge::TGroupState::EStage stage;
+                NKikimrBridge::TGroupState::EStage stage = NKikimrBridge::TGroupState::BLOCKS;
+                bool found = false;
                 for (const auto& pile : bridgeGroupInfo.GetBridgeGroupState().GetPile()) {
                     if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId) {
                         stage = pile.GetStage();
+                        found = true;
                         break;
                     }
                 }
+                Y_DEBUG_ABORT_UNLESS(found);
                 updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TRegisterError{
                     .Stage = stage,
                     .Error = syncer.GetErrorReason(),

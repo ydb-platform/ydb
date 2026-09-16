@@ -10,6 +10,8 @@
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -45,8 +47,9 @@ public:
         TBaseActor<TSchemaOperationActor>::PassAway();
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << ParentId << "[" << Path << "] ";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"path", Path});
     }
 
     void OnException(const std::exception& exc) override {
@@ -55,7 +58,10 @@ public:
 
 private:
     void DoPropose() {
-        LOG_D("DoPropose retry: " << ProposeBackoff.GetIteration());
+        LOG_D(
+            "DoPropose",
+            {"retry", ProposeBackoff.GetIteration()}
+        );
         Become(&TSchemaOperationActor::ProposeState);
 
         auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -129,7 +135,11 @@ private:
 
 private:
     void DoWaitCompletion() {
-        LOG_D("DoWaitTxCompletion SchemeShardTabletId: " << SchemeShardTabletId << " TxId: " << TxId);
+        LOG_D(
+            "DoWaitTxCompletion",
+            {"schemeShardTabletId", SchemeShardTabletId},
+            {"txId", TxId}
+        );
         Become(&TSchemaOperationActor::WaitCompletionState);
 
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
@@ -166,7 +176,10 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
+        LOG_D(
+            errorMessage,
+            {"replyErrorAndDie", errorCode}
+        );
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }

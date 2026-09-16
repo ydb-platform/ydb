@@ -217,14 +217,19 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
                 dictTable = indexTables[0];
                 YQL_ENSURE(dictTable.EndsWith(NKikimr::NTableIndex::NFulltext::DictTable));
                 dataTable = indexTables[1];
+                YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                YQL_ENSURE(indexTables.size() == 3, "Global fulltext compact relevance index should have 3 tables");
+                indexTable = indexTables[2];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                dataTable = indexTables[0];
                 YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
@@ -233,8 +238,7 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                if (!dictTable.empty()) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -242,8 +246,7 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                        if (!dictTable.empty()) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;
@@ -486,7 +489,25 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         } else {
             const auto& tableData = tablesData->ExistingTable(cluster, table);
             YQL_ENSURE(tableData.Metadata);
-            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
+
+            bool needMainTableRead = bool(tableOp & KikimrReadOps());
+            if (!needMainTableRead && tableOp != TYdbOperation::Replace && !write.ReturningColumns().Empty()) {
+                auto inputColumnsSetting = GetSetting(write.Settings().Ref(), "input_columns");
+                YQL_ENSURE(inputColumnsSetting);
+                auto inputColumns = TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>();
+                THashSet<TStringBuf> inputColumnsSet;
+                for (const auto& col : inputColumns) {
+                    inputColumnsSet.insert(col.Value());
+                }
+                for (const auto& returnCol : write.ReturningColumns().Cast<TCoAtomList>()) {
+                    if (!inputColumnsSet.contains(returnCol.Value())) {
+                        needMainTableRead = true;
+                        break;
+                    }
+                }
+            }
+
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
         }
 
         if (!write.ReturningColumns().Empty()) {
@@ -577,7 +598,10 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
+        const bool needMainTableRead = bool(tableOp & KikimrReadOps())
+            || !del.ReturningColumns().Empty(); // For RETURNING row existence must be checked.
+
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, del.Pos())

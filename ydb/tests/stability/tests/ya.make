@@ -45,11 +45,13 @@ PY3TEST()
             ydb/tests/stress/testshard_workload
             ydb/tests/stress/streaming
             ydb/tests/stress/kv_volume
-            ydb/tests/stress/topic_sqs
+            ydb/tests/stress/sqs_topic
             ydb/tests/stability/nemesis
             ydb/tests/stress/min_max_workload
             ydb/tests/stress/result_set_format
+            ydb/tests/stress/remove_storage_groups
             ydb/tests/stress/system_tablet_backup
+            ydb/tests/stress/tpcc
         )
     ENDIF()
 

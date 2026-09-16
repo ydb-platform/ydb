@@ -5,6 +5,7 @@
 #ifndef BOOST_CHARCONV_DETAIL_TO_CHARS_RESULT_HPP
 #define BOOST_CHARCONV_DETAIL_TO_CHARS_RESULT_HPP
 
+#include <boost/charconv/detail/config.hpp>
 #include <system_error>
 
 // 22.13.2, Primitive numerical output conversion
@@ -16,17 +17,17 @@ struct to_chars_result
     char *ptr;
     std::errc ec;
 
-    constexpr friend bool operator==(const to_chars_result &lhs, const to_chars_result &rhs) noexcept
+    BOOST_CHARCONV_HOST_DEVICE constexpr friend bool operator==(const to_chars_result &lhs, const to_chars_result &rhs) noexcept
     {
         return lhs.ptr == rhs.ptr && lhs.ec == rhs.ec;
     }
 
-    constexpr friend bool operator!=(const to_chars_result &lhs, const to_chars_result &rhs) noexcept
+    BOOST_CHARCONV_HOST_DEVICE constexpr friend bool operator!=(const to_chars_result &lhs, const to_chars_result &rhs) noexcept
     {
         return !(lhs == rhs);
     }
 
-    constexpr explicit operator bool() const noexcept { return ec == std::errc{}; }
+    BOOST_CHARCONV_HOST_DEVICE constexpr explicit operator bool() const noexcept { return ec == std::errc{}; }
 };
 
 }} // Namespaces

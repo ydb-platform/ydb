@@ -154,6 +154,7 @@ public:
 
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
+    virtual bool IsAborted() const = 0;
 
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
         return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
@@ -366,12 +367,8 @@ public:
         }
     }
 
-    bool CheckForCleanup(const TSnapshot& snapshot) const {
-        return IsRemovedFor(snapshot);
-    }
-
-    bool CheckForCleanup() const {
-        return HasRemoveSnapshot();
+    virtual bool MayGetForScanAt(const TSnapshot& snapshot) const {
+        return !IsRemovedFor(snapshot);
     }
 
     TPortionAddress GetAddress() const {

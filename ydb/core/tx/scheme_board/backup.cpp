@@ -20,6 +20,8 @@
 
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_BACKUP
+
 namespace NKikimr::NSchemeBoard {
 
 using namespace NJson;
@@ -67,8 +69,11 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_BACKUP_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "backup"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TBackupActor"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     struct TPathDescriptionAggregate {
@@ -123,6 +128,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         try {
             OutputFile.ConstructInPlace(FilePath);
         } catch (...) {
@@ -157,11 +163,10 @@ private:
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
 
-            SBB_LOG_D("ProcessPaths"
-                << ", path: " << path
-                << ", cookie: " << cookie
-                << ", paths in progress: " << PathByCookie.size()
-            );
+            YDB_LOG_DEBUG("ProcessPaths",
+                {"path", path},
+                {"cookie", cookie},
+                {"inProgress", PathByCookie.size()});
         }
 
         SendProgressUpdate();
@@ -187,18 +192,22 @@ private:
         const ui64 cookie = ev->Cookie;
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Unexpected cookie: " << cookie);
+            YDB_LOG_NOTICE("Unexpected cookie",
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
 
         const TString& path = it->second;
-        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"path", path});
 
         const auto replicas = ev->Get()->GetPlainReplicas();
         if (replicas.empty()) {
-            SBB_LOG_I("Empty replica list"
-                << ", path: " << path
-            );
+            YDB_LOG_INFO("Empty replica list",
+                {"selfId", this->SelfId()},
+                {"path", path});
             EmptyReplicaList.emplace(path);
             return MarkPathCompleted(it);
         }
@@ -232,12 +241,16 @@ private:
         const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_D("Received description with inactive cookie: " << cookie);
+            YDB_LOG_DEBUG("Received description with inactive cookie",
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
 
         const TString path = it->second;
-        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"path", path});
 
         TString jsonDescription = std::move(*ev->Get()->Record.MutableJson());
         if (!jsonDescription.empty()) {
@@ -251,13 +264,16 @@ private:
                                 const auto version = std::stoull(pathDescription["Self"]["PathVersion"].GetStringSafe());
                                 auto aggregate = DescriptionsByCookie.find(cookie);
                                 if (aggregate == DescriptionsByCookie.end()) {
-                                    SBB_LOG_N("No description aggregate for cookie: " << cookie);
+                                    YDB_LOG_NOTICE("No description aggregate",
+                                        {"selfId", this->SelfId()},
+                                        {"cookie", cookie});
                                     return;
                                 }
                                 if (!aggregate->second.AddDescription(std::move(jsonDescription), version, GetReplicaGroupIndex(ev->Cookie))) {
-                                    SBB_LOG_N("Invalid replica group: " << GetReplicaGroupIndex(ev->Cookie)
-                                        << ", cookie: " << ev->Cookie
-                                    );
+                                    YDB_LOG_NOTICE("Invalid replica group",
+                                        {"selfId", this->SelfId()},
+                                        {"group", GetReplicaGroupIndex(ev->Cookie)},
+                                        {"cookie", ev->Cookie});
                                     return;
                                 }
                                 if (aggregate->second.IsMajorityReached()) {
@@ -269,7 +285,8 @@ private:
                                     MarkPathCompleted(it);
                                 }
                             } else {
-                                SBB_LOG_I("No version in path description");
+                                YDB_LOG_INFO("No version in path description",
+                                    {"selfId", this->SelfId()});
                             }
                         } else {
                             AddChildrenToPending(pathDescription, path);
@@ -280,9 +297,10 @@ private:
                     }
                 }
             } catch (const std::exception& e) {
-                SBB_LOG_I("Parsing error: " << e.what()
-                    << ", path: " << path
-                );
+                YDB_LOG_INFO("Parsing error",
+                    {"selfId", this->SelfId()},
+                    {"error", e.what()},
+                    {"path", path});
             }
         }
 
@@ -306,9 +324,11 @@ private:
     void AddChildrenToPending(const TJsonValue& pathDescription, const TString& path) {
         if (pathDescription.Has("Children")) {
             const auto& children = pathDescription["Children"];
-            SBB_LOG_D("Queue children: " << JoinSeq(", ", children.GetArraySafe() | std::views::transform([](const TJsonValue& child) {
-                return child["Name"].GetStringSafe().Quote();
-            })));
+            YDB_LOG_DEBUG("Queue children",
+                {"selfId", this->SelfId()},
+                {"children", JoinSeq(", ", children.GetArraySafe() | std::views::transform([](const TJsonValue& child) {
+                    return child["Name"].GetStringSafe().Quote();
+                }))});
             for (const auto& child : children.GetArraySafe()) {
                 if (child.Has("Name")) {
                     TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
@@ -328,12 +348,13 @@ private:
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
             // assume already processed
-            SBB_LOG_D("Timeout with inactive cookie: " << cookie);
+            YDB_LOG_DEBUG("Timeout with inactive cookie",
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
-        SBB_LOG_I("Timeout"
-            << ", path: " << it->second
-        );
+        YDB_LOG_INFO("Timeout",
+            {"path", it->second});
         Timeouts.emplace(it->second);
         MarkPathCompleted(it);
         if (RequireMajority) {
@@ -345,28 +366,27 @@ private:
         const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Undelivered"
-                << ", unexpected cookie: " << cookie
-            );
+            YDB_LOG_NOTICE("Undelivered",
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
-        SBB_LOG_I("Undelivered"
-            << ", path: " << it->second
-        );
+        YDB_LOG_INFO("Undelivered",
+            {"selfId", this->SelfId()},
+            {"path", it->second});
         Undelivered.emplace(it->second);
         MarkPathCompleted(it);
     }
 
     void SendProgressUpdate() {
-        SBB_LOG_D("SendProgressUpdate"
-            << ", paths in progress: " << PathByCookie.size()
-            << ", processed paths: " << ProcessedPaths
-            << ", total paths: " << TotalPaths
-            << ", pending paths: " << PendingPaths.size()
-            << ", timeouts: " << Timeouts.size()
-            << ", delivery problems: " << Undelivered.size()
-            << ", empty replica list: " << EmptyReplicaList.size()
-        );
+        YDB_LOG_DEBUG("SendProgressUpdate",
+            {"inProgress", PathByCookie.size()},
+            {"processedPaths", ProcessedPaths},
+            {"totalPaths", TotalPaths},
+            {"pendingPaths", PendingPaths.size()},
+            {"timeouts", Timeouts.size()},
+            {"deliveryProblems", Undelivered.size()},
+            {"emptyReplicaList", EmptyReplicaList.size()});
         Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, ProcessedPaths));
     }
 
@@ -398,6 +418,7 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
@@ -433,8 +454,11 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_RESTORE_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "restore"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TRestoreActor"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     TRestoreActor(const TString& filePath, ui64 schemeShardId, ui64 generation, const TActorId& parent)
@@ -446,6 +470,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         try {
             InputFile.ConstructInPlace(FilePath);
         } catch (...) {
@@ -476,7 +501,9 @@ private:
             TotalPaths++;
             descriptions.emplace_back(pathId, std::move(description));
             if (TotalPaths % 1'000 == 0) {
-                SBB_LOG_D("Reading file, parsed paths descriptions: " << TotalPaths);
+                YDB_LOG_DEBUG("Reading file, parsed paths",
+                    {"selfId", this->SelfId()},
+                    {"descriptions", TotalPaths});
                 SendProgressUpdate();
             }
         }
@@ -488,9 +515,9 @@ private:
     }
 
     void Populate(std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& descriptions) {
-        SBB_LOG_D("Populate"
-            << ", total paths: " << TotalPaths
-        );
+        YDB_LOG_DEBUG("Populate",
+            {"selfId", this->SelfId()},
+            {"paths", TotalPaths});
         std::sort(descriptions.begin(), descriptions.end());
         auto paths = descriptions | std::views::keys;
         PathsToProcess = TVector<TPathId>(paths.begin(), paths.end());
@@ -507,9 +534,12 @@ private:
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoResponse::TPtr& ev) {
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"selfId", this->SelfId()},
+            {"ev", ev->Get()->ToString()});
         if (ev->Sender != Populator || !ev->Get()->Record.HasPopulatorResponse()) {
-            SBB_LOG_N("Unexpected info response");
+            YDB_LOG_NOTICE("Unexpected info response",
+                {"selfId", this->SelfId()});
             return;
         }
 
@@ -545,6 +575,7 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvInfoResponse, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);

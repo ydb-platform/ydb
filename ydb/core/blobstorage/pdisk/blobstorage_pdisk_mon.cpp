@@ -130,11 +130,20 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceActualCostNs, true);
     COUNTER_INIT(DeviceGroup, DeviceOverestimationRatio, false);
     COUNTER_INIT(DeviceGroup, DeviceNonperformanceMs, false);
+    COUNTER_INIT(DeviceGroup, DeviceOverestimationRatioMerged, false);
+    COUNTER_INIT(DeviceGroup, DeviceNonperformanceMsMerged, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOverestimationDroppedSamples, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceInterruptedSystemCalls, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceSubmitThreadBusyTimeNs, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
+
+    COUNTER_INIT(DeviceGroup, RegularUringCount, false);
+    COUNTER_INIT(DeviceGroup, FallbackUringCount, false);
+    COUNTER_INIT(DeviceGroup, FallbackPDiskCount, false);
+    COUNTER_INIT(DeviceGroup, UringCompletionThreadCPU, true);
+    COUNTER_INIT(DeviceGroup, UringCompletionThreadBusyTimeNs, true);
 
     UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
@@ -156,6 +165,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     TRACKER_INIT_IF_EXTENDED(UpdateDurationTracker.UpdateCycleTime, updateCycle, Time in millisec);
 
+    HISTOGRAM_INIT(DeviceWritesSizes, deviceWritesSizes);
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);

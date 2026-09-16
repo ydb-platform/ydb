@@ -197,6 +197,10 @@ NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationPara
 
 TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams);
 
+NProto::TTouchOperationParams TouchOperationParamsToProto(const TTouchOperationParams& touchOperationParams);
+
+TTouchOperationParams TouchOperationParamsFromProto(const NProto::TTouchOperationParams& protoTouchOperationParams);
+
 NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams);
 
 TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);

@@ -53,6 +53,19 @@
       ],
       "documentation":"<p>Gets information about one or more builds.</p>"
     },
+    "BatchGetCommandExecutions":{
+      "name":"BatchGetCommandExecutions",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchGetCommandExecutionsInput"},
+      "output":{"shape":"BatchGetCommandExecutionsOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"}
+      ],
+      "documentation":"<p>Gets information about the command executions.</p>"
+    },
     "BatchGetFleets":{
       "name":"BatchGetFleets",
       "http":{
@@ -104,6 +117,19 @@
         {"shape":"InvalidInputException"}
       ],
       "documentation":"<p> Returns an array of reports. </p>"
+    },
+    "BatchGetSandboxes":{
+      "name":"BatchGetSandboxes",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchGetSandboxesInput"},
+      "output":{"shape":"BatchGetSandboxesOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"}
+      ],
+      "documentation":"<p>Gets information about the sandbox status.</p>"
     },
     "CreateFleet":{
       "name":"CreateFleet",
@@ -411,6 +437,20 @@
       ],
       "documentation":"<p>Gets a list of build identifiers for the specified build project, with each build identifier representing a single build.</p>"
     },
+    "ListCommandExecutionsForSandbox":{
+      "name":"ListCommandExecutionsForSandbox",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListCommandExecutionsForSandboxInput"},
+      "output":{"shape":"ListCommandExecutionsForSandboxOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Gets a list of command executions for a sandbox.</p>"
+    },
     "ListCuratedEnvironmentImages":{
       "name":"ListCuratedEnvironmentImages",
       "http":{
@@ -486,6 +526,33 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p> Returns a list of ARNs for the reports that belong to a <code>ReportGroup</code>. </p>"
+    },
+    "ListSandboxes":{
+      "name":"ListSandboxes",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListSandboxesInput"},
+      "output":{"shape":"ListSandboxesOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"}
+      ],
+      "documentation":"<p>Gets a list of sandboxes.</p>"
+    },
+    "ListSandboxesForProject":{
+      "name":"ListSandboxesForProject",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListSandboxesForProjectInput"},
+      "output":{"shape":"ListSandboxesForProjectOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Gets a list of sandboxes for a given project.</p>"
     },
     "ListSharedProjects":{
       "name":"ListSharedProjects",
@@ -598,6 +665,49 @@
       ],
       "documentation":"<p>Starts a batch build for a project.</p>"
     },
+    "StartCommandExecution":{
+      "name":"StartCommandExecution",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartCommandExecutionInput"},
+      "output":{"shape":"StartCommandExecutionOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Starts a command execution.</p>"
+    },
+    "StartSandbox":{
+      "name":"StartSandbox",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartSandboxInput"},
+      "output":{"shape":"StartSandboxOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccountSuspendedException"}
+      ],
+      "documentation":"<p>Starts a sandbox.</p>"
+    },
+    "StartSandboxConnection":{
+      "name":"StartSandboxConnection",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StartSandboxConnectionInput"},
+      "output":{"shape":"StartSandboxConnectionOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Starts a sandbox connection.</p>"
+    },
     "StopBuild":{
       "name":"StopBuild",
       "http":{
@@ -625,6 +735,20 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Stops a running batch build.</p>"
+    },
+    "StopSandbox":{
+      "name":"StopSandbox",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"StopSandboxInput"},
+      "output":{"shape":"StopSandboxOutput"},
+      "errors":[
+        {"shape":"InvalidInputException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Stops a sandbox.</p>"
     },
     "UpdateFleet":{
       "name":"UpdateFleet",
@@ -702,9 +826,14 @@
   "shapes":{
     "AccountLimitExceededException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>An Amazon Web Services service limit was exceeded for the calling Amazon Web Services account.</p>",
+      "exception":true
+    },
+    "AccountSuspendedException":{
+      "type":"structure",
+      "members":{},
+      "documentation":"<p>The CodeBuild access has been suspended for the calling Amazon Web Services account.</p>",
       "exception":true
     },
     "ArtifactNamespace":{
@@ -830,6 +959,36 @@
         }
       }
     },
+    "BatchGetCommandExecutionsInput":{
+      "type":"structure",
+      "required":[
+        "sandboxId",
+        "commandExecutionIds"
+      ],
+      "members":{
+        "sandboxId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxId</code> or <code>sandboxArn</code>.</p>"
+        },
+        "commandExecutionIds":{
+          "shape":"CommandExecutionIds",
+          "documentation":"<p>A comma separated list of <code>commandExecutionIds</code>.</p>"
+        }
+      }
+    },
+    "BatchGetCommandExecutionsOutput":{
+      "type":"structure",
+      "members":{
+        "commandExecutions":{
+          "shape":"CommandExecutions",
+          "documentation":"<p>Information about the requested command executions.</p>"
+        },
+        "commandExecutionsNotFound":{
+          "shape":"CommandExecutionIds",
+          "documentation":"<p>The IDs of command executions for which information could not be found.</p>"
+        }
+      }
+    },
     "BatchGetFleetsInput":{
       "type":"structure",
       "required":["names"],
@@ -919,6 +1078,29 @@
         "reportsNotFound":{
           "shape":"ReportArns",
           "documentation":"<p> An array of ARNs passed to <code>BatchGetReportGroups</code> that are not associated with a <code>Report</code>. </p>"
+        }
+      }
+    },
+    "BatchGetSandboxesInput":{
+      "type":"structure",
+      "required":["ids"],
+      "members":{
+        "ids":{
+          "shape":"SandboxIds",
+          "documentation":"<p>A comma separated list of <code>sandboxIds</code> or <code>sandboxArns</code>.</p>"
+        }
+      }
+    },
+    "BatchGetSandboxesOutput":{
+      "type":"structure",
+      "members":{
+        "sandboxes":{
+          "shape":"Sandboxes",
+          "documentation":"<p>Information about the requested sandboxes.</p>"
+        },
+        "sandboxesNotFound":{
+          "shape":"SandboxIds",
+          "documentation":"<p>The IDs of sandboxes for which information could not be found.</p>"
         }
       }
     },
@@ -1236,6 +1418,10 @@
         "debugSessionEnabled":{
           "shape":"WrapperBoolean",
           "documentation":"<p>Specifies if session debugging is enabled for this batch build. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/session-manager.html\">Viewing a running build in Session Manager</a>. Batch session debugging is not supported for matrix batch builds.</p>"
+        },
+        "reportArns":{
+          "shape":"BuildReportArns",
+          "documentation":"<p>An array that contains the ARNs of reports created by merging reports from builds associated with this batch build.</p>"
         }
       },
       "documentation":"<p>Contains information about a batch build.</p>"
@@ -1584,6 +1770,75 @@
       "type":"list",
       "member":{"shape":"CodeCoverage"}
     },
+    "CommandExecution":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The ID of the command execution.</p>"
+        },
+        "sandboxId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxId</code>.</p>"
+        },
+        "submitTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the command execution process was initially submitted, expressed in Unix time format.</p>"
+        },
+        "startTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the command execution process started, expressed in Unix time format.</p>"
+        },
+        "endTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the command execution process ended, expressed in Unix time format.</p>"
+        },
+        "status":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The status of the command execution.</p>"
+        },
+        "command":{
+          "shape":"SensitiveNonEmptyString",
+          "documentation":"<p>The command that needs to be executed.</p>"
+        },
+        "type":{
+          "shape":"CommandType",
+          "documentation":"<p>The command type.</p>"
+        },
+        "exitCode":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The exit code to return upon completion.</p>"
+        },
+        "standardOutputContent":{
+          "shape":"SensitiveNonEmptyString",
+          "documentation":"<p>The text written by the command to stdout.</p>"
+        },
+        "standardErrContent":{
+          "shape":"SensitiveNonEmptyString",
+          "documentation":"<p>The text written by the command to stderr.</p>"
+        },
+        "logs":{"shape":"LogsLocation"},
+        "sandboxArn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxArn</code>.</p>"
+        }
+      },
+      "documentation":"<p>Contains command execution information.</p>"
+    },
+    "CommandExecutionIds":{
+      "type":"list",
+      "member":{"shape":"NonEmptyString"},
+      "max":100,
+      "min":1
+    },
+    "CommandExecutions":{
+      "type":"list",
+      "member":{"shape":"CommandExecution"}
+    },
+    "CommandType":{
+      "type":"string",
+      "enum":["SHELL"]
+    },
     "ComputeConfiguration":{
       "type":"structure",
       "members":{
@@ -1602,9 +1857,13 @@
         "machineType":{
           "shape":"MachineType",
           "documentation":"<p>The machine type of the instance type included in your fleet.</p>"
+        },
+        "instanceType":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The EC2 instance type to be launched in your fleet.</p>"
         }
       },
-      "documentation":"<p>Contains compute attributes. These attributes only need be specified when your project's or fleet's <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code>.</p>"
+      "documentation":"<p>Contains compute attributes. These attributes only need be specified when your project's or fleet's <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code> or <code>CUSTOM_INSTANCE_TYPE</code>.</p>"
     },
     "ComputeType":{
       "type":"string",
@@ -1619,7 +1878,8 @@
         "BUILD_LAMBDA_4GB",
         "BUILD_LAMBDA_8GB",
         "BUILD_LAMBDA_10GB",
-        "ATTRIBUTE_BASED_COMPUTE"
+        "ATTRIBUTE_BASED_COMPUTE",
+        "CUSTOM_INSTANCE_TYPE"
       ]
     },
     "ComputeTypesAllowed":{
@@ -1649,11 +1909,11 @@
         },
         "computeType":{
           "shape":"ComputeType",
-          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
+          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>CUSTOM_INSTANCE_TYPE</code>: Specify the instance type for your compute fleet. For a list of supported instance types, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.instance-types\">Supported instance families </a> in the <i>CodeBuild User Guide</i>.</p> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
         },
         "computeConfiguration":{
           "shape":"ComputeConfiguration",
-          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code>.</p>"
+          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code> or <code>CUSTOM_INSTANCE_TYPE</code>.</p>"
         },
         "scalingConfiguration":{
           "shape":"ScalingConfigurationInput",
@@ -1862,6 +2122,10 @@
         "scopeConfiguration":{
           "shape":"ScopeConfiguration",
           "documentation":"<p>The scope configuration for global or organization webhooks.</p> <note> <p>Global or organization webhooks are only available for GitHub and Github Enterprise webhooks.</p> </note>"
+        },
+        "pullRequestBuildPolicy":{
+          "shape":"PullRequestBuildPolicy",
+          "documentation":"<p>A PullRequestBuildPolicy object that defines comment-based approval requirements for triggering builds on pull requests. This policy helps control when automated builds are executed based on contributor permissions and approval workflows.</p>"
         }
       }
     },
@@ -1931,8 +2195,7 @@
     },
     "DeleteFleetOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteProjectInput":{
       "type":"structure",
@@ -1946,8 +2209,7 @@
     },
     "DeleteProjectOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteReportGroupInput":{
       "type":"structure",
@@ -1965,8 +2227,7 @@
     },
     "DeleteReportGroupOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteReportInput":{
       "type":"structure",
@@ -1980,8 +2241,7 @@
     },
     "DeleteReportOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteResourcePolicyInput":{
       "type":"structure",
@@ -1995,8 +2255,7 @@
     },
     "DeleteResourcePolicyOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteSourceCredentialsInput":{
       "type":"structure",
@@ -2029,8 +2288,7 @@
     },
     "DeleteWebhookOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeCodeCoveragesInput":{
       "type":"structure",
@@ -2114,6 +2372,39 @@
         }
       }
     },
+    "DockerServer":{
+      "type":"structure",
+      "required":["computeType"],
+      "members":{
+        "computeType":{
+          "shape":"ComputeType",
+          "documentation":"<p>Information about the compute resources the docker server uses. Available values include:</p> <ul> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for your docker server.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for your docker server.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for your docker server.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 64 GiB memory and 32 vCPUs for your docker server.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 128 GiB memory and 64 vCPUs for your docker server.</p> </li> </ul>"
+        },
+        "securityGroupIds":{
+          "shape":"SecurityGroupIds",
+          "documentation":"<p>A list of one or more security groups IDs.</p> <note> <p>Security groups configured for Docker servers should allow ingress network traffic from the VPC configured in the project. They should allow ingress on port 9876.</p> </note>"
+        },
+        "status":{
+          "shape":"DockerServerStatus",
+          "documentation":"<p>A DockerServerStatus object to use for this docker server.</p>"
+        }
+      },
+      "documentation":"<p>Contains docker server information.</p>"
+    },
+    "DockerServerStatus":{
+      "type":"structure",
+      "members":{
+        "status":{
+          "shape":"String",
+          "documentation":"<p>The status of the docker server.</p>"
+        },
+        "message":{
+          "shape":"String",
+          "documentation":"<p>A message associated with the status of a docker server.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the status of the docker server.</p>"
+    },
     "EnvironmentImage":{
       "type":"structure",
       "members":{
@@ -2180,6 +2471,7 @@
         "LINUX_GPU_CONTAINER",
         "ARM_CONTAINER",
         "WINDOWS_SERVER_2019_CONTAINER",
+        "WINDOWS_SERVER_2022_CONTAINER",
         "LINUX_LAMBDA_CONTAINER",
         "ARM_LAMBDA_CONTAINER",
         "LINUX_EC2",
@@ -2289,11 +2581,11 @@
         },
         "computeType":{
           "shape":"ComputeType",
-          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
+          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>CUSTOM_INSTANCE_TYPE</code>: Specify the instance type for your compute fleet. For a list of supported instance types, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.instance-types\">Supported instance families </a> in the <i>CodeBuild User Guide</i>.</p> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
         },
         "computeConfiguration":{
           "shape":"ComputeConfiguration",
-          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code>.</p>"
+          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code> or <code>CUSTOM_INSTANCE_TYPE</code>.</p>"
         },
         "scalingConfiguration":{
           "shape":"ScalingConfigurationOutput",
@@ -2329,10 +2621,7 @@
       "max":100,
       "min":1
     },
-    "FleetCapacity":{
-      "type":"integer",
-      "min":1
-    },
+    "FleetCapacity":{"type":"integer"},
     "FleetContextCode":{
       "type":"string",
       "enum":[
@@ -2598,8 +2887,7 @@
     },
     "InvalidInputException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The input value that was provided is not valid.</p>",
       "exception":true
     },
@@ -2615,8 +2903,7 @@
     },
     "InvalidateProjectCacheOutput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "KeyInput":{
       "type":"string",
@@ -2768,10 +3055,44 @@
         }
       }
     },
-    "ListCuratedEnvironmentImagesInput":{
+    "ListCommandExecutionsForSandboxInput":{
+      "type":"structure",
+      "required":["sandboxId"],
+      "members":{
+        "sandboxId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxId</code> or <code>sandboxArn</code>.</p>"
+        },
+        "maxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of sandbox records to be retrieved.</p>"
+        },
+        "sortOrder":{
+          "shape":"SortOrderType",
+          "documentation":"<p>The order in which sandbox records should be retrieved.</p>"
+        },
+        "nextToken":{
+          "shape":"SensitiveString",
+          "documentation":"<p>The next token, if any, to get paginated results. You will get this value from previous execution of list sandboxes.</p>"
+        }
+      }
+    },
+    "ListCommandExecutionsForSandboxOutput":{
       "type":"structure",
       "members":{
+        "commandExecutions":{
+          "shape":"CommandExecutions",
+          "documentation":"<p>Information about the requested command executions.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>Information about the next token to get paginated results.</p>"
+        }
       }
+    },
+    "ListCuratedEnvironmentImagesInput":{
+      "type":"structure",
+      "members":{}
     },
     "ListCuratedEnvironmentImagesOutput":{
       "type":"structure",
@@ -2953,6 +3274,71 @@
         }
       }
     },
+    "ListSandboxesForProjectInput":{
+      "type":"structure",
+      "required":["projectName"],
+      "members":{
+        "projectName":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The CodeBuild project name.</p>"
+        },
+        "maxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of sandbox records to be retrieved.</p>"
+        },
+        "sortOrder":{
+          "shape":"SortOrderType",
+          "documentation":"<p>The order in which sandbox records should be retrieved.</p>"
+        },
+        "nextToken":{
+          "shape":"SensitiveString",
+          "documentation":"<p>The next token, if any, to get paginated results. You will get this value from previous execution of list sandboxes.</p>"
+        }
+      }
+    },
+    "ListSandboxesForProjectOutput":{
+      "type":"structure",
+      "members":{
+        "ids":{
+          "shape":"SandboxIds",
+          "documentation":"<p>Information about the requested sandbox IDs.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>Information about the next token to get paginated results.</p>"
+        }
+      }
+    },
+    "ListSandboxesInput":{
+      "type":"structure",
+      "members":{
+        "maxResults":{
+          "shape":"PageSize",
+          "documentation":"<p>The maximum number of sandbox records to be retrieved.</p>"
+        },
+        "sortOrder":{
+          "shape":"SortOrderType",
+          "documentation":"<p>The order in which sandbox records should be retrieved.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>The next token, if any, to get paginated results. You will get this value from previous execution of list sandboxes.</p>"
+        }
+      }
+    },
+    "ListSandboxesOutput":{
+      "type":"structure",
+      "members":{
+        "ids":{
+          "shape":"SandboxIds",
+          "documentation":"<p>Information about the requested sandbox IDs.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>Information about the next token to get paginated results.</p>"
+        }
+      }
+    },
     "ListSharedProjectsInput":{
       "type":"structure",
       "members":{
@@ -3023,8 +3409,7 @@
     },
     "ListSourceCredentialsInput":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "ListSourceCredentialsOutput":{
       "type":"structure",
@@ -3125,8 +3510,7 @@
     },
     "OAuthProviderException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>There was a problem with the underlying OAuth provider.</p>",
       "exception":true
     },
@@ -3397,6 +3781,10 @@
         "modes":{
           "shape":"ProjectCacheModes",
           "documentation":"<p>An array of strings that specify the local cache modes. You can use one or more local cache modes at the same time. This is only used for <code>LOCAL</code> cache types.</p> <p>Possible values are:</p> <dl> <dt>LOCAL_SOURCE_CACHE</dt> <dd> <p>Caches Git metadata for primary and secondary sources. After the cache is created, subsequent builds pull only the change between commits. This mode is a good choice for projects with a clean working directory and a source that is a large Git repository. If you choose this option and your project does not use a Git repository (GitHub, GitHub Enterprise, or Bitbucket), the option is ignored. </p> </dd> <dt>LOCAL_DOCKER_LAYER_CACHE</dt> <dd> <p>Caches existing Docker layers. This mode is a good choice for projects that build or pull large Docker images. It can prevent the performance issues caused by pulling large Docker images down from the network. </p> <note> <ul> <li> <p>You can use a Docker layer cache in the Linux environment only. </p> </li> <li> <p>The <code>privileged</code> flag must be set so that your project has the required Docker permissions. </p> </li> <li> <p>You should consider the security implications before you use a Docker layer cache. </p> </li> </ul> </note> </dd> <dt>LOCAL_CUSTOM_CACHE</dt> <dd> <p>Caches directories you specify in the buildspec file. This mode is a good choice if your build scenario is not suited to one of the other three local cache modes. If you use a custom cache: </p> <ul> <li> <p>Only directories can be specified for caching. You cannot specify individual files. </p> </li> <li> <p>Symlinks are used to reference cached directories. </p> </li> <li> <p>Cached directories are linked to your build before it downloads its project sources. Cached items are overridden if a source item has the same name. Directories are specified using cache paths in the buildspec file. </p> </li> </ul> </dd> </dl>"
+        },
+        "cacheNamespace":{
+          "shape":"String",
+          "documentation":"<p>Defines the scope of the cache. You can use this namespace to share a cache across multiple projects. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/caching-s3.html#caching-s3-sharing\">Cache sharing between projects</a> in the <i>CodeBuild User Guide</i>.</p>"
         }
       },
       "documentation":"<p>Information about the cache for the build project.</p>"
@@ -3420,7 +3808,7 @@
       "members":{
         "type":{
           "shape":"EnvironmentType",
-          "documentation":"<p>The type of build environment to use for related builds.</p> <ul> <li> <p>The environment type <code>ARM_CONTAINER</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), EU (Ireland), Asia Pacific (Mumbai), Asia Pacific (Tokyo), Asia Pacific (Sydney), and EU (Frankfurt).</p> </li> <li> <p>The environment type <code>LINUX_CONTAINER</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), Canada (Central), EU (Ireland), EU (London), EU (Frankfurt), Asia Pacific (Tokyo), Asia Pacific (Seoul), Asia Pacific (Singapore), Asia Pacific (Sydney), China (Beijing), and China (Ningxia).</p> </li> <li> <p>The environment type <code>LINUX_GPU_CONTAINER</code> is available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), Canada (Central), EU (Ireland), EU (London), EU (Frankfurt), Asia Pacific (Tokyo), Asia Pacific (Seoul), Asia Pacific (Singapore), Asia Pacific (Sydney) , China (Beijing), and China (Ningxia).</p> </li> </ul> <ul> <li> <p>The environment types <code>ARM_LAMBDA_CONTAINER</code> and <code>LINUX_LAMBDA_CONTAINER</code> are available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), Asia Pacific (Mumbai), Asia Pacific (Singapore), Asia Pacific (Sydney), Asia Pacific (Tokyo), EU (Frankfurt), EU (Ireland), and South America (São Paulo).</p> </li> </ul> <ul> <li> <p>The environment types <code>WINDOWS_CONTAINER</code> and <code>WINDOWS_SERVER_2019_CONTAINER</code> are available only in regions US East (N. Virginia), US East (Ohio), US West (Oregon), and EU (Ireland).</p> </li> </ul> <note> <p>If you're using compute fleets during project creation, <code>type</code> will be ignored.</p> </note> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html\">Build environment compute types</a> in the <i>CodeBuild user guide</i>.</p>"
+          "documentation":"<p>The type of build environment to use for related builds.</p> <note> <p>If you're using compute fleets during project creation, <code>type</code> will be ignored.</p> </note> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html\">Build environment compute types</a> in the <i>CodeBuild user guide</i>.</p>"
         },
         "image":{
           "shape":"NonEmptyString",
@@ -3457,6 +3845,10 @@
         "imagePullCredentialsType":{
           "shape":"ImagePullCredentialsType",
           "documentation":"<p> The type of credentials CodeBuild uses to pull images in your build. There are two valid values: </p> <ul> <li> <p> <code>CODEBUILD</code> specifies that CodeBuild uses its own credentials. This requires that you modify your ECR repository policy to trust CodeBuild service principal. </p> </li> <li> <p> <code>SERVICE_ROLE</code> specifies that CodeBuild uses your build project's service role. </p> </li> </ul> <p> When you use a cross-account or private registry image, you must use SERVICE_ROLE credentials. When you use an CodeBuild curated image, you must use CODEBUILD credentials. </p>"
+        },
+        "dockerServer":{
+          "shape":"DockerServer",
+          "documentation":"<p>A DockerServer object to use for this build project.</p>"
         }
       },
       "documentation":"<p>Information about the build environment of the build project.</p>"
@@ -3623,6 +4015,52 @@
         }
       },
       "documentation":"<p>Information about the proxy configurations that apply network access control to your reserved capacity instances.</p>"
+    },
+    "PullRequestBuildApproverRole":{
+      "type":"string",
+      "enum":[
+        "GITHUB_READ",
+        "GITHUB_TRIAGE",
+        "GITHUB_WRITE",
+        "GITHUB_MAINTAIN",
+        "GITHUB_ADMIN",
+        "GITLAB_GUEST",
+        "GITLAB_PLANNER",
+        "GITLAB_REPORTER",
+        "GITLAB_DEVELOPER",
+        "GITLAB_MAINTAINER",
+        "GITLAB_OWNER",
+        "BITBUCKET_READ",
+        "BITBUCKET_WRITE",
+        "BITBUCKET_ADMIN"
+      ]
+    },
+    "PullRequestBuildApproverRoles":{
+      "type":"list",
+      "member":{"shape":"PullRequestBuildApproverRole"}
+    },
+    "PullRequestBuildCommentApproval":{
+      "type":"string",
+      "enum":[
+        "DISABLED",
+        "ALL_PULL_REQUESTS",
+        "FORK_PULL_REQUESTS"
+      ]
+    },
+    "PullRequestBuildPolicy":{
+      "type":"structure",
+      "required":["requiresCommentApproval"],
+      "members":{
+        "requiresCommentApproval":{
+          "shape":"PullRequestBuildCommentApproval",
+          "documentation":"<p>Specifies when comment-based approval is required before triggering a build on pull requests. This setting determines whether builds run automatically or require explicit approval through comments.</p> <ul> <li> <p> <i>DISABLED</i>: Builds trigger automatically without requiring comment approval</p> </li> <li> <p> <i>ALL_PULL_REQUESTS</i>: All pull requests require comment approval before builds execute (unless contributor is one of the approver roles)</p> </li> <li> <p> <i>FORK_PULL_REQUESTS</i>: Only pull requests from forked repositories require comment approval (unless contributor is one of the approver roles)</p> </li> </ul>"
+        },
+        "approverRoles":{
+          "shape":"PullRequestBuildApproverRoles",
+          "documentation":"<p>List of repository roles that have approval privileges for pull request builds when comment approval is required. Only users with these roles can provide valid comment approvals. If a pull request contributor is one of these roles, their pull request builds will trigger automatically. This field is only applicable when <code>requiresCommentApproval</code> is not <i>DISABLED</i>.</p>"
+        }
+      },
+      "documentation":"<p>A PullRequestBuildPolicy object that defines comment-based approval requirements for triggering builds on pull requests. This policy helps control when automated builds are executed based on contributor permissions and approval workflows.</p>"
     },
     "PutResourcePolicyInput":{
       "type":"structure",
@@ -3945,15 +4383,13 @@
     },
     "ResourceAlreadyExistsException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified Amazon Web Services resource cannot be created, because an Amazon Web Services resource with the same settings already exists.</p>",
       "exception":true
     },
     "ResourceNotFoundException":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified Amazon Web Services resource cannot be found.</p>",
       "exception":true
     },
@@ -4056,6 +4492,176 @@
       },
       "documentation":"<p> Information about the S3 bucket where the raw data of a report are exported. </p>"
     },
+    "SSMSession":{
+      "type":"structure",
+      "members":{
+        "sessionId":{
+          "shape":"String",
+          "documentation":"<p>The ID of the session.</p>"
+        },
+        "tokenValue":{
+          "shape":"String",
+          "documentation":"<p>An encrypted token value containing session and caller information.</p>"
+        },
+        "streamUrl":{
+          "shape":"String",
+          "documentation":"<p>A URL back to SSM Agent on the managed node that the Session Manager client uses to send commands and receive output from the node.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the Session Manager session.</p>"
+    },
+    "Sandbox":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The ID of the sandbox.</p>"
+        },
+        "arn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The ARN of the sandbox.</p>"
+        },
+        "projectName":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The CodeBuild project name.</p>"
+        },
+        "requestTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox process was initially requested, expressed in Unix time format.</p>"
+        },
+        "startTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox process started, expressed in Unix time format.</p>"
+        },
+        "endTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox process ended, expressed in Unix time format.</p>"
+        },
+        "status":{
+          "shape":"String",
+          "documentation":"<p>The status of the sandbox.</p>"
+        },
+        "source":{"shape":"ProjectSource"},
+        "sourceVersion":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>Any version identifier for the version of the sandbox to be built.</p>"
+        },
+        "secondarySources":{
+          "shape":"ProjectSources",
+          "documentation":"<p> An array of <code>ProjectSource</code> objects. </p>"
+        },
+        "secondarySourceVersions":{
+          "shape":"ProjectSecondarySourceVersions",
+          "documentation":"<p> An array of <code>ProjectSourceVersion</code> objects.</p>"
+        },
+        "environment":{"shape":"ProjectEnvironment"},
+        "fileSystemLocations":{
+          "shape":"ProjectFileSystemLocations",
+          "documentation":"<p> An array of <code>ProjectFileSystemLocation</code> objects for a CodeBuild build project. A <code>ProjectFileSystemLocation</code> object specifies the <code>identifier</code>, <code>location</code>, <code>mountOptions</code>, <code>mountPoint</code>, and <code>type</code> of a file system created using Amazon Elastic File System. </p>"
+        },
+        "timeoutInMinutes":{
+          "shape":"WrapperInt",
+          "documentation":"<p>How long, in minutes, from 5 to 2160 (36 hours), for CodeBuild to wait before timing out this sandbox if it does not get marked as completed.</p>"
+        },
+        "queuedTimeoutInMinutes":{
+          "shape":"WrapperInt",
+          "documentation":"<p>The number of minutes a sandbox is allowed to be queued before it times out. </p>"
+        },
+        "vpcConfig":{"shape":"VpcConfig"},
+        "logConfig":{"shape":"LogsConfig"},
+        "encryptionKey":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The Key Management Service customer master key (CMK) to be used for encrypting the sandbox output artifacts.</p>"
+        },
+        "serviceRole":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The name of a service role used for this sandbox.</p>"
+        },
+        "currentSession":{
+          "shape":"SandboxSession",
+          "documentation":"<p>The current session for the sandbox.</p>"
+        }
+      },
+      "documentation":"<p>Contains sandbox information.</p>"
+    },
+    "SandboxIds":{
+      "type":"list",
+      "member":{"shape":"NonEmptyString"}
+    },
+    "SandboxSession":{
+      "type":"structure",
+      "members":{
+        "id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The ID of the sandbox session.</p>"
+        },
+        "status":{
+          "shape":"String",
+          "documentation":"<p>The status of the sandbox session.</p>"
+        },
+        "startTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox session started, expressed in Unix time format.</p>"
+        },
+        "endTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox session ended, expressed in Unix time format.</p>"
+        },
+        "currentPhase":{
+          "shape":"String",
+          "documentation":"<p>The current phase for the sandbox.</p>"
+        },
+        "phases":{
+          "shape":"SandboxSessionPhases",
+          "documentation":"<p> An array of <code>SandboxSessionPhase</code> objects. </p>"
+        },
+        "resolvedSourceVersion":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>An identifier for the version of this sandbox's source code.</p>"
+        },
+        "logs":{"shape":"LogsLocation"},
+        "networkInterface":{"shape":"NetworkInterface"}
+      },
+      "documentation":"<p>Contains information about the sandbox session.</p>"
+    },
+    "SandboxSessionPhase":{
+      "type":"structure",
+      "members":{
+        "phaseType":{
+          "shape":"String",
+          "documentation":"<p>The name of the sandbox phase.</p>"
+        },
+        "phaseStatus":{
+          "shape":"StatusType",
+          "documentation":"<p>The current status of the sandbox phase. Valid values include:</p> <dl> <dt>FAILED</dt> <dd> <p>The sandbox phase failed.</p> </dd> <dt>FAULT</dt> <dd> <p>The sandbox phase faulted.</p> </dd> <dt>IN_PROGRESS</dt> <dd> <p>The sandbox phase is still in progress.</p> </dd> <dt>STOPPED</dt> <dd> <p>The sandbox phase stopped.</p> </dd> <dt>SUCCEEDED</dt> <dd> <p>The sandbox phase succeeded.</p> </dd> <dt>TIMED_OUT</dt> <dd> <p>The sandbox phase timed out.</p> </dd> </dl>"
+        },
+        "startTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox phase started, expressed in Unix time format.</p>"
+        },
+        "endTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>When the sandbox phase ended, expressed in Unix time format.</p>"
+        },
+        "durationInSeconds":{
+          "shape":"WrapperLong",
+          "documentation":"<p>How long, in seconds, between the starting and ending times of the sandbox's phase.</p>"
+        },
+        "contexts":{
+          "shape":"PhaseContexts",
+          "documentation":"<p> An array of <code>PhaseContext</code> objects. </p>"
+        }
+      },
+      "documentation":"<p>Contains information about the sandbox phase.</p>"
+    },
+    "SandboxSessionPhases":{
+      "type":"list",
+      "member":{"shape":"SandboxSessionPhase"}
+    },
+    "Sandboxes":{
+      "type":"list",
+      "member":{"shape":"Sandbox"}
+    },
     "ScalingConfigurationInput":{
       "type":"structure",
       "members":{
@@ -4113,7 +4719,7 @@
         },
         "scope":{
           "shape":"WebhookScopeType",
-          "documentation":"<p>The type of scope for a GitHub or GitLab webhook.</p>"
+          "documentation":"<p>The type of scope for a GitHub or GitLab webhook. The scope default is GITHUB_ORGANIZATION.</p>"
         }
       },
       "documentation":"<p>Contains configuration information about the scope for a webhook. </p>"
@@ -4412,7 +5018,7 @@
         },
         "buildspecOverride":{
           "shape":"String",
-          "documentation":"<p>A buildspec file declaration that overrides the latest one defined in the build project, for this build only. The buildspec defined on the project is not changed.</p> <p>If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in <code>CODEBUILD_SRC_DIR</code> environment variable, or the path to an S3 bucket. The bucket must be in the same Amazon Web Services Region as the build project. Specify the buildspec file using its ARN (for example, <code>arn:aws:s3:::my-codebuild-sample2/buildspec.yml</code>). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage\">Buildspec File Name and Storage Location</a>.</p> <note> <p>Since this property allows you to change the build commands that will run in the container, you should note that an IAM principal with the ability to call this API and set this parameter can override the default settings. Moreover, we encourage that you use a trustworthy buildspec location like a file in your source repository or a Amazon S3 bucket.</p> </note>"
+          "documentation":"<p>A buildspec file declaration that overrides the latest one defined in the build project, for this build only. The buildspec defined on the project is not changed.</p> <p>If this value is set, it can be either an inline buildspec definition, the path to an alternate buildspec file relative to the value of the built-in <code>CODEBUILD_SRC_DIR</code> environment variable, or the path to an S3 bucket. The bucket must be in the same Amazon Web Services Region as the build project. Specify the buildspec file using its ARN (for example, <code>arn:aws:s3:::my-codebuild-sample2/buildspec.yml</code>). If this value is not provided or is set to an empty string, the source code must contain a buildspec file in its root directory. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html#build-spec-ref-name-storage\">Buildspec File Name and Storage Location</a>.</p> <note> <p>Since this property allows you to change the build commands that will run in the container, you should note that an IAM principal with the ability to call this API and set this parameter can override the default settings. Moreover, we encourage that you use a trustworthy buildspec location like a file in your source repository or a Amazon S3 bucket. Alternatively, you can restrict overrides to the buildspec by using a condition key: <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/action-context-keys.html#action-context-keys-example-overridebuildspec.html\">Prevent unauthorized modifications to project buildspec</a>.</p> </note>"
         },
         "insecureSslOverride":{
           "shape":"WrapperBoolean",
@@ -4505,6 +5111,77 @@
         }
       }
     },
+    "StartCommandExecutionInput":{
+      "type":"structure",
+      "required":[
+        "sandboxId",
+        "command"
+      ],
+      "members":{
+        "sandboxId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxId</code> or <code>sandboxArn</code>.</p>"
+        },
+        "command":{
+          "shape":"SensitiveNonEmptyString",
+          "documentation":"<p>The command that needs to be executed.</p>"
+        },
+        "type":{
+          "shape":"CommandType",
+          "documentation":"<p>The command type.</p>"
+        }
+      }
+    },
+    "StartCommandExecutionOutput":{
+      "type":"structure",
+      "members":{
+        "commandExecution":{
+          "shape":"CommandExecution",
+          "documentation":"<p>Information about the requested command executions.</p>"
+        }
+      }
+    },
+    "StartSandboxConnectionInput":{
+      "type":"structure",
+      "required":["sandboxId"],
+      "members":{
+        "sandboxId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>A <code>sandboxId</code> or <code>sandboxArn</code>.</p>"
+        }
+      }
+    },
+    "StartSandboxConnectionOutput":{
+      "type":"structure",
+      "members":{
+        "ssmSession":{
+          "shape":"SSMSession",
+          "documentation":"<p>Information about the Session Manager session.</p>"
+        }
+      }
+    },
+    "StartSandboxInput":{
+      "type":"structure",
+      "members":{
+        "projectName":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The CodeBuild project name.</p>"
+        },
+        "idempotencyToken":{
+          "shape":"SensitiveString",
+          "documentation":"<p>A unique client token.</p>"
+        }
+      }
+    },
+    "StartSandboxOutput":{
+      "type":"structure",
+      "members":{
+        "sandbox":{
+          "shape":"Sandbox",
+          "documentation":"<p>Information about the requested sandbox.</p>"
+        }
+      }
+    },
     "StatusType":{
       "type":"string",
       "enum":[
@@ -4548,6 +5225,25 @@
         "build":{
           "shape":"Build",
           "documentation":"<p>Information about the build.</p>"
+        }
+      }
+    },
+    "StopSandboxInput":{
+      "type":"structure",
+      "required":["id"],
+      "members":{
+        "id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>Information about the requested sandbox ID.</p>"
+        }
+      }
+    },
+    "StopSandboxOutput":{
+      "type":"structure",
+      "members":{
+        "sandbox":{
+          "shape":"Sandbox",
+          "documentation":"<p>Information about the requested sandbox.</p>"
         }
       }
     },
@@ -4702,11 +5398,11 @@
         },
         "computeType":{
           "shape":"ComputeType",
-          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
+          "documentation":"<p>Information about the compute resources the compute fleet uses. Available values include:</p> <ul> <li> <p> <code>ATTRIBUTE_BASED_COMPUTE</code>: Specify the amount of vCPUs, memory, disk space, and the type of machine.</p> <note> <p> If you use <code>ATTRIBUTE_BASED_COMPUTE</code>, you must define your attributes by using <code>computeConfiguration</code>. CodeBuild will select the cheapest instance that satisfies your specified attributes. For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.types\">Reserved capacity environment types</a> in the <i>CodeBuild User Guide</i>.</p> </note> </li> <li> <p> <code>CUSTOM_INSTANCE_TYPE</code>: Specify the instance type for your compute fleet. For a list of supported instance types, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment-reserved-capacity.instance-types\">Supported instance families </a> in the <i>CodeBuild User Guide</i>.</p> </li> <li> <p> <code>BUILD_GENERAL1_SMALL</code>: Use up to 4 GiB memory and 2 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_MEDIUM</code>: Use up to 8 GiB memory and 4 vCPUs for builds.</p> </li> <li> <p> <code>BUILD_GENERAL1_LARGE</code>: Use up to 16 GiB memory and 8 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_XLARGE</code>: Use up to 72 GiB memory and 36 vCPUs for builds, depending on your environment type.</p> </li> <li> <p> <code>BUILD_GENERAL1_2XLARGE</code>: Use up to 144 GiB memory, 72 vCPUs, and 824 GB of SSD storage for builds. This compute type supports Docker images up to 100 GB uncompressed.</p> </li> <li> <p> <code>BUILD_LAMBDA_1GB</code>: Use up to 1 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_2GB</code>: Use up to 2 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_4GB</code>: Use up to 4 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_8GB</code>: Use up to 8 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> <li> <p> <code>BUILD_LAMBDA_10GB</code>: Use up to 10 GiB memory for builds. Only available for environment type <code>LINUX_LAMBDA_CONTAINER</code> and <code>ARM_LAMBDA_CONTAINER</code>.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_SMALL</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 16 GiB memory, 4 vCPUs, and 1 NVIDIA A10G Tensor Core GPU for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 4 GiB memory and 2 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p> If you use <code>BUILD_GENERAL1_LARGE</code>: </p> <ul> <li> <p> For environment type <code>LINUX_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs for builds. </p> </li> <li> <p> For environment type <code>LINUX_GPU_CONTAINER</code>, you can use up to 255 GiB memory, 32 vCPUs, and 4 NVIDIA Tesla V100 GPUs for builds.</p> </li> <li> <p> For environment type <code>ARM_CONTAINER</code>, you can use up to 16 GiB memory and 8 vCPUs on ARM-based processors for builds.</p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html#environment.types\">On-demand environment types</a> in the <i>CodeBuild User Guide.</i> </p>"
         },
         "computeConfiguration":{
           "shape":"ComputeConfiguration",
-          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code>.</p>"
+          "documentation":"<p>The compute configuration of the compute fleet. This is only required if <code>computeType</code> is set to <code>ATTRIBUTE_BASED_COMPUTE</code> or <code>CUSTOM_INSTANCE_TYPE</code>.</p>"
         },
         "scalingConfiguration":{
           "shape":"ScalingConfigurationInput",
@@ -4926,6 +5622,10 @@
         "buildType":{
           "shape":"WebhookBuildType",
           "documentation":"<p>Specifies the type of build this webhook will trigger.</p> <note> <p> <code>RUNNER_BUILDKITE_BUILD</code> is only available for <code>NO_SOURCE</code> source type projects configured for Buildkite runner builds. For more information about CodeBuild-hosted Buildkite runner builds, see <a href=\"https://docs.aws.amazon.com/codebuild/latest/userguide/sample-runner-buildkite.html\">Tutorial: Configure a CodeBuild-hosted Buildkite runner</a> in the <i>CodeBuild user guide</i>.</p> </note>"
+        },
+        "pullRequestBuildPolicy":{
+          "shape":"PullRequestBuildPolicy",
+          "documentation":"<p>A PullRequestBuildPolicy object that defines comment-based approval requirements for triggering builds on pull requests. This policy helps control when automated builds are executed based on contributor permissions and approval workflows.</p>"
         }
       }
     },
@@ -5008,7 +5708,8 @@
         "statusMessage":{
           "shape":"String",
           "documentation":"<p>A message associated with the status of a webhook.</p>"
-        }
+        },
+        "pullRequestBuildPolicy":{"shape":"PullRequestBuildPolicy"}
       },
       "documentation":"<p>Information about a webhook that connects repository events to a build project in CodeBuild.</p>"
     },
@@ -5029,7 +5730,7 @@
       "members":{
         "type":{
           "shape":"WebhookFilterType",
-          "documentation":"<p> The type of webhook filter. There are nine webhook filter types: <code>EVENT</code>, <code>ACTOR_ACCOUNT_ID</code>, <code>HEAD_REF</code>, <code>BASE_REF</code>, <code>FILE_PATH</code>, <code>COMMIT_MESSAGE</code>, <code>TAG_NAME</code>, <code>RELEASE_NAME</code>, and <code>WORKFLOW_NAME</code>. </p> <ul> <li> <p> EVENT </p> <ul> <li> <p> A webhook event triggers a build when the provided <code>pattern</code> matches one of nine event types: <code>PUSH</code>, <code>PULL_REQUEST_CREATED</code>, <code>PULL_REQUEST_UPDATED</code>, <code>PULL_REQUEST_CLOSED</code>, <code>PULL_REQUEST_REOPENED</code>, <code>PULL_REQUEST_MERGED</code>, <code>RELEASED</code>, <code>PRERELEASED</code>, and <code>WORKFLOW_JOB_QUEUED</code>. The <code>EVENT</code> patterns are specified as a comma-separated string. For example, <code>PUSH, PULL_REQUEST_CREATED, PULL_REQUEST_UPDATED</code> filters all push, pull request created, and pull request updated events. </p> <note> <p> Types <code>PULL_REQUEST_REOPENED</code> and <code>WORKFLOW_JOB_QUEUED</code> work with GitHub and GitHub Enterprise only. Types <code>RELEASED</code> and <code>PRERELEASED</code> work with GitHub only.</p> </note> </li> </ul> </li> <li> <p>ACTOR_ACCOUNT_ID</p> <ul> <li> <p> A webhook event triggers a build when a GitHub, GitHub Enterprise, or Bitbucket account ID matches the regular expression <code>pattern</code>. </p> </li> </ul> </li> <li> <p>HEAD_REF</p> <ul> <li> <p> A webhook event triggers a build when the head reference matches the regular expression <code>pattern</code>. For example, <code>refs/heads/branch-name</code> and <code>refs/tags/tag-name</code>. </p> <note> <p> Works with GitHub and GitHub Enterprise push, GitHub and GitHub Enterprise pull request, Bitbucket push, and Bitbucket pull request events.</p> </note> </li> </ul> </li> <li> <p>BASE_REF</p> <ul> <li> <p> A webhook event triggers a build when the base reference matches the regular expression <code>pattern</code>. For example, <code>refs/heads/branch-name</code>. </p> <note> <p> Works with pull request events only. </p> </note> </li> </ul> </li> <li> <p>FILE_PATH</p> <ul> <li> <p> A webhook triggers a build when the path of a changed file matches the regular expression <code>pattern</code>. </p> <note> <p> Works with GitHub and Bitbucket events push and pull requests events. Also works with GitHub Enterprise push events, but does not work with GitHub Enterprise pull request events. </p> </note> </li> </ul> </li> <li> <p>COMMIT_MESSAGE</p> <ul> <li> <p>A webhook triggers a build when the head commit message matches the regular expression <code>pattern</code>.</p> <note> <p> Works with GitHub and Bitbucket events push and pull requests events. Also works with GitHub Enterprise push events, but does not work with GitHub Enterprise pull request events. </p> </note> </li> </ul> </li> <li> <p>TAG_NAME</p> <ul> <li> <p>A webhook triggers a build when the tag name of the release matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>RELEASED</code> and <code>PRERELEASED</code> events only. </p> </note> </li> </ul> </li> <li> <p>RELEASE_NAME</p> <ul> <li> <p>A webhook triggers a build when the release name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>RELEASED</code> and <code>PRERELEASED</code> events only. </p> </note> </li> </ul> </li> <li> <p>REPOSITORY_NAME</p> <ul> <li> <p>A webhook triggers a build when the repository name matches the regular expression pattern.</p> <note> <p> Works with GitHub global or organization webhooks only. </p> </note> </li> </ul> </li> <li> <p>WORKFLOW_NAME</p> <ul> <li> <p>A webhook triggers a build when the workflow name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>WORKFLOW_JOB_QUEUED</code> events only. </p> </note> <note> <p>For CodeBuild-hosted Buildkite runner builds, WORKFLOW_NAME filters will filter by pipeline name.</p> </note> </li> </ul> </li> </ul>"
+          "documentation":"<p> The type of webhook filter. There are 11 webhook filter types: <code>EVENT</code>, <code>ACTOR_ACCOUNT_ID</code>, <code>HEAD_REF</code>, <code>BASE_REF</code>, <code>FILE_PATH</code>, <code>COMMIT_MESSAGE</code>, <code>TAG_NAME</code>, <code>RELEASE_NAME</code>, <code>REPOSITORY_NAME</code>, <code>ORGANIZATION_NAME</code>, and <code>WORKFLOW_NAME</code>. </p> <ul> <li> <p> EVENT </p> <ul> <li> <p> A webhook event triggers a build when the provided <code>pattern</code> matches one of nine event types: <code>PUSH</code>, <code>PULL_REQUEST_CREATED</code>, <code>PULL_REQUEST_UPDATED</code>, <code>PULL_REQUEST_CLOSED</code>, <code>PULL_REQUEST_REOPENED</code>, <code>PULL_REQUEST_MERGED</code>, <code>RELEASED</code>, <code>PRERELEASED</code>, and <code>WORKFLOW_JOB_QUEUED</code>. The <code>EVENT</code> patterns are specified as a comma-separated string. For example, <code>PUSH, PULL_REQUEST_CREATED, PULL_REQUEST_UPDATED</code> filters all push, pull request created, and pull request updated events. </p> <note> <p> Types <code>PULL_REQUEST_REOPENED</code> and <code>WORKFLOW_JOB_QUEUED</code> work with GitHub and GitHub Enterprise only. Types <code>RELEASED</code> and <code>PRERELEASED</code> work with GitHub only.</p> </note> </li> </ul> </li> <li> <p>ACTOR_ACCOUNT_ID</p> <ul> <li> <p> A webhook event triggers a build when a GitHub, GitHub Enterprise, or Bitbucket account ID matches the regular expression <code>pattern</code>. </p> </li> </ul> </li> <li> <p>HEAD_REF</p> <ul> <li> <p> A webhook event triggers a build when the head reference matches the regular expression <code>pattern</code>. For example, <code>refs/heads/branch-name</code> and <code>refs/tags/tag-name</code>. </p> <note> <p> Works with GitHub and GitHub Enterprise push, GitHub and GitHub Enterprise pull request, Bitbucket push, and Bitbucket pull request events.</p> </note> </li> </ul> </li> <li> <p>BASE_REF</p> <ul> <li> <p> A webhook event triggers a build when the base reference matches the regular expression <code>pattern</code>. For example, <code>refs/heads/branch-name</code>. </p> <note> <p> Works with pull request events only. </p> </note> </li> </ul> </li> <li> <p>FILE_PATH</p> <ul> <li> <p> A webhook triggers a build when the path of a changed file matches the regular expression <code>pattern</code>. </p> <note> <p> Works with push and pull request events only. </p> </note> </li> </ul> </li> <li> <p>COMMIT_MESSAGE</p> <ul> <li> <p>A webhook triggers a build when the head commit message matches the regular expression <code>pattern</code>.</p> <note> <p> Works with push and pull request events only. </p> </note> </li> </ul> </li> <li> <p>TAG_NAME</p> <ul> <li> <p>A webhook triggers a build when the tag name of the release matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>RELEASED</code> and <code>PRERELEASED</code> events only. </p> </note> </li> </ul> </li> <li> <p>RELEASE_NAME</p> <ul> <li> <p>A webhook triggers a build when the release name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>RELEASED</code> and <code>PRERELEASED</code> events only. </p> </note> </li> </ul> </li> <li> <p>REPOSITORY_NAME</p> <ul> <li> <p>A webhook triggers a build when the repository name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with GitHub global or organization webhooks only. </p> </note> </li> </ul> </li> <li> <p>ORGANIZATION_NAME</p> <ul> <li> <p>A webhook triggers a build when the organization name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with GitHub global webhooks only. </p> </note> </li> </ul> </li> <li> <p>WORKFLOW_NAME</p> <ul> <li> <p>A webhook triggers a build when the workflow name matches the regular expression <code>pattern</code>.</p> <note> <p> Works with <code>WORKFLOW_JOB_QUEUED</code> events only. </p> </note> <note> <p>For CodeBuild-hosted Buildkite runner builds, WORKFLOW_NAME filters will filter by pipeline name.</p> </note> </li> </ul> </li> </ul>"
         },
         "pattern":{
           "shape":"String",
@@ -5054,7 +5755,8 @@
         "WORKFLOW_NAME",
         "TAG_NAME",
         "RELEASE_NAME",
-        "REPOSITORY_NAME"
+        "REPOSITORY_NAME",
+        "ORGANIZATION_NAME"
       ]
     },
     "WebhookScopeType":{

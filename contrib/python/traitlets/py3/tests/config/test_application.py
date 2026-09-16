@@ -19,7 +19,18 @@ from unittest import TestCase, mock
 
 import pytest
 
-from traitlets import Bool, Bytes, Dict, HasTraits, Integer, List, Set, Tuple, Unicode
+from traitlets import (
+    Bool,
+    Bytes,
+    Dict,
+    HasTraits,
+    Int,
+    Integer,
+    List,
+    Set,
+    Tuple,
+    Unicode,
+)
 from traitlets.config.application import Application
 from traitlets.config.configurable import Configurable
 from traitlets.config.loader import Config, KVArgParseConfigLoader
@@ -66,7 +77,7 @@ class MyApp(Application):
         help="Should print a warning if `MyApp.warn-typo=...` command is passed",
     )
 
-    aliases: t.Dict[t.Any, t.Any] = {}
+    aliases: dict[t.Any, t.Any] = {}
     aliases.update(Application.aliases)
     aliases.update(
         {
@@ -83,7 +94,7 @@ class MyApp(Application):
         }
     )
 
-    flags: t.Dict[t.Any, t.Any] = {}
+    flags: dict[t.Any, t.Any] = {}
     flags.update(Application.flags)
     flags.update(
         {
@@ -194,7 +205,24 @@ class TestApplication(TestCase):
     def test_config_seq_args(self):
         app = MyApp()
         app.parse_command_line(
-            "--li 1 --li 3 --la 1 --tb AB 2 --Foo.la=ab --Bar.aset S1 --Bar.aset S2 --Bar.aset S1".split()
+            [
+                "--li",
+                "1",
+                "--li",
+                "3",
+                "--la",
+                "1",
+                "--tb",
+                "AB",
+                "2",
+                "--Foo.la=ab",
+                "--Bar.aset",
+                "S1",
+                "--Bar.aset",
+                "S2",
+                "--Bar.aset",
+                "S1",
+            ]
         )
         assert app.extra_args == ["2"]
         config = app.config
@@ -212,9 +240,25 @@ class TestApplication(TestCase):
     def test_config_dict_args(self):
         app = MyApp()
         app.parse_command_line(
-            "--Foo.fdict a=1 --Foo.fdict b=b --Foo.fdict c=3 "
-            "--Bar.bdict k=1 -D=a=b -D 22=33 "
-            "--Bar.idict k=1 --Bar.idict b=2 --Bar.idict c=3 ".split()
+            [
+                "--Foo.fdict",
+                "a=1",
+                "--Foo.fdict",
+                "b=b",
+                "--Foo.fdict",
+                "c=3",
+                "--Bar.bdict",
+                "k=1",
+                "-D=a=b",
+                "-D",
+                "22=33",
+                "--Bar.idict",
+                "k=1",
+                "--Bar.idict",
+                "b=2",
+                "--Bar.idict",
+                "c=3",
+            ]
         )
         fdict = {"a": "1", "b": "b", "c": "3"}
         bdict = {"k": "1", "a": "b", "22": "33"}
@@ -399,7 +443,7 @@ class TestApplication(TestCase):
 
         class StrictLoader(KVArgParseConfigLoader):
             def _handle_unrecognized_alias(self, arg):
-                self.parser.error("Unrecognized alias: %s" % arg)
+                self.parser.error(f"Unrecognized alias: {arg}")
 
         class StrictApplication(Application):
             def _create_loader(self, argv, aliases, flags, classes):
@@ -465,6 +509,33 @@ class TestApplication(TestCase):
         self.assertEqual(app.log_level, logging.CRITICAL)
         # this would be app.config.Application.log_level if it failed:
         self.assertEqual(app.config.MyApp.log_level, "CRITICAL")
+
+    def test_flatten_aliases_tuple_keys(self):
+        # tuple alias keys must be exploded into one entry per name, so
+        # that the loader can detect collisions between flags and aliases
+        app = MyApp()
+        flags, aliases = app.flatten_flags()
+        self.assertEqual(aliases["fooi"], "Foo.i")
+        self.assertEqual(aliases["i"], "Foo.i")
+        self.assertNotIn(("fooi", "i"), aliases)
+
+    def test_flag_tuple_alias_collision(self):
+        # a flag sharing a name with one member of a tuple alias used to
+        # crash argparse with 'conflicting option strings'
+        class CollisionApp(Application):
+            classes = List([Bar])  # type:ignore[assignment]
+            aliases = {("b", "bee"): "Bar.b"}
+            flags = {"b": ({"Bar": {"enabled": False}}, "Disable Bar")}
+
+        # with an argument it acts as the alias
+        app = CollisionApp()
+        app.parse_command_line(["-b", "5"])
+        self.assertEqual(app.config.Bar.b, 5)
+
+        # without an argument it acts as the flag
+        app = CollisionApp()
+        app.parse_command_line(["-b"])
+        self.assertEqual(app.config.Bar.enabled, False)
 
     def test_extra_args(self):
         app = MyApp()
@@ -779,7 +850,6 @@ def test_show_config_json(capsys):
 
 
 def test_deep_alias():
-    from traitlets import Int
     from traitlets.config import Application, Configurable
 
     class Foo(Configurable):
@@ -898,6 +968,23 @@ def test_logging_teardown_on_error(capsys, caplogconfig):
     app._logging_configured = True  # make it look like logging was configured
     del app
     assert len(caplogconfig) == 1  # logging was configured
+
+
+def test_get_logger_after_application():
+    # get_logger must pick up the Application's logger even if it was
+    # first called (returning the fallback) before the Application existed,
+    # and fall back again once the Application is torn down
+    import traitlets.log
+
+    Application.clear_instance()
+    try:
+        fallback = traitlets.log.get_logger()
+        assert fallback.name == "traitlets"
+        app = Application.instance()
+        assert traitlets.log.get_logger() is app.log
+    finally:
+        Application.clear_instance()
+    assert traitlets.log.get_logger() is fallback
 
 
 if __name__ == "__main__":

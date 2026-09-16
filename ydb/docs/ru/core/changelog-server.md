@@ -2,9 +2,18 @@
 
 ## Версия 26.1 {#26-1}
 
+### Версия 26.1.1.22 {#26-1-1-22}
+
+Дата выхода: 27 июля 2026.
+
+#### Исправления ошибок
+
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/46894) аутентификация через Kafka API для локальных пользователей: при включенной настройке `DomainLoginOnly` пользователи не могли работать с тенантными базами.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/46946) падение (use-after-free) при обновлении векторного индекса из-за асинхронного уничтожения ReadActor.
+
 ### Версия 26.1.1.20 {#26-1-1-20}
 
-Дата выхода: уточняется.
+Дата выхода: 02 июля 2026.
 
 #### Функциональность
 
@@ -147,7 +156,7 @@
 #### Функциональность
 
 * [Аналитические возможности](./concepts/analytics/index.md) доступны по умолчанию: [колоночные таблицы](./concepts/datamodel/table.md#column-oriented-tables) могут создаваться без включения специальных флагов, с использованием сжатия LZ4 и хеш-партиционирования. Поддерживаемые операции включают широкий набор DML (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) и CREATE TABLE AS SELECT. Интеграция с dbt, Apache Airflow, Jupyter, Superset и федеративные запросы к S3 позволяют строить сквозные аналитические пайплайны в YDB.
-* [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-execution-optimization/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
+* [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/optimization/hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
 * Реализован [трансфер данных](./concepts/transfer.md) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md) и [удаление](./yql/reference/syntax/drop-transfer.md) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md).
 * Добавлен [спиллинг](./concepts/query_execution/spilling.md), механизм управления памятью, при котором промежуточные данные, возникающие в результате выполнения запросов и превышающие доступный объём оперативной памяти узла, временно выгружаются во внешнее хранилище. Спиллинг обеспечивает выполнение пользовательских запросов, которые требуют обработки больших объёмов данных, превышающих доступную память узла.
 * Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb?version=v25.2) с 30 минут до 2 часов.
@@ -416,12 +425,12 @@
 
 * Добавлена [трассировка запросов](./reference/observability/tracing/setup) – инструмент, позволяющий детально посмотреть путь следования запроса по распределенной системе.
 * Добавлена поддержка [асинхронной репликации](./concepts/async-replication), которая позволяет синхронизировать данные между базами YDB почти в реальном времени. Также она может быть использована для миграции данных между базами с минимальным простоем работающих с ними приложений.
-* Добавлена поддержка [представлений (VIEW)](https://ydb.tech/docs/ru/concepts/datamodel/view), которая может быть включена администратором кластера с помощью настройки `enable_views` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Добавлена поддержка [представлений (VIEW)](https://ydb.tech/docs/ru/concepts/datamodel/view), которая может быть включена администратором кластера с помощью настройки `enable_views` в [динамической конфигурации](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * В [федеративных запросах](./concepts/query_execution/federated_query/) поддержаны новые внешние источники данных: MySQL, Microsoft SQL Server, Greenplum.
 * Разработана [документация](./devops/deployment-options/manual/federated-queries/connector-deployment) по разворачиванию YDB с функциональностью федеративных запросов (в ручном режиме).
 * Для Docker-контейнера с YDB добавлен параметр запуска `FQ_CONNECTOR_ENDPOINT`, позволяющий указать адрес коннектора ко внешним источникам данных. Добавлена возможность TLS-шифрования соединения с коннектором. Добавлена возможность вывода порта сервиса коннектора, локально работающего на том же хосте, что и динамический узел YDB.
-* Добавлен режим [автопартиционирования](./concepts/datamodel/topic#autopartitioning) топиков, в котором топики могут разбивать партиции в зависимости от нагрузки с сохранением гарантий порядка чтения сообщений и exactly once записи. Режим может быть включен администратором кластера с помощью настроек `enable_topic_split_merge` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
-* Добавлены [транзакции](./concepts/transactions#topic-table-transactions) с участием [топиков](https://ydb.tech/docs/ru/concepts/datamodel/topic) и строковых таблиц. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались. Транзакции могут быть включены администратором кластера с помощью настроек `enable_topic_service_tx` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Добавлен режим [автопартиционирования](./concepts/datamodel/topic#autopartitioning) топиков, в котором топики могут разбивать партиции в зависимости от нагрузки с сохранением гарантий порядка чтения сообщений и exactly once записи. Режим может быть включен администратором кластера с помощью настроек `enable_topic_split_merge` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Добавлены [транзакции](./concepts/transactions#topic-table-transactions) с участием [топиков](https://ydb.tech/docs/ru/concepts/datamodel/topic) и строковых таблиц. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались. Транзакции могут быть включены администратором кластера с помощью настроек `enable_topic_service_tx` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/7150) поддержка [CDC](./concepts/cdc) для синхронных вторичных индексов.
 * Добавлена возможность изменить период хранения записей в [CDC](./concepts/cdc.md) топиках.
 * Добавлена поддержка [автоинкремента](./yql/reference/types/serial) для колонок, включенных в первичный ключ таблицы.
@@ -438,7 +447,7 @@
 * Улучшена диагностика проблем хранилища в HealthCheck.
 * **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer#stoimostnoj-optimizator-zaprosov) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join).
 * **_(Экспериментально)_** Реализована начальная версия [менеджера рабочей нагрузки](./dev/resource-consumption-management), который позволяет создавать пулы ресурсов с ограничениями по процессору, памяти и количеству активных запросов. Реализованы классификаторы ресурсов для отнесения запросов к определенному пулу ресурсов.
-* **_(Экспериментально)_** Реализован [автоматический выбор индекса](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса, который может быть включен администратором кластера с помощью настройки `index_auto_choose_mode` в `table_service_config` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* **_(Экспериментально)_** Реализован [автоматический выбор индекса](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса, который может быть включен администратором кластера с помощью настройки `index_auto_choose_mode` в `table_service_config` в [динамической конфигурации](./devops/configuration-management/configuration-v1/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 
 #### YDB UI
 

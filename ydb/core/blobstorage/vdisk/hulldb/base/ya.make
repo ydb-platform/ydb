@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     library/cpp/monlib/service/pages
     ydb/core/base
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk
     ydb/core/blobstorage/vdisk/protos
 )

@@ -6,7 +6,6 @@
 #include "utils.h"
 
 #include <ydb/core/http_proxy/events.h>
-#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -37,8 +36,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -56,8 +56,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TSetQueueAttributesActor:
         public TQueueUrlHolder,
-        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>,
-        public TCdcStreamCompatible
+        public TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>
     {
     protected:
         using TBase = TGrpcActorBase<TSetQueueAttributesActor, TEvSqsTopicSetQueueAttributesRequest>;
@@ -95,41 +94,17 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
                 hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
         }
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
-            // TODO remove it
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return SetQueueAttributesDescribePolicy();
         }
 
-        void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
-            const auto& topicInfo = result->Topics.begin()->second;
-
-            switch(topicInfo.Status) {
-                case NDescriber::EStatus::SUCCESS:
-                    break;
-                case NDescriber::EStatus::NOT_TOPIC:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
-                        TStringBuilder() << "Queue name used by another scheme object"));
-                case NDescriber::EStatus::NOT_FOUND:
-                case NDescriber::EStatus::UNAUTHORIZED:
-                    return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
-                        "The specified queue doesn't exist"));
-                case NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
-                    return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED,
-                        "Access denied"));
-                case NDescriber::EStatus::UNKNOWN_ERROR:
-                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                        NDescriber::Description(topicInfo.RealPath, topicInfo.Status)));
-            }
-
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
             PQGroup = topicInfo.Info->Description;
             SelfInfo = topicInfo.Self->Info;
 
@@ -168,7 +143,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", check.error())));
             }
 
-            return SendAlterTopicRequest();
+            this->ChargeRequestUnits(ActorContext());
         }
 
         std::expected<void, std::string> ValidateFifoImmutability() const {
@@ -188,13 +163,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
                 topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);
-                if (*NewQueueAttributes.ContentBasedDeduplication) {
-                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                    topicRequest.set_set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
-                } else {
-                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-                    topicRequest.set_set_partition_write_burst_messages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-                }
             }
 
             auto* consumer = topicRequest.add_alter_consumers();
@@ -243,16 +211,20 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
+            const auto* schemaResult = ev->Get();
+            if (schemaResult->Status != Ydb::StatusIds::SUCCESS) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, schemaResult->ErrorMessage));
             }
-            return ReplyAndDie(ActorContext());
+            Ydb::Ymq::V1::SetQueueAttributesResult result;
+            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
         }
 
-        void ReplyAndDie(const TActorContext& ctx) {
-            Ydb::Ymq::V1::SetQueueAttributesResult result;
-            return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext&) {
+            SendAlterTopicRequest();
         }
 
     protected:

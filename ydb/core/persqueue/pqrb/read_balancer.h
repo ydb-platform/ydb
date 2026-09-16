@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -18,7 +19,8 @@
 
 #include <util/system/hp_timer.h>
 
-#include <unordered_map>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -96,7 +98,8 @@ private:
 
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
-                               public TTabletExecutedFlat {
+                               public TTabletExecutedFlat,
+                               public TLogPrefix {
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;
@@ -120,6 +123,16 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void ProcessPartitionsLocationQueue(const TActorContext& ctx);
+    bool TryRespondPartitionsLocation(
+        const TActorId& sender,
+        const NKikimrPQ::TGetPartitionsLocation& request,
+        const TActorContext& ctx,
+        ui64 cookie);
+    bool AllPartitionPipesReady() const;
+    void SchedulePartitionsLocationWakeup(const TActorContext& ctx);
+    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx, ui64 cookie);
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
@@ -151,7 +164,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
     // End kafka integration
 
-    TStringBuilder LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);
@@ -164,7 +177,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void GetStat(const TActorContext&);
     TEvPersQueue::TEvPeriodicTopicStats* GetStatsEvent();
-    void AnswerWaitingRequests(const TActorContext& ctx);
 
     void BroadcastPartitionError(const TString& message, NKikimrServices::EServiceKikimr service, const TActorContext& ctx);
 
@@ -220,14 +232,14 @@ public:
     };
 
 private:
-    std::unordered_map<ui32, TPartitionInfo> PartitionsInfo;
+    absl::flat_hash_map<ui32, TPartitionInfo> PartitionsInfo;
 
     struct TTabletInfo {
         ui64 Owner;
         ui64 Idx;
     };
 
-    std::unordered_map<ui64, TTabletInfo> TabletsInfo;
+    absl::flat_hash_map<ui64, TTabletInfo> TabletsInfo;
     ui64 MaxIdx;
 
     ui32 NextPartitionId;
@@ -254,17 +266,19 @@ private:
         TActorId PipeActor;
         TMaybe<ui64> NodeId;
         TMaybe<ui32> Generation;
+        bool Ready = false;
     };
 
-    std::unordered_map<ui64, TPipeLocation> TabletPipes;
-    std::unordered_set<ui64> PipesRequested;
+    absl::flat_hash_map<ui64, TPipeLocation> TabletPipes;
+    absl::flat_hash_set<ui64> PipesRequested;
+    ui32 ReadyPartitionTablets = 0;
 
     TDatabaseInfo DatabaseInfo;
 
     std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
     struct TStatsRequestTracker {
-        std::unordered_map<ui64, ui64> Cookies;
+        absl::flat_hash_map<ui64, ui64> Cookies;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
@@ -279,6 +293,18 @@ private:
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+
+    static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
+    static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);
+
+    struct TPartitionsLocationRequest {
+        TActorId Sender;
+        NKikimrPQ::TGetPartitionsLocation Record;
+        TInstant Deadline;
+        ui64 Cookie = 0;
+    };
+    std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
+    bool PartitionsLocationWakeupScheduled = false;
 
     using TMLPRequests = std::variant<
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr

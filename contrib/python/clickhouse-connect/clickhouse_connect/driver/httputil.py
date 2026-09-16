@@ -13,11 +13,11 @@ from typing import Any
 import certifi
 import lz4.frame
 import urllib3
-import zstandard
 from urllib3.poolmanager import PoolManager, ProxyManager
 from urllib3.response import HTTPResponse
 
 from clickhouse_connect import common
+from clickhouse_connect.driver.compression import _zstd_decompress, _zstd_decompressor, _ZstdError
 from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Increase this number just to be safe when ClickHouse is returning progress headers
-http.client._MAXHEADERS = 10000
+http.client._MAXHEADERS = 10000  # type: ignore[attr-defined]
 
 DEFAULT_KEEP_INTERVAL = 30
 DEFAULT_KEEP_COUNT = 3
@@ -42,8 +42,8 @@ core_socket_options = [
 ]
 
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-_proxy_managers = {}
-all_managers = {}
+_proxy_managers: dict[str, PoolManager] = {}
+all_managers: dict[PoolManager, int] = {}
 
 
 @atexit.register
@@ -74,7 +74,7 @@ def get_pool_manager_options(
     if getattr(socket, "TCP_KEEPCNT", None) is not None:
         socket_options.append((SOCKET_TCP, socket.TCP_KEEPCNT, keep_count))
     if getattr(socket, "TCP_KEEPIDLE", None) is not None:
-        socket_options.append((SOCKET_TCP, socket.TCP_KEEPIDLE, keep_idle))
+        socket_options.append((SOCKET_TCP, socket.TCP_KEEPIDLE, keep_idle))  # type: ignore[attr-defined]
     if sys.platform == "darwin":
         socket_options.append((SOCKET_TCP, getattr(socket, "TCP_KEEPALIVE", 0x10), keep_interval))
     options["maxsize"] = options.get("maxsize", 8)
@@ -119,7 +119,7 @@ def get_pool_manager(
             raise ProgrammingError("Only one of http_proxy or https_proxy should be specified")
         if not http_proxy.startswith("http"):
             http_proxy = f"http://{http_proxy}"
-        manager = ProxyManager(http_proxy, **options)
+        manager: PoolManager = ProxyManager(http_proxy, **options)
     elif https_proxy:
         if not https_proxy.startswith("http"):
             https_proxy = f"https://{https_proxy}"
@@ -154,9 +154,8 @@ def get_response_data(response: HTTPResponse) -> bytes:
     encoding = response.headers.get("content-encoding", None)
     if encoding == "zstd":
         try:
-            zstd_decom = zstandard.ZstdDecompressor()
-            return zstd_decom.stream_reader(response.data).read()
-        except zstandard.ZstdError:
+            return _zstd_decompress(response.data)
+        except _ZstdError:
             pass
     if encoding == "lz4":
         lz4_decom = lz4.frame.LZ4FrameDecompressor()
@@ -207,7 +206,7 @@ class ResponseSource:
         compression = response.headers.get("content-encoding")
         decompress: Callable | None = None
         if compression == "zstd":
-            zstd_decom = zstandard.ZstdDecompressor().decompressobj()
+            zstd_decom = _zstd_decompressor()
 
             def zstd_decompress(c: deque) -> tuple[bytes, int]:
                 chunk = c.popleft()
@@ -238,7 +237,6 @@ class ResponseSource:
             done = False
             current_size = 0
             read_gen = response.stream(chunk_size, decompress is None)
-            data_received = False
             read_error = None
             while True:
                 while not done:
@@ -246,7 +244,7 @@ class ResponseSource:
                     try:
                         chunk = next(read_gen, None)  # Always try to read at least one chunk if there are any left
                     except Exception as ex:
-                        # Store the exception for potential re-raising if no data was received
+                        # Store the exception for re-raising later
                         read_error = ex
                         logger.warning("unexpected failure to read next chunk", exc_info=True)
                     if not chunk:
@@ -257,7 +255,7 @@ class ResponseSource:
                     if current_size > buffer_size:
                         break
                 if len(chunks) == 0:
-                    if read_error and not data_received:
+                    if read_error:
                         raise OperationalError("Failed to read response data from server") from read_error
                     return
                 if decompress:
@@ -267,7 +265,6 @@ class ResponseSource:
                     chunk = chunks.popleft()
                     current_size -= len(chunk)
                 if chunk:
-                    data_received = True
                     yield chunk
 
         self.gen = buffered()

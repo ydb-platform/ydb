@@ -8,7 +8,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/array_ref.h>
-#include <util/generic/hash.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NKikimr::NPQ {
 
@@ -54,8 +55,8 @@ struct TTopicQueueLeaderCounters {
 
     ::NMonitoring::THistogramPtr ReceiveMessageImmediate_Duration;
 
-    THashMap<TString, TTopicSqsActionCounters> SqsActionCounters;
-    THashMap<TString, TTopicYmqActionCounters> YmqActionCounters;
+    absl::flat_hash_map<TString, TTopicSqsActionCounters> SqsActionCounters;
+    absl::flat_hash_map<TString, TTopicYmqActionCounters> YmqActionCounters;
 };
 
 class TTopicSqsMetricsHandler {

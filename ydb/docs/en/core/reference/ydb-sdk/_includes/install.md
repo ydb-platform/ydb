@@ -44,7 +44,7 @@ The build process using the source code is described in the source code reposito
 
 - C++
 
-  ### Debian packages (Ubuntu 24.04)
+  ## Debian packages (Ubuntu 24.04)
 
   Pre-built `.deb` packages for Ubuntu 24.04 (Noble), amd64 are attached to each [GitHub release](https://github.com/ydb-platform/ydb-cpp-sdk/releases). Download and install them locally:
 
@@ -66,7 +66,7 @@ The build process using the source code is described in the source code reposito
 
   {% endnote %}
 
-  ### Using the SDK in CMake
+  ## Using the SDK in CMake
 
   After installing the packages, use the SDK in your CMake project:
 
@@ -74,7 +74,7 @@ The build process using the source code is described in the source code reposito
 
   Pass `-DCMAKE_PREFIX_PATH=/usr/share/yandex` when configuring your project, since the packages install under the Yandex prefix.
 
-  ### Build from source
+  ## Build from source
 
   Clone the [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) repository and run the following commands from the command line:
 

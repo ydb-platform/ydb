@@ -136,10 +136,16 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
+    std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings> OptimizerRuntimeSettings =
+        NStorageOptimizer::TOptimizerRuntimeSettings::MakeDefault();
 
 public:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
         return DataAccessorsManager;
+    }
+
+    const std::shared_ptr<NStorageOptimizer::TOptimizerRuntimeSettings>& GetOptimizerRuntimeSettings() const {
+        return OptimizerRuntimeSettings;
     }
 
     std::vector<TCSMetadataRequest> CollectMetadataRequests() {

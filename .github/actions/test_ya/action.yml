@@ -696,7 +696,6 @@ runs:
         export build_preset="${{ inputs.build_preset }}"
         export branch_to_compare="$BRANCH_NAME"
         export yellow_treshold=102400
-        export red_treshold=2097152
         export commit_git_sha="$ORIGINAL_HEAD"
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py

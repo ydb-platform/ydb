@@ -85,11 +85,12 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/core/extract_predicate
+    yql/essentials/core/langver
     yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/sql
     yql/essentials/sql/settings/flags
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4

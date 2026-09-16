@@ -107,7 +107,7 @@ public:
             auto tag = Parser_->ParseVariant16Tag();
             if (tag >= TableDescriptions_.size()) {
                 THROW_ERROR_EXCEPTION("Unknown table index varint16 tag")
-                    << TErrorAttribute("tag", tag);
+                    .With("tag", tag);
             }
 
             Consumer_->OnBeginRow(tag);

@@ -651,6 +651,12 @@ ui64 AsyncAlterDropColumn(
         const TString& name,
         const TString& colName);
 
+ui64 AsyncAlterSetMetricsLevel(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level);
+
 ui64 AsyncSetEnableFilterByKey(
         Tests::TServer::TPtr server,
         const TString& workingDir,
@@ -1042,5 +1048,40 @@ ui64 AsyncTruncateTable(
     const TActorId& sender,
     const TString& workingDir,
     const TString& tableName);
+
+// A single upsert operation within an uncommitted write.
+struct TUncommittedWriteOp {
+    ui64 Key;
+    ui64 Value;
+    ui64 WriteSeqNum; // 0 = no WriteSeqNum
+};
+
+// Sends an uncommitted multi-operation upsert. Each element of `ops` becomes one
+// OPERATION_UPSERT with its own WriteSeqNum (0 means none).
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 writerIndex,
+        const TVector<TUncommittedWriteOp>& ops,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Convenience overload for a single-operation uncommitted upsert.
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
+        ui64 writerIndex, ui64 writeSeqNum,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Asserts the lock reports exactly one write seq num and returns it
+const NKikimrDataEvents::TWriteSeqNum& WriteSeqNumOf(const NKikimrDataEvents::TLock& lock);
+
+NKikimrDataEvents::TEvWriteResult CommitLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
 
 } // namespace NKikimr

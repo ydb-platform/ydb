@@ -157,7 +157,7 @@ namespace orc {
                                                     footerLength_, memory_),
           blockSize_, memory_, metrics_);
       stripeFooter_ = std::make_unique<proto::StripeFooter>();
-      if (!stripeFooter_->ParseFromZeroCopyStream(pbStream.get())) {
+      if (!parseProtobufFromStream(stripeFooter_.get(), pbStream.get())) {
         throw ParseError("Failed to parse the stripe footer");
       }
     }

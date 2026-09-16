@@ -129,6 +129,8 @@ namespace NKikimr {
     XX(KeyValuePut, 5001) \
     /* KeyValue component writes garbage-collection barriers and flags. */ \
     XX(KeyValueGC, 5002) \
+    /* KeyValue component moves data to latest group in channel. */ \
+    XX(KeyValueMoveData, 5003) \
     \
     /* ColumnShard: */ \
     \

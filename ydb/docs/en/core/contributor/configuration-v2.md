@@ -1,6 +1,6 @@
 # Internals of the V2 configuration mechanism
 
-The V2 configuration in {{ ydb-short-name }} provides a unified approach to managing cluster settings. While the [DevOps section](../devops/configuration-management/configuration-v2/config-overview.md) describes how to use this mechanism, this article focuses on its technical design. It will be useful for {{ ydb-short-name }} developers and contributors who want to make changes to this mechanism, as well as anyone who wants to gain a deeper understanding of what happens in a {{ ydb-short-name }} cluster when the configuration changes.
+The V2 configuration in {{ ydb-short-name }} provides a unified approach to managing cluster settings. While the [{#T}](../devops/configuration-management/configuration-v2/config-overview.md) page within Cluster Administration section describes how to use this mechanism, this article focuses on its technical design. It will be useful for {{ ydb-short-name }} developers and contributors who want to make changes to this mechanism, as well as anyone who wants to gain a deeper understanding of what happens in a {{ ydb-short-name }} cluster when the configuration changes.
 
 The {{ ydb-short-name }} cluster configuration is stored in several locations, and various cluster components coordinate synchronization between them:
 

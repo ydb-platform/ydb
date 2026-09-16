@@ -6,7 +6,7 @@
 
 #include <library/cpp/yt/memory/range.h>
 
-#include <library/cpp/yt/misc/concepts.h>
+#include <library/cpp/yt/mpl/concepts.h>
 
 #include <optional>
 
@@ -26,12 +26,12 @@ public:
     template <class THeterogenousKey>
     std::optional<TValue> Find(const THeterogenousKey& key);
 
-    template <class THeterogenousKey, CInvocable<TValue()> TValueCtor>
+    template <class THeterogenousKey, NMpl::CInvocable<TValue()> TValueCtor>
     TValue GetOrPut(
         const THeterogenousKey& key,
         const TValueCtor& valueCtor);
 
-    template <class THeterogenousKey, CInvocable<TValue(int index)> TValueCtor>
+    template <class THeterogenousKey, NMpl::CInvocable<TValue(int index)> TValueCtor>
     std::vector<TValue> GetOrPutMany(
         TRange<THeterogenousKey> keys,
         const TValueCtor& valueCtor);

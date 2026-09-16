@@ -12,6 +12,7 @@ private:
     TString Database;
     TString SecurityToken;
     TString PeerName;
+    TString RequestId;
     THolder<TEvTicketParser::TEvAuthorizeTicketResult> AuthorizeTicketResult;
     bool RequireAdminAccess = false;
     bool UserAdmin = false;
@@ -121,6 +122,10 @@ public:
         PeerName = peerName;
     }
 
+    void SetRequestId(const TString& requestId) {
+        RequestId = requestId;
+    }
+
     const TString& GetPeerName() const {
         return PeerName;
     }
@@ -211,7 +216,7 @@ public:
                 ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                     .Ticket = SecurityToken,
                     .Database = Database,
-                    .PeerName = PeerName,
+                    .TraceContext = {PeerName, RequestId},
                     .Entries = Entries
                 }));
             }

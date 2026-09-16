@@ -381,6 +381,38 @@
       ],
       "documentation":"<p>Returns details about one or more multi-Region clusters.</p>"
     },
+    "DescribeMultiRegionParameterGroups":{
+      "name":"DescribeMultiRegionParameterGroups",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeMultiRegionParameterGroupsRequest"},
+      "output":{"shape":"DescribeMultiRegionParameterGroupsResponse"},
+      "errors":[
+        {"shape":"MultiRegionParameterGroupNotFoundFault"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"InvalidParameterCombinationException"}
+      ],
+      "documentation":"<p>Returns a list of multi-region parameter groups.</p>"
+    },
+    "DescribeMultiRegionParameters":{
+      "name":"DescribeMultiRegionParameters",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DescribeMultiRegionParametersRequest"},
+      "output":{"shape":"DescribeMultiRegionParametersResponse"},
+      "errors":[
+        {"shape":"MultiRegionParameterGroupNotFoundFault"},
+        {"shape":"ServiceLinkedRoleNotFoundFault"},
+        {"shape":"InvalidParameterValueException"},
+        {"shape":"InvalidParameterCombinationException"}
+      ],
+      "documentation":"<p>Returns the detailed parameter list for a particular multi-region parameter group.</p>"
+    },
     "DescribeParameterGroups":{
       "name":"DescribeParameterGroups",
       "http":{
@@ -575,7 +607,7 @@
         {"shape":"MultiRegionClusterNotFoundFault"},
         {"shape":"MultiRegionParameterGroupNotFoundFault"}
       ],
-      "documentation":"<p>Lists all tags currently on a named resource. A tag is a key-value pair where the key and value are case-sensitive. You can use tags to categorize and track your MemoryDB resources. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p>"
+      "documentation":"<p>Lists all tags currently on a named resource. A tag is a key-value pair where the key and value are case-sensitive. You can use tags to categorize and track your MemoryDB resources. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p>When you add or remove tags from multi region clusters, you might not immediately see the latest effective tags in the ListTags API response due to it being eventually consistent specifically for multi region clusters. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p/>"
     },
     "PurchaseReservedNodesOffering":{
       "name":"PurchaseReservedNodesOffering",
@@ -636,7 +668,7 @@
         {"shape":"ServiceLinkedRoleNotFoundFault"},
         {"shape":"InvalidParameterValueException"}
       ],
-      "documentation":"<p>A tag is a key-value pair where the key and value are case-sensitive. You can use tags to categorize and track all your MemoryDB resources. When you add or remove tags on clusters, those actions will be replicated to all nodes in the cluster. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/iam.resourcelevelpermissions.html\">Resource-level permissions</a>.</p> <p>For example, you can use cost-allocation tags to your MemoryDB resources, Amazon generates a cost allocation report as a comma-separated value (CSV) file with your usage and costs aggregated by your tags. You can apply tags that represent business categories (such as cost centers, application names, or owners) to organize your costs across multiple services. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/tagging.html\">Using Cost Allocation Tags</a>.</p>"
+      "documentation":"<p> Use this operation to add tags to a resource. A tag is a key-value pair where the key and value are case-sensitive. You can use tags to categorize and track all your MemoryDB resources. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p>When you add tags to multi region clusters, you might not immediately see the latest effective tags in the ListTags API response due to it being eventually consistent specifically for multi region clusters. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p>You can specify cost-allocation tags for your MemoryDB resources, Amazon generates a cost allocation report as a comma-separated value (CSV) file with your usage and costs aggregated by your tags. You can apply tags that represent business categories (such as cost centers, application names, or owners) to organize your costs across multiple services. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/tagging.html\">Using Cost Allocation Tags</a>.</p>"
     },
     "UntagResource":{
       "name":"UntagResource",
@@ -661,7 +693,7 @@
         {"shape":"MultiRegionClusterNotFoundFault"},
         {"shape":"MultiRegionParameterGroupNotFoundFault"}
       ],
-      "documentation":"<p>Use this operation to remove tags on a resource.</p>"
+      "documentation":"<p>Use this operation to remove tags on a resource. A tag is a key-value pair where the key and value are case-sensitive. You can use tags to categorize and track all your MemoryDB resources. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p>When you remove tags from multi region clusters, you might not immediately see the latest effective tags in the ListTags API response due to it being eventually consistent specifically for multi region clusters. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/Tagging-Resources.html\">Tagging your MemoryDB resources</a>.</p> <p>You can specify cost-allocation tags for your MemoryDB resources, Amazon generates a cost allocation report as a comma-separated value (CSV) file with your usage and costs aggregated by your tags. You can apply tags that represent business categories (such as cost centers, application names, or owners) to organize your costs across multiple services. For more information, see <a href=\"https://docs.aws.amazon.com/MemoryDB/latest/devguide/tagging.html\">Using Cost Allocation Tags</a>.</p>"
     },
     "UpdateACL":{
       "name":"UpdateACL",
@@ -816,9 +848,8 @@
     },
     "ACLAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>An ACL with the specified name already exists.</p>",
       "exception":true
     },
     "ACLClusterNameList":{
@@ -840,9 +871,8 @@
     },
     "ACLNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified ACL does not exist.</p>",
       "exception":true
     },
     "ACLPendingChanges":{
@@ -861,9 +891,8 @@
     },
     "ACLQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of ACLs allowed.</p>",
       "exception":true
     },
     "ACLsUpdateStatus":{
@@ -878,9 +907,8 @@
     },
     "APICallRateForCustomerExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The customer has exceeded the maximum number of API requests allowed per time period.</p>",
       "exception":true
     },
     "AZStatus":{
@@ -1084,15 +1112,22 @@
         "DataTiering":{
           "shape":"DataTieringStatus",
           "documentation":"<p>Enables data tiering. Data tiering is only supported for clusters using the r6gd node type. This parameter must be set when using r6gd nodes. For more information, see <a href=\"https://docs.aws.amazon.com/memorydb/latest/devguide/data-tiering.html\">Data tiering</a>.</p>"
+        },
+        "NetworkType":{
+          "shape":"NetworkType",
+          "documentation":"<p>The IP address type for the cluster. Returns 'ipv4' for IPv4 only, 'ipv6' for IPv6 only, or 'dual-stack' if the cluster supports both IPv4 and IPv6 addressing.</p>"
+        },
+        "IpDiscovery":{
+          "shape":"IpDiscovery",
+          "documentation":"<p>The mechanism that the cluster uses to discover IP addresses. Returns 'ipv4' when DNS endpoints resolve to IPv4 addresses, or 'ipv6' when DNS endpoints resolve to IPv6 addresses.</p>"
         }
       },
       "documentation":"<p>Contains all of the attributes of a specific cluster.</p>"
     },
     "ClusterAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A cluster with the specified name already exists.</p>",
       "exception":true
     },
     "ClusterConfiguration":{
@@ -1180,9 +1215,8 @@
     },
     "ClusterNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified cluster does not exist.</p>",
       "exception":true
     },
     "ClusterPendingUpdates":{
@@ -1205,9 +1239,8 @@
     },
     "ClusterQuotaForCustomerExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of clusters allowed for this customer.</p>",
       "exception":true
     },
     "CopySnapshotRequest":{
@@ -1378,6 +1411,14 @@
         "DataTiering":{
           "shape":"BooleanOptional",
           "documentation":"<p>Enables data tiering. Data tiering is only supported for clusters using the r6gd node type. This parameter must be set when using r6gd nodes. For more information, see <a href=\"https://docs.aws.amazon.com/memorydb/latest/devguide/data-tiering.html\">Data tiering</a>.</p>"
+        },
+        "NetworkType":{
+          "shape":"NetworkType",
+          "documentation":"<p>Specifies the IP address type for the cluster. Valid values are 'ipv4', 'ipv6', or 'dual_stack'. When set to 'ipv4', the cluster will only be accessible via IPv4 addresses. When set to 'ipv6', the cluster will only be accessible via IPv6 addresses. When set to 'dual_stack', the cluster will be accessible via both IPv4 and IPv6 addresses. If not specified, the default is 'ipv4'.</p>"
+        },
+        "IpDiscovery":{
+          "shape":"IpDiscovery",
+          "documentation":"<p>The mechanism for discovering IP addresses for the cluster discovery protocol. Valid values are 'ipv4' or 'ipv6'. When set to 'ipv4', cluster discovery functions such as cluster slots, cluster shards, and cluster nodes return IPv4 addresses for cluster nodes. When set to 'ipv6', the cluster discovery functions return IPv6 addresses for cluster nodes. The value must be compatible with the NetworkType parameter. If not specified, the default is 'ipv4'.</p>"
         }
       }
     },
@@ -1399,7 +1440,7 @@
       "members":{
         "MultiRegionClusterNameSuffix":{
           "shape":"String",
-          "documentation":"<p>A suffix to be added to the multi-Region cluster name.</p>"
+          "documentation":"<p>A suffix to be added to the Multi-Region cluster name. Amazon MemoryDB automatically applies a prefix to the Multi-Region cluster Name when it is created. Each Amazon Region has its own prefix. For instance, a Multi-Region cluster Name created in the US-West-1 region will begin with \"virxk\", along with the suffix name you provide. The suffix guarantees uniqueness of the Multi-Region cluster name across multiple regions.</p>"
         },
         "Description":{
           "shape":"String",
@@ -1590,9 +1631,8 @@
     },
     "DefaultUserRequired":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A default user is required and must be specified.</p>",
       "exception":true
     },
     "DeleteACLRequest":{
@@ -1922,6 +1962,71 @@
         }
       }
     },
+    "DescribeMultiRegionParameterGroupsRequest":{
+      "type":"structure",
+      "members":{
+        "MultiRegionParameterGroupName":{
+          "shape":"String",
+          "documentation":"<p>The request for information on a specific multi-region parameter group.</p>"
+        },
+        "MaxResults":{
+          "shape":"IntegerOptional",
+          "documentation":"<p>The maximum number of records to include in the response. If more records exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.</p>"
+        }
+      }
+    },
+    "DescribeMultiRegionParameterGroupsResponse":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>An optional token to include in the response. If this token is provided, the response includes only results beyond the token, up to the value specified by MaxResults.</p>"
+        },
+        "MultiRegionParameterGroups":{
+          "shape":"MultiRegionParameterGroupList",
+          "documentation":"<p>A list of multi-region parameter groups. Each element in the list contains detailed information about one parameter group.</p>"
+        }
+      }
+    },
+    "DescribeMultiRegionParametersRequest":{
+      "type":"structure",
+      "required":["MultiRegionParameterGroupName"],
+      "members":{
+        "MultiRegionParameterGroupName":{
+          "shape":"String",
+          "documentation":"<p>The name of the multi-region parameter group to return details for.</p>"
+        },
+        "Source":{
+          "shape":"String",
+          "documentation":"<p>The parameter types to return. Valid values: user | system | engine-default</p>"
+        },
+        "MaxResults":{
+          "shape":"IntegerOptional",
+          "documentation":"<p>The maximum number of records to include in the response. If more records exist than the specified MaxResults value, a token is included in the response so that the remaining results can be retrieved.</p>"
+        },
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>An optional token returned from a prior request. Use this token for pagination of results from this action. If this parameter is specified, the response includes only results beyond the token, up to the value specified by MaxResults.</p>"
+        }
+      }
+    },
+    "DescribeMultiRegionParametersResponse":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"String",
+          "documentation":"<p>An optional token to include in the response. If this token is provided, the response includes only results beyond the token, up to the value specified by MaxResults.</p>"
+        },
+        "MultiRegionParameters":{
+          "shape":"MultiRegionParametersList",
+          "documentation":"<p>A list of parameters specific to a particular multi-region parameter group. Each element in the list contains detailed information about one parameter.</p>"
+        }
+      }
+    },
     "DescribeParameterGroupsRequest":{
       "type":"structure",
       "members":{
@@ -2218,9 +2323,8 @@
     "Double":{"type":"double"},
     "DuplicateUserNameFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A user with the specified name already exists.</p>",
       "exception":true
     },
     "Endpoint":{
@@ -2359,60 +2463,52 @@
     },
     "InsufficientClusterCapacityFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The cluster does not have sufficient capacity to perform the requested operation.</p>",
       "exception":true
     },
     "Integer":{"type":"integer"},
     "IntegerOptional":{"type":"integer"},
     "InvalidACLStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The ACL is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidARNFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified Amazon Resource Name (ARN) is not valid.</p>",
       "exception":true
     },
     "InvalidClusterStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The cluster is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidCredentialsException":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The provided credentials are not valid.</p>",
       "exception":true
     },
     "InvalidKMSKeyFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified KMS key is not valid or accessible.</p>",
       "exception":true
     },
     "InvalidMultiRegionClusterStateFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The requested operation cannot be performed on the multi-Region cluster in its current state.</p>",
       "exception":true
     },
     "InvalidNodeStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The node is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidParameterCombinationException":{
@@ -2420,15 +2516,14 @@
       "members":{
         "message":{"shape":"AwsQueryErrorMessage"}
       },
-      "documentation":"<p/>",
+      "documentation":"<p>The specified parameter combination is not valid.</p>",
       "exception":true,
       "synthetic":true
     },
     "InvalidParameterGroupStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The parameter group is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidParameterValueException":{
@@ -2436,37 +2531,40 @@
       "members":{
         "message":{"shape":"AwsQueryErrorMessage"}
       },
-      "documentation":"<p/>",
+      "documentation":"<p>The specified parameter value is not valid.</p>",
       "exception":true,
       "synthetic":true
     },
     "InvalidSnapshotStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The snapshot is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidSubnet":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified subnet is not valid.</p>",
       "exception":true
     },
     "InvalidUserStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The user is not in a valid state for the requested operation.</p>",
       "exception":true
     },
     "InvalidVPCNetworkStateFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The VPC network is not in a valid state for the requested operation.</p>",
       "exception":true
+    },
+    "IpDiscovery":{
+      "type":"string",
+      "enum":[
+        "ipv4",
+        "ipv6"
+      ]
     },
     "KeyList":{
       "type":"list",
@@ -2593,8 +2691,7 @@
     },
     "MultiRegionClusterAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>A multi-Region cluster with the specified name already exists.</p>",
       "exception":true
     },
@@ -2604,23 +2701,96 @@
     },
     "MultiRegionClusterNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The specified multi-Region cluster does not exist.</p>",
       "exception":true
     },
-    "MultiRegionParameterGroupNotFoundFault":{
+    "MultiRegionParameter":{
       "type":"structure",
       "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the parameter.</p>"
+        },
+        "Value":{
+          "shape":"String",
+          "documentation":"<p>The value of the parameter.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of the parameter.</p>"
+        },
+        "Source":{
+          "shape":"String",
+          "documentation":"<p>Indicates the source of the parameter value. Valid values: user | system | engine-default</p>"
+        },
+        "DataType":{
+          "shape":"String",
+          "documentation":"<p>The valid data type for the parameter.</p>"
+        },
+        "AllowedValues":{
+          "shape":"String",
+          "documentation":"<p>The valid range of values for the parameter.</p>"
+        },
+        "MinimumEngineVersion":{
+          "shape":"String",
+          "documentation":"<p>The earliest engine version to which the parameter can apply.</p>"
+        }
       },
+      "documentation":"<p>Describes an individual setting that controls some aspect of MemoryDB behavior across multiple regions.</p>"
+    },
+    "MultiRegionParameterGroup":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"String",
+          "documentation":"<p>The name of the multi-region parameter group.</p>"
+        },
+        "Family":{
+          "shape":"String",
+          "documentation":"<p>The name of the parameter group family that this multi-region parameter group is compatible with.</p>"
+        },
+        "Description":{
+          "shape":"String",
+          "documentation":"<p>A description of the multi-region parameter group.</p>"
+        },
+        "ARN":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the multi-region parameter group.</p>"
+        }
+      },
+      "documentation":"<p>Represents the output of a CreateMultiRegionParameterGroup operation. A multi-region parameter group represents a collection of parameters that can be applied to clusters across multiple regions.</p>"
+    },
+    "MultiRegionParameterGroupList":{
+      "type":"list",
+      "member":{"shape":"MultiRegionParameterGroup"}
+    },
+    "MultiRegionParameterGroupNotFoundFault":{
+      "type":"structure",
+      "members":{},
       "documentation":"<p>The specified multi-Region parameter group does not exist.</p>",
       "exception":true
     },
+    "MultiRegionParametersList":{
+      "type":"list",
+      "member":{"shape":"MultiRegionParameter"}
+    },
+    "NetworkType":{
+      "type":"string",
+      "enum":[
+        "ipv4",
+        "ipv6",
+        "dual_stack"
+      ]
+    },
+    "NetworkTypeList":{
+      "type":"list",
+      "member":{"shape":"NetworkType"}
+    },
     "NoOperationFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The requested operation would result in no changes.</p>",
       "exception":true
     },
     "Node":{
@@ -2655,16 +2825,14 @@
     },
     "NodeQuotaForClusterExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of nodes allowed for this cluster.</p>",
       "exception":true
     },
     "NodeQuotaForCustomerExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of nodes allowed for this customer.</p>",
       "exception":true
     },
     "NodeTypeList":{
@@ -2725,9 +2893,8 @@
     },
     "ParameterGroupAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A parameter group with the specified name already exists.</p>",
       "exception":true
     },
     "ParameterGroupList":{
@@ -2736,16 +2903,14 @@
     },
     "ParameterGroupNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified parameter group does not exist.</p>",
       "exception":true
     },
     "ParameterGroupQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of parameter groups allowed.</p>",
       "exception":true
     },
     "ParameterNameList":{
@@ -2935,8 +3100,7 @@
     },
     "ReservedNodeAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>You already have a reservation with the given identifier.</p>",
       "exception":true
     },
@@ -2946,15 +3110,13 @@
     },
     "ReservedNodeNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The requested node does not exist.</p>",
       "exception":true
     },
     "ReservedNodeQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The request cannot be processed because it would exceed the user's node quota.</p>",
       "exception":true
     },
@@ -2994,8 +3156,7 @@
     },
     "ReservedNodesOfferingNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>The requested node offering does not exist. </p>",
       "exception":true
     },
@@ -3060,9 +3221,8 @@
     },
     "ServiceLinkedRoleNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The required service-linked role was not found.</p>",
       "exception":true
     },
     "ServiceUpdate":{
@@ -3113,9 +3273,8 @@
     },
     "ServiceUpdateNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified service update does not exist.</p>",
       "exception":true
     },
     "ServiceUpdateRequest":{
@@ -3228,16 +3387,14 @@
     },
     "ShardNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified shard does not exist.</p>",
       "exception":true
     },
     "ShardsPerClusterQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of shards allowed per cluster.</p>",
       "exception":true
     },
     "SlotMigration":{
@@ -3286,9 +3443,8 @@
     },
     "SnapshotAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A snapshot with the specified name already exists.</p>",
       "exception":true
     },
     "SnapshotArnsList":{
@@ -3301,16 +3457,14 @@
     },
     "SnapshotNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified snapshot does not exist.</p>",
       "exception":true
     },
     "SnapshotQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of snapshots allowed.</p>",
       "exception":true
     },
     "SourceType":{
@@ -3335,6 +3489,10 @@
         "AvailabilityZone":{
           "shape":"AvailabilityZone",
           "documentation":"<p>The Availability Zone where the subnet resides</p>"
+        },
+        "SupportedNetworkTypes":{
+          "shape":"NetworkTypeList",
+          "documentation":"<p>The network types supported by this subnet. Returns an array of strings that can include 'ipv4', 'ipv6', or both, indicating whether the subnet supports IPv4 only, IPv6 only, or dual-stack deployments.</p>"
         }
       },
       "documentation":"<p>Represents the subnet associated with a cluster. This parameter refers to subnets defined in Amazon Virtual Private Cloud (Amazon VPC) and used with MemoryDB.</p>"
@@ -3361,22 +3519,24 @@
         "ARN":{
           "shape":"String",
           "documentation":"<p>The ARN (Amazon Resource Name) of the subnet group.</p>"
+        },
+        "SupportedNetworkTypes":{
+          "shape":"NetworkTypeList",
+          "documentation":"<p>The network types supported by this subnet group. Returns an array of strings that can include 'ipv4', 'ipv6', or both, indicating the IP address types that can be used for clusters deployed in this subnet group.</p>"
         }
       },
       "documentation":"<p>Represents the output of one of the following operations:</p> <ul> <li> <p>CreateSubnetGroup</p> </li> <li> <p>UpdateSubnetGroup</p> </li> </ul> <p>A subnet group is a collection of subnets (typically private) that you can designate for your clusters running in an Amazon Virtual Private Cloud (VPC) environment.</p>"
     },
     "SubnetGroupAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A subnet group with the specified name already exists.</p>",
       "exception":true
     },
     "SubnetGroupInUseFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The subnet group is currently in use and cannot be deleted.</p>",
       "exception":true
     },
     "SubnetGroupList":{
@@ -3385,16 +3545,14 @@
     },
     "SubnetGroupNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified subnet group does not exist.</p>",
       "exception":true
     },
     "SubnetGroupQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of subnet groups allowed.</p>",
       "exception":true
     },
     "SubnetIdentifierList":{
@@ -3403,9 +3561,8 @@
     },
     "SubnetInUse":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The subnet is currently in use and cannot be deleted.</p>",
       "exception":true
     },
     "SubnetList":{
@@ -3414,16 +3571,14 @@
     },
     "SubnetNotAllowedFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified subnet is not allowed for this operation.</p>",
       "exception":true
     },
     "SubnetQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of subnets allowed.</p>",
       "exception":true
     },
     "TStamp":{"type":"timestamp"},
@@ -3448,16 +3603,14 @@
     },
     "TagNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified tag does not exist.</p>",
       "exception":true
     },
     "TagQuotaPerResourceExceeded":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of tags allowed per resource.</p>",
       "exception":true
     },
     "TagResourceRequest":{
@@ -3493,9 +3646,8 @@
     },
     "TestFailoverNotAvailableFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>Test failover is not available for this cluster configuration.</p>",
       "exception":true
     },
     "UnprocessedCluster":{
@@ -3636,6 +3788,10 @@
         "ACLName":{
           "shape":"ACLName",
           "documentation":"<p>The Access Control List that is associated with the cluster.</p>"
+        },
+        "IpDiscovery":{
+          "shape":"IpDiscovery",
+          "documentation":"<p>The mechanism for discovering IP addresses for the cluster discovery protocol. Valid values are 'ipv4' or 'ipv6'. When set to 'ipv4', cluster discovery functions such as cluster slots, cluster shards, and cluster nodes will return IPv4 addresses for cluster nodes. When set to 'ipv6', the cluster discovery functions return IPv6 addresses for cluster nodes. The value must be compatible with the NetworkType parameter. If not specified, the default is 'ipv4'.</p>"
         }
       }
     },
@@ -3675,7 +3831,7 @@
         },
         "UpdateStrategy":{
           "shape":"UpdateStrategy",
-          "documentation":"<p>Whether to force the update even if it may cause data loss.</p>"
+          "documentation":"<p>The strategy to use for the update operation. Supported values are \"coordinated\" or \"uncoordinated\".</p>"
         }
       }
     },
@@ -3811,9 +3967,8 @@
     },
     "UserAlreadyExistsFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>A user with the specified name already exists.</p>",
       "exception":true
     },
     "UserList":{
@@ -3836,16 +3991,14 @@
     },
     "UserNotFoundFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The specified user does not exist.</p>",
       "exception":true
     },
     "UserQuotaExceededFault":{
       "type":"structure",
-      "members":{
-      },
-      "documentation":"<p/>",
+      "members":{},
+      "documentation":"<p>The request cannot be processed because it would exceed the maximum number of users allowed.</p>",
       "exception":true
     }
   },

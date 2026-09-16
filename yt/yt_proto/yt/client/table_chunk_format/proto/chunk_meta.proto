@@ -61,6 +61,13 @@ message TLogicalType
         optional int32 scale = 2;
     }
 
+    message TAggregateStateLogicalType
+    {
+        optional string function = 1;
+        optional TLogicalType argument_type = 2;
+        optional TLogicalType element = 3;
+    }
+
     oneof type {
         int32 simple = 1;
         TLogicalType optional = 2;
@@ -72,6 +79,7 @@ message TLogicalType
         TDictLogicalType dict = 8;
         TTaggedLogicalType tagged = 9;
         TDecimalLogicalType decimal = 10;
+        TAggregateStateLogicalType aggregate_state = 11;
     }
 }
 

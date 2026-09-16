@@ -18,7 +18,7 @@
 
 #include <memory>
 
-namespace NKikimr::NKqp::NWorkload {
+namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
 class IQueryClassifier;
 }
@@ -341,6 +341,10 @@ public:
         return Record.GetRequest().GetCollectDiagnostics();
     }
 
+    bool GetCollectAffectedRows() const {
+        return Record.GetRequest().GetCollectAffectedRows();
+    }
+
     ui32 CalculateSerializedSize() const override {
         PrepareRemote();
         return Record.ByteSize();
@@ -368,19 +372,19 @@ public:
         return UserRequestContext;
     }
 
-    void SetWmSessionUpdater(const std::shared_ptr<NWorkload::ISessionUpdater>& wmSessionUpdater) {
+    void SetWmSessionUpdater(const std::shared_ptr<NWorkloadManager::ISessionUpdater>& wmSessionUpdater) {
         WmSessionUpdater = wmSessionUpdater;
     }
 
-    std::shared_ptr<NWorkload::ISessionUpdater> GetWmSessionUpdater() const {
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> GetWmSessionUpdater() const {
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(std::shared_ptr<NWorkload::IQueryClassifier> classifier) {
+    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
         WmQueryClassifier = std::move(classifier);
     }
 
-    std::shared_ptr<NWorkload::IQueryClassifier> GetWmQueryClassifier() const {
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
         return WmQueryClassifier;
     }
 
@@ -469,14 +473,6 @@ public:
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
     }
 
-    void SetGeneration(i64 generation) {
-        Generation = generation;
-    }
-
-    i64 GetGeneration() const {
-        return Generation;
-    }
-
     void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
         DisableDefaultTimeout = disableDefaultTimeout;
     }
@@ -519,10 +515,9 @@ private:
     std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    i64 Generation = 0;
     bool DisableDefaultTimeout = false;
-    std::shared_ptr<NWorkload::ISessionUpdater> WmSessionUpdater;
-    std::shared_ptr<NWorkload::IQueryClassifier> WmQueryClassifier;
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

@@ -9,6 +9,8 @@ SRCS(
     mkql_alloc.cpp
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
+    mkql_bridge_mode.cpp
+    mkql_bridge_mode.h
     mkql_buffer.cpp
     mkql_buffer.h
     mkql_date_scaler.cpp
@@ -82,6 +84,7 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
     yql/essentials/utils
+    yql/essentials/utils/meta
     yql/essentials/utils/memory_profiling
 )
 

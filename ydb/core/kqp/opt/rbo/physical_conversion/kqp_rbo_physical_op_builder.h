@@ -53,13 +53,22 @@ public:
     virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) = 0;
 };
 
+class TPhysicalVariadicOpBuilder: public TPhysicalOpBuilder {
+public:
+    TPhysicalVariadicOpBuilder(TExprContext& ctx, TPositionHandle pos)
+        : TPhysicalOpBuilder(ctx, pos) {
+    }
+
+    virtual TExprNode::TPtr BuildPhysicalOp(const TVector<TExprNode::TPtr>& inputs) = 0;
+};
+
 class TPhysicalBinaryOpBuilderWithParams: public TPhysicalOpBuilder {
 public:
     TPhysicalBinaryOpBuilderWithParams(TExprContext& ctx, TPositionHandle pos)
         : TPhysicalOpBuilder(ctx, pos) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) = 0;
+    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
 };
 
 class TPhysicalUnaryOpBuilderWithMemLimit: public TPhysicalOpBuilder {

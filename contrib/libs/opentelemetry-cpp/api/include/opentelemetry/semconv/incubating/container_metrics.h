@@ -21,14 +21,14 @@ namespace container
 {
 
 /**
-  Total CPU time consumed.
+  CPU time consumed.
   <p>
-  Total CPU time consumed by the specific container on all available CPU cores
+  CPU time consumed by the specific container on all available CPU cores
   <p>
   counter
  */
 static constexpr const char *kMetricContainerCpuTime     = "container.cpu.time";
-static constexpr const char *descrMetricContainerCpuTime = "Total CPU time consumed.";
+static constexpr const char *descrMetricContainerCpuTime = "CPU time consumed.";
 static constexpr const char *unitMetricContainerCpuTime  = "s";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricContainerCpuTime(

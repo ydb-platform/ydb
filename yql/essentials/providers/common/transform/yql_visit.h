@@ -66,7 +66,6 @@ protected:
         };
     }
 
-protected:
     const bool FailOnUnknown_;
     THashMap<TStringBuf, THandler> Handlers_;
 };

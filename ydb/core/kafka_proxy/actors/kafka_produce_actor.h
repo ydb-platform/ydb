@@ -20,11 +20,12 @@ using namespace NKikimrClient;
 // Each request can contain data for writing to several topics, and in each topic to several partitions.
 // When a request to write to an unknown topic arrives, the actor changes the state to Init until it receives
 // information about all the topics needed to process the request.
-// 
+//
 // Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
 // The order of responses to requests is also guaranteed.
 //
-class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
+class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
+                        , public TKafkaExceptionHandler<TKafkaProduceActor> {
     struct TPendingRequest;
 
     enum ETopicStatus {
@@ -43,6 +44,10 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_PRODUCE_ACTOR; }
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     void PassAway() override;
 
@@ -58,6 +63,8 @@ private:
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage);
+    void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
 
     // StateInit - describe topics
     void HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -116,7 +123,7 @@ private:
     std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
     bool WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage);
 
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
     void LogEvent(IEventHandle& ev);
     void SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx);
 
@@ -171,6 +178,7 @@ private:
 
         NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
         std::shared_ptr<IPartitionChooser> PartitionChooser;
+        TIntrusivePtr<TSecurityObject> SecurityObject;
     };
     std::map<TString, TTopicInfo> Topics;
 

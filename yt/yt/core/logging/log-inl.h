@@ -20,11 +20,13 @@ TLogMessage BuildLogMessage(
     TFormatString<TArgs...> format,
     TArgs&&... args)
 {
-    TMessageStringBuilder builder;
-    AppendLogMessageWithFormat(&builder, loggingContext, logger, format.Get(), std::forward<TArgs>(args)...);
-    builder.AppendChar('\n');
-    FormatValue(&builder, error, TStringBuf("v"));
-    return {builder.Flush(), format.Get()};
+    TTaggedPayloadWriter writer;
+    auto* builder = writer.BeginMessage();
+    AppendLogMessageWithFormat(builder, loggingContext, logger, format.Get(), std::forward<TArgs>(args)...);
+    builder->AppendChar('\n');
+    FormatValue(builder, error, TStringBuf("v"));
+    writer.EndMessage();
+    return {writer.Finish(), format.Get()};
 }
 
 } // namespace NDetail

@@ -322,8 +322,8 @@ IGraphTransformer::TStatus TryToUsingEntry(
     const TStringBuf lhsName = lhsRef->Tail().Content();
     const TStringBuf rhsName = rhsRef->Tail().Content();
 
-    auto lhsInput = groupInputs[lhsIdx];
-    auto rhsInput = groupInputs[rhsIdx];
+    const auto& lhsInput = groupInputs[lhsIdx];
+    const auto& rhsInput = groupInputs[rhsIdx];
 
     ui32 rhsPos;
     if (auto status = TryToFindItemI(rhsRef->Pos(), rhsInput, rhsName, rhsPos, ctx);
@@ -349,7 +349,77 @@ IGraphTransformer::TStatus TryToUsingEntry(
     return IGraphTransformer::TStatus::Ok;
 }
 
+TVector<TYqlResultItemLabel> YqlSetItemLabels(const TExprNode::TPtr& input) {
+    YQL_ENSURE(input->IsCallable("YqlSetItem"));
+
+    const auto setting = GetSetting(input->Head(), "result");
+    YQL_ENSURE(setting, "Expected result in YqlSetItem");
+
+    const auto result = setting->TailPtr();
+
+    TVector<TYqlResultItemLabel> labels(Reserve(result->ChildrenSize()));
+    for (const auto& item : result->Children()) {
+        auto label = item->Child(0);
+
+        TString name(label->Content());
+
+        bool isSynthetic = (3 < item->ChildrenSize() &&
+                            HasSetting(*item->Child(2), "synthetic"));
+
+        bool isShadowingWarning = (3 < item->ChildrenSize() &&
+                                   HasSetting(*item->Child(2), "warnShadow"));
+
+        TYqlResultItemLabel x;
+        x.Position = label->Pos();
+        x.Content = std::move(name);
+        x.IsSynthetic = isSynthetic;
+        x.IsShadowingWarning = isShadowingWarning;
+
+        labels.emplace_back(std::move(x));
+    }
+
+    return labels;
+}
+
+TYqlColumnOrder ToColumnOrder(TVector<TYqlResultItemLabel> labels) {
+    TYqlColumnOrder order(Reserve(labels.size()));
+    for (auto& label : labels) {
+        order.push_back({
+            .Content = std::move(label.Content),
+            .IsSynthetic = label.IsSynthetic,
+        });
+    }
+    return order;
+}
+
 } // namespace
+
+TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings, TExtContext& ctx) {
+    TYqlFromSettings parsed;
+
+    auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
+        if (name == "cte" || name == "into_values") {
+            if (setting.ChildrenSize() != 1) {
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(setting.Pos()),
+                    TStringBuilder() << "No extra parameters are expected by setting "
+                                     << "'" << name << "'"));
+                return false;
+            }
+
+            parsed.IsExplicitlyColumnOrdered = true;
+            return true;
+        }
+
+        YQL_ENSURE(false, "unknown setting " << name);
+    };
+
+    if (!EnsureValidSettings(*settings, {"cte", "into_values"}, validator, ctx.Expr)) {
+        return Nothing();
+    }
+
+    return parsed;
+}
 
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
@@ -485,6 +555,142 @@ IGraphTransformer::TStatus InferYqlInferUnionType(
     }
 
     return status;
+}
+
+TMaybe<TYqlColumnOrder> InferYqlSimpleColumnOrder(const TExprNode::TPtr& input) {
+    if (!input->IsCallable("YqlSelect")) {
+        return Nothing();
+    }
+
+    const auto items = GetSetting(input->Head(), "set_items")->ChildPtr(1);
+
+    TYqlColumnOrder result = ToColumnOrder(YqlSetItemLabels(items->ChildPtr(0)));
+
+    for (const auto& item : items->Children()) {
+        TYqlColumnOrder x = ToColumnOrder(YqlSetItemLabels(item));
+        if (result != x) {
+            return Nothing();
+        }
+    }
+
+    return result;
+}
+
+IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    TPositionHandle position,
+    const TVector<TPositionHandle>& expectedPositions,
+    const TVector<TString>& expectedOrder,
+    const TYqlColumnOrder& actualOrder)
+{
+    constexpr size_t Limit = 4;
+
+    TIssue issue(
+        ctx.Expr.GetPosition(position),
+        "Column names in SELECT don't match column specification in parenthesis");
+    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_SOURCE_SELECT_COLUMN_MISMATCH, issue);
+
+    for (size_t i = 0;
+         (i < Min(actualOrder.size(), expectedOrder.size())) &&
+         (issue.GetSubIssues().size() < Limit);
+         i += 1)
+    {
+        const auto& label = actualOrder[i];
+        if (label.IsSynthetic || label.Content == expectedOrder[i]) {
+            continue;
+        }
+
+        auto subIssue = MakeIntrusive<TIssue>(
+            ctx.Expr.GetPosition(expectedPositions[i]),
+            TStringBuilder()
+                << "At position " << (i + 1) << ' '
+                << "actual " << '"' << label.Content << '"' << ' '
+                << "doesn't match "
+                << "expected " << '"' << expectedOrder[i] << '"');
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_SOURCE_SELECT_COLUMN_MISMATCH, *subIssue);
+        issue.AddSubIssue(std::move(subIssue));
+    }
+
+    if (issue.GetSubIssues().empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (auto status = AddSqlSelectWarning(input, output, ctx.Expr, "yql_explicit_column_orders");
+        status != IGraphTransformer::TStatus::Repeat)
+    {
+        return status;
+    }
+
+    if (!ctx.Expr.AddWarning(issue)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Repeat;
+}
+
+IGraphTransformer::TStatus ValidateYqlWarnShadow(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    const TInputs& inputs)
+{
+    YQL_ENSURE(input->IsCallable("YqlSetItem"));
+
+    const auto isResult = HasSetting(input->Head(), "result");
+    const auto isValues = HasSetting(input->Head(), "values");
+    YQL_ENSURE(isResult xor isValues, "Expected 'result' or 'values' in YqlSetItem");
+    if (isValues) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TVector<TIssue> issues;
+
+    for (const auto& label : YqlSetItemLabels(input)) {
+        const TString& alias = label.Content;
+
+        if (!label.IsShadowingWarning) {
+            continue;
+        }
+
+        if (!AnyOf(inputs, [&](const TInput& input) {
+            return input.Type->FindItemType(alias);
+        })) {
+            continue;
+        }
+
+        TIssue issue(
+            ctx.Expr.GetPosition(label.Position),
+            TStringBuilder()
+                << "Alias `" << alias << "` shadows column with the same name. "
+                << "It looks like comma is missed here. "
+                << "If not, it is recommended to use ... AS `" << alias << "` to avoid confusion");
+        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_ALIAS_SHADOWS_COLUMN, issue);
+        issues.emplace_back(std::move(issue));
+    }
+
+    if (issues.empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (auto status = AddSqlSelectWarning(input, output, ctx.Expr, "yql_core_alias_shadows_column");
+        status != IGraphTransformer::TStatus::Repeat)
+    {
+        return status;
+    }
+
+    bool isError = false;
+    for (const auto& issue : issues) {
+        if (!ctx.Expr.AddWarning(issue)) {
+            isError = true;
+        }
+    }
+    if (isError) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Repeat;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(

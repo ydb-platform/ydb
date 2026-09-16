@@ -35,6 +35,9 @@ public:
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
             tablet.BootMode = protoTabletInfo.GetTabletBootMode();
+            if (protoTabletInfo.HasIsBackup()) {
+                tablet.IsBackup = protoTabletInfo.GetIsBackup();
+            }
             tablet.ObjectId = {owner.first, protoTabletInfo.GetObjectId()};
 
             TVector<TSubDomainKey> allowedDomains;
@@ -51,6 +54,9 @@ public:
             tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tablet.Id, tablet.Type));
             tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
             tablet.TabletStorageInfo->Version = protoTabletInfo.GetTabletStorageVersion();
+            tablet.ConfirmedStorageVersion = protoTabletInfo.HasConfirmedStorageVersion()
+                ? protoTabletInfo.GetConfirmedStorageVersion()
+                : Max<ui32>();
 
             tablet.LockedToActor = ActorIdFromProto(protoTabletInfo.GetLockedToActor());
             tablet.LockedReconnectTimeout = TDuration::MilliSeconds(protoTabletInfo.GetLockedReconnectTimeout());
@@ -68,6 +74,7 @@ public:
                         //NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedDataCenters>(),
                         NIceDb::TUpdate<Schema::Tablet::TabletStorageVersion>(tablet.TabletStorageInfo->Version),
+                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(tablet.ConfirmedStorageVersion),
                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(protoTabletInfo.GetObjectId()),
                         //NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(),
                         NIceDb::TUpdate<Schema::Tablet::AllowedDomains>(allowedDomains),
@@ -75,6 +82,7 @@ public:
                         NIceDb::TUpdate<Schema::Tablet::LockedToActor>(tablet.LockedToActor),
                         NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(protoTabletInfo.GetLockedReconnectTimeout()),
                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(protoTabletInfo.GetObjectDomain()),
+                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
                         NIceDb::TUpdate<Schema::Tablet::NeedToReleaseFromParent>(true));
 
             TVector<TTabletChannelInfo>& tabletChannels = tablet.TabletStorageInfo->Channels;

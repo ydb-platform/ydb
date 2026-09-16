@@ -40,6 +40,7 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log_level.h>
@@ -2517,14 +2518,8 @@ public:
                 return nullptr;
             }
         } else if (name == "warning") {
-            if (auto langver = NYql::MakeLangVersion(2026, 01);
-                !NYql::IsBackwardCompatibleFeatureAvailable(
-                    Settings_.LangVer, langver, Settings_.BackportMode))
-            {
-                AddError(
-                    TStringBuilder()
-                    << "VariableSetStmt, Warning pragma is not available "
-                    << "before language version " << NYql::FormatLangVersion(langver));
+            if (auto x = EnsureIsAvailableOn(Settings_.LangVer, Settings_.BackportMode, NYql::NFeature::PgPragmaWarning); !x) {
+                AddError(TString::Join("VariableSetStmt, ", x.error()));
                 return nullptr;
             }
 
@@ -5275,7 +5270,6 @@ public:
         return VL(nodes_vec.data(), nodes_vec.size());
     }
 
-public:
     TWarningRules GetWarningRules() const {
         return WarningPolicy_.GetRules();
     }
@@ -5396,7 +5390,6 @@ private:
         return L(A("PgProjectionRef"), QA(ToString(num - 1)));
     }
 
-private:
     TVector<TAstParseResult>& AstParseResults_;
     NSQLTranslation::TTranslationSettings Settings_;
     NYql::TWarningPolicy WarningPolicy_;

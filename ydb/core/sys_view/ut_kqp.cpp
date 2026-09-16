@@ -1101,6 +1101,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     BoxId,
                     DecommitStatus,
                     ExpectedSlotCount,
+                    ExpectedSlotSize,
                     Guid,
                     Kind,
                     MaintenanceStatus,
@@ -1132,12 +1133,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(123u); // Guid
         check.Uint64(0u); // Kind
         check.String("NO_REQUEST"); // MaintenanceStatus
@@ -2022,7 +2024,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 32);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2030,6 +2032,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
@@ -2042,7 +2045,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2050,6 +2053,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
@@ -2439,6 +2443,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
+    }
+
+    Y_UNIT_TEST(UdfModulesEmpty) {
+        TTestEnv env(1, 0);
+        TTableClient client(env.GetDriver());
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT Uid, Name, ModuleType, CompileStatus
+            FROM `/Root/.sys/udf_modules`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        NKqp::CompareYson(R"([])", NKqp::StreamResultToYson(it));
     }
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {

@@ -108,6 +108,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    std::optional<bool> DeduplicationEnabled;
     TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
@@ -127,6 +128,8 @@ private:
 
         if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
             arrowType = arrow::fixed_size_binary(16);
+        } else if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+            arrowType = arrow::int64();
         } else {
             auto result = NArrow::GetArrowType(column.PType);
             AFL_VERIFY(result.ok());
@@ -247,6 +250,10 @@ public:
 
     const std::optional<TString>& GetScanReaderPolicyName() const {
         return ScanReaderPolicyName;
+    }
+
+    const std::optional<bool>& GetDeduplicationEnabled() const {
+        return DeduplicationEnabled;
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {

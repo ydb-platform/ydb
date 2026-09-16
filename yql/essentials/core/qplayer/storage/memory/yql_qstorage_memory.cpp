@@ -162,7 +162,6 @@ private:
         }
     }
 
-private:
     TStatePtr State_;
 };
 

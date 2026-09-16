@@ -575,7 +575,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"}
+                {"Index": 3, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "SampleRate", "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -673,7 +674,9 @@
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "ValueParamName", "Type": "TCoAtom"}
+                {"Index": 5, "Name": "ValueParamName", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "ReplaceIfExists", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "ExistingOk", "Type": "TCoAtom"}
             ]
         },
         {
@@ -685,7 +688,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "ValueParamName", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "ValueParamName", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         },
         {
@@ -695,7 +699,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Secret", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         }
     ]

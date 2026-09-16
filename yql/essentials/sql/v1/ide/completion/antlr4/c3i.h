@@ -42,7 +42,7 @@ public:
     };
 
     virtual ~IC3Engine() = default;
-    virtual TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) = 0;
+    virtual TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) const = 0;
 };
 
 } // namespace NSQLComplete

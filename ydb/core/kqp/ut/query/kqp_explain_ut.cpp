@@ -1,7 +1,13 @@
+#include <functional>
+
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <util/folder/dirut.h>
+
+#include <functional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -400,6 +406,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
         spilling->SetEnable(true);
         spilling->SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
         auto kikimr = DefaultKikimrRunner({}, appCfg);
 
         auto db = kikimr.GetTableClient();
@@ -1176,6 +1183,93 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
     }
 
+    Y_UNIT_TEST(UpsertWithReturningPlan) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `/Root/ReturningDst` (Key Uint64, Value String, PRIMARY KEY (Key));
+            CREATE TABLE `/Root/ReturningSrc` (Key Uint64, Value String, PRIMARY KEY (Key));
+        )").GetValueSync());
+
+        auto explain = [&](const TString& query) {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            Cerr << plan << Endl;
+            return plan;
+        };
+
+        auto plainPlan = explain(R"(
+            UPSERT INTO `/Root/ReturningDst` SELECT * FROM `/Root/ReturningSrc`;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "Sink"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "ReturningSink"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "ResultSet"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Name", "Upsert"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "TableFullScan"), 1);
+
+        const auto& plainSimplified = plainPlan.GetMapSafe().at("SimplifiedPlan");
+        auto plainSimplifiedUpsert = FindPlanNodeByKv(plainSimplified, "Node Type", "Upsert");
+        UNIT_ASSERT(plainSimplifiedUpsert.IsDefined());
+        UNIT_ASSERT(plainSimplifiedUpsert.GetMapSafe().contains("Plans"));
+
+        auto returningPlanJson = explain(R"(
+            UPSERT INTO `/Root/ReturningDst` SELECT * FROM `/Root/ReturningSrc` RETURNING *;
+        )");
+
+        const auto& returningPlan = returningPlanJson.GetMapSafe().at("Plan");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "Sink"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "ReturningSink"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Name", "Upsert"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "TableFullScan"), 1);
+
+        // The plan must end with a clean ResultSet node whose direct child is the sink stage
+        // (instead of a combined "ResultSet-Sink" node and a stray empty CTE reference).
+        auto resultSet = FindPlanNodeByKv(returningPlan, "Node Type", "ResultSet");
+        UNIT_ASSERT(resultSet.IsDefined());
+        const auto& resultSetPlans = resultSet.GetMapSafe().at("Plans").GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(resultSetPlans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSetPlans[0].GetMapSafe().at("Node Type").GetStringSafe(), "ReturningSink");
+
+        bool hasEmptyNodeType = false;
+        bool hasCteName = false;
+        std::function<void(const NJson::TJsonValue&)> scan = [&](const NJson::TJsonValue& node) {
+            const auto& map = node.GetMapSafe();
+            if (map.contains("Node Type") && map.at("Node Type").GetStringSafe().empty()) {
+                hasEmptyNodeType = true;
+            }
+            if (map.contains("CTE Name")) {
+                hasCteName = true;
+            }
+            if (map.contains("Plans")) {
+                for (const auto& subplan : map.at("Plans").GetArraySafe()) {
+                    scan(subplan);
+                }
+            }
+        };
+        scan(returningPlan);
+        UNIT_ASSERT(!hasEmptyNodeType);
+        UNIT_ASSERT(!hasCteName);
+
+        // The simplified plan (operator tree) must keep the reads connected under the sink.
+        const auto& simplified = returningPlanJson.GetMapSafe().at("SimplifiedPlan");
+        auto simplifiedUpsert = FindPlanNodeByKv(simplified, "Node Type", "Upsert");
+        UNIT_ASSERT(simplifiedUpsert.IsDefined());
+        UNIT_ASSERT(simplifiedUpsert.GetMapSafe().contains("Plans"));
+
+        session.Close();
+    }
+
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseStreamIndex) {
         TKikimrSettings settings;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
@@ -1626,6 +1720,149 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         Cerr << WriteJson(plan, /*formatOutput*/ true, /*sortkeys*/ false, /*validateUtf8*/ true) << Endl;
 
         
+    }
+
+    void UpsertSelectCommonSubexpressionReturningImpl(const std::function<void(const std::string&)>& testQuery) {
+        static const std::vector<std::string> queries = {
+            R"(
+                DECLARE $key AS Int32;
+                
+                $cnt = SELECT COUNT(*)
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+
+                SELECT * FROM $cnt;
+
+                $data = SELECT 0 AS `col1`, 0 AS `col2`;
+                
+                UPSERT INTO `/Root/test`
+                    SELECT *
+                    FROM $data
+                    WHERE $cnt = 0
+                    RETURNING `col1`, `col2`;
+            )",
+            R"(
+                DECLARE $key AS Int32;
+                
+                $cnt = SELECT COUNT(*)
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+
+                $data = SELECT 0 AS `col1`, 0 AS `col2`;
+                
+                UPSERT INTO `/Root/test`
+                    SELECT *
+                    FROM $data
+                    WHERE $cnt = 0
+                    RETURNING `col1`, `col2`;
+
+                SELECT * FROM $cnt;
+            )",
+            R"(
+                DECLARE $key AS Int32;
+
+                SELECT `col1`, `col2`
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+        
+                $cnt = SELECT COUNT(*)
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+
+                $data = SELECT 0 AS `col1`, 0 AS `col2`;
+                
+                UPSERT INTO `/Root/test`
+                    SELECT *
+                    FROM $data
+                    WHERE $cnt = 0
+                    RETURNING `col1`, `col2`;
+            )",
+            R"(
+                DECLARE $key AS Int32;
+        
+                $cnt = SELECT COUNT(*)
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+
+                $data = SELECT 0 AS `col1`, 0 AS `col2`;
+                
+                UPSERT INTO `/Root/test`
+                    SELECT *
+                    FROM $data
+                    WHERE $cnt = 0
+                    RETURNING `col1`, `col2`;
+
+                SELECT `col1`, `col2`
+                    FROM `/Root/test`
+                    WHERE `col1` = $key;
+            )"
+        };
+
+        for (const auto& query : queries) {
+            testQuery(query);
+        }
+    }
+
+    Y_UNIT_TEST(UpsertSelectCommonSubexpressionReturningTableClient) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto createTable = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test` (
+                col1 Int32,
+                col2 Int32,
+                PRIMARY KEY (col1)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createTable.GetStatus(), EStatus::SUCCESS, createTable.GetIssues().ToString());
+
+        UpsertSelectCommonSubexpressionReturningImpl([&](const std::string& queryText) {
+            auto result = session.ExplainDataQuery(queryText).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            Cerr << result.GetPlan() << Endl;
+        });
+    }
+
+    Y_UNIT_TEST(UpsertSelectCommonSubexpressionReturningQueryClient) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto createTable = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/test` (
+                col1 Int32,
+                col2 Int32,
+                PRIMARY KEY (col1)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createTable.GetStatus(), EStatus::SUCCESS, createTable.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        UpsertSelectCommonSubexpressionReturningImpl([&](const std::string& queryText) {
+            auto result = querySession.ExecuteQuery(
+                queryText,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetStats().has_value());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            Cerr << *result.GetStats()->GetPlan() << Endl;
+        });
     }
 }
 

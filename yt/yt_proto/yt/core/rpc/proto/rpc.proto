@@ -104,6 +104,7 @@ message TRequestHeader
      * target_master_peer_ext               126
      * target_node_has_row_level_ace        127
      * resolved_sequoia_object              128
+     * suppress_access_logging              129
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */

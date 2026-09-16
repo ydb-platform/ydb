@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <memory>

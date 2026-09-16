@@ -3,9 +3,9 @@ from clickhouse_connect.driver.query import QueryResult
 
 
 class QuerySummary:
-    summary = {}
+    summary: dict[str, str] = {}
 
-    def __init__(self, summary: dict | None = None):
+    def __init__(self, summary: dict[str, str] | None = None):
         if summary is not None:
             self.summary = summary
 
@@ -20,7 +20,7 @@ class QuerySummary:
         return self.summary.get("query_id", "")
 
     def as_query_result(self) -> QueryResult:
-        data = []
+        data: list[int | str] = []
         column_names = []
         column_types = []
         str_type = get_from_name("String")

@@ -11,7 +11,8 @@ export default {
     hosts: Object,
     processes: Object,
     scheduleStatus: Object, // Schedule status for all nemesis types
-    processTypes: Array // All process types with their configurations
+    processTypes: Array, // All process types with their configurations
+    inventory: Object
   },
   setup(props) {
     const { ref, computed } = Vue
@@ -101,6 +102,7 @@ export default {
           :processes="getProcessesByType(nemesis.name)"
           :schedule-status="scheduleStatus"
           :process-types="processTypes"
+          :inventory="inventory"
         ></process-type-group>
       </div>
     </div>

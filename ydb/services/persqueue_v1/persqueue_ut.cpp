@@ -31,6 +31,7 @@
 
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 
 #include <grpcpp/client_context.h>
@@ -2195,6 +2196,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
 
         grpc::ClientContext readContext;
+        readContext.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
         auto readStream = TopicStubP_ -> StreamRead(&readContext);
         UNIT_ASSERT(readStream);
 
@@ -2272,20 +2274,91 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.mutable_read_request()->set_bytes_size(10000);
 
-            // auto commit = req.mutable_commit_offset_request()->add_commit_offsets();
-            // commit->set_partition_session_id(assignId);
+            // Strict CommitOffset kills the read session. The proxy may already
+            // have closed the stream with SESSION_EXPIRED (HasData invalidation),
+            // in which case Write fails; that is a valid race, not a product error.
+            const bool wrote = readStream->Write(req);
+            UNIT_ASSERT_C(readStream->Read(&resp),
+                TStringBuilder() << "expected a stream response after CommitOffset, wrote=" << wrote);
+            Cerr << "=== Got response (expect session expired, wrote=" << wrote << "): "
+                 << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SESSION_EXPIRED);
+        }
+    }
 
-            // auto offsets = commit->add_offsets();
-            // offsets->set_start(0);
-            // offsets->set_end(7);
+    // CommitOffset while the partition actor is waiting for data via HasData must close the
+    // stream with SESSION_EXPIRED without the client sending another Read.
+    Y_UNIT_TEST(TopicServiceCommitOffsetWhileWaitingForData) {
+        auto server = SetupLbFederationServerWithTopic("topic_wait_hasdata", 1, {"user"});
+        server->EnableLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server->EnableLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server->EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+        server->EnableLogs({ NKikimrServices::PERSQUEUE }, NLog::EPriority::PRI_DEBUG);
+
+        const TString topicPath = "account/topic_wait_hasdata";
+
+        auto Channel_ = grpc::CreateChannel("localhost:" + ToString(server->GrpcPort), grpc::InsecureChannelCredentials());
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        grpc::ClientContext readContext;
+        readContext.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        auto readStream = TopicStubP_->StreamRead(&readContext);
+        UNIT_ASSERT(readStream);
+
+        // Empty topic: after StartPartitionSession the partition actor enters WaitForData / HasData.
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path(topicPath);
+            req.mutable_init_request()->set_consumer("user");
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
 
             UNIT_ASSERT(readStream->Read(&resp));
-            Cerr << "=== Got response (expect session expired): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), topicPath);
+
+            const i64 assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            req.mutable_start_partition_session_response()->set_read_offset(0);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        // Let HasData reach the tablet and stay pending (no data on empty topic).
+        Sleep(TDuration::Seconds(1));
+
+        {
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path(topicPath);
+            req.set_consumer("user");
+            req.set_offset(0);
+            grpc::ClientContext rcontext;
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
+
+        {
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "=== Got response (expect session expired via HasData invalidate): "
+                 << resp.ShortDebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SESSION_EXPIRED);
+            UNIT_ASSERT_GE(resp.issues_size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(resp.issues(0).message(), "no such session");
         }
     }
 
@@ -2838,6 +2911,172 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
+    enum class ECustomCodecsMode {
+        None,
+        Known,
+        Mixed,
+        CustomOnly,
+    };
+
+    static  TVector<i32> GetCustomCodecs(ECustomCodecsMode customCodecsMode) {
+        TVector<i32> customCodecs;
+        switch (customCodecsMode) {
+            case ECustomCodecsMode::None:
+                break;
+            case ECustomCodecsMode::Known:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_ZSTD};
+                break;
+            case ECustomCodecsMode::Mixed:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_CUSTOM + 5, Ydb::Topic::CODEC_ZSTD, Ydb::Topic::CODEC_CUSTOM + 7};
+                break;
+            case ECustomCodecsMode::CustomOnly:
+                customCodecs = {Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
+                break;
+        }
+        return customCodecs;
+    }
+
+    static void TopicServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic";
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--custom-codecs-topic");
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            for (const auto codec : customCodecs) {
+                request.mutable_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+            }
+            request.add_consumers()->set_name("user");
+
+            grpc::ClientContext rcontext;
+            auto status = topicStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.AnnoyingClient->WaitTopicInit(topicShortName);
+            server.AnnoyingClient->AddTopic(topicShortName);
+        }
+
+        grpc::ClientContext wcontext;
+        auto writeStream = topicStub->StreamWrite(&wcontext);
+        UNIT_ASSERT(writeStream);
+
+        Ydb::Topic::StreamWriteMessage::FromClient req;
+        Ydb::Topic::StreamWriteMessage::FromServer resp;
+        req.mutable_init_request()->set_path(topicShortName);
+        req.mutable_init_request()->set_producer_id("producer");
+        req.mutable_init_request()->set_message_group_id("producer");
+
+        UNIT_ASSERT(writeStream->Write(req));
+        UNIT_ASSERT(writeStream->Read(&resp));
+        Cerr << "===Got init response: " << resp.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+
+        const auto& initCodecs = resp.init_response().supported_codecs().codecs();
+        TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        Sort(customCodecs);
+        Sort(gotCodecs);
+        UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, customCodecs, resp.init_response().ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseNone) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::None);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseKnown) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Known);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseMixed) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Mixed);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseCustomOnly) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::CustomOnly);
+    }
+
+    static void PersQueueServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+        auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic-pqv1";
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--custom-codecs-topic-pqv1");
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            for (const auto codec : customCodecs) {
+                request.mutable_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+            }
+            request.add_consumers()->set_name("user");
+
+            grpc::ClientContext rcontext;
+            auto status = topicStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.AnnoyingClient->WaitTopicInit(topicShortName);
+            server.AnnoyingClient->AddTopic(topicShortName);
+        }
+
+        grpc::ClientContext wcontext;
+        auto writeStream = pqStub->StreamingWrite(&wcontext);
+        UNIT_ASSERT(writeStream);
+
+        Ydb::PersQueue::V1::StreamingWriteClientMessage req;
+        Ydb::PersQueue::V1::StreamingWriteServerMessage resp;
+        req.mutable_init_request()->set_topic(topicShortName);
+        req.mutable_init_request()->set_message_group_id("producer");
+
+        UNIT_ASSERT(writeStream->Write(req));
+        UNIT_ASSERT(writeStream->Read(&resp));
+        Cerr << "===Got init response: " << resp.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(resp.server_message_case() == Ydb::PersQueue::V1::StreamingWriteServerMessage::kInitResponse);
+
+        TVector<i32> expectedCodecs;
+        for (const auto codec : customCodecs) {
+            if (Ydb::PersQueue::V1::Codec_IsValid(codec)) {
+                expectedCodecs.push_back(codec);
+            }
+        }
+
+        const auto& initCodecs = resp.init_response().supported_codecs();
+        TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        Sort(expectedCodecs);
+        Sort(gotCodecs);
+        UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, expectedCodecs, resp.init_response().ShortDebugString());
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseNone) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::None);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseKnown) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::Known);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseMixed) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::Mixed);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseCustomOnly) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::CustomOnly);
+    }
+
     Y_UNIT_TEST(SetupWriteSession) {
         NPersQueue::TTestServer server{PQSettings(0, 2), false};
         server.StartServer();
@@ -3377,7 +3616,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.PQConfig.MutableCompactionConfig()->SetMaxWTimeLagSec(1);
         settings.PQConfig.MutableCompactionConfig()->SetBlobsSize(1_MB);
         NPersQueue::TTestServer server(settings);
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
+        // LowWatermark is not expressible via Topic API; msgbus create keeps 8MB.
+        server.AnnoyingClient->CreateTopicViaMsgBus(
+            TRequestCreatePQ(DEFAULT_TOPIC_NAME, 1, 0, 86400, 8_MB));
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -6054,7 +6295,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       WriteSpeedInMessagesPerSecond: 80000
       BurstSizeInMessages: 40000
-      SourceIdMaxCounts: 6000000
+      SourceIdMaxCounts: 100000
     }
     Version: 6
     LocalDC: true
@@ -7034,6 +7275,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(ReadRuleServiceTypeMigration) {
+        // Describe fill for consumers without ServiceType is unit-tested in
+        // TResolveConsumerServiceTypeTest. Here: default type + alter/add/remove via PQv1.
         TServerSettings settings = PQSettings(0);
         {
             settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
@@ -7201,115 +7444,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadRuleServiceTypeMigrationWithDisallowDefault) {
-        TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-            settings.PQConfig.SetDisallowDefaultClientServiceType(true);
-        }
-        NPersQueue::TTestServer server(settings);
-
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        const ui32 topicsCount = 4;
-        for (ui32 i = 1; i <= topicsCount; ++i) {
-            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1);
-            createTopicRequest.ReadRules.push_back("acc@user1");
-            createTopicRequest.ReadRules.push_back("acc@user2");
-            createTopicRequest.ReadRules.push_back("acc@user3");
-            server.AnnoyingClient->CreateTopic(createTopicRequest);
-        }
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-        {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-
-        auto doAlter = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path(topic);
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            for (auto rrInfo : readRules) {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name(rrInfo.first);
-                rr->set_service_type(rrInfo.second);
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-        };
-
-        auto checkDescribe = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path(topic);
-            grpc::ClientContext rcontext;
-
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-            if (statusCode == Ydb::StatusIds::SUCCESS) {
-                UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-                for (ui64 i = 0; i < readRules.size(); ++i) {
-                    const auto& rr = res.settings().read_rules(i);
-                    UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                    UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-                }
-            }
-        };
-        checkDescribe(
-            "/Root/PQ/rt3.dc1--topic_1",
-            {},
-            Ydb::StatusIds::INTERNAL_ERROR
-        );
-        {
-            doAlter(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-        }
-    }
-
+    // Legacy "empty ServiceType in tablet config + DisallowDefault → describe INTERNAL_ERROR"
+    // is covered by TResolveConsumerServiceTypeTest in ydb/core/ydb_convert/ut.
+    // Create/alter with explicit types under DisallowDefault: ReadRuleDisallowDefaultServiceType.
 
     void TestReadRuleServiceTypePasswordImpl(bool forcePassword)
     {

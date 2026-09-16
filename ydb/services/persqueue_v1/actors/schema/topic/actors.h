@@ -2,12 +2,16 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 
-namespace NKikimr::NGRpcProxy::V1::NTopic {
+namespace NKikimr::NGRpcProxy::V1 {
+
+namespace NTopic {
 
 NActors::IActor* CreateAlterTopicActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateCreateTopicActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDescribeConsumerActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDescribePartitionActor(NGRpcService::IRequestOpCtx* request);
+NActors::IActor* CreateDescribeTopicActor(NGRpcService::IRequestOpCtx* request);
 NActors::IActor* CreateDropTopicActor(NGRpcService::IRequestOpCtx* request);
 
-} // namespace NKikimr::NGRpcProxy::V1::NTopic
+} // namespace NTopic
+} // namespace NKikimr::NGRpcProxy::V1

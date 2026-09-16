@@ -62,7 +62,7 @@ void WaitForPredicate(
         }
     }
     THROW_ERROR_EXCEPTION("Wait failed: %s", options.Message)
-        << TErrorAttribute("location", NYT::ToString(options.SourceLocation));
+        .With("location", NYT::ToString(options.SourceLocation));
 }
 
 void WaitForPredicate(

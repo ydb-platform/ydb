@@ -78,11 +78,13 @@ struct TEvHttpProxy {
         TString PrivateKeyFile;
         TString SslCertificatePem;
         TString CaFile;
+        bool ClientCertificateRequired = false;
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         bool AllowHttp2 = false; // enable HTTP/2 support on this port
+        TIntrusivePtr<TSocketDescriptor> PreboundSocket;
 
         TEvAddListeningPort() = default;
 
@@ -119,6 +121,7 @@ struct TEvHttpProxy {
     struct TEvHttpIncomingRequest : NActors::TEventLocal<TEvHttpIncomingRequest, EvHttpIncomingRequest> {
         THttpIncomingRequestPtr Request;
         TString UserToken; // built and serialized
+        TString Database; // raw extracted from request; empty if not specified
 
         TEvHttpIncomingRequest(THttpIncomingRequestPtr request)
             : Request(std::move(request))
@@ -375,6 +378,7 @@ struct TUrlHandler {
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
+TIntrusivePtr<TSocketDescriptor> TryBindListeningSocket(const TString& address, TIpPort port);
 NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event);
 NActors::IActor* CreateIncomingConnectionActor(
         std::shared_ptr<TPrivateEndpointInfo> endpoint,

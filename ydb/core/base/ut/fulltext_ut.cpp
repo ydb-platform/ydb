@@ -2,10 +2,84 @@
 #include "fulltext_query.h"
 #include "table_index.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
+
+namespace {
+
+struct TDeltaItem {
+    ui64 DocId;
+    ui32 Freq;
+};
+
+struct TGeneration {
+    bool Added;
+    TVector<TDeltaItem> Items;
+};
+
+TVector<ui8> Encode(const TVector<TDeltaItem>& items, bool withFreq = true) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, false);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+    return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+}
+
+TVector<TDeltaItem> Merge(const TVector<TGeneration>& generations, bool withFreq = true) {
+    TVector<TVector<ui8>> encoded;
+    encoded.reserve(generations.size());
+
+    TMultiDeltaReader reader;
+    reader.Reset(withFreq, false);
+    for (const auto& generation : generations) {
+        encoded.push_back(Encode(generation.Items, withFreq));
+        reader.Add(generation.Added, encoded.back());
+    }
+    reader.Start();
+
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
+TVector<TDeltaItem> RoundTrip(const TVector<TDeltaItem>& items, bool withFreq, bool sign = false) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, sign);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetCount(), items.size());
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetMaxId(), items.empty() ? 0 : items.back().DocId);
+
+    TDeltaReader reader(writer.GetBuf(), withFreq, sign);
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
+void AssertDeltaItemsEqual(const TVector<TDeltaItem>& actual, const TVector<TDeltaItem>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].DocId, expected[i].DocId, "item " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].Freq, expected[i].Freq, "item " << i);
+    }
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(NFulltext) {
 
@@ -67,6 +141,272 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
         UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(DeltaCodecEmptyAndSingle) {
+        AssertDeltaItemsEqual(RoundTrip({}, false), {});
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, false), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), 1}}, false), {{Max<ui64>(), 1}});
+
+        // Frequency one is implicit in relevance segments, while larger values are stored explicitly.
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, true), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), Max<ui32>()}}, true),
+            {{Max<ui64>(), Max<ui32>()}});
+    }
+
+    Y_UNIT_TEST(DeltaCodecVarintBoundaries) {
+        // Exercise one-byte/multi-byte transitions for regular delta varints (7 payload bits).
+        const TVector<TDeltaItem> plain = {
+            {0, 1},
+            {127, 1},
+            {255, 1},       // delta 128
+            {16638, 1},     // delta 16383
+            {33022, 1},     // delta 16384
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(plain, false), plain);
+
+        // Relevance doc-id varints reserve a flag bit, so their first transition is 63 -> 64.
+        // Frequencies independently cross the regular 127 -> 128 transition.
+        const TVector<TDeltaItem> relevance = {
+            {0, 1},
+            {63, 2},
+            {127, 127},     // delta 64
+            {8254, 128},    // delta 8127
+            {16446, Max<ui32>()}, // delta 8192
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(relevance, true), relevance);
+    }
+
+    Y_UNIT_TEST(DeltaCodecSignedExtremes) {
+        const TVector<TDeltaItem> items = {
+            {static_cast<ui64>(Min<i64>()), 1},
+            {static_cast<ui64>(-1), 2},
+            {0, 127},
+            {static_cast<ui64>(Max<i64>()), Max<ui32>()},
+        };
+        AssertDeltaItemsEqual(RoundTrip(items, true, true), items);
+    }
+
+    Y_UNIT_TEST(DeltaCodecManyAndRandomizedRoundTrip) {
+        TVector<TDeltaItem> many;
+        many.reserve(10000);
+        for (ui64 i = 0; i < 10000; ++i) {
+            many.push_back({i * i + i, 1 + static_cast<ui32>(i % 257)});
+        }
+        AssertDeltaItemsEqual(RoundTrip(many, true), many);
+
+        // Fixed-seed xorshift64 property test. Generate strictly increasing ids with deltas spanning
+        // every varint width normally encountered by compact posting segments.
+        ui64 random = 0x9e3779b97f4a7c15ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 iteration = 0; iteration < 100; ++iteration) {
+            TVector<TDeltaItem> items;
+            ui64 docId = nextRandom() & 0xFFFF;
+            const size_t count = 1 + nextRandom() % 500;
+            items.reserve(count);
+            for (size_t i = 0; i < count; ++i) {
+                const ui32 shift = nextRandom() % 28;
+                const ui64 delta = 1 + (nextRandom() & ((1ULL << shift) - 1));
+                if (Max<ui64>() - docId < delta) {
+                    break;
+                }
+                docId += delta;
+                const ui32 freq = 1 + static_cast<ui32>(nextRandom() % 100000);
+                items.push_back({docId, freq});
+            }
+            AssertDeltaItemsEqual(RoundTrip(items, true), items);
+            AssertDeltaItemsEqual(RoundTrip(items, false), [&] {
+                TVector<TDeltaItem> result = items;
+                for (auto& item : result) {
+                    item.Freq = 1;
+                }
+                return result;
+            }());
+        }
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderGenerationMerge) {
+        auto encode = [](std::initializer_list<TDeltaItem> items) {
+            TDeltaWriter writer;
+            writer.Reset(true, false);
+            for (const auto& item : items) {
+                writer.Add(item.DocId, item.Freq);
+            }
+            return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+        };
+
+        const auto base = encode({{1, 2}, {2, 1}, {4, 5}, {8, 1}});
+        const auto deleted = encode({{1, 1}, {2, 1}, {4, 7}, {6, 1}});
+        const auto added = encode({{1, 3}, {3, 1}, {4, 2}, {6, 2}});
+
+        TMultiDeltaReader reader;
+        reader.Reset(true, false);
+        reader.Add(true, base);
+        reader.Add(false, deleted);
+        reader.Add(true, added);
+        reader.Start();
+
+        TVector<TDeltaItem> actual;
+        ui64 docId = 0;
+        ui32 freq = 0;
+        while (reader.Read(docId, freq)) {
+            actual.push_back({docId, freq});
+        }
+
+        // Frequencies from add generations are summed, deletes are subtracted, and non-positive
+        // totals disappear. A delete of an absent id is canceled if a later generation adds it.
+        const TVector<TDeltaItem> expected = {{1, 4}, {3, 1}, {6, 1}, {8, 1}};
+        AssertDeltaItemsEqual(actual, expected);
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderManyGenerationsDifferentialAndIdempotent) {
+        // Treat a simple posting map as the legacy/reference representation and compare it with compact
+        // add/delete segments over many generations. The fixed seed makes failures exactly reproducible.
+        TVector<TGeneration> generations;
+        TMap<ui64, i64> reference;
+        ui64 random = 0xd1b54a32d192ed03ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 gen = 0; gen < 250; ++gen) {
+            TGeneration generation{.Added = (nextRandom() % 3) != 0};
+            TMap<ui64, ui32> uniqueItems;
+            for (ui32 i = 0, count = 1 + nextRandom() % 40; i < count; ++i) {
+                // Mix a dense head with a sparse tail. Repeated ids occur across generations, while
+                // every individual segment remains strictly sorted as required by TDeltaWriter.
+                const ui64 docId = (nextRandom() & 1)
+                    ? nextRandom() % 128
+                    : (nextRandom() % 128) * (1ULL << (nextRandom() % 40));
+                uniqueItems[docId] = 1 + nextRandom() % 31;
+            }
+            for (const auto& [docId, freq] : uniqueItems) {
+                generation.Items.push_back({docId, freq});
+                reference[docId] += generation.Added ? static_cast<i64>(freq) : -static_cast<i64>(freq);
+            }
+            generations.push_back(std::move(generation));
+        }
+
+        TVector<TDeltaItem> expected;
+        for (const auto& [docId, freq] : reference) {
+            if (freq > 0) {
+                expected.push_back({docId, static_cast<ui32>(freq)});
+            }
+        }
+        const auto compacted = Merge(generations);
+        AssertDeltaItemsEqual(compacted, expected);
+
+        // Compacting the canonical single add segment again is byte-for-byte and logically idempotent.
+        const auto compactedAgain = Merge({TGeneration{.Added = true, .Items = compacted}});
+        AssertDeltaItemsEqual(compactedAgain, compacted);
+        UNIT_ASSERT(Encode(compactedAgain) == Encode(compacted));
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderAddDeleteAddFrequencyExtremes) {
+        const ui32 maxFreq = Max<ui32>();
+        const TVector<TGeneration> generations = {
+            {true,  {{0, maxFreq}, {1, 7}, {64, 100}, {Max<ui64>(), 3}}},
+            {false, {{0, maxFreq}, {1, 7}, {64, 40}, {Max<ui64>(), 3}}},
+            {true,  {{0, maxFreq}, {1, 9}, {64, 2}, {Max<ui64>(), 1}}},
+            {false, {{1, 4}, {64, 62}}},
+            {true,  {{1, 1}, {64, 5}}},
+        };
+        const TVector<TDeltaItem> expected = {
+            {0, maxFreq},
+            {1, 6},
+            {64, 5},
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(Merge(generations), expected);
+    }
+
+    Y_UNIT_TEST(DeltaReaderMaxIdBoundaryDoesNotConsume) {
+        const auto encoded = Encode({{5, 1}, {10, 2}, {Max<ui64>(), 3}});
+        TDeltaReader reader(encoded, true, false);
+        reader.SetMaxId(7);
+
+        ui64 docId = 0;
+        ui32 freq = 0;
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 5);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+        // Read() restores its cursor when MaxId rejects an otherwise valid item.
+        reader.SetMaxId(10);
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 10);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 2);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+        reader.SetMaxId(Max<ui64>());
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(freq, 3);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+    }
+
+    Y_UNIT_TEST(DeltaReaderRejectsMalformedSegments) {
+        ui64 docId = 0;
+        ui32 freq = 0;
+
+        const TVector<ui8> truncated = {0x80};
+        TDeltaReader truncatedReader(truncated, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(truncatedReader.Read(docId, freq), yexception, "truncated varint");
+
+        const TVector<ui8> overlong(10, 0x80);
+        TDeltaReader overlongReader(overlong, false, false);
+        UNIT_ASSERT_EXCEPTION(overlongReader.Read(docId, freq), yexception);
+
+        const TVector<ui8> nonCanonical = {0x80, 0x00};
+        TDeltaReader nonCanonicalReader(nonCanonical, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            nonCanonicalReader.Read(docId, freq), yexception, "non-canonical varint");
+
+        TVector<ui8> overflowingFlagged = {0x80};
+        overflowingFlagged.insert(overflowingFlagged.end(), 8, 0x80);
+        overflowingFlagged.push_back(0x04); // tail=2^58 cannot be shifted left by the reserved six bits
+        TDeltaReader flaggedReader(overflowingFlagged, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            flaggedReader.Read(docId, freq), yexception, "overflowing flagged varint");
+
+        const TVector<ui8> overflowingFrequency = {0x41, 0x80, 0x80, 0x80, 0x80, 0x10};
+        TDeltaReader frequencyReader(overflowingFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(frequencyReader.Read(docId, freq), yexception, "overflowing frequency");
+
+        TVector<ui8> overflowingDocId = Encode({{Max<ui64>(), 1}}, false);
+        overflowingDocId.push_back(1);
+        TDeltaReader docIdReader(overflowingDocId, false, false);
+        UNIT_ASSERT(docIdReader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(docIdReader.Read(docId, freq), yexception, "overflowing document id");
+
+        const TVector<ui8> explicitZeroFrequency = {0x41, 0x00};
+        TDeltaReader zeroFrequencyReader(explicitZeroFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            zeroFrequencyReader.Read(docId, freq), yexception, "non-canonical frequency");
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderRejectsFrequencyOverflow) {
+        const ui32 maxFreq = Max<ui32>();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            Merge({
+                {true, {{1, maxFreq}}},
+                {true, {{1, 1}}},
+            }),
+            yexception,
+            "exceeds ui32");
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {
@@ -228,6 +568,62 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should have a single value");
     }
 
+    Y_UNIT_TEST(ValidateSuperLemmerSettings) {
+        const auto makeSettings = [] {
+            Ydb::Table::FulltextIndexSettings settings;
+            auto* column = settings.add_columns();
+            column->set_column("text");
+            auto* analyzers = column->mutable_analyzers();
+            analyzers->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers->set_use_filter_superlemmer(true);
+            return settings;
+        };
+
+        TString error;
+
+        {
+            auto settings = makeSettings();
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language required when use_filter_superlemmer is set");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("klingon");
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by superlemmer");
+        }
+
+        {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            analyzers->set_use_filter_snowball(true);
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball and use_filter_superlemmer at the same time");
+        }
+
+        for (bool edge : {false, true}) {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            if (edge) {
+                analyzers->set_use_filter_edge_ngram(true);
+            } else {
+                analyzers->set_use_filter_ngram(true);
+            }
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian");
+            UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        }
+    }
+
     Y_UNIT_TEST(FillSetting) {
         TString error;
         Ydb::Table::FulltextIndexSettings settings;
@@ -254,6 +650,36 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(FillSetting(settings, "filter_length_max", "5", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().at(0).analyzers().filter_length_max(), 5);
+    }
+
+    Y_UNIT_TEST(FillAnalyzer) {
+        TString error;
+        Ydb::Table::FulltextIndexSettings settings;
+        settings.add_columns()->set_column("text");
+
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "standard", error), error);
+        auto* analyzers = settings.mutable_columns(0)->mutable_analyzers();
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT(analyzers->use_filter_lowercase());
+        UNIT_ASSERT(analyzers->use_filter_stopwords());
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        analyzers->Clear();
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "snowball", error), error);
+        UNIT_ASSERT_C(FillSetting(settings, "language", "russian", error), error);
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT(analyzers->use_filter_lowercase());
+        UNIT_ASSERT(analyzers->use_filter_stopwords());
+        UNIT_ASSERT(analyzers->use_filter_snowball());
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        analyzers->Clear();
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "keyword", error), error);
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::KEYWORD);
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        UNIT_ASSERT(!FillSetting(settings, "analyzer", "unknown", error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Invalid analyzer: unknown");
     }
 
     Y_UNIT_TEST(FillSettingInvalid) {
@@ -293,6 +719,9 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat", "0123,456@"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog_cat", "0123,456"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::ALPHANUMERIC);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat", "0123", "456"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
@@ -319,6 +748,22 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
         analyzers.set_use_filter_lowercase(true);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"привет", "это", "test123", "и", "слово", "ёлка", "ёль"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterStopwords) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        analyzers.set_use_filter_lowercase(true);
+        analyzers.set_use_filter_stopwords(true);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("The quick brown fox is in the garden", analyzers),
+            (TVector<TString>{"quick", "brown", "fox", "garden"}));
+
+        analyzers.set_language("russian");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("Это быстрый лис и он в саду", analyzers),
+            (TVector<TString>{"быстрый", "лис", "саду"}));
     }
 
     Y_UNIT_TEST(AnalyzeInvalid) {
@@ -533,6 +978,78 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
         UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
             (TVector<T>{{"foo bar", false}}));
+    }
+
+    Y_UNIT_TEST(MidNumberChainedStandard) {
+        // Regression test: after consuming a MidNumber separator + digit, prev was
+        // incorrectly set to LETTER instead of DIGIT, so a second separator would not
+        // satisfy the (prev == DIGIT || prev == MID_DIGIT) guard and the token was cut short.
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+
+        // Two separators: "1,2,3" must be one token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3", analyzers), (TVector<TString>{"1,2,3"}));
+
+        // Mix of MidNumber chars (comma and period).
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.3", analyzers), (TVector<TString>{"1,2.3"}));
+
+        // Trailing separator does not join — "1," ends at safeEnd before the comma.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,", analyzers), (TVector<TString>{"1,2"}));
+
+        // Longer chain.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3,4,5", analyzers), (TVector<TString>{"1,2,3,4,5"}));
+
+        // Multiple tokens separated by whitespace — each chained number is its own token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 4,5,6", analyzers), (TVector<TString>{"1,2,3", "4,5,6"}));
+
+        // Mixed: a word token followed by a chained number token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("price 1,234,567", analyzers), (TVector<TString>{"price", "1,234,567"}));
+
+        // Chained number token followed by a letter token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 end", analyzers), (TVector<TString>{"1,2,3", "end"}));
+
+        // Punctuation breaks tokens: "1,2.foo" — the period before a letter is MidLetter territory,
+        // but here it follows digits so the chain stops at "1,2" and "foo" is separate.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.foo", analyzers), (TVector<TString>{"1,2", "foo"}));
+    }
+
+    Y_UNIT_TEST(WordBreakTest) {
+        // Generated from
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakTest.txt
+        // and
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakProperty.txt
+        TString tests = NResource::Find("word_break_test.json");
+        NJson::TJsonValue out;
+        ReadJsonTree(tests, &out, true);
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        int ok = 0, failed = 0;
+        for (auto& test: out.GetArray()) {
+            TString in = test["input"].GetString();
+            TVector<TString> expected;
+            for (auto& token: test["tokens"].GetArray()) {
+                expected.push_back(token.GetString());
+            }
+            TVector<TString> out = Analyze(in, analyzers);
+            if (out != expected) {
+                Cerr << "Input: " << in << "\nTokens:";
+                for (auto& token: out) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\nExpected:";
+                for (auto& token: expected) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\n\n";
+                failed++;
+            } else {
+                ok++;
+            }
+        }
+        if (failed > 0) {
+            Cerr << "Ok " << ok << "/" << (ok+failed) << " tests\n";
+        }
+        UNIT_ASSERT(!failed);
     }
 }
 

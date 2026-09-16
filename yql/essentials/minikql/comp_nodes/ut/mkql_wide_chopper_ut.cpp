@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideChopperTest) {
 Y_UNIT_TEST_LLVM(TestConcatKeyToItems) {
@@ -237,7 +236,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         // Call GetState.
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -333,7 +332,7 @@ template <bool LLVM>
 TRuntimeNode MakeTestProxyFlow(TSetup<LLVM>& setup, TRuntimeNode inputWideFlow) {
     TCallableBuilder callableBuilder(*setup.Env, TestProxyFlowName, inputWideFlow.GetStaticType());
     callableBuilder.Add(inputWideFlow);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 Y_UNIT_TEST_LLVM(TestCodegenWithProxyFlow) {
@@ -359,5 +358,4 @@ Y_UNIT_TEST_LLVM(TestCodegenWithProxyFlow) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideChopperTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -39,20 +39,21 @@ import botocore.awsrequest
 import botocore.httpsession
 
 # IP Regexes retained for backwards compatibility
-from botocore.compat import HEX_PAT  # noqa: F401
-from botocore.compat import IPV4_PAT  # noqa: F401
-from botocore.compat import IPV6_ADDRZ_PAT  # noqa: F401
-from botocore.compat import IPV6_PAT  # noqa: F401
-from botocore.compat import LS32_PAT  # noqa: F401
-from botocore.compat import UNRESERVED_PAT  # noqa: F401
-from botocore.compat import ZONE_ID_PAT  # noqa: F401
 from botocore.compat import (
     HAS_CRT,
+    HEX_PAT,  # noqa: F401
+    IPV4_PAT,  # noqa: F401
     IPV4_RE,
+    IPV6_ADDRZ_PAT,  # noqa: F401
     IPV6_ADDRZ_RE,
+    IPV6_PAT,  # noqa: F401
+    LS32_PAT,  # noqa: F401
     MD5_AVAILABLE,
+    UNRESERVED_PAT,  # noqa: F401
     UNSAFE_URL_CHARS,
+    ZONE_ID_PAT,  # noqa: F401
     OrderedDict,
+    get_current_datetime,
     get_md5,
     get_tzinfo_options,
     json,
@@ -86,6 +87,11 @@ from botocore.exceptions import (
     UnsupportedS3ConfigurationError,
     UnsupportedS3ControlArnError,
     UnsupportedS3ControlConfigurationError,
+)
+from botocore.plugin import (
+    PluginContext,
+    reset_plugin_context,
+    set_plugin_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,7 +167,6 @@ EVENT_ALIASES = {
     "models.lex": "lex-model-building-service",
     "monitoring": "cloudwatch",
     "mturk-requester": "mturk",
-    "opsworks-cm": "opsworkscm",
     "resourcegroupstaggingapi": "resource-groups-tagging-api",
     "route53": "route-53",
     "route53domains": "route-53-domains",
@@ -183,6 +188,15 @@ EVENT_ALIASES = {
 CHECKSUM_HEADER_PATTERN = re.compile(
     r'^X-Amz-Checksum-([a-z0-9]*)$',
     flags=re.IGNORECASE,
+)
+
+PRIORITY_ORDERED_SUPPORTED_PROTOCOLS = (
+    'json',
+    'rest-json',
+    'rest-xml',
+    'smithy-rpc-v2-cbor',
+    'query',
+    'ec2',
 )
 
 
@@ -355,6 +369,18 @@ def is_global_accesspoint(context):
     return is_global
 
 
+def create_nested_client(session, service_name, **kwargs):
+    # If a client is created from within a plugin based on the environment variable,
+    # an infinite loop could arise.  Any clients created from within another client
+    # must use this method to prevent infinite loops.
+    ctx = PluginContext(plugins="DISABLED")
+    token = set_plugin_context(ctx)
+    try:
+        return session.create_client(service_name, **kwargs)
+    finally:
+        reset_plugin_context(token)
+
+
 class _RetriesExceededError(Exception):
     """Internal exception used when the number of retries are exceeded."""
 
@@ -427,7 +453,7 @@ class IMDSFetcher:
         else:
             chosen_base_url = METADATA_BASE_URL
 
-        logger.debug(f"IMDS ENDPOINT: {chosen_base_url}")
+        logger.debug("IMDS ENDPOINT: %s", chosen_base_url)
         if not is_valid_uri(chosen_base_url):
             raise InvalidIMDSEndpointError(endpoint=chosen_base_url)
 
@@ -667,7 +693,7 @@ class InstanceMetadataFetcher(IMDSFetcher):
             )
             jitter = random.randint(120, 600)  # Between 2 to 10 minutes
             refresh_interval_with_jitter = refresh_interval + jitter
-            current_time = datetime.datetime.utcnow()
+            current_time = get_current_datetime()
             refresh_offset = datetime.timedelta(
                 seconds=refresh_interval_with_jitter
             )
@@ -678,14 +704,15 @@ class InstanceMetadataFetcher(IMDSFetcher):
                     "%Y-%m-%dT%H:%M:%SZ"
                 )
                 logger.info(
-                    f"Attempting credential expiration extension due to a "
-                    f"credential service availability issue. A refresh of "
-                    f"these credentials will be attempted again within "
-                    f"the next {refresh_interval_with_jitter/60:.0f} minutes."
+                    "Attempting credential expiration extension due to a "
+                    "credential service availability issue. A refresh of "
+                    "these credentials will be attempted again within "
+                    "the next %.0f minutes.",
+                    refresh_interval_with_jitter / 60,
                 )
         except ValueError:
             logger.debug(
-                f"Unable to parse expiry_time in {credentials['expiry_time']}"
+                "Unable to parse expiry_time in %s", credentials['expiry_time']
             )
 
 
@@ -1546,7 +1573,9 @@ def _get_new_endpoint(original_endpoint, new_endpoint, use_new_scheme=True):
         '',
     )
     final_endpoint = urlunsplit(final_endpoint_components)
-    logger.debug(f'Updating URI from {original_endpoint} to {final_endpoint}')
+    logger.debug(
+        'Updating URI from %s to %s', original_endpoint, final_endpoint
+    )
     return final_endpoint
 
 
@@ -1797,16 +1826,21 @@ class S3RegionRedirectorv2:
 
         if new_region is None:
             logger.debug(
-                f"S3 client configured for region {client_region} but the "
-                f"bucket {bucket} is not in that region and the proper region "
-                "could not be automatically determined."
+                "S3 client configured for region %s but the "
+                "bucket %s is not in that region and the proper region "
+                "could not be automatically determined.",
+                client_region,
+                bucket,
             )
             return
 
         logger.debug(
-            f"S3 client configured for region {client_region} but the bucket {bucket} "
-            f"is in region {new_region}; Please configure the proper region to "
-            f"avoid multiple unnecessary redirects and signing attempts."
+            "S3 client configured for region %s but the bucket %s "
+            "is in region %s; Please configure the proper region to "
+            "avoid multiple unnecessary redirects and signing attempts.",
+            client_region,
+            bucket,
+            new_region,
         )
         # Adding the new region to _cache will make construct_endpoint() to
         # use the new region as value for the AWS::Region builtin parameter.
@@ -1995,16 +2029,21 @@ class S3RegionRedirector:
 
         if new_region is None:
             logger.debug(
-                f"S3 client configured for region {client_region} but the bucket {bucket} is not "
+                "S3 client configured for region %s but the bucket %s is not "
                 "in that region and the proper region could not be "
-                "automatically determined."
+                "automatically determined.",
+                client_region,
+                bucket,
             )
             return
 
         logger.debug(
-            f"S3 client configured for region {client_region} but the bucket {bucket} is in region"
-            f" {new_region}; Please configure the proper region to avoid multiple "
-            "unnecessary redirects and signing attempts."
+            "S3 client configured for region %s but the bucket %s is in region"
+            " %s; Please configure the proper region to avoid multiple "
+            "unnecessary redirects and signing attempts.",
+            client_region,
+            bucket,
+            new_region,
         )
         endpoint = self._endpoint_resolver.resolve('s3', new_region)
         endpoint = endpoint['endpoint_url']
@@ -2423,7 +2462,7 @@ class S3EndpointSetter:
             )
         )
         logger.debug(
-            f'Updating URI from {request.url} to {accesspoint_endpoint}'
+            'Updating URI from %s to %s', request.url, accesspoint_endpoint
         )
         request.url = accesspoint_endpoint
 
@@ -2723,7 +2762,7 @@ class S3ControlEndpointSetter:
             )
         )
         logger.debug(
-            f'Updating URI from {request.url} to {arn_details_endpoint}'
+            'Updating URI from %s to %s', request.url, arn_details_endpoint
         )
         request.url = arn_details_endpoint
 
@@ -3238,14 +3277,14 @@ def calculate_md5(body, **kwargs):
 
 def _calculate_md5_from_bytes(body_bytes):
     """This function has been deprecated, but is kept for backwards compatibility."""
-    md5 = get_md5(body_bytes)
+    md5 = get_md5(body_bytes, usedforsecurity=False)
     return md5.digest()
 
 
 def _calculate_md5_from_file(fileobj):
     """This function has been deprecated, but is kept for backwards compatibility."""
     start_position = fileobj.tell()
-    md5 = get_md5()
+    md5 = get_md5(usedforsecurity=False)
     for chunk in iter(lambda: fileobj.read(1024 * 1024), b''):
         md5.update(chunk)
     fileobj.seek(start_position)
@@ -3355,7 +3394,7 @@ class SSOTokenLoader:
 
     def __call__(self, start_url, session_name=None):
         cache_key = self._generate_cache_key(start_url, session_name)
-        logger.debug(f'Checking for cached token at: {cache_key}')
+        logger.debug('Checking for cached token at: %s', cache_key)
         if cache_key not in self._cache:
             name = start_url
             if session_name is not None:
@@ -3391,7 +3430,9 @@ class EventbridgeSignerSetter:
     def set_endpoint_url(self, params, context, **kwargs):
         if 'eventbridge_endpoint' in context:
             endpoint = context['eventbridge_endpoint']
-            logger.debug(f"Rewriting URL from {params['url']} to {endpoint}")
+            logger.debug(
+                "Rewriting URL from %s to %s", params['url'], endpoint
+            )
             params['url'] = endpoint
 
     def check_for_global_endpoint(self, params, context, **kwargs):
@@ -3532,11 +3573,10 @@ class JSONFileCache:
             file_content = self._dumps(value)
         except (TypeError, ValueError):
             raise ValueError(
-                f"Value cannot be cached, must be "
-                f"JSON serializable: {value}"
+                f"Value cannot be cached, must be JSON serializable: {value}"
             )
         if not os.path.isdir(self._working_dir):
-            os.makedirs(self._working_dir)
+            os.makedirs(self._working_dir, exist_ok=True)
         with os.fdopen(
             os.open(full_key, os.O_WRONLY | os.O_CREAT, 0o600), 'w'
         ) as f:
@@ -3555,10 +3595,29 @@ class JSONFileCache:
         return value
 
 
+def generate_login_cache_key(sign_in_session_name):
+    return hashlib.sha256(sign_in_session_name.encode('utf-8')).hexdigest()
+
+
 def is_s3express_bucket(bucket):
     if bucket is None:
         return False
     return bucket.endswith('--x-s3')
+
+
+def get_token_from_environment(signing_name, environ=None):
+    if not isinstance(signing_name, str) or not signing_name.strip():
+        return None
+
+    if environ is None:
+        environ = os.environ
+    env_var = _get_bearer_env_var_name(signing_name)
+    return environ.get(env_var)
+
+
+def _get_bearer_env_var_name(signing_name):
+    bearer_name = signing_name.replace('-', '_').replace(' ', '_').upper()
+    return f"AWS_BEARER_TOKEN_{bearer_name}"
 
 
 # This parameter is not part of the public interface and is subject to abrupt
@@ -3633,3 +3692,32 @@ CLIENT_NAME_TO_HYPHENIZED_SERVICE_ID_OVERRIDES = {
     'stepfunctions': 'sfn',
     'storagegateway': 'storage-gateway',
 }
+
+
+def get_login_token_cache_directory():
+    """Returns which directory contains the login_session token files"""
+    if 'AWS_LOGIN_CACHE_DIRECTORY' in os.environ:
+        path = os.path.expandvars(os.environ['AWS_LOGIN_CACHE_DIRECTORY'])
+        path = os.path.expanduser(path)
+        return path
+    else:
+        return os.path.expanduser(os.path.join('~', '.aws', 'login', 'cache'))
+
+
+class LoginTokenLoader:
+    """Loads and saves login access tokens to disk"""
+
+    def __init__(self, cache=None):
+        if cache is None:
+            cache = {}
+        self._cache = cache
+
+    def save_token(self, session_name, token):
+        cache_key = generate_login_cache_key(session_name)
+        self._cache[cache_key] = token
+
+    def load_token(self, session_name):
+        cache_key = generate_login_cache_key(session_name)
+        if cache_key not in self._cache:
+            return None
+        return self._cache[cache_key]

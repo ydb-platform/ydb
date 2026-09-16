@@ -30,15 +30,26 @@ def safe_upload_results(
 
         try:
             suite_name = 'SingleStressUtil' if len(result.stress_util_runs.keys()) == 1 else 'ParallelStressUtil'
+            recoverability = result.recoverability_result
             # Upload aggregated results
             for workload_name, runs in result.stress_util_runs.items():
-                _upload_results(runs, run_config, node_errors, suite_name, workload_name)
+                recoverability_runs = None
+                if recoverability is not None and workload_name in recoverability.stress_util_runs:
+                    recoverability_runs = recoverability.stress_util_runs[workload_name]
+                _upload_results(
+                    runs,
+                    run_config,
+                    node_errors,
+                    suite_name,
+                    workload_name,
+                    recoverability_runs=recoverability_runs,
+                )
                 with allure.step(f"Process {workload_name} results"):
-
-                    # Informative message about what was uploaded
+                    phases_count = 2 if recoverability_runs is not None else 1
                     upload_summary = [
                         "Results uploaded successfully:",
                         "• Aggregate results: 1 record (kind=Stability)",
+                        f"• Phases: {phases_count}",
                         f"• Total iterations: {sum(len(node_run.runs) for node_run in runs.node_runs.values())}",
                         f"• Workload: {workload_name}",
                         f"• Suite: {suite_name}",
@@ -49,9 +60,6 @@ def safe_upload_results(
             # Log upload error but don't interrupt execution
             error_msg = f"Failed to upload results: {e}\n{traceback.format_exc()}"
             logging.error(error_msg)
-            # result.add_warning(error_msg)
-            # After adding warning we need to recalculate summary flags
-            # Summary flags (with_errors/with_warnings) are automatically added in ydb_cli.py
 
             # Detailed error info for Allure
             error_details = [
@@ -70,27 +78,86 @@ def safe_upload_results(
                           "Upload error details", allure.attachment_type.TEXT)
 
 
+def _build_phase_stats(
+    phase_name: str,
+    phase_result: StressUtilResult,
+    nemesis_enabled: bool,
+    planned_duration: Optional[float] = None,
+) -> dict:
+    """Build Stats fragment for a single workload execution phase.
+
+    Args:
+        phase_name: Phase identifier ('main' or 'recoverability')
+        phase_result: Results for this phase
+        nemesis_enabled: Whether nemesis was active during the phase
+        planned_duration: Planned duration in seconds (optional)
+
+    Returns:
+        dict: Phase statistics without per-host breakdown
+    """
+    total_runs = phase_result.get_total_runs()
+    successful_runs = phase_result.get_successful_runs()
+    failed_runs = total_runs - successful_runs
+    actual_duration = None
+    if phase_result.start_time is not None and phase_result.end_time is not None:
+        actual_duration = phase_result.end_time - phase_result.start_time
+
+    total_execution_time = None
+    if phase_result.node_runs:
+        total_execution_time = max(
+            (run.total_execution_time or 0) for run in phase_result.node_runs.values()
+        )
+
+    success_rate = (successful_runs / total_runs) if total_runs else 0.0
+
+    phase = {
+        "name": phase_name,
+        "nemesis_enabled": nemesis_enabled,
+        "start_time": phase_result.start_time,
+        "end_time": phase_result.end_time,
+        "total_runs": total_runs,
+        "successful_runs": successful_runs,
+        "failed_runs": failed_runs,
+        "success_rate": success_rate,
+        "hosts_count": len(phase_result.node_runs),
+        "is_successful": phase_result.is_all_success() and total_runs > 0,
+    }
+    if planned_duration is not None:
+        phase["planned_duration"] = planned_duration
+    if actual_duration is not None:
+        phase["actual_duration"] = actual_duration
+    if total_execution_time is not None:
+        phase["total_execution_time"] = total_execution_time
+    return phase
+
+
 def _upload_results(
     result: StressUtilResult,
     run_config: RunConfigInfo,
     node_errors: list[NodeErrors],
     suite_name: str,
-    workload_name: str
+    workload_name: str,
+    recoverability_runs: Optional[StressUtilResult] = None,
 ) -> None:
     """Upload results for a specific workload test.
 
+    Top-level Stats keep main-phase aggregates for backward compatibility.
+    All execution periods (main with/without nemesis, recoverability) are
+    listed in ``phases`` so dashboards can distinguish them without schema changes.
+
     Args:
-        result: Stress utility results
+        result: Stress utility results (main phase)
         run_config: Run configuration info
         node_errors: List of node errors
         suite_name: Test suite name
         workload_name: Workload name
+        recoverability_runs: Optional recoverability-phase results (nemesis off)
     """
     stats = {}
 
     stats["aggregation_level"] = "aggregate"
     stats["run_id"] = ResultsProcessor.get_run_id()
-    # Add workload timings for proper analysis
+    # Add workload timings for proper analysis (main phase)
     workload_start_time = result.start_time
     if workload_start_time:
         stats["workload_start_time"] = workload_start_time
@@ -100,17 +167,24 @@ def _upload_results(
     stats["total_runs"] = result.get_total_runs()
     stats["successful_runs"] = result.get_successful_runs()
     stats["failed_runs"] = stats["total_runs"] - stats["successful_runs"]
-    stats["total_iterations"] = 1
+    stats["total_iterations"] = stats["total_runs"]
     stats["successful_iterations"] = stats["successful_runs"]
-    stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
+    stats["failed_iterations"] = stats["failed_runs"]
     stats["planned_duration"] = run_config.duration
-    stats["actual_duration"] = result.end_time - result.start_time
-    stats["total_execution_time"] = max(run.total_execution_time for run in result.node_runs.values())
-    stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
+    stats["actual_duration"] = result.end_time - result.start_time if result.start_time and result.end_time else None
+    if result.node_runs:
+        stats["total_execution_time"] = max(
+            (run.total_execution_time or 0) for run in result.node_runs.values()
+        )
+    else:
+        stats["total_execution_time"] = 0
+    stats["success_rate"] = (
+        stats["successful_runs"] / stats["total_runs"] if stats["total_runs"] else 0.0
+    )
     # obsolete
     stats["avg_threads_per_iteration"] = 0
     stats["total_threads"] = 1
-    stats["use_iterations"] = False
+    stats["use_iterations"] = stats["total_runs"] > 1
 
     stats["nodes_percentage"] = run_config.nodes_percentage
     stats["nemesis_enabled"] = run_config.nemesis_enabled
@@ -118,6 +192,7 @@ def _upload_results(
     stats["table_type"] = run_config.table_type
     stats["workload_type"] = workload_name
     stats["test_timestamp"] = result.start_time
+    stats["hosts_count"] = len(result.node_runs)
 
     stats["with_warnings"] = False
 
@@ -154,6 +229,27 @@ def _upload_results(
     stats["workload_warnings"] = None
     stats["workload_error_messages"] = None
     stats["workload_warning_messages"] = None
+
+    # Phases: main (with or without nemesis) + optional recoverability (always without)
+    phases = [
+        _build_phase_stats(
+            phase_name="main",
+            phase_result=result,
+            nemesis_enabled=bool(run_config.nemesis_enabled),
+            planned_duration=run_config.duration,
+        )
+    ]
+    if recoverability_runs is not None:
+        phases.append(
+            _build_phase_stats(
+                phase_name="recoverability",
+                phase_result=recoverability_runs,
+                nemesis_enabled=False,
+                planned_duration=1200,
+            )
+        )
+    stats["phases"] = phases
+    stats["phases_count"] = len(phases)
 
     end_time = datetime.now().timestamp()
 

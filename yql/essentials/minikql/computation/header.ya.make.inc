@@ -1,8 +1,10 @@
 INCLUDE_ONCE()
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 ADDINCL(
     GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR}
-    GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR}/yql/essentials/minikql/computation    
+    GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR}/yql/essentials/minikql/computation
 )
 
 COPY_FILE(TEXT

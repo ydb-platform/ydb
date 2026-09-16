@@ -17,7 +17,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TEnum, std::same_as<TEnum>... TArgs>
-consteval bool AllDifferentValues(TArgs... args)
+consteval bool AreAllValuesDifferent(TArgs... args)
 {
     TEnumIndexedArray<TEnum, bool> array;
     ((array[args] = true), ...);
@@ -191,7 +191,25 @@ TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYso
 }
 
 template <CPolymorphicEnumMapping TMapping>
-typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetCurrentType() const
+template <std::derived_from<typename TMapping::TBaseClass> TConcrete>
+TIntrusivePtr<TConcrete> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<TConcrete>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+template <typename TMapping::TKey Value>
+TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TPolymorphicYsonStruct<TMapping>::GetConcrete() const
+{
+    auto result = TryGetConcrete<Value>();
+    YT_VERIFY(result);
+    return result;
+}
+
+template <CPolymorphicEnumMapping TMapping>
+typename TPolymorphicYsonStruct<TMapping>::TKey TPolymorphicYsonStruct<TMapping>::GetType() const
 {
     return HeldType_;
 }
@@ -217,10 +235,10 @@ void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& o
     }
 
     THROW_ERROR_EXCEPTION_UNLESS(
-        GetCurrentType() == other.GetCurrentType(),
-        "Can't merge polymorphic yson structs with different types stored (ThisType: %v, OtherType: %v)",
-        GetCurrentType(),
-        other.GetCurrentType());
+        GetType() == other.GetType(),
+        "Cannot merge polymorphic YSON structs with different stored types: %Qlv vs %Qlv",
+        GetType(),
+        other.GetType());
 
     SerializedStorage_ = PatchNode(SerializedStorage_, other.SerializedStorage_);
 
@@ -246,7 +264,8 @@ template <class T>
     requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
 void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path)
 {
-    static constexpr auto enumValues = TEnumTraits<typename T::TKey>::GetDomainValues();
+    static constexpr auto enumValues =
+        TEnumTraits<typename T::TKey>::template GetDomainValues</*AllowAmbiguousValues*/ true>();
     [&]<auto... Is> (std::index_sequence<Is...>) {
         (TraverseYsonStruct<typename T::template TEnumToDerived<enumValues[Is]>>(visitor, path + "/" + FormatEnum(enumValues[Is])), ...);
     } (std::make_index_sequence<std::size(enumValues)>());

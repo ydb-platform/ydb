@@ -30,6 +30,7 @@ from ydb.tools.cfg import base, types, utils
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,
     kikimr_cfg_for_dynamic_node,
+    kikimr_cfg_for_dynamic_node_new_style,
     kikimr_cfg_for_dynamic_slot,
     kikimr_cfg_for_static_node,
     kikimr_cfg_for_static_node_new_style,
@@ -568,6 +569,22 @@ class StaticConfigGenerator(object):
     @property
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
+            if self.__cluster_details.use_new_style_kikimr_cfg:
+                return kikimr_cfg_for_dynamic_node_new_style(
+                    self.__node_broker_port,
+                    self._database,
+                    self.__ic_port,
+                    self.__grpc_port,
+                    self.__mon_port,
+                    self.__kikimr_home,
+                    self._enable_cores,
+                    self.__cluster_details.default_log_level,
+                    kikimr_binaries_base_path='/Berkanavt/kikimr',
+                    mon_address=self.__cluster_details.monitor_address,
+                    cert_params=self.__cluster_details.ic_cert_params,
+                    use_auth_token_file=self._use_auth_token_file,
+                )
+
             return kikimr_cfg_for_dynamic_node(
                 self.__node_broker_port,
                 self._database,
@@ -692,11 +709,17 @@ class StaticConfigGenerator(object):
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
                     for drive in host_config['drive']:
+                        pdisk_config = {}
                         if 'expected_slot_count' in drive:
                             # inside config.yaml we should use pdisk_config section for expected_slot_count
-                            drive['pdisk_config'] = {
-                                'expected_slot_count': drive.pop('expected_slot_count')
-                            }
+                            pdisk_config['expected_slot_count'] = drive.pop('expected_slot_count')
+                        if 'expected_slot_size' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_size/max_slots
+                            pdisk_config['expected_slot_size'] = drive.pop('expected_slot_size')
+                        if 'max_slots' in drive:
+                            pdisk_config['max_slots'] = drive.pop('max_slots')
+                        if pdisk_config:
+                            drive.setdefault('pdisk_config', {}).update(pdisk_config)
 
                         # support type-safe `pdisk_config` directly in `host_configs`, for example:
                         # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
@@ -1004,7 +1027,14 @@ class StaticConfigGenerator(object):
                             vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
-                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_count'])
+                                if 'expected_slot_size' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_size'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_size'])
+                                if 'max_slots' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['max_slots'] = int(
+                                        vdisk_location['pdisk_config']['max_slots'])
 
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
@@ -1292,6 +1322,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
                 if drive.disk_scope is not None:
                     drive_pb.DiskScope = drive.disk_scope
@@ -1375,6 +1408,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
                 if drive.disk_scope is not None:
                     drive_pb.DiskScope = drive.disk_scope

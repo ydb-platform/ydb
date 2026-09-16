@@ -4,6 +4,7 @@ PEERDIR(
     ydb/library/actors/protos
     library/cpp/monlib/service/pages
     ydb/core/base
+    ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/protos
     ydb/core/protos

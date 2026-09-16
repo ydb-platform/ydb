@@ -1,10 +1,10 @@
-# Debug reads from a topic
+# Debug reading from a topic
 
-When developing [streaming queries](../../concepts/streaming-query.md), it is often useful to inspect what arrives in a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. Run a regular `SELECT` with `STREAMING = TRUE`.
+When developing [streaming queries](../../concepts/streaming-query/streaming-query.md), it is useful to quickly see what data is coming into a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. To do this, you can run a regular `SELECT` with the `STREAMING = "TRUE"` parameter.
 
 {% note warning %}
 
-For debugging and inspection only. For production, create streaming queries with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+This method is intended only for debugging and checking data in a topic. For production use, create streaming queries using [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 
 {% endnote %}
 
@@ -12,14 +12,15 @@ For debugging and inspection only. For production, create streaming queries with
 
 In the examples:
 
-- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md);
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md).
 - `input_topic` — a local or external topic (see [local and external topics in streaming queries](../../dev/streaming-query/local-and-external-topics.md)).
 
 {% endnote %}
 
-## Raw reads
+## Reading raw data
 
-Simplest option — read messages in `raw` format without parsing:
+The simplest way is to read messages in `raw` format, without parsing the schema:
+
 
 ```sql
 SELECT
@@ -36,11 +37,13 @@ WITH (
 LIMIT 1
 ```
 
-`LIMIT` is required; without it the query never completes because it waits for new messages indefinitely.
 
-## JSON parsing
+The `LIMIT` parameter is required — without it, the query will not complete, as it will wait for new messages indefinitely.
 
-If the topic stores JSON, parse fields directly:
+## Reading with JSON parsing
+
+If the data in the topic is stored in JSON format, you can immediately parse it by fields:
+
 
 ```sql
 SELECT
@@ -59,8 +62,9 @@ WITH (
 LIMIT 5
 ```
 
+
 ## See also
 
-* [{#T}](../../concepts/streaming-query.md)
+* [{#T}](../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — supported data formats
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = "TRUE"` in the YQL reference
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — description of `STREAMING = "TRUE"` in the YQL reference

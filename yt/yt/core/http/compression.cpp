@@ -149,7 +149,7 @@ private:
         }
 
         THROW_ERROR_EXCEPTION("Unsupported content encoding")
-            << TErrorAttribute("content_encoding", ToString(ContentEncoding_));
+            .With("content_encoding", ToString(ContentEncoding_));
     }
 
     void DoWriteCompressor(const TSharedRef& buffer)
@@ -268,7 +268,7 @@ private:
         }
 
         THROW_ERROR_EXCEPTION("Unsupported content encoding")
-            << TErrorAttribute("content_encoding", ContentEncoding_);
+            .With("content_encoding", ContentEncoding_);
     }
 
     size_t DoReadDecompressor(const TSharedMutableRef& uncompressedBuffer)
@@ -387,7 +387,7 @@ TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAccep
 
     if (!bestEncoding) {
         return TError("Could not determine feasible content encoding given accept encoding constraints")
-            << TErrorAttribute("client_accept_encoding", clientAcceptEncodingHeader);
+            .With("client_accept_encoding", clientAcceptEncodingHeader);
     }
 
     return *bestEncoding;

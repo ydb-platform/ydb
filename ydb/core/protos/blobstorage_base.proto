@@ -1,4 +1,5 @@
 import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 
@@ -11,6 +12,16 @@ enum EPutHandleClass {
     UserData = 3;       // user data that we write as separate blobs (RT/NoneTMP)
 
     // NOTE: currently NoneRT/TMP blobs must be treated as AsyncBlob
+}
+
+// Kind of the data being written. Space management rejects writes of different kinds at
+// different space colors: system data survives worse colors than user data, so that a tenant
+// which has run out of space can still boot its system tablets and delete user data.
+message TDataKind {
+    enum E {
+        USER = 0;   // data of user tablets: DataShard, ColumnShard, PersQueue, KeyValue, ...
+        SYSTEM = 1; // data of system tablets: SchemeShard, Hive, Coordinator, Mediator, ...
+    }
 }
 
 // VDisk handle read of LogoBlobs in different ways, below we define several classes of these requests
@@ -114,4 +125,59 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
+}
+
+// VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones
+enum EVDiskStatus {
+    ERROR = 0; // the disk is not operational at all
+    INIT_PENDING = 1; // initialization in process
+    REPLICATING = 2; // the disk accepts queries, but not all the data was replicated
+    READY = 3; // the disk is fully operational and does not affect group fault tolerance
+}
+
+message TGroupMetrics {
+    message TGroupParameters {
+        optional uint32 ErasureSpecies = 1;
+        optional uint32 GroupID = 2;
+        optional string StoragePoolName = 3; // if it was selected from the storage pool
+        optional bool PhysicalGroup = 12; // related to TChannelBind.PhysicalGroupsOnly
+        optional bool Decommitted = 13;
+
+        reserved 4;
+
+        // group resourcs (as seen by user, that is, including erasure encoding and so on)
+        message TResources {
+            optional uint64 Space = 1; // bytes
+            optional double IOPS = 2; // operations per second
+            optional uint64 ReadThroughput = 3; // bytes per second
+            optional uint64 WriteThroughput = 4; // bytes per second
+            optional double Occupancy = 5; // the worst occupancy among all VDisks in group
+        }
+
+        // assured part of group metrics -- when the underlying PDisks have all possible VSlots created; these metrics
+        // are expected not to degrade over time, including vdisk movement; however, everything is possible :)
+        optional TResources AssuredResources = 7;
+
+        // instant part of group metrics -- with current VSlot count over PDisks
+        optional TResources CurrentResources = 8;
+
+        // VDisk metrics for this group
+        optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
+        optional uint64 AllocatedSize = 10; // the same basis
+        optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
+        optional uint32 GroupSizeInUnits = 14;
+    }
+
+    optional fixed64 GroupId = 1;
+    optional TGroupParameters GroupParameters = 2;
+}
+
+message TDriveData {
+    optional string Path = 1;
+    optional string SerialNumber = 2;
+    optional string FirmwareRevision = 3;
+    optional string ModelNumber = 4;
+    optional uint64 Size = 6;
+    optional bool IsMock = 7 [default = false];
+    optional EPDiskType DeviceType = 5;
 }

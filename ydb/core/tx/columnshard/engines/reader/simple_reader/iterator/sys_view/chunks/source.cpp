@@ -31,10 +31,14 @@ class TChunkDetailsFetchLogic: public NCommon::IKernelFetchLogic {
         }
     }
 
-    virtual void DoOnDataCollected(NCommon::TFetchingResultContext& context) override {
+    virtual TConclusionStatus DoOnDataCollected(NCommon::TFetchingResultContext& context) override {
         for (auto& f : SubFetchers) {
-            f->OnDataCollected(context);
+            auto conclusion = f->OnDataCollected(context);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
+        return TConclusionStatus::Success();
     }
 
 public:
@@ -375,16 +379,20 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
     return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
 }
 
-void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+TConclusionStatus TSourceData::DoAssembleAccessor(
+    const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
         if (auto fetcher = MutableStageData().ExtractFetcherOptional(NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId)) {
             AFL_VERIFY(OriginalData);
             NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
-            fetcher->OnDataCollected(fetchContext);
+            auto conclusion = fetcher->OnDataCollected(fetchContext);
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
         }
     }
-    TBase::DoAssembleAccessor(context, columnId, subColumnName);
+    return TBase::DoAssembleAccessor(context, columnId, subColumnName);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks

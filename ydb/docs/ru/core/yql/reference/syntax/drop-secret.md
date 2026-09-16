@@ -5,9 +5,10 @@
 Синтаксис:
 
 ```sql
-DROP SECRET secret_name
+DROP SECRET [IF EXISTS] secret_name
 ```
 
+* `IF EXISTS` — команда не возвращает ошибку, если секрет не существует; в этом случае она ничего не делает.
 * `secret_name` — имя удаляемого секрета.
 
 ## Разрешения
@@ -20,6 +21,12 @@ DROP SECRET secret_name
 
 ```sql
 DROP SECRET secret_name;
+```
+
+Удалить секрет с именем `secret_name`, только если он существует; если он не существует, команда ничего не делает:
+
+```sql
+DROP SECRET IF EXISTS secret_name;
 ```
 
 ## См. также

@@ -4,7 +4,6 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/library/actors/util
-    ydb/library/formats/arrow
     ydb/library/formats/arrow/hash
     ydb/library/mkql_proto
     ydb/library/yql/dq/actors/compute/events

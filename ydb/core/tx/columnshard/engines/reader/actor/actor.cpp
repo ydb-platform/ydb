@@ -11,6 +11,8 @@
 
 namespace NKikimr::NOlap::NReader {
 
+constexpr TStringBuf NoScanIteratorDiagnostics = "NO";
+
 NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
         auto cnt = ScanCountersPool.ReadStepsCounters();
@@ -196,8 +198,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noe
     auto& msg = ev->Get()->Record;
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
-    auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-    YDB_LOG_COMP(prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
         {"scanActorId", ScanActorId},
         {"txId", TxId},
         {"scanId", ScanId},
@@ -302,6 +303,15 @@ bool TColumnShardScan::ProduceResults() noexcept {
     Y_ABORT_UNLESS(!Finished);
     Y_ABORT_UNLESS(ScanIterator);
 
+    // Stop a scan whose transaction can no longer commit: nobody will ever see its rows. Conflicts are
+    // detected while the scan runs, so this has to be re-checked as results come, not only once.
+    if (ReadMetadataRange->HasWritesAndBroken()) {
+        SendScanAborted();
+        ScanIterator.reset();
+        Finish(NColumnShard::TScanCounters::EStatusFinish::BrokenLock);
+        return false;
+    }
+
     if (ScanIterator->Finished()) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"stage", "scan iterator is finished"},
@@ -386,12 +396,10 @@ bool TColumnShardScan::ProduceResults() noexcept {
     if (CurrentLastReadKey && result.GetScanCursor()->GetPKCursor() && CurrentLastReadKey->GetPKCursor()) {
         auto pNew = result.GetScanCursor()->GetPKCursor();
         auto pOld = CurrentLastReadKey->GetPKCursor();
-        if (!ReadMetadataRange->GetFakeSort()) {
-            if (ReadMetadataRange->IsAscSorted()) {
-                AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
-            } else if (ReadMetadataRange->IsDescSorted()) {
-                AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
-            }
+        if (ReadMetadataRange->IsAscSorted()) {
+            AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
+        } else if (ReadMetadataRange->IsDescSorted()) {
+            AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
         }
     }
     CurrentLastReadKey = result.GetScanCursor();
@@ -588,9 +596,25 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     Send(ScanComputeActorId, ev.Release());
 }
 
+void TColumnShardScan::SendScanAborted() {
+    // Same answer datashard gives a read on a broken write lock: the rows would be inconsistent, and the
+    // transaction cannot commit anyway, so abort instead of returning them.
+    const TString msg = TStringBuilder() << "Read conflict with concurrent transaction at tablet " << TabletId;
+    auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(ScanGen, TabletId);
+    ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
+    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, msg);
+    NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
+    YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "scan_aborted"},
+        {"computeActorId", ScanComputeActorId},
+        {"reason", msg});
+
+    Send(ScanComputeActorId, ev.Release());
+}
+
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
     if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
-        auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
+        auto scanIteratorDiagnostics = ScanIterator ? ScanIterator->DebugString(true) : TString(NoScanIteratorDiagnostics);
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }

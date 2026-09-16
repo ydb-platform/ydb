@@ -12,12 +12,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/metrics
     ydb/core/fq/libs/row_dispatcher/common
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler
+    ydb/core/fq/libs/row_dispatcher/memory
     ydb/core/fq/libs/row_dispatcher/purecalc_compilation
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
@@ -45,8 +45,12 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
-    purecalc_no_pg_wrapper
+    common
+    events
     format_handler
+    memory
+    purecalc_compilation
+    purecalc_no_pg_wrapper
 )
 
 IF(NOT EXPORT_CMAKE)

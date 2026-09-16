@@ -1,3 +1,4 @@
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -53,7 +54,7 @@ ui64 GetFailProbability() {
 }
 
 bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
-    if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+    if (currentLangVersion >= NYql::NFeature::ValidateRegexp.MinLangVer) {
         return true;
     }
     THashType hash = GetStringHash(regexp) % 100;
@@ -239,7 +240,7 @@ private:
                 case CAPTURE: {
                     const int count = Regexp_->NumberOfCapturingGroups() + 1;
                     TUnboxedValue* items = nullptr;
-                    const auto result = valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
+                    auto result = valueBuilder->NewArray(RegexpGroups_.Names.size(), items);
                     if (Regexp_->Match(piece, 0, input.size(), anchor, Captured_.get(), count)) {
                         for (int i = 0; i < count; ++i) {
                             if (!Captured_[i].empty()) {

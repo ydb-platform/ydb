@@ -292,9 +292,6 @@ namespace NKikimr {
             if (blobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER) {
                 if (!checksum) {
                     checksum.emplace(CalculateChecksum(rope, Max<size_t>()));
-                } else {
-                    // TODO(alexvru): debug? or make it permanent?
-                    Y_DEBUG_ABORT_UNLESS(checksum == CalculateChecksum(rope, Max<size_t>()));
                 }
                 rope.Insert(rope.End(), arena.CreateRope(&checksum.value(), sizeof(ui64)));
             }

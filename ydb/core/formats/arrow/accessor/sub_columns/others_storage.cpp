@@ -121,7 +121,7 @@ public:
         TDictStats::TBuilder statBuilder;
         for (auto&& i : UsedKeys) {
             statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
-                i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
+                i.second.GetAccessorType(settings, recordsCount), OthersExplicitBinaryJson);
         }
         return statBuilder.Finish();
     }
@@ -247,29 +247,15 @@ TOthersData TOthersData::BuildEmpty() {
     return result;
 }
 
-TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
-    auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
-    for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-        auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), nullptr, i);
-        AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
-    }
-    auto accessorResult = jsonPathAccessorTrie->GetAccessor(path);
-    if (accessorResult.IsFail()) {
-        return accessorResult;
-    }
+std::shared_ptr<TJsonPathAccessor> TOthersData::BuildEmptyPathAccessor(const ui32 recordsCount) {
+    return std::make_shared<TJsonPathAccessor>(
+        std::make_shared<TSparsedArray>(nullptr, arrow::binary(), recordsCount), TString{}, OthersExplicitBinaryJson);
+}
 
-    auto accessor = accessorResult.DetachResult();
-    if (!accessor) {
-        return std::shared_ptr<TJsonPathAccessor>{};
-    }
-
-    auto idx = accessor->GetCookie();
-    if (!idx) {
-        return std::make_shared<TJsonPathAccessor>(std::make_shared<TSparsedArray>(nullptr, arrow::binary(), recordsCount), TString{});
-    }
+std::shared_ptr<TJsonPathAccessor> TOthersData::GetPathAccessor(TDictStats::TResolvedPath path, const ui32 recordsCount) const {
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {
-        filter.Add(it.GetKeyIndex() == *idx);
+        filter.Add(it.GetKeyIndex() == path.ColumnIndex);
     }
     auto recordsFiltered = NArrow::ApplyFilter(filter, Records);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
@@ -277,13 +263,13 @@ TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(con
     TSparsedArray::TBuilder builder(nullptr, arrow::binary());
     auto batch = ToBatch(table);
     builder.AddChunk(recordsCount, batch->GetColumnByName("record_idx"), batch->GetColumnByName("value"));
-    return std::make_shared<TJsonPathAccessor>(builder.Finish(), accessor->GetRemainingPath());
+    return std::make_shared<TJsonPathAccessor>(builder.Finish(), std::move(path.RemainingPath), OthersExplicitBinaryJson);
 }
 
-NArrow::NAccessor::TBinaryJsonValueView TOthersData::TIterator::GetValue() const {
+NArrow::NAccessor::TJsonValueView TOthersData::TIterator::GetValue() const {
     AFL_VERIFY(IsValid());
     auto view = Values->GetView(CurrentIndex);
-    return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
+    return NArrow::NAccessor::TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -92,6 +92,7 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
     {"structured_web_json", true},
     {"user_tokens_metadata", true},
+    {"cumulative_spec_patch", true},
 });
 
 #ifdef OPENSOURCE
@@ -389,7 +390,8 @@ public:
             driverRequest.Parameters = parameters->ToMap();
             driverRequest.AuthenticatedUser = Context_->Request().AuthenticatedUser;
             driverRequest.UserTag = Context_->Request().UserTag;
-            driverRequest.LoggingTags = Format("SubrequestIndex: %v", RequestIndex_);
+            driverRequest.LoggingTags = NLogging::TLoggingTagList()
+                .With("SubrequestIndex", RequestIndex_);
 
             return driver->Execute(driverRequest).Apply(
                 BIND(&TRequestExecutor::OnResponse, MakeStrong(this)));

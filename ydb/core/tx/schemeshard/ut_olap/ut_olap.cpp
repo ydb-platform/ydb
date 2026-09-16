@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -235,10 +236,6 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
 
     auto& appData = runtime.GetAppData();
-    // Use the l-buckets optimizer: it merges identical-key portions in a single bucket and, unlike the
-    // tiling (LSM) optimizer, honours CompactionMemoryLimit when sizing a compaction task - which is how we
-    // throttle recovery to a couple of portions per wave below.
-    appData.ColumnShardConfig.SetDefaultCompactionPreset("l-buckets");
     appData.FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
 
     // Each identical upsert batch lands as one small portion contributing ~perPortionBytes of small-blobs
@@ -766,6 +763,87 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s2");
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogram) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto checkEqHeight = [&](const TSet<TString>& expectedNames) {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/EqHeightColumnTable");
+            const auto& tableDesc = descr.GetPathDescription().GetColumnTableDescription();
+            TSet<TString> names;
+            for (const auto& stat : tableDesc.GetMultiColumnStatistics()) {
+                names.insert(stat.GetName());
+                UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), stat.ColumnIdsSize());
+                UNIT_ASSERT(stat.ColumnNamesSize() > 0);
+                UNIT_ASSERT(stat.TypesSize() > 0);
+                for (const auto type : stat.GetTypes()) {
+                    UNIT_ASSERT_EQUAL(
+                        static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type),
+                        NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(names, expectedNames);
+        };
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key1" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "key1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1"});
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkEqHeight({"h1"});
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightColumnTable"
+            UpsertMultiColumnStatistics { Name: "h2" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, txId);
+        checkEqHeight({"h1", "h2"});
+    }
+
+    Y_UNIT_TEST(MultiColumnStatisticsEqHeightHistogramRejectsJson) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+            MultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "js" Type: "Json" }
+                KeyColumnNames: [ "timestamp" ]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "EqHeightJsonColumnTable"
+            UpsertMultiColumnStatistics { Name: "h1" ColumnNames: "js" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(CreateTable) {
@@ -1721,6 +1799,139 @@ Y_UNIT_TEST_SUITE(TOlap) {
         StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/false);
     }
 
+    Y_UNIT_TEST(DropColumnTableResetsSmallBlobsCounters) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SmallBlobsQuotaConfig.SetSmallBlobSizeThresholdBytes(1'000'000'000);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SomeDatabase"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedTablePathId = GetNextLocalPathId(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            auto& self = record.GetPathDescription().GetSelf();
+            pathId = self.GetPathId();
+            txId = self.GetCreateTxId() + 1;
+            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/Table");
+        };
+        TestLsPathId(runtime, expectedTablePathId, checkFn);
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        const ui32 rowsInBatch = 100000;
+        const TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
+        constexpr ui32 batchCount = 3;
+        for (ui32 i = 0; i < batchCount; ++i) {
+            std::vector<ui64> writeIds;
+            ++txId;
+            UNIT_ASSERT(NTxUT::WriteData(runtime, sender, shardId, i + 1, pathId, data, defaultYdbSchema, &writeIds,
+                NEvWrite::EModificationType::Upsert, txId));
+            planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        }
+
+        WaitTableStats(runtime, shardId);
+
+        const auto waitForCounter = [&](const TString& name, ui64 minValue) {
+            for (int i = 0; i < 30; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                if (GetSimpleCounter(runtime, name) >= minValue) {
+                    return;
+                }
+            }
+            UNIT_FAIL("counter " << name << " did not reach " << minValue << "; " << DEBUG_HINT);
+        };
+
+        waitForCounter("SchemeShard/SmallBlobsCount", 1);
+        waitForCounter("SchemeShard/SmallBlobsVolumeBytes", 1);
+
+        const ui64 smallBlobsCountBefore = GetSimpleCounter(runtime, "SchemeShard/SmallBlobsCount");
+        const ui64 smallBlobsVolumeBefore = GetSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes");
+        UNIT_ASSERT_GT_C(smallBlobsCountBefore, 0, DEBUG_HINT);
+        UNIT_ASSERT_GT_C(smallBlobsVolumeBefore, 0, DEBUG_HINT);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/Table", false, NLs::PathNotExist);
+
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCount", 0);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeBytes", 0);
+    }
+
+    Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Record the initial path count to verify cleanup later.
+        ui64 initialPathCount = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
+        env.TestWaitNotification(runtime, txId);
+
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/Table");
+
+        // 3 new paths: the table + 2 index children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount + 3),
+        });
+
+        // Drop the table using DropTableRequest (ESchemeOpDropTable)
+        auto* dropEv = DropTableRequest(++txId, "/MyRoot", "Table");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, dropEv);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        env.TestWaitNotification(runtime, txId);
+
+        // Table and its index children should all be gone.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_bloom"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/idx_ngram"), {NLs::PathNotExist});
+
+        // Path count must return to the initial value — no orphaned children.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+            NLs::PathsInsideDomain(initialPathCount),
+        });
+    }
+
     Y_UNIT_TEST(MoveNonExistentTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1944,6 +2155,268 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after drop");
         }
 
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST(ReadOnlyCopyColumnTableDiskQuota) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
+
+        TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        constexpr const char* databaseDescription = R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 1000000
+                data_size_soft_quota: 900000
+            }
+        )";
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+                Name: "SomeDatabase"
+            )" << databaseDescription
+        );
+
+        const TString tableSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        {
+            auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                auto& self = record.GetPathDescription().GetSelf();
+                pathId = self.GetPathId();
+                txId = self.GetCreateTxId() + 1;
+                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+                UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+                shardId = sharding.GetColumnShards()[0];
+            };
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+        }
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        ui32 rowsInBatch = 100000;
+        ui64 writeId = 0;
+
+        {
+            TActorId writeSender = runtime.AllocateEdgeActor();
+            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 100; ++i) {
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
+                txIds.insert(txId);
+            }
+
+            NTxUT::PlanCommit(runtime, writeSender, shardId, planStep, txIds);
+
+            WaitTableStats(runtime, shardId);
+            CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+        }
+
+        const auto getTotalBytes = [&]() -> ui64 {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            return description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize();
+        };
+
+        const ui64 totalBytesBefore = getTotalBytes();
+        UNIT_ASSERT_GT_C(totalBytesBefore, 0, DEBUG_HINT);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTableCopy", "/MyRoot/SomeDatabase/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTableCopy", false, NLs::PathExist);
+
+        WaitTableStats(runtime, shardId);
+
+        {
+            const ui64 totalBytesAfterCopy = getTotalBytes();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterCopy, totalBytesBefore,
+                DEBUG_HINT << ", backup copy must not change DiskSpaceTablesTotalBytes");
+        }
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTableCopy");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTableCopy", false, NLs::PathNotExist);
+
+        WaitTableStats(runtime, shardId);
+
+        {
+            const ui64 totalBytesAfterDropCopy = getTotalBytes();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDropCopy, totalBytesBefore,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes must be preserved after dropping backup copy"
+                           << ", got=" << totalBytesAfterDropCopy << ", expected=" << totalBytesBefore);
+        }
+        // Source table still holds the data that exceeded the quota.
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTable", false, NLs::PathNotExist);
+
+        {
+            const ui64 totalBytesAfterDropSource = getTotalBytes();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytesAfterDropSource, 0,
+                DEBUG_HINT << ", DiskSpaceTablesTotalBytes should be zero after dropping source");
+        }
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST(ReadOnlyCopyColumnTableDiskQuotaStuckAfterDropSource) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
+
+        TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        constexpr const char* databaseDescription = R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 1000000
+                data_size_soft_quota: 900000
+            }
+        )";
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", TStringBuilder() << R"(
+                Name: "SomeDatabase"
+            )" << databaseDescription
+        );
+
+        const TString tableSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        NTxUT::TPlanStep planStep;
+        {
+            auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                auto& self = record.GetPathDescription().GetSelf();
+                pathId = self.GetPathId();
+                txId = self.GetCreateTxId() + 1;
+                planStep = NTxUT::TPlanStep{self.GetCreateStep()};
+                auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+                UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+                shardId = sharding.GetColumnShards()[0];
+            };
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/ColumnTable"), {checkFn});
+        }
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep.Val());
+
+        {
+            TActorId writeSender = runtime.AllocateEdgeActor();
+            TString data = NTxUT::MakeTestBlob({0, 100000}, defaultYdbSchema, {}, { "timestamp" });
+            ui64 writeId = 0;
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 100; ++i) {
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(runtime, writeSender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                planStep = NTxUT::ProposeCommit(runtime, writeSender, shardId, txId, writeIds, txId);
+                txIds.insert(txId);
+            }
+            NTxUT::PlanCommit(runtime, writeSender, shardId, planStep, txIds);
+            WaitTableStats(runtime, shardId);
+            CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+        }
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTableCopy", "/MyRoot/SomeDatabase/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTable", false, NLs::PathNotExist);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            const ui64 totalBytes = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize();
+            UNIT_ASSERT_VALUES_EQUAL_C(totalBytes, 0, DEBUG_HINT << ", usage should be zero after dropping source");
+        }
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        // Drop leftover backup copy. Must not re-introduce bogus usage / DiskQuotaExceeded.
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase", "ColumnTableCopy");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/SomeDatabase/ColumnTableCopy", false, NLs::PathNotExist);
+
+        {
+            auto description = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase");
+            const auto& disk = description.GetPathDescription().GetDomainDescription().GetDiskSpaceUsage().GetTables();
+            UNIT_ASSERT_VALUES_EQUAL_C(disk.GetTotalSize(), 0,
+                DEBUG_HINT << ", usage must stay zero after dropping backup copy"
+                           << ", TotalSize=" << disk.GetTotalSize()
+                           << ", DataSize=" << disk.GetDataSize());
+        }
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 
@@ -3343,5 +3816,45 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
+    }
+
+    Y_UNIT_TEST(DropReadOnlyCopyColumnTableCounter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        static constexpr auto counterName = "SchemeShard/ColumnTables";
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckSimpleCounter(runtime, counterName, 0);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        CheckSimpleCounter(runtime, counterName, 1);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckSimpleCounter(runtime, counterName, 3);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy1");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy1", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 2);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy2");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/Copy2", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 1);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        CheckSimpleCounter(runtime, counterName, 0);
     }
 }

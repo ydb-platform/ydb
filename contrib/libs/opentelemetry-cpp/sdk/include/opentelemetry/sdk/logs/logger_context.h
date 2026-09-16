@@ -9,6 +9,7 @@
 
 #include "logger_config.h"
 #include "opentelemetry/sdk/instrumentationscope/scope_configurator.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/version.h"
@@ -43,7 +44,8 @@ public:
           std::make_unique<instrumentationscope::ScopeConfigurator<LoggerConfig>>(
               instrumentationscope::ScopeConfigurator<LoggerConfig>::Builder(
                   LoggerConfig::Default())
-                  .Build())) noexcept;
+                  .Build()),
+      LogRecordLimits log_record_limits = LogRecordLimits()) noexcept;
 
   /**
    * Attaches a log processor to list of configured processors to this logger context.
@@ -77,6 +79,28 @@ public:
       const noexcept;
 
   /**
+   * Obtain the LogRecord limits applied by this context.
+   * @return The LogRecordLimits for this logger context.
+   */
+  const LogRecordLimits &GetLogRecordLimits() const noexcept;
+
+  /**
+   * Whether any configured processor produces a recordable that enforces the
+   * LogRecord attribute limits. Computed once at construction (and refreshed by
+   * AddProcessor) so the Logger hot path can skip the per-record
+   * SetLogRecordLimits() virtual call when no processor needs it.
+   * @return true if at least one processor enforces limits.
+   */
+  bool RecordableEnforcesLogRecordLimits() const noexcept;
+
+  /**
+   * Replace the ScopeConfigurator for this logger context.
+   * @param logger_configurator The new configurator.
+   */
+  void SetLoggerConfigurator(std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>>
+                                 logger_configurator) noexcept;
+
+  /**
    * Force all active LogProcessors to flush any buffered logs
    * within the given timeout.
    */
@@ -93,6 +117,13 @@ private:
   std::unique_ptr<LogRecordProcessor> processor_;
 
   std::unique_ptr<instrumentationscope::ScopeConfigurator<LoggerConfig>> logger_configurator_;
+
+  LogRecordLimits log_record_limits_;
+
+  // Cached capability flag: true when at least one configured processor's
+  // recordable enforces the LogRecord attribute limits. Refreshed by
+  // AddProcessor so the Logger hot path reads a plain bool.
+  bool recordable_enforces_limits_{false};
 };
 }  // namespace logs
 }  // namespace sdk

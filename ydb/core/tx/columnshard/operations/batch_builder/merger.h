@@ -11,6 +11,8 @@
 
 #include <util/string/builder.h>
 
+#include <vector>
+
 namespace NKikimr::NOlap {
 
 class IMerger {
@@ -28,6 +30,11 @@ protected:
     std::shared_ptr<ISnapshotSchema> Schema;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
+
+private:
+    std::vector<std::shared_ptr<arrow::Table>> ExistsChunks;
+
+    TYdbConclusionStatus MergeExistsDataOrdered(const std::shared_ptr<arrow::Table>& data);
 
 public:
     IMerger(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)

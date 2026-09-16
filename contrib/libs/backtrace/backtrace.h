@@ -68,15 +68,41 @@ typedef void (*backtrace_error_callback) (void *data, const char *msg,
 
 /* Create state information for the backtrace routines.  This must be
    called before any of the other routines, and its return value must
-   be passed to all of the other routines.  FILENAME is the path name
-   of the executable file; if it is NULL the library will try
-   system-specific path names.  If not NULL, FILENAME must point to a
-   permanent buffer.  If THREADED is non-zero the state may be
-   accessed by multiple threads simultaneously, and the library will
-   use appropriate atomic operations.  If THREADED is zero the state
-   may only be accessed by one thread at a time.  This returns a state
-   pointer on success, NULL on error.  If an error occurs, this will
-   call the ERROR_CALLBACK routine.
+   be passed to all of the other routines.
+
+   FILENAME is the path name of the executable file; if it is NULL the
+   library will try system-specific path names.  If not NULL, FILENAME
+   must point to a permanent buffer.
+
+   FLAGS passes flags as bits in an int value:
+   1: THREADED
+   2: MOREDATA
+
+   If (FLAGS & 1) != 0 the THREADED flag is set.  If this flag is set,
+   the state may be accessed by multiple threads simultaneously, and the
+   library will use appropriate atomic operations.  If THREADED is not
+   set the state may only be accessed by one thread at a time.
+
+   If (FLAGS & 2) != 0 the MOREDATA flag is set.  If this flag is set,
+   then backtrace_full_callback and backtrace_symbol_callback will not
+   pass the DATA argument as the user-specified DATA value, but will
+   instead pass it as a pointer to a backtrace_moredata struct.  This is
+   a backward compatible approach to getting more data from the various
+   backtrace functions.
+
+   Historical note: in previous versions (before July, 2026) the FLAGS
+   argument was named THREADED, and passing non-zero for THREADED was
+   documented as doing what setting the THREADED flag does today.  In
+   practice all callers passed either 0 or 1, so the new semantics of
+   the flag do not affect users of old versions of the library.
+   However, code that passes the MOREDATA flag must ensure that it is
+   using a new version of the library.  The backtrace-supported.h file
+   will #define BACKTRACE_SUPPORTS_MOREDATA as 1 for versions of
+   libbacktrace that support the MOREDATA flag.
+
+   The backtrace_create_state function returns a state pointer on
+   success, NULL on error.  If an error occurs, it will call the
+   ERROR_CALLBACK routine before returning.
 
    Calling this function allocates resources that cannot be freed.
    There is no backtrace_free_state function.  The state is used to
@@ -89,13 +115,15 @@ extern struct backtrace_state *backtrace_create_state (
     backtrace_error_callback error_callback, void *data);
 
 /* The type of the callback argument to the backtrace_full function.
-   DATA is the argument passed to backtrace_full.  PC is the program
-   counter.  FILENAME is the name of the file containing PC, or NULL
-   if not available.  LINENO is the line number in FILENAME containing
-   PC, or 0 if not available.  FUNCTION is the name of the function
-   containing PC, or NULL if not available.  This should return 0 to
-   continuing tracing.  The FILENAME and FUNCTION buffers may become
-   invalid after this function returns.  */
+   DATA is either the argument passed to backtrace_full (if the MOREDATA
+   flag was not set when calling backtrace_create_state) or a pointer to
+   a backtrace_moredata struct.  PC is the program counter.  FILENAME is
+   the name of the file containing PC, or NULL if not available.  LINENO
+   is the line number in FILENAME containing PC, or 0 if not available.
+   FUNCTION is the name of the function containing PC, or NULL if not
+   available.  This should return 0 to continuing tracing.  The FILENAME
+   and FUNCTION buffers may become invalid after this function
+   returns.  */
 
 typedef int (*backtrace_full_callback) (void *data, uintptr_t pc,
 					const char *filename, int lineno,
@@ -156,11 +184,14 @@ extern int backtrace_pcinfo (struct backtrace_state *state, uintptr_t pc,
 			     backtrace_error_callback error_callback,
 			     void *data);
 
-/* The type of the callback argument to backtrace_syminfo.  DATA and
-   PC are the arguments passed to backtrace_syminfo.  SYMNAME is the
-   name of the symbol for the corresponding code.  SYMVAL is the
-   value and SYMSIZE is the size of the symbol.  SYMNAME will be NULL
-   if no error occurred but the symbol could not be found.  */
+/* The type of the callback argument to backtrace_syminfo.  DATA is
+   either the argument passed to backtrace_full (if the MOREDATA flag
+   was not set when calling backtrace_create_state) or a pointer to a
+   backtrace_moredata struct.  PC is the the argument passed to
+   backtrace_syminfo.  SYMNAME is the name of the symbol for the
+   corresponding code.  SYMVAL is the value and SYMSIZE is the size of
+   the symbol.  SYMNAME will be NULL if no error occurred but the symbol
+   could not be found.  */
 
 typedef void (*backtrace_syminfo_callback) (void *data, uintptr_t pc,
 					    const char *symname,
@@ -181,6 +212,31 @@ extern int backtrace_syminfo (struct backtrace_state *state, uintptr_t addr,
 			      backtrace_syminfo_callback callback,
 			      backtrace_error_callback error_callback,
 			      void *data);
+
+/* The type of the value that the DATA argument passed to
+   backtrace_full_callback or backtrace_syminfo_callback points to if
+   the MOREDATA flag is set in the call to backtrace_create_state.
+
+   The backtrace_moredata value will only be valid for the lifetime of
+   the callback; the callback may copy the data out but must not save
+   the pointer it receives.  */
+
+struct backtrace_moredata
+{
+  /* The version of this struct. The current expectation is that the
+     version number will be the number of fields in the struct. It's
+     possible that future versions of libbacktrace will add new fields
+     and increment the version number accordingly. There is no plan to
+     remove fields from this struct.  Thus the current value of the
+     version field will be 3.  */
+  int backtrace_version;
+  /* The DATA value passed to whatever function is calling the callback
+     (backtrace_full, backtrace_pcinfo, or backtrace_syminfo).  */
+  void *backtrace_data;
+  /* The DWARF discriminator.  This is zero if there is none. See
+     https://wiki.dwarfstd.org/Path_Discriminators.md.  */
+  unsigned int backtrace_discriminator;
+};
 
 #ifdef __cplusplus
 } /* End extern "C".  */

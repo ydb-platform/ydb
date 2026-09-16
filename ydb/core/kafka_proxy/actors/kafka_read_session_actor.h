@@ -54,7 +54,8 @@ namespace NKafka {
      *           <----------------
      */
 
-class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
+class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor>
+                            , public TKafkaExceptionHandler<TKafkaReadSessionActor> {
 
 enum EReadSessionSteps {
     WAIT_JOIN_GROUP,
@@ -89,10 +90,14 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_READ_SESSION_ACTOR; }
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     using TActorContext = NActors::TActorContext;
 
-    TString LogPrefix();
+    NStructuredLog::TStructuredMessage LogPrefix();
 
     void Die(const TActorContext& ctx) override;
 

@@ -30,6 +30,34 @@ It is recommended to create and consume linear types within the [`Block`](../bui
 * `Linear` cannot be returned from `lambda`.
 * `Linear` can be used either by itself or as a field in a `Struct/Tuple` (without nesting). Whenever possible, individual uses of `Struct/Tuple` fields are tracked using the field access operator (dot).
 
+#### Linear values in conditional expressions {#linear-in-if}
+
+The same `Linear` value must be passed to both mutually exclusive branches of [`IF`](../builtins/basic.md#if). Only one branch is evaluated at runtime, so the value is used exactly once on every execution path. The same rule applies to `IF_STRICT`.
+
+Static verification requires both branches to contain the same set of linear values.
+
+If symmetric use of linear values cannot be guaranteed statically, use `DynamicLinear<T>`.
+
+In the following example, both branches contain the same set of linear values, but in a different order:
+
+```yql
+SELECT Block(
+    ($arg) -> {
+        $x = ToMutDict({'foo': 1}, $arg);
+        $y = ToMutDict({'bar': 2}, $arg);
+        $swap = Random($arg) < 0.5;
+        $left, $right = IF($swap, ($x, $y), ($y, $x));
+        RETURN (FromMutDict($left), FromMutDict($right));
+    }
+);
+```
+
+If different branches return different linear values directly, static verification fails:
+
+```yql
+$result = IF($condition, $x, $y); -- $x and $y are different Linear<T> values
+```
+
 If you need to use values ​​of linear types within other container types (for example, in lists), you should use the `DynamicLinear` type.
 
 ### Rules for checking dynamic linear types `DynamicLinear<T>`

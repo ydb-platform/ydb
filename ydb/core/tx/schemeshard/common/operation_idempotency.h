@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
@@ -43,7 +42,6 @@ TString GetUid(const Ydb::Operations::OperationParams& operationParams);
 TString GetUid(Ydb::TOperationId_EKind kind, const Ydb::Operations::OperationParams& operationParams);
 
 struct TOperationUidIdentity {
-    TMaybe<TPathId> DomainPathId;
     TMaybe<TStringBuf> UserSID;
     TMaybe<TStringBuf> RequestBody;
 };
@@ -53,7 +51,6 @@ using TOperationUidKey = std::pair<Ydb::TOperationId_EKind, TString>;
 
 struct TOperationUidRecord {
     ui64 OperationId = 0;
-    TMaybe<TPathId> DomainPathId;
     TString UserSID;
     TString RequestBody;
 };

@@ -2941,6 +2941,14 @@ partitioning_settings {
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         TestGetExport(Runtime(), exportId, "/MyRoot");
 
+        // Legacy retries allow an omitted or unresolved database, but reject
+        // a different resolved path before validating a new request.
+        for (const TString& database : {TString(), TString("/MissingDatabase")}) {
+            TestExport(Runtime(), ++txId, database, differentBody);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+        TestExport(Runtime(), ++txId, "/MyRoot/Table", differentBody, "", "", Ydb::StatusIds::ALREADY_EXISTS);
+
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
         TestExport(Runtime(), ++txId, "/MyRoot", request);

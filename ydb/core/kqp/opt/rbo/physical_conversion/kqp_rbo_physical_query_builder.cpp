@@ -433,27 +433,26 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(const TExprNode::TP
     // clang-format on
 }
 
-TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages) {
+// Collects param bindings walking from root stage.
+TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TExprNode::TPtr& rootStage) {
     auto& ctx = RBOCtx.ExprCtx;
     auto pos = Root.Pos;
 
     TVector<TKqpParamBinding> paramBindings;
     THashSet<TString> paramsCollected;
-    for (const auto& physicalStage : physicalStages) {
-        const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
-        for (const auto& param : params) {
-            const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
-            if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
-                // clang-format off
-                const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Value(paramName)
-                    .Build()
-                .Done();
-                // clang-format on
-                paramBindings.push_back(paramBinding);
-                paramsCollected.insert(paramName);
-            }
+    const auto params = FindNodes(rootStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
+    for (const auto& param : params) {
+        const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
+        if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
+            // clang-format off
+            const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(paramName)
+                .Build()
+            .Done();
+            // clang-format on
+            paramBindings.push_back(paramBinding);
+            paramsCollected.insert(paramName);
         }
     }
 
@@ -465,7 +464,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     auto& ctx = RBOCtx.ExprCtx;
 
     TVector<TExprBase> phyTxs;
-    auto paramBindingsMainTx = CollectParamBindings(physicalStages);
+    auto paramBindingsMainTx = CollectParamBindings(physicalStages.back());
 
     TVector<TExprBase> phyStagesForMaterialize;
     TVector<TExprBase> resultsForMaterialize;
@@ -494,7 +493,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         paramBindingsMainTx.emplace_back(paramBinding);
 
         auto materializeStage = materializeResult.Output().Stage();
-        const auto paramBindingsMaterialize = CollectParamBindings({materializeStage.Ptr()});
+        const auto paramBindingsMaterialize = CollectParamBindings(materializeStage.Ptr());
         // Bindings params in materialize.
         paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
         // Stages for phy tx.
@@ -756,7 +755,7 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
-    if (!root->GetTypeAnn()) {
+    if (!root->GetTypeAnn() && enableWideChannels) {
         TypeAnnotate(root);
     }
     auto& ctx = RBOCtx.ExprCtx;
@@ -774,10 +773,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TE
         .Done().Ptr();
         // clang-format on
 
-        TypeAnnotate(newStage);
-        rootStage = enableWideChannels
-            ? NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr()
-            : newStage;
+        // We don't need to run type annotation when wide channels is off.
+        if (enableWideChannels) {
+            TypeAnnotate(newStage);
+            rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        } else {
+            rootStage = newStage;
+        }
+
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 

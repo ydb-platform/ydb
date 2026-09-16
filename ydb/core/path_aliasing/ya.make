@@ -13,5 +13,6 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    context/ut
     ut
 )

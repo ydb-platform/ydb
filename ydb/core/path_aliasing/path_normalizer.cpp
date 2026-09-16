@@ -88,9 +88,37 @@ namespace NKikimr::NPathAliasing {
         return !Impl;
     }
 
+    bool IsValidRewrittenPath(TStringBuf path) noexcept {
+        if (path.empty() || path.front() != '/' || path.find('\0') != TStringBuf::npos) {
+            return false;
+        }
+        size_t start = 1;
+        while (start <= path.size()) {
+            const size_t end = path.find('/', start);
+            const TStringBuf part = path.SubStr(start,
+                                                end == TStringBuf::npos ? path.size() - start : end - start);
+            if (part == "." || part == "..") {
+                return false;
+            }
+            if (end == TStringBuf::npos) {
+                break;
+            }
+            start = end + 1;
+        }
+        return true;
+    }
+
     TString TPathNormalizer::NormalizePath(TStringBuf absoluteLogicalPath) const {
+        TString result;
+        if (TryRewritePath(absoluteLogicalPath, result)) {
+            return result;
+        }
+        return TString(absoluteLogicalPath);
+    }
+
+    bool TPathNormalizer::TryRewritePath(TStringBuf absoluteLogicalPath, TString& output) const {
         if (!Impl) {
-            return TString(absoluteLogicalPath);
+            return false;
         }
 
         // RE2 represents an unmatched capture with nullptr. Keep a matched empty
@@ -117,10 +145,12 @@ namespace NKikimr::NPathAliasing {
             result.append(input.data(), prefixSize);
             result.append(replacement.data(), replacement.size());
             result.append(input.data() + suffixStart, input.size() - suffixStart);
-            return result;
+            // Assign only after using the input: it may refer to output's buffer.
+            output = std::move(result);
+            return true;
         }
 
-        return TString(absoluteLogicalPath);
+        return false;
     }
 
     TString TPathNormalizer::GetFingerprint() const {

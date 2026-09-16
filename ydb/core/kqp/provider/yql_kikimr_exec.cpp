@@ -807,7 +807,13 @@ namespace {
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
             } else if (name == "setMetricsLevel") {
-                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                ui32 metricsLevel = 0;
+                TString error;
+                auto result = ParseTopicMetricsLevel(
+                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(),
+                        metricsLevel, error
+                );
+                YQL_ENSURE(result, << error);
                 request->set_metrics_level(metricsLevel);
             } else if (name == "setContentBasedDeduplication") {
                 auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
@@ -883,7 +889,13 @@ namespace {
                 YQL_ENSURE(result);
                 request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
             } else if (name == "setMetricsLevel") {
-                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                ui32 metricsLevel = 0;
+                TString error;
+                auto result = ParseTopicMetricsLevel(
+                        TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()),
+                        metricsLevel, error
+                );
+                YQL_ENSURE(result, << error);
                 request->set_set_metrics_level(metricsLevel);
             } else if (name == "resetMetricsLevel") {
                 request->mutable_reset_metrics_level();

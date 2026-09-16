@@ -2743,6 +2743,22 @@ private:
         }
         return true;
     }
+    static bool CheckTopicMetricsLevel(const TCoNameValueTupleList& settings, TExprContext& ctx) {
+        for (const auto& setting : settings) {
+            auto name = setting.Name().Value();
+            if (name != "setMetricsLevel") {
+                continue;
+            }
+            ui32 value = 0;
+            TString error;
+            if (!ParseTopicMetricsLevel(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value(), value, error)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                return false;
+            }
+        }
+        return true;
+    }
+
     static bool CheckConsumerSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         for (const auto& setting : settings) {
             const auto name = setting.Name().Value();
@@ -2775,6 +2791,9 @@ private:
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         if (!CheckTopicSettings(node.Settings(), ctx)) {
+            return TStatus::Error;
+        }
+        if (!CheckTopicMetricsLevel(node.TopicSettings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2851,6 +2870,9 @@ private:
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
         if (!CheckTopicSettings(node.Settings(), ctx)) {
+            return TStatus::Error;
+        }
+        if (!CheckTopicMetricsLevel(node.TopicSettings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;

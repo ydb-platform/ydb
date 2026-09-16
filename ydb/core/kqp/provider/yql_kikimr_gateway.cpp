@@ -342,6 +342,25 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
     }
 }
 
+bool ParseTopicMetricsLevel(TStringBuf raw, ui32& out, TString& error) {
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    if (TryFromString<ui64>(value, numericVal) && numericVal <= 3) {
+        out = static_cast<ui32>(numericVal);
+    } else if (value == "database") {
+        out = 1;
+    } else if (value == "topic") {
+        out = 2;
+    } else if (value == "partition") {
+        out = 3;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
+}
+
 bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error) {
     static constexpr Ydb::Table::MetricsSettings::MetricsLevel numericLevels[] = {
         Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE,

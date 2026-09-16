@@ -13415,6 +13415,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto query = R"(
                 --!syntax_v1
+                ALTER TOPIC `/Root/topic` SET (metrics_level = "TOPIC")
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic` SET (metrics_level = "PARTITION")
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic` SET (metrics_level = "database")
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
                 CREATE TOPIC `/Root/topic1` (
                     CONSUMER cs WITH (type='streaming', keep_messages_order=true)
                 )
@@ -13658,6 +13682,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // bad
         {
+            // Empty string is screened by the translator, so the message comes from there
+            // rather than from ParseTopicMetricsLevel. Asserted on the same substring the
+            // pre-existing test used, which the translator's wording still contains.
             const auto query = R"(
                 --!syntax_v1
                 CREATE TOPIC `/Root/topic` WITH (metrics_level = "")
@@ -13665,6 +13692,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "METRICS_LEVEL value should be an integer", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic` WITH (metrics_level = "NOPE")
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "METRICS_LEVEL is invalid: NOPE", result.GetIssues().ToString());
         }
     }
 

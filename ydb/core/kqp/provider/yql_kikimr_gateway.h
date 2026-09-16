@@ -1750,6 +1750,7 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
+bool ParseTopicMetricsLevel(TStringBuf raw, ui32& out, TString& error);
 bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error);
 bool ParseDatabaseTablesMetricsLevel(TStringBuf raw, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error);
 

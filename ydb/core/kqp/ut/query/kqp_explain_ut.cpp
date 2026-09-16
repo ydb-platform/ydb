@@ -5,13 +5,8 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-<<<<<<< HEAD
-=======
-#include <util/folder/dirut.h>
-
 #include <functional>
 
->>>>>>> 40e8ed25d2d (Pretty plan for streaming RETURNING & fix simplified plan for sink (#53069))
 namespace NKikimr {
 namespace NKqp {
 

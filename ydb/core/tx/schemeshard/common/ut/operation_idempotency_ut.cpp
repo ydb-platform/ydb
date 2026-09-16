@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(OperationUidAdmission) {
             const TOperationUidKey key{kind, "same uid"};
             auto admission = TAdmission::Prepare(key, EPolicy::Reject,
                 [&](const auto& uid) -> TMaybe<TOperationUidRecord> {
-                    if (const auto* record = FindOperationByUid(records, uid)) {
+                    if (const auto* record = records.FindPtr(uid)) {
                         return *record;
                     }
                     return Nothing();

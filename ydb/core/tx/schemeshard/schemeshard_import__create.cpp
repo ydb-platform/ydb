@@ -243,12 +243,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         const TString& uid = GetUid(Ydb::TOperationId::IMPORT, request.GetRequest().GetOperationParams());
         auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::IMPORT, uid},
             TOperationUidAdmission::EDuplicatePolicy::Replay,
-            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
-                if (const auto* existing = FindOperationByUid(Self->ImportsByUid, key.second)) {
-                    return TOperationUidRecord{(*existing)->Id, (*existing)->DomainPathId, {}, {}};
-                }
-                return Nothing();
-            },
+            [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {
                 const auto domain = DomainPathId(request.GetDatabaseName());
                 // Preserve legacy requests without a database binding.
@@ -1022,12 +1017,8 @@ private:
         Y_ABORT_UNLESS(item.State == EState::BuildIndexes);
 
         const auto uid = MakeIndexBuildUid(importInfo, itemIdx);
-        const auto* infoPtr = Self->IndexBuildsByUid.FindPtr(uid);
-        if (!infoPtr) {
-            return InvalidTxId;
-        }
-
-        return TTxId(ui64((*infoPtr)->Id));
+        const auto* id = Self->OperationsByUid.FindPtr(TOperationUidKey{Ydb::TOperationId::BUILD_INDEX, uid});
+        return id ? TTxId(*id) : InvalidTxId;
     }
 
     TTxId GetActiveCreateChangefeedTxId(const TImportInfo& importInfo, ui32 itemIdx) {

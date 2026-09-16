@@ -42,13 +42,6 @@ TString GetUid(const Ydb::Operations::OperationParams& operationParams);
 // a programming error. Keep the untyped extractor for diagnostics such as audit.
 TString GetUid(Ydb::TOperationId_EKind kind, const Ydb::Operations::OperationParams& operationParams);
 
-// Each operation type has an independent UID index; UIDs live with their operation records.
-template <typename TIndex, typename TKey>
-const typename TIndex::mapped_type* FindOperationByUid(const TIndex& index, const TKey& key) {
-    const auto it = index.find(key);
-    return it == index.end() ? nullptr : &it->second;
-}
-
 struct TOperationUidIdentity {
     TMaybe<TPathId> DomainPathId;
     TMaybe<TStringBuf> UserSID;

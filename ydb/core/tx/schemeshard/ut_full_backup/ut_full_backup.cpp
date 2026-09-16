@@ -16,6 +16,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <type_traits>
@@ -550,6 +551,62 @@ Y_UNIT_TEST_SUITE(TBackupIdempotency) {
         UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(activeId));
         UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST_TWIN(UidNamespacesSurviveForgetAndReboot, ForgetBackupFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        PrepareTable(runtime, env, txId, "IndexTable");
+        const TString uid = "shared UID / ключ";
+
+        const auto backup = [&] {
+            const auto response = Submit(runtime, ++txId, uid);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusAccepted, response.ShortDebugString());
+            return response.GetTxId();
+        };
+        const auto createIndex = [&](const TString& name, Ydb::StatusIds::StatusCode expected) {
+            auto* request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/IndexTable",
+                TBuildIndexConfig{name, NKikimrSchemeOp::EIndexTypeGlobal, {"value"}, {}, {}});
+            (*request->Record.MutableOperationParams()->mutable_labels())["uid"] = uid;
+            const auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), expected, response->Record.ShortDebugString());
+        };
+        const auto forgetBackup = [&](ui64 id) {
+            const auto response = InternalForgetFullBackup(runtime, id, ++txId);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+        };
+
+        const ui64 backupId = backup();
+        env.TestWaitNotification(runtime, backupId);
+        createIndex("Index", Ydb::StatusIds::SUCCESS);
+        const ui64 indexId = txId;
+        env.TestWaitNotification(runtime, indexId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(backup(), backupId);
+        createIndex("OtherIndex", Ydb::StatusIds::ALREADY_EXISTS);
+
+        if (ForgetBackupFirst) {
+            forgetBackup(backupId);
+            createIndex("OtherIndex", Ydb::StatusIds::ALREADY_EXISTS);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            createIndex("OtherIndex", Ydb::StatusIds::ALREADY_EXISTS);
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            const ui64 nextId = backup();
+            UNIT_ASSERT_VALUES_EQUAL(nextId, txId);
+            env.TestWaitNotification(runtime, nextId);
+        } else {
+            TestForgetBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", indexId);
+            UNIT_ASSERT_VALUES_EQUAL(backup(), backupId);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            UNIT_ASSERT_VALUES_EQUAL(backup(), backupId);
+            createIndex("OtherIndex", Ydb::StatusIds::SUCCESS);
+            env.TestWaitNotification(runtime, txId);
+        }
     }
 
     Y_UNIT_TEST(UidNamespaceIsIndependentAcrossSchemeShardTablets) {

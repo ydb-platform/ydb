@@ -85,7 +85,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         if (incrementalBackup.Uid) {
-            Self->SchemeOperationsByUid.erase({Ydb::TOperationId::INCREMENTAL_BACKUP, incrementalBackup.Uid});
+            Self->OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::INCREMENTAL_BACKUP, incrementalBackup.Uid});
         }
         PersistRemoveIncrementalBackup(db, incrementalBackup);
         Self->IncrementalBackups.erase(incrementalBackup.Id);

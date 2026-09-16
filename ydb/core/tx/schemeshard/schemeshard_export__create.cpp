@@ -144,12 +144,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         const TString& uid = GetUid(Ydb::TOperationId::EXPORT, request.GetRequest().GetOperationParams());
         auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::EXPORT, uid},
             TOperationUidAdmission::EDuplicatePolicy::Replay,
-            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
-                if (const auto* existing = FindOperationByUid(Self->ExportsByUid, key.second)) {
-                    return TOperationUidRecord{(*existing)->Id, (*existing)->DomainPathId, {}, {}};
-                }
-                return Nothing();
-            },
+            [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {
                 const auto domain = DomainPathId(request.GetDatabaseName());
                 // Preserve legacy requests without a database binding.

@@ -178,7 +178,7 @@ void TMemoryChanges::GrabNewFullBackupOp(TSchemeShard* ss, ui64 id) {
 }
 
 void TMemoryChanges::GrabNewSchemeOperationUidKey(TSchemeShard* ss, const TOperationUidKey& key) {
-    Y_ABORT_UNLESS(!ss->SchemeOperationsByUid.contains(key));
+    Y_ABORT_UNLESS(!ss->OperationsByUid.contains(key));
     SchemeOperationUidKeys.push(key);
 }
 
@@ -400,9 +400,9 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (SchemeOperationUidKeys) {
         const auto& key = SchemeOperationUidKeys.top();
         if (key.first == Ydb::TOperationId::RESTORE) {
-            ss->IncrementalRestoreStates.erase(ss->SchemeOperationsByUid.at(key));
+            ss->IncrementalRestoreStates.erase(ss->OperationsByUid.at(key));
         }
-        ss->SchemeOperationsByUid.erase(key);
+        ss->OperationsByUid.erase(key);
         SchemeOperationUidKeys.pop();
     }
 

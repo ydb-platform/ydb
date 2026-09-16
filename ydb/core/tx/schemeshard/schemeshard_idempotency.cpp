@@ -4,15 +4,19 @@
 
 namespace NKikimr::NSchemeShard {
 
-// Storage adapter for TModifyScheme admission. Legacy RPC handlers provide
-// their existing operation tables/indexes directly to TOperationUidAdmission.
-
-TMaybe<TOperationUidRecord> TSchemeShard::FindSchemeOperationByUid(const TOperationUidKey& key) const {
-    const auto* id = FindOperationByUid(SchemeOperationsByUid, key);
+TMaybe<TOperationUidRecord> TSchemeShard::FindOperationByUid(const TOperationUidKey& key) const {
+    const auto* id = OperationsByUid.FindPtr(key);
     if (!id) {
         return Nothing();
     }
     switch (key.first) {
+        case Ydb::TOperationId::EXPORT:
+            return TOperationUidRecord{*id, Exports.at(*id)->DomainPathId, {}, {}};
+        case Ydb::TOperationId::IMPORT:
+            return TOperationUidRecord{*id, Imports.at(*id)->DomainPathId, {}, {}};
+        case Ydb::TOperationId::BUILD_INDEX:
+        case Ydb::TOperationId::SET_NOT_NULL:
+            return TOperationUidRecord{*id, {}, {}, {}};
         case Ydb::TOperationId::FULL_BACKUP: {
             const auto& info = *FullBackups.at(*id);
             return TOperationUidRecord{*id, {}, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
@@ -26,7 +30,7 @@ TMaybe<TOperationUidRecord> TSchemeShard::FindSchemeOperationByUid(const TOperat
             return TOperationUidRecord{*id, {}, info.UserSID, info.OriginalDdl};
         }
         default:
-            Y_ABORT("Unsupported scheme operation UID storage kind");
+            Y_ABORT("Unsupported operation UID storage kind");
     }
 }
 
@@ -66,11 +70,11 @@ void TSchemeShard::BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
         default:
             Y_ABORT("Unsupported scheme operation UID storage kind");
     }
-    Y_ABORT_UNLESS(SchemeOperationsByUid.emplace(key, id).second);
+    Y_ABORT_UNLESS(OperationsByUid.emplace(key, id).second);
 }
 
 void TSchemeShard::PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOperationUidKey& key) {
-    const auto id = SchemeOperationsByUid.at(key);
+    const auto id = OperationsByUid.at(key);
     switch (key.first) {
         case Ydb::TOperationId::FULL_BACKUP: {
             const auto& info = *FullBackups.at(id);

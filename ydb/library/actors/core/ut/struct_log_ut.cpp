@@ -604,66 +604,66 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(GenerateJson) {
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(), R"({})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":1})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":1,"v2":2})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), R"({"v1":1,"v2":2,"v3":3})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":"1","v2":"2"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), R"({"v1":"1","v2":"2","v3":"3"})");
 
         // Empty pairs
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":"1"})");
 
         // Support types
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":1})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), R"({"value":1})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":3})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":4})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":5})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":6})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":7})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":8})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), R"({"value":true})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), R"({"value":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":"3"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":"4"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":"5"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":"6"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":"7"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":"8"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), R"({"value":"true"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), R"({"value":"abc"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), R"({"value":"abc"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":1.123})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":1.123})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":"1.123"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":"1.123"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":"1.123"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId(1, 2)}), R"({"value":"[0:1:2]"})");
 
         // reuse message and sub message
         auto subMessage = YDB_LOG_CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});
 
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage), R"({"subValue1":1,"subValue2":2})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":1,"subValue2":2})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage), R"({"subValue1":"1","subValue2":"2"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":"1","subValue2":"2"})");
         TEST_JSON_MESSAGE(
-            YDB_LOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":1,"subValue2":2}})"
+            YDB_LOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":"1","subValue2":"2"}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE(subMessage, {"value", subMessage}),
-            R"({"subValue1":1,"subValue2":2,"value":{"subValue1":1,"subValue2":2}})"
+            R"({"subValue1":"1","subValue2":"2","value":{"subValue1":"1","subValue2":"2"}})"
         );
 
         // optional values
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({"value":"\u003Cnull\u003E"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":"1"})");
 
         // optional subMessages
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}),
-            R"({"value":{"subValue1":1,"subValue2":2}})"
+            R"({"value":{"subValue1":"1","subValue2":"2"}})"
         );
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
         TEST_JSON_MESSAGE(
-            YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})"
+            YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":"1","subValue2":"2"})"
         );
 
         // subMessage name conflict
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value", YDB_LOG_CREATE_MESSAGE({"value", 1})}),
-            R"({"value":1,"_value":{"value":1}})"
+            R"({"value":"1","_value":{"value":"1"}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value", YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value2", 2})}),
-            R"({"value":1,"_value":{"value":1,"value2":2}})"
+            R"({"value":"1","_value":{"value":"1","value2":"2"}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE(
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 {"value", YDB_LOG_CREATE_MESSAGE({"value", 1})},
                 {"xvalue", YDB_LOG_CREATE_MESSAGE({"value", 10})}
             ),
-            R"({"value":1,"_value":{"value":1},"xvalue":{"value":10}})"
+            R"({"value":"1","_value":{"value":"1"},"xvalue":{"value":"10"}})"
         );
 
         TEST_JSON_MESSAGE(
@@ -695,16 +695,16 @@ Y_UNIT_TEST_SUITE(StructLog) {
     }
 
     Y_UNIT_TEST(GenerateJsonLimits) {
-        CheckJsonTypeLimits<ui8>(R"({"max":255,"min":0})");
-        CheckJsonTypeLimits<i8>(R"({"max":127,"min":-128})");
-        CheckJsonTypeLimits<ui16>(R"({"max":65535,"min":0})");
-        CheckJsonTypeLimits<i16>(R"({"max":32767,"min":-32768})");
-        CheckJsonTypeLimits<ui32>(R"({"max":4294967295,"min":0})");
-        CheckJsonTypeLimits<i32>(R"({"max":2147483647,"min":-2147483648})");
-        CheckJsonTypeLimits<ui64>(R"({"max":18446744073709551615,"min":0})");
-        CheckJsonTypeLimits<i64>(R"({"max":9223372036854775807,"min":-9223372036854775808})");
-        CheckJsonTypeLimits<float>(R"({"max":3.40282e+38,"min":1.17549e-38})");
-        CheckJsonTypeLimits<double>(R"({"max":1.797693135e+308,"min":2.225073859e-308})");
+        CheckJsonTypeLimits<ui8>(R"({"max":"255","min":"0"})");
+        CheckJsonTypeLimits<i8>(R"({"max":"127","min":"-128"})");
+        CheckJsonTypeLimits<ui16>(R"({"max":"65535","min":"0"})");
+        CheckJsonTypeLimits<i16>(R"({"max":"32767","min":"-32768"})");
+        CheckJsonTypeLimits<ui32>(R"({"max":"4294967295","min":"0"})");
+        CheckJsonTypeLimits<i32>(R"({"max":"2147483647","min":"-2147483648"})");
+        CheckJsonTypeLimits<ui64>(R"({"max":"18446744073709551615","min":"0"})");
+        CheckJsonTypeLimits<i64>(R"({"max":"9223372036854775807","min":"-9223372036854775808"})");
+        CheckJsonTypeLimits<float>(R"({"max":"3.40282e+38","min":"1.17549e-38"})");
+        CheckJsonTypeLimits<double>(R"({"max":"1.797693135e+308","min":"2.225073859e-308"})");
     }
 
 

@@ -2653,17 +2653,14 @@ private:
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (name == "setMeteringMode") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                const auto val = to_lower(TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()));
                 Ydb::Topic::MeteringMode meteringMode;
-                auto result = GetTopicMeteringModeFromString(val, meteringMode);
-                if (!result) {
+                if (!GetTopicMeteringModeFromString(val, meteringMode)) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                                         TStringBuilder() << "unknown metering_mode: " << val));
+                    return false;
                 }
-
             } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
                 const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
                 ui32 value = 0;
@@ -2679,15 +2676,20 @@ private:
                     maxPartitions = value;
                 }
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setContentBasedDeduplication") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-            } else if (name == "resetMetricsLevel") {
-                // ALTER TOPIC RESET (metrics_level) is encoded in TopicSettings.
+            } else if (name == "resetMetricsLevel"
+                    || name == "resetRetentionPeriod"
+                    || name == "resetRetentionStorage"
+                    || name == "resetPartitionWriteSpeed"
+                    || name == "resetPartitionWriteBurstSpeed"
+                    || name == "resetSupportedCodecs"
+                    || name == "resetContentBasedDeduplication"
+                    || name == "resetAutoPartitioningStabilizationWindow"
+                    || name == "resetAutoPartitioningUpUtilizationPercent"
+                    || name == "resetAutoPartitioningDownUtilizationPercent") {
+                // Applied in execution: native Topic API reset or SET of the default value.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
-                        errorPos,
+                        ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "RESET is currently not supported for topic options")
                 );
                 return false;

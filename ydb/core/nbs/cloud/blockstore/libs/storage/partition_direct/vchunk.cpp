@@ -930,7 +930,7 @@ void TVChunk::DoPersistDirtyMap()
     DirtyMapStatePersisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
-    const ui32 stateGeneration = state.GetStateGeneration();
+    const ui32 stateGeneration = BlocksDirtyMap->GetCurrentGeneration();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
@@ -973,6 +973,7 @@ void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 
     DirtyMapStatePersisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()

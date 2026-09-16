@@ -55,10 +55,10 @@ TDirectBlockGroupsConnections MakeSampleDirectBlockGroupsConnections()
     return msg;
 }
 
-TDirtyMapStateProto MakeSampleDirtyMapState(ui32 stateGeneration)
+TDirtyMapStateProto MakeSampleDirtyMapState(ui32 marker)
 {
     TDirtyMapStateProto state;
-    state.SetStateGeneration(stateGeneration);
+    state.SetDDiskTouched(marker != 0);
 
     auto* ddiskState = state.AddDDiskStates();
     auto* ahead = ddiskState->MutableAhead();
@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     written.SerializeAsString(),
                     state.SerializeAsString());
-                UNIT_ASSERT_VALUES_EQUAL(7u, state.GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(true, state.GetDDiskTouched());
                 UNIT_ASSERT_VALUES_EQUAL(2, state.DDiskStatesSize());
             });
     }
@@ -535,10 +535,10 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
 
                 UNIT_ASSERT(loaded.contains(0));
-                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.at(0).GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(true, loaded.at(0).GetDDiskTouched());
 
                 UNIT_ASSERT(loaded.contains(1));
-                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.at(1).GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(true, loaded.at(1).GetDDiskTouched());
 
                 // A vchunk that was never written must be absent from the map.
                 UNIT_ASSERT(!loaded.contains(2));
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT(loaded.contains(5));
 
                 const auto& state = loaded.at(5);
-                UNIT_ASSERT_VALUES_EQUAL(99u, state.GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(true, state.GetDDiskTouched());
                 UNIT_ASSERT_VALUES_EQUAL(
                     updated.SerializeAsString(),
                     state.SerializeAsString());

@@ -58,6 +58,10 @@ void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
         DDiskStates[ddisk].Load(ddiskState);
         ++ddisk;
     }
+
+    if (proto.GetDDiskTouched()) {
+        DDiskTouchedGeneration = PersistedStateGeneration;
+    }
 }
 
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
@@ -135,6 +139,8 @@ void TBlocksDirtyMap::RestorePBuffer(
     Y_ABORT_UNLESS(item);
     auto& inflight = item->Value;
     inflight.RestorePBuffer(host);
+
+    TouchDDisk();
 }
 
 // Create multiple readRangeHints for specified range with possible overlapping
@@ -228,6 +234,12 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
     {
         // We can't make a flush while DDisk quorum is unavailable. Will wait
         // until it becomes available.
+        return result;
+    }
+
+    if (!IsDDiskTouchPersisted()) {
+        // Persist that DDisk writes have occurred before issuing the first
+        // flush.
         return result;
     }
 
@@ -363,6 +375,8 @@ void TBlocksDirtyMap::WriteFinished(
     }
 
     inflightItem.OnWritten(requested, confirmed);
+
+    TouchDDisk();
 }
 
 void TBlocksDirtyMap::FlushFinished(
@@ -756,7 +770,7 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
 
 void TBlocksDirtyMap::OnBehindAheadChanged()
 {
-    ++BehindAheadGeneration;
+    ++StateGeneration;
 }
 
 bool TBlocksDirtyMap::NeedFlush() const
@@ -769,32 +783,44 @@ bool TBlocksDirtyMap::NeedErase() const
     return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
 }
 
+bool TBlocksDirtyMap::IsDDiskTouched() const
+{
+    return DDiskTouchedGeneration != DDiskNotTouched;
+}
+
 bool TBlocksDirtyMap::NeedPersist() const
 {
-    return BehindAheadGeneration > PersistedGeneration;
+    const bool needPersistAheadBehind =
+        StateGeneration > PersistedStateGeneration;
+    const bool needPersistDDiskTouch =
+        IsDDiskTouched() && !IsDDiskTouchPersisted();
+    return needPersistAheadBehind || needPersistDDiskTouch;
 }
 
 TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
     TDirtyMapStateProto result;
-    result.SetStateGeneration(GetCurrentGeneration());
+
+    result.SetDDiskTouched(IsDDiskTouched());
+
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());
     }
+
     return result;
 }
 
 void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
 {
-    Y_ABORT_UNLESS(persistGeneration > PersistedGeneration);
-    Y_ABORT_UNLESS(persistGeneration <= BehindAheadGeneration);
+    Y_ABORT_UNLESS(persistGeneration > PersistedStateGeneration);
+    Y_ABORT_UNLESS(persistGeneration <= StateGeneration);
 
-    PersistedGeneration = persistGeneration;
+    PersistedStateGeneration = persistGeneration;
 }
 
 ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 {
-    return BehindAheadGeneration;
+    return StateGeneration;
 }
 
 void TBlocksDirtyMap::Trim()
@@ -979,8 +1005,8 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
 TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
 {
     TStringBuilder result;
-    result << "gen:" << GetCurrentGeneration() << "/" << PersistedGeneration
-           << " ";
+    result << "gen:" << GetCurrentGeneration() << "/"
+           << PersistedStateGeneration << " ";
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
         auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
         if (brief) {
@@ -1138,13 +1164,13 @@ bool TBlocksDirtyMap::CheckEraseAbility(
     TBlockRange16 range,
     TInflightInfo& inflightInfo)
 {
-    if (BehindAheadGeneration == 0) {
+    if (StateGeneration == 0) {
         // There is not a single red block.
         return true;
     }
 
     if (inflightInfo.GetPersistGeneration() &&
-        inflightInfo.GetPersistGeneration() <= PersistedGeneration)
+        inflightInfo.GetPersistGeneration() <= PersistedStateGeneration)
     {
         // Red blocks already persisted. Can erase.
         return true;
@@ -1167,7 +1193,7 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         // The red blocks from this inflightInfo are already in the current
         // generation. Start waiting for data with the current or newer
         // generation to be persisted.
-        inflightInfo.SetPersistGeneration(BehindAheadGeneration);
+        inflightInfo.SetPersistGeneration(StateGeneration);
     }
     return false;
 }
@@ -1179,6 +1205,21 @@ void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
 
     const bool removed = Inflight.RemoveRange(pBufferKey);
     Y_ABORT_UNLESS(removed);
+}
+
+void TBlocksDirtyMap::TouchDDisk()
+{
+    if (DDiskTouchedGeneration != DDiskNotTouched) {
+        return;
+    }
+    ++StateGeneration;
+    DDiskTouchedGeneration = StateGeneration;
+}
+
+bool TBlocksDirtyMap::IsDDiskTouchPersisted() const
+{
+    return IsDDiskTouched() &&
+           PersistedStateGeneration >= DDiskTouchedGeneration;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

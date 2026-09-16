@@ -31,10 +31,8 @@ std::optional<TPBufferKey> GetSafeBarrierOnExecutor(
     return future.GetValue(TDuration::Seconds(10));
 }
 
-// Drives dirtyMap into a state where NeedPersist() is true and the persist
-// generation has advanced. Mirrors the flush choreography used in dirty_map_ut:
-// a write above the fresh DDisk's watermark populates its Ahead field, which
-// bumps the behind/ahead generation on flush. Must run on the executor thread.
+// Drives dirtyMap into a state where the first DDisk touch needs to be
+// persisted. Must run on the executor thread.
 void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
 {
     THostMask requested;
@@ -51,11 +49,6 @@ void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
         TBlockRange16::WithLength(10, 10),
         requested,
         requested);
-
-    auto flushHint = dirtyMap.MakeFlushHint(1);
-    for (const auto& [route, hint]: flushHint.GetAllHints()) {
-        dirtyMap.FlushFinished(route, MakePBufferKeys(hint.Segments), {});
-    }
 }
 
 }   // namespace
@@ -67,6 +60,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     Y_UNIT_TEST_F(ShouldScheduleCleanup, TBaseFixture)
     {
         Init();
+        DirtyMapStateProto.SetDDiskTouched(true);
 
         const auto range = TBlockRange16::WithLength(10, 1);
         ExpectedRange = range;
@@ -949,16 +943,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
     // DoPersistDirtyMap must forward the dirty map state to
     // IPartitionDirectService::UpdateDirtyMapState (carrying the vchunk index
-    // and the current state generation) and, once that future resolves, run
+    // and the DDiskTouched flag) and, once that future resolves, run
     // OnDirtyMapPersisted which clears the in-flight flag and acknowledges the
     // generation to the dirty map (NeedPersist() becomes false).
     Y_UNIT_TEST_F(ShouldPersistDirtyMapState, TBaseFixture)
     {
-        // Host 3 is fresh; a write above its watermark populates its Ahead
-        // field so a flush bumps the persist generation.
-        VChunkConfig.PromoteHost(3);
-        VChunkConfig.SetWatermark(3, BlockSize * 5);
-
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -977,7 +966,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Drive the dirty map into a "need persist" state and trigger persist,
         // all on the executor thread the vchunk state is confined to.
-        ui32 expectedGeneration = 0;
         RunOnExecutor(
             DirectBlockGroup->GetExecutor(),
             [&]() -> bool
@@ -985,7 +973,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
-                expectedGeneration = dirtyMap.GetCurrentGeneration();
 
                 InvokePersistDirtyMap(*vchunk);
                 return true;
@@ -993,16 +980,14 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             .GetValue(TDuration::Seconds(10));
 
         // A single UpdateDirtyMapState request must have been issued with the
-        // vchunk index and captured generation; the vchunk marks itself busy.
+        // vchunk index and DDiskTouched flag; the vchunk marks itself busy.
         UNIT_ASSERT_VALUES_EQUAL(
             1u,
             PartitionDirectService->UpdateDirtyMapStateRequests.size());
         const auto& request =
             PartitionDirectService->UpdateDirtyMapStateRequests.front();
         UNIT_ASSERT_VALUES_EQUAL(FixtureVChunkIndex, request.VChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(
-            expectedGeneration,
-            request.Proto.GetStateGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(true, request.Proto.GetDDiskTouched());
         UNIT_ASSERT_VALUES_EQUAL(true, IsDirtyMapStatePersisting(*vchunk));
 
         // Complete the persist; OnDirtyMapPersisted runs on the callback.

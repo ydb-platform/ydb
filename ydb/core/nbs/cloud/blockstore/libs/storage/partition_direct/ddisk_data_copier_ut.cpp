@@ -72,6 +72,12 @@ struct TFixture
     {
         TBaseFixture::Init();
 
+        // Copier tests exercise range synchronization after the VChunk has
+        // already started writing to DDisks.
+        TDirtyMapStateProto state;
+        state.SetDDiskTouched(true);
+        DirtyMap->Load(state);
+
         VChunkConfig.PromoteHost(3);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
         DirtyMap->UpdateConfig(VChunkConfig);

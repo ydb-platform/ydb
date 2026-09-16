@@ -143,6 +143,7 @@ public:
 
     [[nodiscard]] bool NeedFlush() const;
     [[nodiscard]] bool NeedErase() const;
+    [[nodiscard]] bool IsDDiskTouched() const;
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
@@ -150,6 +151,7 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
+    // Memory management
     void Trim();
 
     // Stats
@@ -201,6 +203,8 @@ private:
     using TInflightDDiskSyncMap =
         TBlockRangeMap<ui64, TInflightDDiskSync, TBlockRange16>;
 
+    static constexpr ui32 DDiskNotTouched = Max<ui32>();
+
     void ResizeHosts(size_t newHostCount);
 
     [[nodiscard]] THostMask FilterLocations(
@@ -229,6 +233,9 @@ private:
         TInflightInfo& inflightInfo);
 
     void RemovePBuffer(TPBufferKey pBufferKey);
+
+    void TouchDDisk();
+    [[nodiscard]] bool IsDDiskTouchPersisted() const;
 
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
@@ -267,10 +274,15 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changed when DDiskState changed his behind or ahead map.
-    ui32 BehindAheadGeneration = 0;
+    // Changes when a DDisk is first touched or its behind/ahead map changes.
+    ui32 StateGeneration = 0;
+    // Generation in which the first write to a DDisk was observed. Flushes
+    // remain blocked until that generation, and therefore the DDiskTouched
+    // flag, is persisted. Loading an already persisted flag sets this to the
+    // current persisted generation and permits flushes immediately.
+    ui32 DDiskTouchedGeneration = DDiskNotTouched;
     // Last persisted DDisks states generation.
-    ui32 PersistedGeneration = 0;
+    ui32 PersistedStateGeneration = 0;
 
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;

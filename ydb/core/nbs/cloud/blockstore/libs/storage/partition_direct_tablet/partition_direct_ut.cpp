@@ -267,7 +267,7 @@ TPersistResultFuture SendDirtyMapStateUpdate(
     ui32 stateGeneration)
 {
     TDirtyMapStateProto state;
-    state.SetStateGeneration(stateGeneration);
+    state.SetDDiskTouched(stateGeneration != 0);
 
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
@@ -288,6 +288,19 @@ TPersistResultFuture SendDirtyMapStateUpdate(
     env.Runtime->DestroyActor(sender);
 
     return future;
+}
+
+void PersistDDiskTouch(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    ui32 vChunkIndex)
+{
+    auto future =
+        SendDirtyMapStateUpdate(env, partitionTabletId, vChunkIndex, 1);
+    env.Sim(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(
+        EPersistResult::Success,
+        future.GetValue(TDuration::Seconds(10)));
 }
 
 NProto::TError DeletePartition(
@@ -2412,6 +2425,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2499,6 +2521,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/2,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2594,6 +2625,15 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             /*syncRequestsBatchSize=*/1);
 
         auto partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
+        RestartTabletNode(
+            env,
+            scopedService,
+            CreateNbsConfig(
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                /*pbufferCleanupLsnStep=*/4,
+                /*syncRequestsBatchSize=*/1));
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,

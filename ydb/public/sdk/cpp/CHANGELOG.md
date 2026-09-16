@@ -1,3 +1,5 @@
+* Added `Float16` and `BFloat16` vector index types.
+
 # v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.

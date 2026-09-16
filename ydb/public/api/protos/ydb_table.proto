@@ -80,6 +80,8 @@ message VectorIndexSettings {
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
         VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_FLOAT16 = 5;
+        VECTOR_TYPE_BFLOAT16 = 6;
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;

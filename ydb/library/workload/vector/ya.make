@@ -16,6 +16,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/colorizer
     ydb/library/formats/arrow/csv/converter
+    ydb/library/vector_distance
     ydb/library/workload/abstract
     ydb/library/workload/benchmark_base
     ydb/public/api/protos

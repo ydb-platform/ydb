@@ -116,6 +116,12 @@ THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildMemoryLimitError(TChannelFullI
             NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, message);
 }
 
+// Both actors of the channel: the one whose quota ran out and the one which would wait for it for good
+void AbortChannelByMemoryLimit(NActors::TActorSystem* actorSystem, TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, ui64 bytes) {
+    actorSystem->Send(info.OutputActorId, BuildMemoryLimitError(info, quotaManager, bytes).Release());
+    actorSystem->Send(info.InputActorId, BuildMemoryLimitError(info, quotaManager, bytes).Release());
+}
+
 THolder<NYql::NDq::TEvDq::TEvAbortExecution> BuildTempUnavailableError(TChannelFullInfo& info, const TString& message) {
     return NYql::NDq::TEvDq::TEvAbortExecution::Build(
             NYql::NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -442,7 +448,7 @@ void TLocalBuffer::ExportPopStats(TDqAsyncStats& stats) {
 
 void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.InputActorId, BuildMemoryLimitError(Info, QuotaManager, bytes).Release());
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, QuotaManager, bytes);
     }
 }
 
@@ -685,7 +691,7 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
 
 void TOutputDescriptor::AbortChannelByMemoryLimit(ui64 bytes) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, GetQuotaManager(), bytes).Release());
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, GetQuotaManager(), bytes);
     }
 }
 
@@ -1017,7 +1023,7 @@ void TInputDescriptor::AbortChannel(const TString& message) {
 
 void TInputDescriptor::AbortChannelByMemoryLimit(ui64 bytes, IMemoryQuotaManager::TPtr quotaManager) {
     if (!Aborted.exchange(true)) {
-        ActorSystem->Send(Info.OutputActorId, BuildMemoryLimitError(Info, quotaManager ? quotaManager : QuotaManager, bytes).Release());
+        NDq::AbortChannelByMemoryLimit(ActorSystem, Info, quotaManager ? quotaManager : QuotaManager, bytes);
     }
 }
 

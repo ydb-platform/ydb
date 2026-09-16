@@ -39,16 +39,19 @@ from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import web_workload_catalog
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, plan_affinity, topology_record
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
-from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
+from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path
 from ydb.tools.ydb_bench.lib.federation import Federation, split_reference, page_options
 from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
+from ydb.tools.ydb_bench.lib.monitoring_settings import MonitoringSettings
+from ydb.tools.ydb_bench.lib.metrics_export import MetricsExporter
+from ydb.tools.ydb_bench.lib.grafana import Grafana
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions
 from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError, request_operation
 from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
-from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui
+from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui, monitoring_settings_ui
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -401,6 +404,7 @@ async function refreshEditorActivity(){
 }
 function runDisplay(value){return splitRunRef(value)?.id||value}
 function hostApiPath(path){
+  if(path.startsWith('/api/grafana/'))return path;
   if(path.startsWith('/api/federation/')||path.startsWith('/api/hosts'))return path;
   const match=/^[/]api[/]runs[/]([^/?]+)(.*)$/.exec(path),ref=match&&splitRunRef(decodeURIComponent(match[1]));
   if(ref)return '/api/hosts/'+enc(ref.host)+'/api/runs/'+enc(ref.id)+match[2];
@@ -409,7 +413,30 @@ function hostApiPath(path){
   return viewedHost&&(/#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)||path==='/api/system-topology'||path==='/api/cpu-usage')?
     '/api/hosts/'+enc(viewedHost)+path:path
 }
-function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
+function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>Results are incomplete — '+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
+const hostAvailability=new Map();
+let checkingHostAvailability=false;
+async function refreshHostAvailability(){
+  if(checkingHostAvailability)return;
+  checkingHostAvailability=true;
+  try{
+    const value=await api('/api/hosts'),ids=new Set(value.hosts.map(h=>h.id));
+    for(const id of hostAvailability.keys())if(!ids.has(id))hostAvailability.delete(id);
+    const failed=[];
+    for(const host of value.hosts){
+      if(host.availability==='unavailable'&&hostAvailability.get(host.id)!=='unavailable')failed.push(host.name||host.id);
+      hostAvailability.set(host.id,host.availability);
+    }
+    if(failed.length){
+      document.getElementById('host-unavailable-toast')?.remove();
+      const toast=document.createElement('div');toast.id='host-unavailable-toast';toast.className='notice';
+      toast.setAttribute('role','status');toast.style.cssText='position:fixed;right:1rem;bottom:1rem;z-index:1000;max-width:32rem';
+      const text=document.createElement('span');text.textContent='Host unavailable: '+failed.join(', ');toast.append(text);
+      const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Dismiss notification');
+      close.onclick=()=>toast.remove();toast.append(close);document.body.append(toast);setTimeout(()=>toast.remove(),8000);
+    }
+  }catch{}finally{checkingHostAvailability=false}
+}
 async function hostChoices(selected='',all=true){
   const value=await api('/api/hosts'),hosts=[value.local,...value.hosts];
   for(const host of hosts)distributedHosts.set(host.id,host.name||host.endpoint||host.id);
@@ -522,7 +549,11 @@ function shell(current,body,breadcrumb=''){
     '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
       '<a href="'+(id==='hosts'?'/?#hosts':'#'+id)+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
-      'No active run')+'</span>'+(/^#run[/]/.test(location.hash)?'<button type=button id=refresh-run class=run-refresh aria-label="Refresh run" title="Refresh run">↻</button>':'')+'</header><main>'+
+      'No active run')+'</span>'+(/^#run[/]/.test(location.hash)?'<button type=button id=refresh-run class=run-refresh aria-label="Refresh run" title="Refresh run">↻</button>':'')+
+      '<a href="/?#settings" class=settings-link title="Settings" aria-label="Settings"'+(section==='settings'?' aria-current="page"':'')+'>'+
+      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" focusable="false">'+
+      '<path d="m9 3-.6 2.4-2 .9-2.2-.7-2 3.4 1.6 1.7v2.6L2.2 15l2 3.4 2.2-.7 2 .9L9 21h4l.6-2.4 2-.9 2.2.7 2-3.4-1.6-1.7v-2.6L19.8 9l-2-3.4-2.2.7-2-.9L13 3Z"/>'+
+      '<circle cx="11" cy="12" r="3"/></svg></a></header><main>'+
       (viewedHost&&/^#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)?
         '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
       breadcrumb+body+'</main></div></div>'
@@ -3048,7 +3079,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
   app.innerHTML=shell('runs','<div class=attempt-page><div class=breadcrumbs><a href="'+esc(discovery)+'">'+
     esc(runId+' / '+profile)+' / Discovery</a></div><div class=run-header><h1 class=page-title>'+
     (attempt==='verification'?'Verification':'Attempt '+esc(attempt))+
-    '</h1><div class=toolbar><button id=counter-refresh>Refresh</button><details class=downloads hidden '+
+    '</h1><div class=toolbar><span class=toolbar id=attempt-export></span><span id=attempt-grafana></span><button id=counter-refresh>Refresh</button><details class=downloads hidden '+
     'id=attempt-downloads><summary>Downloads</summary><div class=actions id=attempt-artifacts></div></details></div></div>'+
     '<div id=attempt-error></div><div id=attempt-header></div><nav class=local-profile-tabs aria-label="Attempt details">'+
     [['summary','Summary'],['counters','YDB counters'],['commands','Commands']].map(([view,label])=>
@@ -3063,6 +3094,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     '</div><div id=counter-notice></div><div id=counter-charts class=local-charts></div></section>'+
     '<section data-attempt-panel=commands id=attempt-commands></section></div>');
   const target=document.querySelector('#counter-charts'),summary=document.querySelector('#attempt-summary');
+  mountMetricsExport(document.querySelector('#attempt-export'),runId,{benchmark,profile,attempt:String(attempt)});
   const repetition=document.querySelector('#counter-repetition'),node=document.querySelector('#counter-node');
   const host=document.querySelector('#counter-host');
   const raw=document.querySelector('#counter-raw');
@@ -3135,6 +3167,9 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
         '">Profile YDB counters (JSONL)</a>':'')+downloads.map(item=>'<a href="'+esc(hostApiPath(item.url))+'">'+
           esc(hostNames.get(item.host_id)||item.host_id)+' · '+esc(item.url.split('/').slice(-4,-2).join('/'))+' (JSONL)</a>').join('');
       samples=metrics.samples||[];
+      let from=Infinity,to=-Infinity;
+      for(const sample of samples){if(Number.isFinite(sample.timestamp_unix)){from=Math.min(from,sample.timestamp_unix*1000);to=Math.max(to,sample.timestamp_unix*1000)}}
+      mountGrafana(document.querySelector('#attempt-grafana'),runId,{benchmark,profile,attempt:String(attempt)},from,to);
       const errors=[...new Set(samples.flatMap(sample=>[
         sample.error,...sample.nodes.map(value=>value.error?value.role+' '+value.index+': '+value.error:null)
       ]).filter(Boolean))];
@@ -3287,7 +3322,7 @@ function bindRunConfiguration(container,id){
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];\n"
     "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><div class=toolbar>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
-    ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
+    ":'')+'<span class=toolbar id=run-export></span><button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
     "esc(humanTime(run.started_at))+' · Run duration <span id=run-duration>'+duration(run)+'</span> · '+run.finished_steps+' / '+run.steps.length+"
@@ -3322,6 +3357,7 @@ function bindRunConfiguration(container,id){
     "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
     "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
+    "    mountMetricsExport(document.querySelector('#run-export'),id);\n"
     "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
     "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb'].includes(activeBenchmark)&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
@@ -3672,18 +3708,20 @@ async function renderComparisons(){
     """
     "async function compose(){if(!location.hash.slice(1))history.replaceState(history.state,'',location.pathname+location.search+'#runs');"
     "const pieces=routeParts(),current=pieces.join('/');if(pieces[0]==='cluster-templates')return renderClusterTemplates(pieces[1]);"
-    "if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "if(current==='settings')return renderMonitoringSettings();if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(['attempt','distributed-attempt'].includes(pieces[0])&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4],pieces[0]==='distributed-attempt'?'distributed-ydb':'local-ydb');if(pieces[0]==='run'){"
     "if(pieces.length===3&&pieces[2]==='configuration')return renderRun(pieces[1],'','configuration');if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
-    "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"
+    "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);setInterval(refreshHostAvailability,3000);refreshHostAvailability();compose();\n"
 )
 
 
 _CSS += cluster_templates_ui.CSS
+_CSS += monitoring_settings_ui.CSS
+_JS = monitoring_settings_ui.JS + _JS
 _JS += cluster_templates_ui.JS
 _CSS += distributed_builder_ui.CSS
 _JS += distributed_builder_ui.JS
@@ -4415,6 +4453,9 @@ class RunService:
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
         self.hosts = HostDirectory(self.output)
+        self.monitoring_settings = MonitoringSettings(self.output, self.hosts)
+        self.metrics_exporter = MetricsExporter(self.output, self.monitoring_settings, self.hosts.id)
+        self.grafana = Grafana(self.monitoring_settings, self.hosts)
         self.cluster_templates = ClusterTemplateStore(self.output)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
@@ -4439,6 +4480,8 @@ class RunService:
         self._recovery_stop = threading.Event()
         self._recovery_thread = None
         self._start_recovery()
+        self.monitoring_settings.start()
+        self.hosts.start()
 
     def _start_recovery(self):
         with self._lock:
@@ -4919,6 +4962,8 @@ class RunService:
         if timeout is not None:
             timeout = max(0.0, float(timeout))
         self._recovery_stop.set()
+        self.monitoring_settings.close()
+        self.hosts.close()
         self.run_index.close()
         if self._recovery_thread is not None:
             self._recovery_thread.join(timeout=6)
@@ -5088,6 +5133,24 @@ class RunService:
 
     def chart_data(self, run_ids, benchmark_filter=None):
         return chart_data(self.output, run_ids, benchmark_filter)
+
+    def metrics_export(self, run_id, options, start=False):
+        root = _run_directory(self.output, run_id)
+        if not isinstance(options, dict) or set(options) not in (set(), {'benchmark', 'profile', 'attempt'}):
+            raise BenchmarkError('expected benchmark, profile and attempt, or an empty run selection')
+        if options and (
+            options['benchmark'] not in ('local-ydb', 'distributed-ydb')
+            or not isinstance(options['profile'], str)
+            or not isinstance(options['attempt'], str)
+            or not re.fullmatch(r'(?:[1-9][0-9]{0,8}|verification)', options['attempt'])
+        ):
+            raise BenchmarkError('invalid metrics export selection')
+        if start:
+            detail = self.detail(run_id)
+            if not detail or detail['state'] not in ('passed', 'failed', 'cancelled', 'unsupported'):
+                raise BenchmarkError('Export is available after the run has finished')
+            return self.metrics_exporter.start(run_id, root, options)
+        return self.metrics_exporter.status(run_id, options)
 
     def local_ydb_metrics(self, run_id, profile, attempt, benchmark="local-ydb"):
         if attempt != "verification" and not re.fullmatch(r"[1-9][0-9]{0,8}", str(attempt)):
@@ -6142,8 +6205,7 @@ def _handler(service):
                             raise BenchmarkError('route is not allowed')
                         self.path = target
                         return self.do_GET()
-                    record = service.hosts.get(host_id)
-                    with open_peer(record, target) as response:
+                    with service.hosts.open(host_id, target) as response:
                         self.send_response(response.status)
                         self.send_header(
                             "Content-Type", response.headers.get("Content-Type", "application/octet-stream")
@@ -6168,6 +6230,24 @@ def _handler(service):
                 return self._send(200, "application/javascript; charset=utf-8", _JS.encode())
             if path == "/api/settings":
                 return self._json(200, service.settings())
+            if path == "/api/monitoring-settings":
+                return self._json(200, service.monitoring_settings.status())
+            if path in ('/api/grafana/config', '/api/grafana/catalog'):
+                try:
+                    return self._json(
+                        200,
+                        service.grafana.config() if path.endswith('/config') else service.grafana.execute('catalog'),
+                    )
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
+            if path.startswith('/api/runs/') and path.endswith('/metrics-export'):
+                try:
+                    options = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
+                    return self._json(
+                        200, service.metrics_export(unquote(path[len('/api/runs/') : -len('/metrics-export')]), options)
+                    )
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
             if path == "/api/activity-status":
                 return self._json(200, service.activity_status())
             if path == "/api/benchmarks":
@@ -6315,6 +6395,42 @@ def _handler(service):
         def do_POST(self):
             path = urlparse(self.path).path
             try:
+                if path in ('/peer/monitoring/snapshot', '/peer/monitoring/save', '/peer/monitoring/grafana'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    options = self._json_body()
+                    if path.endswith('/grafana'):
+                        if not isinstance(options, dict) or set(options) != {'operation', 'options'}:
+                            raise BenchmarkError('invalid Grafana request')
+                        return self._json(
+                            200, service.grafana.execute(options['operation'], options['options'], forwarded=True)
+                        )
+                    return self._json(
+                        200,
+                        (
+                            service.monitoring_settings.snapshot()
+                            if path.endswith('/snapshot')
+                            else service.monitoring_settings.save(options)
+                        ),
+                    )
+                if path in ('/api/monitoring-settings', '/api/monitoring-settings/refresh', '/api/grafana/install'):
+                    origin = self.headers.get('Origin')
+                    if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                        origin and urlparse(origin).netloc != self.headers.get('Host')
+                    ):
+                        return self._json(403, {'error': 'same-origin JSON request required'})
+                    options = self._json_body()
+                    if path == '/api/grafana/install':
+                        return self._json(201, service.grafana.execute('install', options))
+                    if path.endswith('/refresh'):
+                        service.monitoring_settings.sync()
+                        return self._json(200, service.monitoring_settings.status())
+                    return self._json(200, service.monitoring_settings.save(options))
                 if path.startswith('/peer/distributed/'):
                     if not service.hosts.authorized(self.headers.get('Authorization')):
                         return self._json(401, {'error': 'peer authentication required'})
@@ -6350,15 +6466,29 @@ def _handler(service):
                         if parts[0] == service.hosts.id:
                             self.path = '/' + parts[1]
                             return self.do_POST()
-                        options = self._json_body() if parts[1].endswith('/cancel') else self._options()
+                        options = (
+                            self._json_body() if parts[1].endswith(('/cancel', '/metrics-export')) else self._options()
+                        )
                         if not isinstance(options, dict):
                             raise BenchmarkError('request must be an object')
-                        status, content_type, body = request_peer(service.hosts.get(parts[0]), '/' + parts[1], options)
+                        status, content_type, body = service.hosts.request(parts[0], '/' + parts[1], options)
                         return self._send(status, content_type, body, {'Cache-Control': 'no-store'})
                 local_prefix = '/api/hosts/' + service.hosts.id
                 if path.startswith(local_prefix + '/api/runs/'):
                     self.path = self.path[len(local_prefix) :]
                     return self.do_POST()
+                if path.startswith('/api/runs/') and path.endswith('/metrics-export'):
+                    origin = self.headers.get('Origin')
+                    if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                        origin and urlparse(origin).netloc != self.headers.get('Host')
+                    ):
+                        return self._json(403, {'error': 'same-origin JSON request required'})
+                    return self._json(
+                        202,
+                        service.metrics_export(
+                            unquote(path[len('/api/runs/') : -len('/metrics-export')]), self._json_body(), start=True
+                        ),
+                    )
                 if path in ('/api/saved-comparisons', '/api/saved-comparisons/delete'):
                     options = self._json_body()
                     if isinstance(options, dict) and isinstance(options.get('id'), str):

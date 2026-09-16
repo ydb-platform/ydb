@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/nbs/cloud/blockstore/libs/service
     library/cpp/logger
     library/cpp/threading/atomic_shared_ptr
     ydb/core/protos

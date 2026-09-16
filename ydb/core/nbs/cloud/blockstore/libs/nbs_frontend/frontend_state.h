@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/mount.pb.h>
@@ -14,7 +16,14 @@ class TVolumeConfig;
 
 namespace NYdb::NBS::NBlockStore {
 
-// Owns request admission, disk metadata and process-local session.
+// The handler and geometry belong to the same checked registration/session.
+struct TFrontendIoBackend
+{
+    IDeviceHandlerPtr Handler;
+    TVolumeConfigPtr IoGeometry;
+};
+
+// Owns request admission, disk backend and process-local session.
 // For now this is a prototype and there is no a goal to support full sessions
 // logic for all possible disks.
 class TFrontendState final
@@ -34,11 +43,13 @@ public:
     // Check if the admission gate is open so request can be handled.
     NProto::TError CheckAcceptingRequests() const;
 
-    // Registers partition metadata and returns a unique registration ID.
-    // UnregisterVolume uses this ID to avoid removing a newer registration.
+    // Registers partition metadata/backend and returns a unique registration
+    // ID. UnregisterVolume uses this ID to avoid removing a newer registration.
     // Replacing a registration revokes its session.
     TResultOrError<TString> RegisterVolume(
-        const NKikimrBlockStore::TVolumeConfig& volumeConfig);
+        const NKikimrBlockStore::TVolumeConfig& volumeMetadata,
+        IStoragePtr storage,
+        TVolumeConfigPtr ioGeometry);
 
     // Revokes the matching registration and session; stale tokens are harmless.
     void UnregisterVolume(const TString& registrationId);
@@ -58,8 +69,8 @@ public:
         const TString& clientId,
         const TString& sessionId);
 
-    // Checks if session can handle IO requests.
-    NProto::TError ValidateIoSession(
+    // Checks admission and session in one snapshot and retains its I/O backend.
+    TResultOrError<TFrontendIoBackend> AcquireIoBackend(
         const TString& diskId,
         const TString& clientId,
         const TString& sessionId) const;

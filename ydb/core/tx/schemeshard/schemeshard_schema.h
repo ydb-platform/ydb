@@ -2296,10 +2296,10 @@ struct Schema : NIceDb::Schema {
 
         struct Uid : Column<12, NScheme::NTypeIds::Utf8> {};
         struct OriginalDdl : Column<13, NScheme::NTypeIds::String> {};
-        struct UserSID : Column<16, NScheme::NTypeIds::Utf8> {};
-        struct BackupCollectionPathOwnerId : Column<17, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
-        struct BackupCollectionPathId : Column<18, NScheme::NTypeIds::Uint64> {};
-        struct AwaitingInitialRestore : Column<19, NScheme::NTypeIds::Bool> {};
+        struct UserSID : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct BackupCollectionPathOwnerId : Column<15, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct BackupCollectionPathId : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct AwaitingInitialRestore : Column<17, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<

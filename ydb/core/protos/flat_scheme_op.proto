@@ -2000,9 +2000,9 @@ message TSetColumnConstraintSettings {
 // retain their parent's operation identity rather than admit this key again.
 message TOperationIdempotency {
     optional string Uid = 1 [(Ydb.sensitive) = true];
-    optional bytes OriginalDdl = 3 [(Ydb.sensitive) = true];
+    optional bytes OriginalDdl = 2 [(Ydb.sensitive) = true];
     // Read retained identity without admitting an operation on a miss.
-    optional bool LookupOnly = 4 [default = false];
+    optional bool LookupOnly = 3 [default = false];
 }
 
 // Request for scheme modification

@@ -259,14 +259,23 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):
         cover_files = []
+        cover_outputs = []
+        # Only output names are localized; keep the original source arguments.
+        # Match _GoToolCover._cover_go_path in build/scripts/go.py.
+        cover_module = rootrel_arc_src(unit.get('GO_TEST_FOR_DIR') or unit_path, unit).strip('/')
         generated_go_files = []
         for f in go_files:
             resolved = resolve_go_path(unit, f)
             if resolved and resolved.startswith('$S/'):
                 cover_files.append(f)
+                relative = posixpath.relpath(resolved[3:], cover_module)
+                if relative.startswith('../'):
+                    relative = '_external/' + resolved[3:]
+                cover_outputs.append(relative)
             else:
                 generated_go_files.append(f)
         unit.set(['GO_COVER_MODE', 'set'])  # Enable Go coverage with mode="set"
+        unit.set(['_GO_COVER_FILES', ' '.join(cover_outputs)])
         unit.on_go_gen_cover([go_package_name(unit), *cover_files])
 
         # The coverage command reads paths relative to the source root. Generated

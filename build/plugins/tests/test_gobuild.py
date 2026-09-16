@@ -636,3 +636,19 @@ def test_go_test_for_curdir_is_not_the_tested_library_directory():
     gobuild._GO_PROCESS_SRCS(unit)
 
     assert unit.get('_GO_SRCS_VALUE') == ' '.join(files)
+
+
+@pytest.mark.parametrize('root', ['', '${CURDIR}/', '$S/project/pkg/'])
+def test_coverage_keeps_source_arguments_and_separates_outputs(root):
+    """Source spelling stays unchanged; output paths keep source subdirectories."""
+    sources = [root + 'source.go', root + 'sub/source.go']
+    unit = FakeUnit(
+        variables={'_GO_SRCS_VALUE': ' '.join(sources), '_GO_PACKAGE_VALUE': 'pkg'},
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE', 'GO_TEST_COVER'),
+        sources=('source.go', 'sub/source.go'),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.calls == [('on_go_gen_cover', ['pkg'] + sources)]
+    assert unit.get('_GO_COVER_FILES') == 'source.go sub/source.go'

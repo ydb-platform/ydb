@@ -363,11 +363,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
         constexpr ui64 portionsCount = 3;
         constexpr ui64 limit = 3;
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
-        TKikimrRunner kikimr(settings);
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         for (ui64 i = 0; i < portionsCount; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);

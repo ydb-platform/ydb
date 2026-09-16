@@ -1,7 +1,5 @@
 #include "source.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>

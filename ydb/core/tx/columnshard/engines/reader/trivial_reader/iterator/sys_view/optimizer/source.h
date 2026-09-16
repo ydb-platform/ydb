@@ -1,6 +1,4 @@
 #pragma once
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/abstract/source.h>

@@ -1,6 +1,4 @@
 #pragma once
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tx/columnshard/engines/metadata_accessor.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NAbstract {
@@ -25,10 +23,6 @@ public:
 
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const override {
         return PathId;
-    }
-
-    virtual bool OrderByLimitAllowed() const override {
-        return HasAppData() && AppDataVerified().FeatureFlags.GetEnableSysViewOrderByLimitPushdown();
     }
 
     virtual bool NeedDuplicateFiltering() const override {

@@ -1765,7 +1765,6 @@ void WithSysViewPortions(const TString& readerClassName, TCheck&& check, ui64 po
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
-    runtime.GetAppData(0).FeatureFlags.SetEnableSysViewOrderByLimitPushdown(true);
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 

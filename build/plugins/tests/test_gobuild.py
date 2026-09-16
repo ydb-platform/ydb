@@ -12,6 +12,7 @@ class FakeUnit:
         self.resolutions = {source: self.path() + '/' + source for source in sources}
         self.resolutions.update(resolutions or {})
         self.calls = []
+        self.messages = []
 
     def path(self):
         return '$S/' + self.module_path
@@ -58,6 +59,98 @@ class FakeUnit:
 
     def onadd_check(self, args):
         self.checks.append(args)
+
+    def message(self, args):
+        self.messages.append(args)
+
+
+@pytest.mark.parametrize('declaration', ['_GO_TEST_SRCS_VALUE', '_GO_XTEST_SRCS_VALUE', '_GO_UNUSED_TEST_SRCS_VALUE'])
+@pytest.mark.parametrize('test_module', [False, True])
+@pytest.mark.parametrize('spelling', ['first_test.go', '${CURDIR}/first_test.go', '$S/project/pkg/first_test.go'])
+def test_all_go_srcs_warns_only_about_undeclared_tests(declaration, test_module, spelling):
+    files = ['${ARCADIA_ROOT}/project/pkg/' + name for name in ('main.go', 'first_test.go', 'second_test.go')]
+    unit = FakeUnit(
+        variables={
+            '_GO_SRCS_VALUE': files[0],
+            '_ALL_GO_FILES': files[0],
+            '_ALL_GO_SKIPPED_TEST_FILES': ' '.join(files[1:]),
+            declaration: spelling,
+        },
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE') if test_module else ('_GO_FMT_ADD_CHECK',),
+        sources=('first_test.go',),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == files[0]
+    assert len(unit.messages) == 1
+    level, message = unit.messages[0]
+    assert level == 'WARN'
+    assert 'GO_UNUSED_TEST_SRCS() (intentionally unused)' in message
+    assert 'project/pkg/second_test.go' in message
+    assert 'project/pkg/first_test.go' not in message
+    assert 'project/pkg/main.go' not in message
+    assert all('second_test.go' not in source for check in unit.checks for source in check)
+
+
+@pytest.mark.parametrize('declaration', [None, '_GO_TEST_SRCS_VALUE', '_GO_UNUSED_TEST_SRCS_VALUE'])
+def test_all_go_srcs_keeps_globbed_tests_out_of_coverage(declaration):
+    files = ['${ARCADIA_ROOT}/project/pkg/' + name for name in ('main.go', 'main_test.go')]
+    unit = FakeUnit(
+        variables={
+            '_GO_SRCS_VALUE': files[0],
+            '_ALL_GO_FILES': files[0],
+            '_ALL_GO_SKIPPED_TEST_FILES': files[1],
+            **({declaration: 'main_test.go'} if declaration else {}),
+        },
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE', 'GO_TEST_COVER'),
+        sources=('main_test.go',),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == ''
+    cover_calls = [args for name, args in unit.calls if name == 'on_go_gen_cover']
+    assert len(cover_calls) == 1
+    assert cover_calls[0][1:] == files[:1]
+    assert bool(unit.messages) == (declaration is None)
+    if declaration == '_GO_UNUSED_TEST_SRCS_VALUE':
+        assert not unit.get('_GO_TEST_SRCS_VALUE')
+        assert not unit.get('_GO_XTEST_SRCS_VALUE')
+
+
+@pytest.mark.parametrize('declaration', ['_GO_TEST_SRCS_VALUE', '_GO_UNUSED_TEST_SRCS_VALUE'])
+@pytest.mark.parametrize('explicit_first', [False, True])
+@pytest.mark.parametrize('spelling', ['main_test.go', '${ARCADIA_ROOT}/project/pkg/main_test.go'])
+def test_all_go_srcs_preserves_errors_for_explicit_test_sources(monkeypatch, declaration, explicit_first, spelling):
+    files = ['${ARCADIA_ROOT}/project/pkg/' + name for name in ('main.go', 'main_test.go')]
+    srcs = [spelling, files[0]] if explicit_first else [files[0], spelling]
+    unit = FakeUnit(
+        variables={
+            '_GO_SRCS_VALUE': ' '.join(srcs),
+            '_ALL_GO_FILES': files[0],
+            '_ALL_GO_SKIPPED_TEST_FILES': files[1],
+            declaration: 'main_test.go',
+        },
+        sources=('main_test.go',),
+    )
+    errors = []
+    monkeypatch.setattr(gobuild.ymake, 'report_configure_error', errors.append, raising=False)
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert len(errors) == 1
+    assert 'must be listed in GO_TEST_SRCS() or GO_XTEST_SRCS()' in errors[0]
+    assert not unit.messages
+
+
+def test_explicit_sources_do_not_check_undeclared_tests():
+    unit = FakeUnit(variables={'_GO_SRCS_VALUE': 'main.go'}, sources=('main.go', 'unlisted_test.go'))
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == 'main.go'
+    assert not unit.messages
 
 
 @pytest.mark.parametrize(

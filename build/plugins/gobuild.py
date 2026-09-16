@@ -173,6 +173,20 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
             ymake.report_configure_error('file {} must be listed in GO_TEST_SRCS() or GO_XTEST_SRCS() macros'.format(f))
     go_test_files = get_appended_values(unit, '_GO_TEST_SRCS_VALUE')
     go_xtest_files = get_appended_values(unit, '_GO_XTEST_SRCS_VALUE')
+    skipped_tests = get_appended_values(unit, '_ALL_GO_SKIPPED_TEST_FILES')
+    if skipped_tests:
+        go_unused_test_files = get_appended_values(unit, '_GO_UNUSED_TEST_SRCS_VALUE')
+        declared_tests = {resolve_go_path(unit, f) for f in go_test_files + go_xtest_files + go_unused_test_files}
+        missing_tests = [f for f in skipped_tests if resolve_go_path(unit, f) not in declared_tests]
+        if missing_tests:
+            unit.message(
+                [
+                    'WARN',
+                    'ALL_GO_SRCS() skips test files not declared in GO_TEST_SRCS(), GO_XTEST_SRCS() '
+                    'or GO_UNUSED_TEST_SRCS() (intentionally unused): '
+                    + ', '.join(rootrel_arc_src(f, unit) for f in missing_tests),
+                ]
+            )
     for f in go_test_files + go_xtest_files:
         if not f.endswith('_test.go'):
             ymake.report_configure_error(

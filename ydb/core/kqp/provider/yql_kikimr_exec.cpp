@@ -158,6 +158,13 @@ namespace {
                 }
                 schemeLimits->SetMaxChildrenInDir(value);
             }
+            if (name == "TABLES_METRICS_LEVEL") {
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                YQL_ENSURE(ParseDatabaseTablesMetricsLevel(
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error), << error);
+                alterDatabaseSettings.TablesMetricsLevel = metricsLevel;
+            }
         }
 
         return alterDatabaseSettings;

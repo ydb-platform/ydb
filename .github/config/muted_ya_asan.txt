@@ -62,6 +62,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecords
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShards
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsEmptyFields
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsExclusiveStartShardId
+ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.ListShardsTimestamp
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithIncorrectHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.PutRecordsWithLongExplicitHashKey
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestConsumersEmptyNames
@@ -122,6 +123,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Co
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat0
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat1
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessageWithAttributes_TableImplementation
@@ -243,6 +245,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWith
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithCustomConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithEmptyName
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndDifferentParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteMessageIdempotence
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueNonExisting
@@ -261,6 +264,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestListQueues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthDeleteMessage
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthDeleteQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthGetQueueUrlEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestNoAuthGetQueueUrlOfNotExistingQueue
@@ -397,6 +401,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
+ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/core/tx/schemeshard/ut_olap unittest.[*/*] chunk

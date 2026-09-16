@@ -58,6 +58,8 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             Send(Parent, std::move(ev));
         }
 
+        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
+
         PassAway();
     }
 

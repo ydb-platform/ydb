@@ -43,7 +43,9 @@ Each per-DBG actor generates `lsn = sequence++ * NumDbgsTotal + DbgIndex + 1`. T
 
 For each write, the actor validates configuration, payload, address, PB connection count, and the LSN cap. It stores a `TWriteInfo` with origin actor/cookie, selector, tracing state, coordinator, and requested/confirmed peer masks. `InflightLsnAtSlot` points each address slot to its latest outstanding LSN; older LSN records may still be completing.
 
-The actor picks a coordinator from the primary PB peers and sends `TEvWritePersistentBuffers` with all three primary PB IDs. `AddPayloadThenChecksum` attaches the rope and checksum. Additional configured peers are connected, but the normal load path does not implement production NBS handoff or replacement-host policy.
+When checksums are enabled, the load worker calculates one checksum per 4 KiB block of its reusable payload once and includes them in every `TEvNbsWrite`. The per-DBG actor forwards those checksums unchanged in `TEvWritePersistentBuffers`. When checksums are disabled, both events omit them. The setting must match the DDisk/PersistentBuffer storage configuration.
+
+The actor picks a coordinator from the primary PB peers and sends `TEvWritePersistentBuffers` with all three primary PB IDs. Additional configured peers are connected, but the normal load path does not implement production NBS handoff or replacement-host policy.
 
 The actor accumulates per-peer confirmations from plural-write results. Three confirmations satisfy the normal write quorum; `ReplySent` prevents multiple client replies. A definitively lost quorum returns an error and drops the tracked LSN. A successful quorum replies to the client immediately and queues background flush work.
 

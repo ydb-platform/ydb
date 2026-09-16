@@ -202,12 +202,14 @@ public:
     }
 
     void StopDDisk(ui32 diskIdx) {
+        const auto wardenEdge = Runtime->AllocateEdgeActor();
+        Runtime->RegisterService(MakeBlobStorageNodeWardenID(NodeId), wardenEdge);
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new TEvents::TEvPoison()));
-        Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
-            new NDDisk::TEvRead(), IEventHandle::FlagTrackDelivery));
-        auto undelivered = Grab<TEvents::TEvUndelivered>();
-        Y_ABORT_UNLESS(undelivered);
+        // Router callbacks can keep the actor in Stopping after poison. Gone
+        // marks completed shutdown without racing it with a client probe.
+        auto gone = Runtime->GrabEdgeEventRethrow<TEvents::TEvGone>(wardenEdge, TDuration::Seconds(30));
+        UNIT_ASSERT(gone);
     }
 
     void RestartDDisk(ui32 diskIdx) {
@@ -243,7 +245,7 @@ public:
     // Real-thread runtime: DDisk/PDisk complete trailing chunk-reserve refills and
     // chunk-map log replies asynchronously after write replies return to the edge.
     // Wait a quiet window so RestartPDisk does not deliver INVALID_ROUND for those
-    // still-in-flight owner-stamped ops (which would Terminate the DDisk early).
+    // still-in-flight owner-stamped ops (which would stop the DDisk early).
     void QuiesceInFlightPDiskOps(TDuration quietWindow = TDuration::MilliSeconds(200)) {
         Sleep(quietWindow);
     }
@@ -1176,29 +1178,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 // SAME PDisk 0 (different VDisk owner, different SlotId) and tablet 3 writes to it --
 // this proves the restarted PDisk is functional through a fresh owner.
 //
-// Before RestartPDisk we quiesce trailing owner-stamped PDisk traffic from phase 1
-// (chunk-reserve refill / chunk-map log). Otherwise those replies can arrive after
-// restart as INVALID_ROUND and Terminate the zombie DDisk before the page-1 writes
-// that this test expects to still succeed.
-//
-// Variant restartDDisk == false (zombie):
-//   The original DDisk slot 0 keeps running. Its OwnerRound is now stale, so the first
-//   reply it gets back from PDisk for any owner-stamped request will be INVALID_ROUND,
-//   and CheckPDiskReply switches it to StateFuncTerminate. From that point client
-//   requests are silently dropped (no reply). We attempt vchunk 0 page 1 writes first:
-//   the chunk is already committed, so uring bypasses PDisk and ChunkWriteRaw (PDisk
-//   fallback) does not enforce OwnerRound — both modes still get a reply. Then vchunk 1
-//   page 0 writes need a fresh chunk reservation that always goes through PDisk, so this
-//   is guaranteed to zombify and produce no reply in either mode. The test must NOT crash.
-//   Isolation of a fresh owner from zombie uring I/O is not asserted: reserved chunks
-//   may already have been formatted, so PDisk restart can reassign those physical
-//   offsets while the zombie still holds a live ring.
-//
-// Variant restartDDisk == true (warden-style recovery):
-//   After the PDisk restart we also restart DDisk slot 0; the new DDisk instance uses
-//   the next OwnerRound and rebuilds its chunk map from the on-disk log. Tablets 1 and
-//   2 reconnect, write fresh vchunks, and we read everything back to confirm pre- and
-//   post-restart data survived.
+// Before RestartPDisk we quiesce trailing owner-stamped traffic. A requested
+// production restart drains DDisks first; this fixture also exercises direct
+// PDisk restart with a stale DDisk. Its next allocation must fail, and further
+// requests must receive SESSION_MISMATCH instead of disappearing.
+// With restartDDisk=true the new owner recovers committed data and continues I/O.
 [[maybe_unused]] void TestPDiskRestartWithReservedChunks(NDDisk::TDDiskConfig ddiskConfig,
         bool restartDDisk) {
     constexpr ui32 baseTabletId = 901;
@@ -1247,7 +1231,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     writeBlock(0, creds2, baseTabletId + 1, 0, 0);
 
     // Finish trailing chunk-reserve refill / log replies from phase 1 before restarting
-    // PDisk, so the zombie path is not Terminated by INVALID_ROUND on those replies
+    // PDisk, so the zombie path has not begun stopping on INVALID_ROUND on those replies
     // before the page-1 writes below.
     ctx.QuiesceInFlightPDiskOps();
 
@@ -1293,33 +1277,16 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         return;
     }
 
-    // Zombie variant: DDisk slot 0 is still the stale instance. Its OwnerRound is
-    // stale so any request that goes through PDisk (chunk reserve, log) gets
-    // INVALID_ROUND and CheckPDiskReply switches DDisk to StateFuncTerminate.
-    // After that the actor silently drops all further messages.
-    //
-    // Writes to vchunk 0 page 1 succeed in both modes: the chunk is already
-    // committed, so uring bypasses PDisk and ChunkWriteRaw does not enforce
-    // OwnerRound. QuiesceInFlightPDiskOps above ensures we are not already
-    // Terminated by a trailing phase-1 reserve/log reply.
-    writeBlock(0, creds1, baseTabletId + 0, 0, 1);
-    writeBlock(0, creds2, baseTabletId + 1, 0, 1);
+    // Force an owner-stamped allocation through the restarted PDisk. A stale
+    // router may reject its I/O first; either failure must stop the old actor.
+    auto stale = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
+        makeWrite(creds1, baseTabletId + 0, 1, 0).release());
+    UNIT_ASSERT(stale->Get()->Record.GetStatus() == TReplyStatus::ERROR
+        || stale->Get()->Record.GetStatus() == TReplyStatus::SESSION_MISMATCH);
+    auto rejected = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
+        makeWrite(creds2, baseTabletId + 1, 1, 0).release());
+    AssertStatus<NDDisk::TEvWriteResult>(rejected, TReplyStatus::SESSION_MISMATCH);
 
-    // Writes to vchunk 1 need a fresh chunk reservation that goes through PDisk,
-    // hits INVALID_ROUND, and DDisk zombifies -- no reply in either mode.
-
-    ctx.DecreaseDispatchTimeout();
-
-    ctx.SendTo(0, makeWrite(creds1, baseTabletId + 0, 1, 0).release());
-    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
-
-    ctx.SendTo(0, makeWrite(creds2, baseTabletId + 1, 1, 0).release());
-    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
-
-    // Isolation of the new owner from the zombie slot is not guaranteed: the
-    // zombie still holds a live io_uring on physical offsets that PDisk may
-    // have reassigned after restart. The fresh-owner check above already
-    // proved the restarted PDisk works.
 }
 
 // Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other

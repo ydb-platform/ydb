@@ -194,6 +194,8 @@ message RegisterNodeRequest {
         int64 CpuSystem = 7;
         int64 CpuUser = 8;
         int64 CpuTotal = 9;
+        int64 MaxRss = 10; // bytes
+        int64 CurrentRss = 11; // bytes
     }
 
     TRusage Rusage = 21;

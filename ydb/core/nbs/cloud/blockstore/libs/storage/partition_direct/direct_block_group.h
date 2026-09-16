@@ -4,7 +4,8 @@
 
 #include "restore_request.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
@@ -62,7 +63,7 @@ struct TDBGRestoreResponse
     struct TRestoreMeta
     {
         TPBufferKey PBufferKey;
-        TBlockRange64 Range;
+        TBlockRange16 Range;
         THostIndex HostIndex = InvalidHostIndex;
     };
 
@@ -74,7 +75,7 @@ struct TListPBufferMeta
 {
     ui32 VChunkIndex = 0;
     TPBufferKey PBufferKey;
-    TBlockRange64 Range;
+    TBlockRange16 Range;
 };
 
 using TListPBufferMetaVector = TVector<TListPBufferMeta>;
@@ -117,6 +118,11 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
+    virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
+    {
+        return {};
+    }
+
     // The tablet generation this DBG was created with. New records are
     // minted under it; restored records keep the generation they were
     // written in.
@@ -140,7 +146,7 @@ public:
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
@@ -148,14 +154,14 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
@@ -163,7 +169,7 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) = 0;
 
@@ -175,7 +181,7 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -224,6 +230,14 @@ public:
         ui32 dbgConnectionsConfigGeneration) = 0;
 
     virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
 
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may

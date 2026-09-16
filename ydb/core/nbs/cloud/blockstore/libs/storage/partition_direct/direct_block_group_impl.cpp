@@ -73,9 +73,11 @@ TListPBufferResponse MakeListPBufferResponse(
             .Generation = segment.GetGeneration(),
             .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
-        auto range = TBlockRange64::WithLength(
-            segment.GetSelector().GetOffsetInBytes() / blockSize,
-            segment.GetSelector().GetSize() / blockSize);
+        const ui16 rangeStart =
+            segment.GetSelector().GetOffsetInBytes() / blockSize;
+        const ui16 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        Y_ABORT_UNLESS(rangeSize);
+        const auto range = TBlockRange16::WithLength(rangeStart, rangeSize);
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex,
              .PBufferKey = pBufferKey,
@@ -161,6 +163,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
@@ -169,10 +172,13 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    const TVector<EHostHealth>& hostHealths,
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
-    : ActorSystem(actorSystem)
+    : ArenaAllocatorPool(
+          std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
+    , ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(diskDescription.TabletId)
@@ -192,11 +198,12 @@ TDirectBlockGroup::TDirectBlockGroup(
           TabletGeneration,
           static_cast<ui32>(DirectBlockGroupIndex),
           dbgConnectionsConfigGeneration)
-    , Oracle(StorageConfig, this)
+    , Oracle(StorageConfig, this, hostHealths)
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(hostHealths.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
@@ -215,6 +222,11 @@ TDirectBlockGroup::~TDirectBlockGroup()
         NKikimrServices::NBS_PARTITION,
         "%s ~TDirectBlockGroup",
         LogTitle.GetWithTime().c_str());
+}
+
+TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)
@@ -291,7 +303,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -419,7 +431,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -493,7 +505,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -621,7 +633,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -698,7 +710,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -1239,6 +1251,7 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     if (hostIndex >= Connections.GetSlotCount()) {
         return MakeFuture(TListPBufferResponse{.Error = MakeError(E_FAIL)});
     }
+    Y_ABORT_UNLESS(!Connections.IsSlotDead(hostIndex));
 
     const auto& connection = Connections.GetPBuffer(hostIndex);
     // Hold a local copy of the connect future,
@@ -1324,6 +1337,38 @@ void TDirectBlockGroup::OnAddHostSucceeded(
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
+void TDirectBlockGroup::OnRemoveHostSucceeded(
+    THostIndex removeIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(removeIndex < Connections.GetSlotCount());
+
+    MarkSlotDead(removeIndex, dbgConnectionsConfigGeneration);
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost committed: slot %s is dead",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(removeIndex).c_str());
+}
+
+void TDirectBlockGroup::OnRemoveHostFailed(
+    THostIndex removeIndex,
+    const NProto::TError& error)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RemoveHost %s request failed: %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(removeIndex).c_str(),
+        FormatError(error).c_str());
+}
+
 TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1402,6 +1447,30 @@ TDirectBlockGroup::GatherVChunkStats(EVChunkStatsDetail detail) const
     return future;
 }
 
+void TDirectBlockGroup::PersistHostHealth(
+    const THostIndex hostIndex,
+    const EHostHealth oldHealth,
+    const EHostHealth newHealth)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s %s persisting health change: %s -> %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        ToString(oldHealth).c_str(),
+        ToString(newHealth).c_str());
+
+    Service->PersistHostHealth(
+        DirectBlockGroupIndex,
+        hostIndex,
+        oldHealth,
+        newHealth);
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -1438,6 +1507,35 @@ void TDirectBlockGroup::QueryAddHost()
         Connections.GetGeneration());
 
     Service->QueryAddHost(DirectBlockGroupIndex, Connections.GetGeneration());
+}
+
+void TDirectBlockGroup::QueryRemoveHost(THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    if (const auto reason = ValidateRemoveHost(hostIndex); !reason.empty()) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s RemoveHost rejected (hostIndex=%s): %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
+            reason.c_str());
+        return;
+    }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s QueryRemoveHost %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str());
+
+    Service->QueryRemoveHost(
+        DirectBlockGroupIndex,
+        hostIndex,
+        Connections.GetGeneration());
 }
 
 TCountAndSize TDirectBlockGroup::GetPBuffersUsage(THostIndex hostIndex) const
@@ -1477,6 +1575,9 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    Y_ABORT_UNLESS(
+        Connections.GetLiveSlotCount() == Connections.GetSlotCount());
 
     for (size_t i = 0; i < Connections.GetSlotCount(); ++i) {
         DoEstablishConnection(i, EConnectionType::DDisk);
@@ -1657,6 +1758,10 @@ void TDirectBlockGroup::ReEstablishConnection(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     TDDiskConnection& connection = Connections.Get(connectionType, hostIndex);
 
+    if (Connections.IsSlotDead(hostIndex)) {
+        return;   // nothing to reconnect to, the resources are deleted
+    }
+
     Counters.OnReconnect(ToDBGConnectionType(connectionType));
 
     if (BlockedGenerationDetected) {
@@ -1700,6 +1805,14 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     ReEstablishConnection(EConnectionType::DDisk, hostIndex);
 }
 
+void TDirectBlockGroup::MarkSlotDead(
+    THostIndex slot,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    Connections.MarkSlotDead(slot, dbgConnectionsConfigGeneration);
+    Oracle.OnHostRemoved(slot);
+}
+
 bool TDirectBlockGroup::HasPBufferQuorum() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1724,6 +1837,60 @@ bool TDirectBlockGroup::HasLockedQuorum() const
         }
     }
     return lockedCount >= MinLockedDDiskSessionsToStart;
+}
+
+TString TDirectBlockGroup::ValidateRemoveHost(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const size_t slotCount = Connections.GetSlotCount();
+    if (hostIndex >= slotCount) {
+        return TStringBuilder()
+               << "host index is out of range (have " << slotCount << ")";
+    }
+    if (Connections.IsSlotDead(hostIndex)) {
+        return "the slot is already removed";
+    }
+    // Hosts are removed only after additions, so the group never shrinks
+    // below the default host count.
+    const size_t liveCount = Connections.GetLiveSlotCount();
+    if (liveCount - 1 < DirectBlockGroupHostCount) {
+        return TStringBuilder() << "removal would shrink the group below "
+                                << DirectBlockGroupHostCount << " hosts";
+    }
+
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto& cfg = vChunk->GetConfig();
+        if (cfg.GetHostCount() != slotCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex()
+                   << " config lags the connections (" << cfg.GetHostCount()
+                   << " vs " << slotCount << ")";
+        }
+        if (!cfg.GetDisabledHosts().Get(hostIndex)) {
+            return TStringBuilder() << "host is still enabled in vchunk "
+                                    << cfg.GetVChunkIndex();
+        }
+        // Removal is irreversible, so every vchunk must keep a quorum of
+        // healthy ddisks. The disabled host is not in that set already.
+        const auto healthyCount = cfg.GetHealthyDDisks().Count();
+        if (healthyCount < QuorumDirectBlockGroupHostCount) {
+            return TStringBuilder()
+                   << "vchunk " << cfg.GetVChunkIndex() << " has "
+                   << healthyCount << " healthy ddisks, below the "
+                   << QuorumDirectBlockGroupHostCount << "-host quorum";
+        }
+    }
+
+    if (GetPBuffersUsage(hostIndex).Size != 0) {
+        return "the removed host's pbuffer is not drained";
+    }
+
+    return {};
 }
 
 void TDirectBlockGroup::DoListPBuffers()
@@ -1994,15 +2161,18 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
+    TDirtyMapStats dirtyMapStats;
+
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                hostsStat[host].AheadBlocks += vChunk->GetAheadBlocks(host);
-                hostsStat[host].BehindBlocks += vChunk->GetBehindBlocks(host);
+                hostsStat[host].DirtyMapStats.Aggregate(
+                    vChunk->GetDirtyMapHostStats(host));
             }
+            dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
     }
 
@@ -2012,6 +2182,9 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
+        .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
+        .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
+        .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

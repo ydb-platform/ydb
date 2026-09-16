@@ -13,7 +13,7 @@ bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult&
                 break;
             case EUdfType::WASM:
             case EUdfType::NATIVE_UNSAFE:
-                Udfs.emplace(module.GetMd5(), std::move(module));
+                Udfs.emplace(module.GetName(), std::move(module));
                 break;
         }
     });
@@ -23,7 +23,7 @@ bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult&
 TString TSnapshot::DoSerializeToString() const {
     TStringBuilder sb;
     sb << "UDFS:";
-    for (auto&& [md5, udf] : Udfs) {
+    for (auto&& [name, udf] : Udfs) {
         sb << udf.SerializeToString();
     }
     sb << " LIBRARIES:";
@@ -33,19 +33,19 @@ TString TSnapshot::DoSerializeToString() const {
     return sb;
 }
 
-const TUdfModule* TSnapshot::GetUdfByMd5(const TString& md5) const {
-    auto it = Udfs.find(md5);
+const TUdfModule* TSnapshot::GetUdfByName(const TString& name) const {
+    auto it = Udfs.find(name);
     if (it == Udfs.end()) {
         return nullptr;
     }
     return &it->second;
 }
 
-std::vector<TString> TSnapshot::GetUdfMd5s() const {
+std::vector<TString> TSnapshot::GetUdfNames() const {
     std::vector<TString> result;
     result.reserve(Udfs.size());
-    for (auto&& [md5, _] : Udfs) {
-        result.emplace_back(md5);
+    for (auto&& [name, _] : Udfs) {
+        result.emplace_back(name);
     }
     return result;
 }

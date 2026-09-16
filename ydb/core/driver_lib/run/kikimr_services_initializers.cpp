@@ -232,6 +232,7 @@
 #include <ydb/core/backup/controller/tablet.h>
 
 #include <ydb/services/udf_store/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 
 #include <ydb/library/actors/protos/services_common.pb.h>
 
@@ -1031,16 +1032,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         }
     }
 
-    auto createWilsonUploader = [&](const NKikimrConfig::TTracingConfig& tracingConfig,
-            const TActorId& uploaderId, TString monPageId, TString monPageTitle, bool userFacing) {
+    if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
+        const auto& tracingConfig = Config.GetTracingConfig();
         const auto& tracingBackend = tracingConfig.GetBackend();
 
         std::unique_ptr<NWilson::IGrpcSigner> grpcSigner;
         if (tracingBackend.HasAuthConfig() && Factories && Factories->WilsonGrpcSignerFactory) {
             grpcSigner = Factories->WilsonGrpcSignerFactory(tracingBackend.GetAuthConfig());
             if (!grpcSigner) {
-                Cerr << "Failed to initialize " << (userFacing ? "user-facing " : "")
-                        << "wilson grpc signer due to misconfiguration. Config provided: "
+                Cerr << "Failed to initialize wilson grpc signer due to misconfiguration. Config provided: "
                         << tracingBackend.GetAuthConfig().DebugString() << Endl;
             }
         }
@@ -1050,9 +1050,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::kOpentelemetry: {
                 const auto& opentelemetry = tracingBackend.GetOpentelemetry();
                 if (!(opentelemetry.HasCollectorUrl() && opentelemetry.HasServiceName())) {
-                    Cerr << "Both collector_url and service_name should be present in "
-                            << (userFacing ? "user-facing " : "")
-                            << "opentelemetry backend config" << Endl;
+                    Cerr << "Both collector_url and service_name should be present in opentelemetry backend config" << Endl;
                     break;
                 }
 
@@ -1092,41 +1090,27 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
 
                 if (const auto& mon = appData->Mon) {
-                    uploaderParams.RegisterMonPage = [mon, monPageId = std::move(monPageId),
-                            monPageTitle = std::move(monPageTitle)](TActorSystem *actorSystem, const TActorId& actorId) {
+                    uploaderParams.RegisterMonPage = [mon](TActorSystem *actorSystem, const TActorId& actorId) {
                         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-                        mon->RegisterActorPage(actorsMonPage, monPageId, monPageTitle, false, actorSystem, actorId);
+                        mon->RegisterActorPage(actorsMonPage, "wilson_uploader", "Wilson Trace Uploader", false, actorSystem, actorId);
                     };
                 }
                 uploaderParams.Counters = GetServiceCounters(counters, "utils");
-                if (userFacing) {
-                    uploaderParams.Counters = uploaderParams.Counters->GetSubgroup("channel", "user_facing");
-                }
 
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;
             }
 
             case NKikimrConfig::TTracingConfig::TBackendConfig::BackendCase::BACKEND_NOT_SET: {
-                Cerr << "No backend option was provided in "
-                        << (userFacing ? "user-facing " : "") << "tracing config" << Endl;
+                Cerr << "No backend option was provided in tracing config" << Endl;
                 break;
             }
         }
         if (wilsonUploader) {
             setup->LocalServices.emplace_back(
-                uploaderId,
+                NWilson::MakeWilsonUploaderId(),
                 TActorSetupCmd(wilsonUploader.release(), TMailboxType::ReadAsFilled, appData->BatchPoolId));
         }
-    };
-
-    if (Config.HasTracingConfig() && Config.GetTracingConfig().HasBackend()) {
-        createWilsonUploader(Config.GetTracingConfig(), NWilson::MakeWilsonUploaderId(),
-            "wilson_uploader", "Wilson Trace Uploader", false);
-    }
-    if (Config.HasUserFacingTracingConfig() && Config.GetUserFacingTracingConfig().HasBackend()) {
-        createWilsonUploader(Config.GetUserFacingTracingConfig(), NWilson::MakeUserFacingWilsonUploaderId(),
-            "user_facing_wilson_uploader", "User-facing Wilson Trace Uploader", true);
     }
 
     { // create retro collector
@@ -1179,7 +1163,8 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
-    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
+    setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
     nodeWardenConfig->BlobStorageExecutorPoolIds =
         NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
@@ -1272,6 +1257,13 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
             nodeWardenConfig->DDiskConfig->SetIdleSpinUs(
                 storageConfig.GetIdleSpinUs());
+        }
+        if (storageConfig.HasIntegrityChecksumCacheBytes()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
+                storageConfig.GetIntegrityChecksumCacheBytes());
         }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
@@ -1404,6 +1396,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
@@ -2016,14 +2009,12 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                                                            TActorSetupCmd(grpcReqProxy, TMailboxType::ReadAsFilled,
                                                                           appData->UserPoolId)));
         }
-        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
-                appData->TracingConfigurator,
-                appData->UserFacingTracingConfigurator,
-                Config)) {
-            setup->LocalServices.emplace_back(
+        setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 TActorId(),
-                TActorSetupCmd(configurator, TMailboxType::ReadAsFilled, appData->UserPoolId));
-        }
+                TActorSetupCmd(
+                    NConsole::CreateJaegerTracingConfigurator(appData->TracingConfigurator, Config.GetTracingConfig()),
+                    TMailboxType::ReadAsFilled,
+                    appData->UserPoolId)));
     }
 
     if (!IsServiceInitialized(setup, NKesus::MakeKesusProxyServiceId())) {

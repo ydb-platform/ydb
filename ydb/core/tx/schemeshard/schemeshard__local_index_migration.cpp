@@ -7,6 +7,8 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TString TLocalIndexMigrationItem::DebugString() const {
@@ -37,8 +39,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "LocalIndexMigrator: Bootstrap with " << PendingItems.size() << " pending items");
+        YDB_LOG_NOTICE("LocalIndexMigrator: Bootstrap",
+            {"pendingItems", PendingItems.size()},
+        );
         // Process items immediately
         ProcessItems(TlsActivationContext->AsActorContext());
         Become(&TLocalIndexMigrator::StateWork);
@@ -53,8 +56,9 @@ public:
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT("LocalIndexMigrator unexpected event",
+                    {"eventType", ev->GetTypeRewrite()},
+                );
         }
     }
 
@@ -64,14 +68,15 @@ private:
     }
 
     void ProcessItems(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "LocalIndexMigrator: ProcessItems called, PendingItems=" << PendingItems.size()
-            << ", AwaitingRequests=" << AwaitingRequests.size());
+        YDB_LOG_INFO_CTX(ctx, "LocalIndexMigrator: ProcessItems called",
+            {"pendingItems", PendingItems.size()},
+            {"awaitingRequests", AwaitingRequests.size()},
+        );
 
         if (PendingItems.empty()) {
             if (AwaitingRequests.empty()) {
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator: All items processed, passing away");
+                YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: All items processed, passing away"
+                );
                 PassAway();
             }
             return;
@@ -80,17 +85,18 @@ private:
         // Only process one item at a time to avoid concurrent ALTER operations on the same table
         if (!AwaitingRequests.empty()) {
             // Wait for current operation to complete before processing next item
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "LocalIndexMigrator: Waiting for " << AwaitingRequests.size() << " request(s) to complete");
+            YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: Waiting for requests to complete",
+                {"awaitingRequests", AwaitingRequests.size()},
+            );
             return;
         }
 
         TTxId txId = SchemeShard->GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
             // No more TxIds available, wait and retry
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "LocalIndexMigrator: TxId cache exhausted, waiting for "
-                << PendingItems.size() << " remaining item(s)");
+            YDB_LOG_INFO_CTX(ctx, "LocalIndexMigrator: TxId cache exhausted, waiting",
+                {"pendingItems", PendingItems.size()},
+            );
             ctx.Schedule(RetryDelay, new TEvents::TEvWakeup());
             return;
         }
@@ -98,9 +104,11 @@ private:
         // Get next item (without popping yet, so it stays in PendingItems if validation fails)
         auto& item = PendingItems.back();
 
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "LocalIndexMigrator: Processing index '" << JoinPath({item.WorkingDir, item.IndexConfig.GetName()})
-            << "' with TxId=" << txId << ", remaining=" << (PendingItems.size() - 1));
+        YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: Processing index",
+            {"index", JoinPath({item.WorkingDir, item.IndexConfig.GetName()})},
+            {"txId", txId},
+            {"remaining", PendingItems.size() - 1},
+        );
 
         // Create and send ModifySchemeTransaction
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
@@ -113,14 +121,17 @@ private:
             SchemeShard->ReturnTxIdToCache(txId);
             if (item.Backoff.HasMore()) {
                 auto delay = item.Backoff.Next();
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to split path '" << item.WorkingDir << "', will retry after delay " << delay);
+                YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator: failed to split path, will retry",
+                    {"schemeshard", SelfTabletId},
+                    {"path", item.WorkingDir},
+                    {"retryDelay", delay},
+                );
                 ctx.Schedule(delay, new TEvents::TEvWakeup());
             } else {
-                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to split path '" << item.WorkingDir << "' after max retries, dying");
+                YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator: failed to split path after max retries, dying",
+                    {"schemeshard", SelfTabletId},
+                    {"path", item.WorkingDir},
+                );
                 PassAway();
             }
             return;
@@ -149,14 +160,17 @@ private:
                 SchemeShard->ReturnTxIdToCache(txId);
                 if (item.Backoff.HasMore()) {
                     auto delay = item.Backoff.Next();
-                    LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                        << ", failed to convert index config for '" << item.WorkingDir << "', will retry after delay " << delay);
+                    YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator: failed to convert index config, will retry",
+                        {"schemeshard", SelfTabletId},
+                        {"path", item.WorkingDir},
+                        {"retryDelay", delay},
+                    );
                     ctx.Schedule(delay, new TEvents::TEvWakeup());
                 } else {
-                    LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                        << ", failed to convert index config for '" << item.WorkingDir << "' after max retries, dying");
+                    YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator: failed to convert index config after max retries, dying",
+                        {"schemeshard", SelfTabletId},
+                        {"path", item.WorkingDir},
+                    );
                     PassAway();
                 }
                 return;
@@ -185,14 +199,15 @@ private:
     }
 
     void Done(TTxId txId, const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "LocalIndexMigrator: Done for TxId=" << txId
-            << ", AwaitingRequests=" << AwaitingRequests.size()
-            << ", PendingItems=" << PendingItems.size());
+        YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: Done",
+            {"txId", txId},
+            {"awaitingRequests", AwaitingRequests.size()},
+            {"pendingItems", PendingItems.size()},
+        );
         AwaitingRequests.erase(txId);
         if (AwaitingRequests.empty() && PendingItems.empty()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "LocalIndexMigrator: All items completed, passing away");
+            YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: All items completed, passing away"
+            );
             PassAway();
         } else {
             // Process next item after current one completes
@@ -216,18 +231,21 @@ private:
         default:
             if (AwaitingRequests.at(txId).Backoff.HasMore()) {
                 auto delay = AwaitingRequests.at(txId).Backoff.Next();
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to " << AwaitingRequests.at(txId).DebugString()
-                    << ", reason: " << record.GetReason() << ", will retry after delay " << delay);
+                YDB_LOG_ERROR_CTX(ctx, "LocalIndexMigrator: failed to process item, will retry",
+                    {"schemeshard", SelfTabletId},
+                    {"operation", AwaitingRequests.at(txId).DebugString()},
+                    {"reason", record.GetReason()},
+                    {"retryDelay", delay},
+                );
                 PendingItems.push_back(std::move(AwaitingRequests.at(txId)));
                 AwaitingRequests.erase(txId);
                 ctx.Schedule(delay, new TEvents::TEvWakeup());
             } else {
-                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to " << AwaitingRequests.at(txId).DebugString()
-                    << " after max retries, reason: " << record.GetReason() << ", dying");
+                YDB_LOG_CRIT_CTX(ctx, "LocalIndexMigrator: failed to process item after max retries, dying",
+                    {"schemeshard", SelfTabletId},
+                    {"operation", AwaitingRequests.at(txId).DebugString()},
+                    {"reason", record.GetReason()},
+                );
                 PassAway();
             }
             break;
@@ -242,9 +260,10 @@ private:
         for (ui64 txId : ev->Get()->TxIds) {
             SchemeShard->ReturnTxIdToCache(TTxId(txId));
         }
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "LocalIndexMigrator: replenished TxId cache with " << ev->Get()->TxIds.size()
-            << " TxId(s), PendingItems=" << PendingItems.size());
+        YDB_LOG_NOTICE_CTX(ctx, "LocalIndexMigrator: replenished TxId cache",
+            {"txIds", ev->Get()->TxIds.size()},
+            {"pendingItems", PendingItems.size()},
+        );
         ProcessItems(ctx);
     }
 
@@ -265,3 +284,5 @@ THolder<IActor> CreateLocalIndexMigrator(TTabletId selfTabletId, TActorId selfAc
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

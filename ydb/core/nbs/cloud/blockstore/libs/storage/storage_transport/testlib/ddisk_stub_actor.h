@@ -122,6 +122,13 @@ private:
     void HandleConnect(
         const NKikimr::NDDisk::TEvConnect::TPtr& ev,
         const NActors::TActorContext& ctx);
+    void HandleGetPersistentBufferRegistrationToken(
+        const NKikimr::NDDisk::TEvGetPersistentBufferRegistrationToken::TPtr&
+            ev,
+        const NActors::TActorContext& ctx);
+    void HandleRegisterPersistentBuffer(
+        const NKikimr::NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
     void HandleRead(
         const NKikimr::NDDisk::TEvRead::TPtr& ev,
         const NActors::TActorContext& ctx);

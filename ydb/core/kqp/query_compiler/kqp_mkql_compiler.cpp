@@ -416,10 +416,17 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             NMiniKQL::TBlockHashJoinSettings settings;
             for (const auto& setting : node.Child(7)->Children()) {
-                if (setting->Child(0)->Content() == "BuildSide") {
+                const auto name = setting->Child(0)->Content();
+                if (name == "BuildSide") {
                     if (setting->Child(1)->Content() == "Left") {
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;
                     }
+                } else if (name == NMiniKQL::EqualNullsSettingName) {
+                    const auto& value = *setting->Child(1);
+                    YQL_ENSURE(value.IsCallable("Uint32"), "EqualNulls setting value must be Uint32");
+                    const ui32 keyIndex = FromString<ui32>(value.Head().Content());
+                    YQL_ENSURE(keyIndex < leftKeyColumns.size(), "EqualNulls key index is out of range");
+                    settings.EqualNullsKeys.push_back(keyIndex);
                 }
             }
 

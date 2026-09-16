@@ -265,12 +265,23 @@ namespace NKikimr {
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
             {
                 const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
-                const ui32 totalChunks = oos.GetLocalTotalChunks();
-                const ui32 usedChunks = oos.GetLocalUsedChunks();
                 const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);
-                if (totalChunks > 0) {
-                    const ui32 freeChunks = totalChunks > usedChunks ? totalChunks - usedChunks : 0;
-                    params.FreeChunksBudget = freeChunks > reserve ? freeChunks - reserve : 0;
+                // What PDisk will really let this owner allocate, which is not its nominal
+                // personal share. LocalTotalChunks is that share and LocalUsedChunks the
+                // chunks the owner physically holds, so an owner legitimately past its
+                // share -- its personal colour is capped and the shared pool still has
+                // room -- came out with a budget of zero and could not run even the small
+                // reclaiming compaction that would bring it back under. Headroom below
+                // BLACK is the boundary AllocateChunkForOwner() actually enforces. Left
+                // unbounded until the first space observation arrives.
+                if (const TSpaceHeadroom headroom = oos.GetSpaceHeadroom(); headroom.Valid) {
+                    // AllocatableToBlack, not ToBlack: compaction output is housekeeping and
+                    // PDisk lets it past the static group reserve. Budgeting it against the
+                    // admission headroom instead would read zero on exactly the disks that
+                    // need compacting most, and nothing would ever reclaim anything.
+                    const ui64 room = headroom.AllocatableToBlack;
+                    const ui64 budget = room > reserve ? room - reserve : 0;
+                    params.FreeChunksBudget = ui32(Min<ui64>(budget, Max<ui32>() - 1));
                 }
                 params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
                     ui64(Config->HullCompEmergencyEnableAtColor));
@@ -619,6 +630,12 @@ namespace NKikimr {
 
         void ApplyCompactionResult(const TActorContext &ctx, TVector<ui32> chunksAdded, TVector<ui32> reservedChunksLeft,
                 ui64 wId) {
+            // Reservations the compaction never wrote into. They went into no SST, so no
+            // snapshot can be reading them and none of the delete-to-decommitted handling
+            // below applies: hand them straight back instead of parking them in
+            // DATA_DECOMMITTED until the previous slice's snapshots drain.
+            ForgetReservedChunks(ctx, reservedChunksLeft);
+
             // create new slice
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateWaitCommit);
 
@@ -634,9 +651,9 @@ namespace NKikimr {
                 LogRemovedHugeBlobs(ctx, CompactionTask->GetHugeBlobsToDelete(), true);
             }
 
-            // delete list, includes previous ChunksToDelete and reserved chunks
+            // delete list: chunks a previous snapshot may still be reading, so they have to go
+            // through the commit record that stops referencing them
             TVector<ui32> deleteChunks(std::move(prevSlice->ChunksToDelete));
-            deleteChunks.insert(deleteChunks.end(), reservedChunksLeft.begin(), reservedChunksLeft.end());
 
             // only delete chunks if we actually delete SST's from yard; otherwise it is move operation, we delete them from one
             // level and put to another
@@ -688,6 +705,24 @@ namespace NKikimr {
             prevSlice.Drop();
         }
 
+        // Hand back allocations of a compaction that produced nothing. They were never
+        // committed, so PDisk drops them outright -- no entry point, and nothing to write on
+        // a disk that is already out of space. Addressed from the skeleton, which vets PDisk
+        // replies for the whole VDisk: nothing here needs an answer, and waiting for one would
+        // let a reply that never comes wedge compaction for good.
+        void ForgetReservedChunks(const TActorContext &ctx, TVector<ui32>& chunks) {
+            if (!chunks) {
+                return;
+            }
+            const auto& pdisk = *HullDbCommitterCtx->PDiskCtx;
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS,
+                VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "FORGET: PDiskId# %s ChunksToForget# %s",
+                    pdisk.PDiskIdString.data(), FormatList(chunks).data()));
+            TActivationContext::Send(new IEventHandle(pdisk.PDiskId, RTCtx->SkeletonId,
+                new NPDisk::TEvChunkForget(pdisk.Dsk->Owner, pdisk.Dsk->OwnerRound, std::move(chunks))));
+            chunks.clear(); // released now; whoever looks at them next must see nothing left
+        }
+
         void LogRemovedHugeBlobs(const TActorContext &ctx, const TDiskPartVec &vec, bool level) const {
             for (const auto &x : vec) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, VDISKP(HullDs->HullCtx->VCtx, "%s: LogRemovedHugeBlobs: one slot: addr# %s level# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), x.ToString().data(), (level ? "true" : "false")));
@@ -723,7 +758,16 @@ namespace NKikimr {
             // handle commit msg differently
             if (msg->FreshCompaction) {
                 if (msg->Aborted) {
-
+                    YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Fresh compaction aborted",
+                        {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {"signature", PDiskSignatureForHullDbKey<TKey>()});
+                    // ReservedChunks contains every allocation made by the failed attempt,
+                    // including SST output already written. Return it before retrying;
+                    // otherwise each attempt can consume more of the remaining free space.
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
+                    RTCtx->LevelIndex->FreshCompactionAborted();
+                    // Give other space-reclaiming work a chance before retrying the same segment.
+                    ScheduleCompactionWakeup(ctx);
                 } else {
                     TStringStream dbg;
                     dbg << "{commiter# fresh"
@@ -751,6 +795,10 @@ namespace NKikimr {
                             RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
                     }
 
+                    // as in ApplyCompactionResult: leftover reservations went into no SST, so
+                    // they go back directly rather than riding the commit record
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
+
                     // run fresh committer
                     auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                             ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
@@ -777,17 +825,39 @@ namespace NKikimr {
                     std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), msg->Aborted,
                     std::move(msg->AllocatedStripeBlobs));
 
+                bool nothingToCommit = false;
                 if (msg->Aborted) { // if the compaction was aborted, ensure there was no index change
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(CompactionTask->GetSstsToDelete().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(CompactionTask->GetHugeBlobsToDelete().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(!msg->CommitChunks, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(!msg->FreshSegment, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    // As for fresh: nothing the failed attempt allocated was committed, so it
+                    // goes back without a log record. ReservedChunks is GetAllocatedChunks()
+                    // here -- reservations only, never a stripe chunk owned by the huge keeper.
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
+                    // What is left to commit is the chunks a previous snapshot still holds.
+                    // Without them the index did not change either, so a commit would serialize
+                    // the very same entry point into the recovery log and buy nothing. With the
+                    // explicit sst request still pending the next selection returns the same
+                    // job, and on a disk that is already out of space that loop fills the log
+                    // with unchanged entry points until an ordinary log write is refused and
+                    // the whole VDisk dies.
+                    nothingToCommit = RTCtx->LevelIndex->CurSlice->ChunksToDelete.empty();
                 } else {
                     Y_VERIFY_S(!CompactionTask->GetSstsToDelete().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                 }
 
-                ApplyCompactionResult(ctx, std::move(msg->CommitChunks), std::move(msg->ReservedChunks), wId);
+                if (nothingToCommit) {
+                    YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP,
+                        "Level compaction aborted with nothing to commit, skipping the entry point",
+                        {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {"signature", PDiskSignatureForHullDbKey<TKey>()},
+                        {"task", (CompactionTask ? CompactionTask->ToString() : "nullptr")});
+                    FinishLevelCompaction(ctx, false);
+                } else {
+                    ApplyCompactionResult(ctx, std::move(msg->CommitChunks), std::move(msg->ReservedChunks), wId);
+                }
             }
 
             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
@@ -846,26 +916,47 @@ namespace NKikimr {
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        // The tail of a level compaction, shared by the job that committed its result and
+        // the one that was aborted with nothing to commit: give the token back, return to
+        // the idle state and look for the next job. Only a committed job has produced a new
+        // entry point and may report a full compaction as done; an aborted one leaves the
+        // request pending so it is picked up again once there is room for it.
+        void FinishLevelCompaction(const TActorContext &ctx, bool committed) {
+            if (CompactionTokenState == ECompactionTokenState::InProgress) {
+                Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token# %" PRIu64 " released", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
+                CompactionTokenState = ECompactionTokenState::Idle;
+                CompactionToken = 0;
+            }
+            CompactionWorkingStartTime = TMonotonic();
+            Y_VERIFY_DEBUG_S(RTCtx->LevelIndex->GetCompState() == (committed
+                    ? TLevelIndexBase::StateWaitCommit
+                    : TLevelIndexBase::StateCompInProgress),
+                HullDs->HullCtx->VCtx->VDiskLogPrefix);
+            RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
+            if (committed) {
+                RTCtx->LevelIndex->PrevEntryPointLsn = ui64(-1);
+                FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
+            }
+            CompactionTask->Clear();
+            if (committed) {
+                ScheduleCompaction(ctx);
+            } else {
+                // Selecting again right away would hand back the very same job -- the
+                // explicit sst list is still pending -- and it would fail its reservation
+                // again. Wait for the next scheduling interval so that whatever frees
+                // space gets a chance to run first.
+                ScheduleCompactionWakeup(ctx);
+            }
+        }
+
         void Handle(THullCommitFinished::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             switch (ev->Get()->Type) {
                 case THullCommitFinished::CommitLevel:
-                    if (CompactionTokenState == ECompactionTokenState::InProgress) {
-                        Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                        ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
-                            Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
-                        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token# %" PRIu64 " released", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
-                        CompactionTokenState = ECompactionTokenState::Idle;
-                        CompactionToken = 0;
-                    }
-                    CompactionWorkingStartTime = TMonotonic();
-                    Y_VERIFY_DEBUG_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit,
-                        HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                    RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
-                    RTCtx->LevelIndex->PrevEntryPointLsn = ui64(-1);
-                    FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
-                    CompactionTask->Clear();
-                    ScheduleCompaction(ctx);
+                    FinishLevelCompaction(ctx, true);
                     break;
                 case THullCommitFinished::CommitFresh:
                     ProcessFreshOnlyCompactQ(ctx);

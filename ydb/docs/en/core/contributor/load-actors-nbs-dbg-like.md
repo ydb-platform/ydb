@@ -92,6 +92,7 @@ NbsDbgLikeLoad {
       EraseBatchSize: 10000
       SyncRequestsBatchSize: 10
       PBufferReplyTimeoutMicroseconds: 50000
+      EnableChecksums: true
     }
   }
 }
@@ -152,6 +153,7 @@ These fields belong to `WorkloadConfig.TabletConfig`.
 | `SyncRequestsBatchSize` | `10` | Per-DBG threshold of ready LSNs before scheduling flush or erase. Set to `1` to process tails promptly. The gate remains enabled after load generation stops. |
 | `PBufferReplyTimeoutMicroseconds` | `50000` | Timeout passed to the PB plural-write coordinator. |
 | `DisableReplication` | `false` | Write only to the coordinator PB, acknowledge its confirmation, and erase without copying to DDisk. Requires `ReadRatio: 0`. |
+| `EnableChecksums` | `true` | Calculate one checksum per 4 KiB payload block in the load worker and forward the checksums through the load tablet to PersistentBuffer. Set this to the DDisk/PersistentBuffer checksum mode. |
 
 The proxy sets `TabletConfig.IoSizeBytes` from `ReadWriteSizeKiB` and `TabletConfig.NumDirectBlockGroupsToUse` from the selected DBG count. Configure those through the workload fields, not the internal tablet fields.
 

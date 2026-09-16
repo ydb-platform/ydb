@@ -1157,6 +1157,30 @@ class TDataShard
             using TColumns = TableColumns<LockId, WriterIndex, WriteSeqNum, WriteResult>;
         };
 
+        // Ancestor shards that hold the original persistent lock for transferred (split/merge) uncommitted writes.
+        struct AncestorShardsLocks : Table<41> {
+            struct LockId          : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TabletId        : Column<2, NScheme::NTypeIds::Uint64> {};  // ancestor shard
+            struct Generation      : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct Counter         : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct CreateTimestamp : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct Flags           : Column<6, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<LockId, TabletId>;
+            using TColumns = TableColumns<LockId, TabletId, Generation, Counter, CreateTimestamp, Flags>;
+        };
+
+        struct AncestorLockWriteSeqNums : Table<42> {
+            struct LockId      : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TabletId    : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct WriterIndex : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct WriteSeqNum : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct WriteResult : Column<5, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<LockId, TabletId, WriterIndex>;
+            using TColumns = TableColumns<LockId, TabletId, WriterIndex, WriteSeqNum, WriteResult>;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1166,7 +1190,7 @@ class TDataShard
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
             LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans,
-            LockWriteSeqNums>;
+            LockWriteSeqNums, AncestorShardsLocks, AncestorLockWriteSeqNums>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -2883,6 +2907,9 @@ private:
     bool SplitStarted = false;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
+    // Persistent write-only locks collected during split to transfer to dst shards.
+    // Populated in TTxStartSplit when all remaining locks are qualifying (persistent, no reads).
+    TVector<NKikimrTxDataShard::TSplitSrcLockInfo> SrcLocksToTransfer;
     // TODO: make this persitent
     THashSet<ui64> ReceiveSnapshotsFrom;
     ui64 DstSplitOpId;

@@ -447,10 +447,6 @@ private:
     }
 
 private:
-    bool PendingLeave() {
-        return PendingRecords && PendingRecords->empty();
-    }
-
     TStructuredMessage GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = YDB_LOG_CREATE_MESSAGE({"selfId", SelfId()});

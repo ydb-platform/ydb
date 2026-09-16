@@ -42,6 +42,7 @@ struct TOracleMock: public IOracle
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskBroken(THostIndex hostIndex) override;
+    void OnHostRemoved(THostIndex hostIndex) override;
 
     TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
@@ -82,7 +83,7 @@ public:
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TReadBlocksFromPBufferHandler =
@@ -90,14 +91,14 @@ public:
             ui32 vChunkIndex,
             THostIndex hostIndex,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToDDiskHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToPBufferHandler =
@@ -105,7 +106,7 @@ public:
             ui32 vChunkIndex,
             THostIndex hostIndex,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
@@ -113,7 +114,7 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -150,6 +151,11 @@ public:
     using TTakeCopyRangeBudgetHandler =
         std::function<TDuration(ui64 byteCount)>;
 
+    using TOnRemoveHostSucceededHandler = std::function<
+        void(THostIndex removeIndex, ui32 dbgConnectionsConfigGeneration)>;
+    using TOnRemoveHostFailedHandler = std::function<
+        void(THostIndex removeIndex, const NProto::TError& error)>;
+
     TExecutorPtr Executor;
     TOracleMock Oracle;
     TScheduleHandler ScheduleHandler;
@@ -165,15 +171,19 @@ public:
     TDBGDumpHandler DumpHandler;
     TOnAddHostSucceededHandler OnAddHostSucceededHandler;
     TOnAddHostFailedHandler OnAddHostFailedHandler;
+    TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
+    TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
+    TArenaAllocatorPoolPtr ArenaAllocatorPool;
 
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+    TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
 
     ui32 GetTabletGeneration() const override;
 
@@ -192,7 +202,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -200,14 +210,14 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -215,7 +225,7 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -224,7 +234,7 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -260,6 +270,14 @@ public:
         ui32 dbgConnectionsConfigGeneration) override;
 
     void OnAddHostFailed(const NProto::TError& error) override;
+
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
 
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 

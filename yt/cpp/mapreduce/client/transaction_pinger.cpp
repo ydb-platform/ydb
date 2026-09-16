@@ -91,7 +91,7 @@ public:
             periodic = std::move(it->second);
             Transactions_.erase(it);
         }
-        NConcurrency::WaitUntilSet((*periodic)->Stop());
+        YT_UNUSED_FUTURE((*periodic)->Stop());
     }
 
 private:

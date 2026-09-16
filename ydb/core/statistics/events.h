@@ -101,6 +101,8 @@ private:
 struct TRequest {
     TPathId PathId;
     TColumnTags ColumnTags;
+    // Requires understanding TResponse::Sampling.
+    bool AcceptSampledStatistics = false;
 };
 
 struct TResponse {
@@ -112,6 +114,7 @@ struct TResponse {
     TStatEqWidthHistogram EqWidthHistogram;
     TStatEqHeightHistogram EqHeightHistogram;
     TStatTableSummary TableSummary;
+    std::optional<NKikimrStat::TSamplingStatistics> Sampling;
 };
 
 // A single item of columnar statistics ready to be saved in the internal table.
@@ -137,6 +140,7 @@ struct TStatisticsItem {
     TColumnTags ColumnTags;
     EStatType Type;
     TString Data;
+    std::optional<NKikimrStat::TSamplingStatistics> Sampling;
 };
 
 struct TEvStatistics {
@@ -294,10 +298,11 @@ struct TEvStatistics {
         TEvLoadStatisticsQueryResponse,
         EvLoadStatisticsQueryResponse>
     {
-        Ydb::StatusIds::StatusCode Status;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues Issues;
         bool Success = true;
         std::optional<TString> Data;
+        std::optional<NKikimrStat::TSamplingStatistics> Sampling;
     };
 
     struct TEvDeleteStatisticsQueryResponse : public TEventLocal<

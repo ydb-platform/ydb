@@ -4,6 +4,7 @@
 #include "direct_block_group.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/dbg_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -36,6 +37,7 @@ class TDirectBlockGroup
 {
 public:
     TDirectBlockGroup(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
@@ -45,6 +47,7 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        const TVector<EHostHealth>& hostHealths,
         ui32 dbgConnectionsConfigGeneration,
         NTransport::TStorageTransportPtr storageTransport,
         NMonitoring::TDynamicCounterPtr counters);
@@ -56,6 +59,7 @@ public:
     void Register(TVChunkWeakPtr vChunk) override;
 
     TExecutorPtr GetExecutor() override;
+    TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
 
     ui32 GetTabletGeneration() const override;
 
@@ -74,7 +78,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -82,14 +86,14 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -97,7 +101,7 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -106,7 +110,7 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId,
@@ -143,6 +147,14 @@ public:
 
     void OnAddHostFailed(const NProto::TError& error) override;
 
+    void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) override;
+
     TDuration TakeCopyRangeBudget(ui64 byteCount) override;
 
     ui32 GetNodeId(THostIndex host) const override;
@@ -154,6 +166,11 @@ public:
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;
 
+    void PersistHostHealth(
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -161,6 +178,7 @@ public:
         EHostState newState) override;
     TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const override;
     void QueryAddHost() override;
+    void QueryRemoveHost(THostIndex hostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -187,8 +205,12 @@ private:
         THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
+    void MarkSlotDead(THostIndex slot, ui32 dbgConnectionsConfigGeneration);
+
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] TString ValidateRemoveHost(THostIndex hostIndex) const;
 
     [[nodiscard]] bool IsInitialized() const
     {
@@ -252,6 +274,7 @@ private:
 
     [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
+    const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;

@@ -328,6 +328,8 @@ namespace NMonitoring {
 
         void RemoveCounter(const TString &value);
         bool RemoveNamedCounter(const TString& name, const TString &value);
+        void RemoveHistogram(const TString &value);
+        bool RemoveNamedHistogram(const TString& name, const TString &value);
         void RemoveSubgroupChain(const std::vector<std::pair<TString, TString>>& chain);
 
         TIntrusivePtr<TDynamicCounters> GetSubgroup(const TString& name, const TString& value);

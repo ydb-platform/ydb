@@ -1,3 +1,4 @@
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
@@ -6,6 +7,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -131,6 +133,150 @@ Y_UNIT_TEST(AnalyzeError) {
                 }),
             result.GetIssues().ToString());
     }
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeSampling, QueryService) {
+    TTestEnv env(1, 1, false);
+    CreateDatabase(env, "Database");
+    const auto table = PrepareMultiColumnTable(env, "Database", "Table", true);
+    TTableClient client(env.GetDriver());
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto execute = [&](const TString& query) {
+        return env.RunInThreadPool([&]() -> TStatus {
+            if (QueryService) {
+                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            }
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        });
+    };
+    TVector<double> requestedRates;
+    size_t fullRequests = 0;
+    auto observer = env.GetServer().GetRuntime()->AddObserver<TEvStatistics::TEvAnalyze>([&](auto& ev) {
+        for (const auto& table : ev->Get()->Record.GetTables()) {
+            if (table.HasSampleRate()) {
+                requestedRates.push_back(table.GetSampleRate());
+            } else {
+                ++fullRequests;
+            }
+        }
+    });
+    for (const TString rate : {"0.5", "(0.5 + 0.5) / 2", "$rate", "Math::Sqrt(0.25)"}) {
+        const auto result = execute("$rate = 1.0 / 2; ANALYZE `Root/Database/Table` (Value1) SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        if (rate == "0.5") {
+            const auto stored = ExecuteYqlScriptWithResult(env, TStringBuilder()
+                << "SELECT column_tags, data, sampled_data FROM `/Root/Database/.metadata/statistics_v2`"
+                << " WHERE owner_id = " << table.PathId.OwnerId << "ul AND local_path_id = " << table.PathId.LocalPathId
+                << "ul AND stat_type = " << static_cast<ui32>(EStatType::SIMPLE_COLUMN) << "u;");
+            UNIT_ASSERT_VALUES_EQUAL(stored.rows_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stored.rows(0).items(0).bytes_value(), "2");
+            UNIT_ASSERT(stored.rows(0).items(1).has_null_flag_value());
+            NKikimrStat::TSampledStatistic payload;
+            UNIT_ASSERT(payload.ParseFromString(stored.rows(0).items(2).bytes_value()));
+            const auto& metadata = payload.GetSampling();
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetRequestedRate(), 0.5);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetEligibleUnits(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetSelectedUnits(), 2);
+            UNIT_ASSERT(metadata.GetSampleRows() > 0 && metadata.GetSampleRows() < ColumnTableRowsNumber);
+            NKikimrStat::TSimpleColumnStatistics statistics;
+            UNIT_ASSERT(statistics.ParseFromString(payload.GetData()));
+            UNIT_ASSERT_VALUES_EQUAL(statistics.GetCount(), metadata.GetSampleRows());
+            UNIT_ASSERT(!statistics.HasCountDistinct());
+        }
+    }
+    for (const TString clause : {"", " SAMPLE 1", " SAMPLE 0.5 + 0.5"}) {
+        const auto result = execute("ANALYZE `Root/Database/Table`" + clause + ";");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(requestedRates.size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(fullRequests, 3);
+    for (size_t i = 0; i < 4; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(requestedRates[i], 0.5);
+    }
+    for (const TString rate : {"0", "-0.0", "-0.1", "1.5", "1.0000000000000002", "1.0 - 1.0", "0.75 * 2",
+            "Double('nan')", "Double('inf')", "-Double('inf')", "1.0 / 0.0"}) {
+        const auto result = execute("ANALYZE `Root/Database/Table` SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(!result.IsSuccess(), rate);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ANALYZE SAMPLE rate must be a finite number in (0, 1]");
+    }
+    for (const TString rate : {"1e999", "1e-999", "NULL", "'0.5'", "TRUE", "[0.5]"}) {
+        const auto result = execute("ANALYZE `Root/Database/Table` SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(!result.IsSuccess(), rate);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(requestedRates.size(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(fullRequests, 3);
+}
+
+Y_UNIT_TEST(AnalyzeSamplingServerless) {
+    TTestEnv env(1, 1, false);
+    CreateDatabase(env, "Shared", 1, true);
+    CreateServerlessDatabase(env, "Database", "/Root/Shared");
+    PrepareMultiColumnTable(env, "Database", "Table", true);
+    TVector<double> requestedRates;
+    auto observer = env.GetServer().GetRuntime()->AddObserver<TEvStatistics::TEvAnalyze>([&](auto& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TablesSize(), 1);
+        const auto& table = ev->Get()->Record.GetTables(0);
+        UNIT_ASSERT_VALUES_EQUAL(table.ColumnTagsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumnTags(0), 2);
+        requestedRates.push_back(table.GetSampleRate());
+    });
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    for (const TString rate : {"0.5", "1"}) {
+        const auto result = env.RunInThreadPool([&] {
+            return session.ExecuteSchemeQuery("ANALYZE `Root/Database/Table` (Value1) SAMPLE " + rate + ";").GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(requestedRates.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(requestedRates[0], 0.5);
+    UNIT_ASSERT_VALUES_EQUAL(requestedRates[1], 1.0);
+}
+
+Y_UNIT_TEST(AnalyzeSamplingRequiresColumnTable) {
+    TTestEnv env(1, 1, false);
+    CreateDatabase(env, "Database");
+    CreateEmptyTable(env, "Database", "Table", false);
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto execute = [&](const TString& query) {
+        return env.RunInThreadPool([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
+    };
+    const auto result = execute("ANALYZE `Root/Database/Table` SAMPLE 0.5;");
+    UNIT_ASSERT(!result.IsSuccess());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ANALYZE SAMPLE is supported only for column tables");
+    const auto full = execute("ANALYZE `Root/Database/Table` SAMPLE 1;");
+    UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
+}
+
+Y_UNIT_TEST(RetryPreservesSampleRate) {
+    TTestEnv env(1, 1, false);
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+    const auto table = PrepareColumnTable(env, "Database", "Table", 4);
+    size_t attempts = 0;
+    auto forwards = runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
+        if (ev->Get()->Ev->Type() != TEvStatistics::TEvAnalyze::EventType || ++attempts != 1) {
+            return;
+        }
+        const auto gateway = ev->Sender;
+        const auto cache = ev->GetRecipientRewrite();
+        ev.Reset();
+        runtime.Send(new IEventHandle(gateway, cache,
+            new TEvPipeCache::TEvDeliveryProblem(table.SaTabletId, true)),
+            gateway.NodeId() - runtime.GetFirstNodeId(), true);
+    });
+    auto requests = runtime.AddObserver<TEvStatistics::TEvAnalyze>([](auto& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTables(0).GetSampleRate(), 0.5);
+    });
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto result = env.RunInThreadPool([&] {
+        return session.ExecuteSchemeQuery("ANALYZE `Root/Database/Table` SAMPLE 0.5;").GetValueSync();
+    });
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(attempts, 2);
 }
 
 } // suite

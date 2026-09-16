@@ -151,7 +151,7 @@ private:
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
             DispatchLoadStatisticsQuery(
-                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags);
+                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags, req.AcceptSampledStatistics);
 
             ++request.ReplyCounter;
             ++reqIndex;
@@ -620,6 +620,10 @@ private:
             }
         } else {
             response.Success = false;
+        }
+
+        if (response.Success) {
+            response.Sampling = msg->Sampling;
         }
 
         if (--request.ReplyCounter == 0) {

@@ -1277,6 +1277,12 @@ public:
                     }
                 } else if (mode == "analyze") {
                     auto columns = Build<TCoAtomList>(ctx, node->Pos());
+                    TMaybeNode<TExprBase> sampleRate;
+                    for (const auto& setting : settings.Other) {
+                        if (setting.Name().Value() == "sampleRate") {
+                            sampleRate = setting.Value();
+                        }
+                    }
 
                     for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
                         columns.Add(column);
@@ -1287,6 +1293,7 @@ public:
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Columns(columns.Done())
+                        .SampleRate(sampleRate)
                         .Done()
                         .Ptr();
                 } else {

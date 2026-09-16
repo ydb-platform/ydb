@@ -368,6 +368,7 @@ constexpr TStringBuf DatabaseOnlySid = "database-only@as";
 constexpr TStringBuf ViewerOnlySid = "viewer-only@as";
 constexpr TStringBuf MonitoringOnlySid = "monitoring-only@as";
 constexpr TStringBuf AdminOnlySid = "admin-only@as";
+constexpr TStringBuf NodeRegistrationSid = "node-registration@as";
 
 void ConfigureSecurityConfig(TTestActorRuntime* runtime) {
     auto& securityConfig = *runtime->GetAppData().DomainsConfig.MutableSecurityConfig();
@@ -376,6 +377,10 @@ void ConfigureSecurityConfig(TTestActorRuntime* runtime) {
     securityConfig.AddMonitoringAllowedSIDs(TString{MonitoringOnlySid});
     securityConfig.AddAdministrationAllowedSIDs(TString{AdminOnlySid});
     runtime->GetAppData().AdministrationAllowedSIDs = {TString{AdminOnlySid}};
+    // The list must be non-empty: an empty one is treated as allowing node registration to
+    // everyone, which would make every user exempt from the connect right check.
+    securityConfig.AddRegisterDynamicNodeAllowedSIDs(TString{NodeRegistrationSid});
+    runtime->GetAppData().RegisterDynamicNodeAllowedSIDs = {TString{NodeRegistrationSid}};
 }
 
 void SetupDedicatedSubDomain(
@@ -455,7 +460,8 @@ THttpAuthCheckResponse RunHttpAuthCheck(
         TMaybe<TString>(userToken),
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-        "192.168.0.101");
+        "192.168.0.101",
+        "http-auth-check-request-id");
 
     std::unique_ptr<IEventHandle> ieh = std::make_unique<IEventHandle>(
         NGRpcService::CreateGRpcRequestProxyId(),
@@ -512,6 +518,17 @@ Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
     const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+}
+
+Y_UNIT_TEST(NodeRegistrationSubjectOk) {
+    TTestSetup setup("database-only", "/Root/db", {});
+    ConfigureSecurityConfig(setup.GetRuntime());
+    setup.GetRuntime()->GetAppData().RegisterDynamicNodeAllowedSIDs = {TString{DatabaseOnlySid}};
+    TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+    SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+    const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+    UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
 }
 
 Y_UNIT_TEST(NoSecurityObject) {

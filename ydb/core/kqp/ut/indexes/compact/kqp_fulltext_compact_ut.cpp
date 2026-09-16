@@ -158,7 +158,7 @@ Y_UNIT_TEST(AddIndexCompact) {
 // update only to KQP to pin that authority boundary and ensure the skew still produces one coherent layout.
 // Existing indexes must keep accepting DML/read/drop across later KQP toggles.
 Y_UNIT_TEST_TWIN(KqpCompactFlagSkewKeepsSqlIndexTypeConsistent, SchemeShardCompact) {
-    auto kikimr = SchemeShardCompact ? KikimrWithCompact(true) : Kikimr();
+    auto kikimr = KikimrWithCompact(SchemeShardCompact);
     auto db = kikimr.GetQueryClient();
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -256,31 +256,6 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     CompareYson(R"([
         [4u;0u;14u]
     ])", NYdb::FormatResultSetYson(index));
-}
-
-Y_UNIT_TEST_TWIN(FulltextCompactUpdateRequiresStreamWrite, WithRelevance) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
-    auto kikimr = TKikimrRunner(settings);
-    auto db = kikimr.GetQueryClient();
-
-    CreateTexts(db);
-    UpsertSomeTexts(db);
-    AddIndex(db, WithRelevance ? "fulltext_relevance" : "fulltext_plain");
-
-    TVector<TString> queries = {
-        "INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, \"Foxes love cats.\", \"foxes data\")",
-        "UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, \"Foxes love cats.\", \"foxes data\")",
-        "UPDATE `/Root/Texts` SET Text=\"Foxes love cats\" WHERE Key=100",
-        "DELETE FROM `/Root/Texts` WHERE Key=100"
-    };
-    for (auto& query: queries) {
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-    }
 }
 
 Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
@@ -1326,6 +1301,218 @@ Y_UNIT_TEST(UpsertTwoIndexes) {
     }
 }
 
+Y_UNIT_TEST(WriteMaintenanceNoStreamWrite) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "fulltext_relevance");
+
+    // Also add a regular index
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX data_idx
+                GLOBAL ON (Data)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // INSERT
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data"),
+            (151, "Wolves love foxes.", "cows data")
+    )sql");
+    CompareYson(R"([
+        [[100u];["Cats love cats."];["cats data"]];
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    // UPSERT
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, "Birds love rabbits.", "birds data"),
+            (152, "Rabbits love foxes.", "rabbit data")
+    )sql");
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    // DELETE
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 100
+    )sql");
+    CompareYson(R"([])", FulltextSearch(db, "birds"));
+
+    // UPDATE
+    ExecuteQuery(db, R"sql(
+        UPDATE `/Root/Texts` SET Text = "Birds love rabbits.", Data = "birds data" WHERE Key = 150
+    )sql");
+    CompareYson(R"([])", FulltextSearch(db, "cats"));
+    CompareYson(R"([
+        [[150u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+
+    // REPLACE
+    ExecuteQuery(db, R"sql(
+        REPLACE INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Bears love honey.", "bears data"),
+            (301, "Eagles love fish.", "eagles data")
+    )sql");
+    CompareYson(R"([
+        [[152u];["Bears love honey."];["bears data"]]
+    ])", FulltextSearch(db, "bears"));
+    CompareYson(R"([
+        [[150u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "rabbits"));
+}
+
+// Same as WriteMaintenanceNoStreamWrite but with ROWID and RETURNING
+Y_UNIT_TEST(WriteMaintenanceNoStreamWriteRowidReturning) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
+    auto db = kikimr.GetQueryClient();
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key string not null,
+                Text string not null,
+                Data string not null,
+                PRIMARY KEY (Key),
+                INDEX data_idx GLOBAL ON (Data),
+                INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // UPSERT new
+    // FIXME: RETURNING * with rowid shouldn't return rowid
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                ("X-100", "Cats love cats.", "cats data"),
+                ("X-200", "Dogs love foxes.", "dogs data")
+            RETURNING Key, Text, Data
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYsonUnordered(R"([
+            ["X-100";"Cats love cats.";"cats data"];
+            ["X-200";"Dogs love foxes.";"dogs data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    // INSERT new
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                ("X-150", "Foxes love cats.", "foxes data"),
+                ("X-151", "Wolves love foxes.", "cows data")
+            RETURNING Key, Text, Data
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYsonUnordered(R"([
+            ["X-150";"Foxes love cats.";"foxes data"];
+            ["X-151";"Wolves love foxes.";"cows data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            ["X-100";"Cats love cats.";"cats data"];
+            ["X-150";"Foxes love cats.";"foxes data"]
+        ])", FulltextSearch(db, "cats"));
+    }
+
+    // UPSERT
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                ("X-100", "Birds love rabbits.", "birds data"),
+                ("X-152", "Rabbits love foxes.", "rabbit data")
+            RETURNING Key, Text, Data
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYsonUnordered(R"([
+            ["X-100";"Birds love rabbits.";"birds data"];
+            ["X-152";"Rabbits love foxes.";"rabbit data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            ["X-150";"Foxes love cats.";"foxes data"]
+        ])", FulltextSearch(db, "cats"));
+        CompareYson(R"([
+            ["X-100";"Birds love rabbits.";"birds data"]
+        ])", FulltextSearch(db, "birds"));
+    }
+
+    // DELETE
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            DELETE FROM `/Root/Texts` WHERE Key = "X-100"
+            RETURNING Key, Text, Data
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            ["X-100";"Birds love rabbits.";"birds data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", FulltextSearch(db, "birds"));
+    }
+
+    // UPDATE
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            UPDATE `/Root/Texts` SET Text = "Birds love rabbits.", Data = "birds data" WHERE Key = "X-150"
+            RETURNING Key, Text, Data
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            ["X-150";"Birds love rabbits.";"birds data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", FulltextSearch(db, "cats"));
+        CompareYson(R"([
+            ["X-150";"Birds love rabbits.";"birds data"]
+        ])", FulltextSearch(db, "birds"));
+    }
+
+    // REPLACE
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            REPLACE INTO `/Root/Texts` (Key, Text, Data) VALUES
+                ("X-152", "Bears love honey.", "bears data"),
+                ("X-301", "Eagles love fish.", "eagles data")
+            RETURNING Key, Text, Data
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYsonUnordered(R"([
+            ["X-152";"Bears love honey.";"bears data"];
+            ["X-301";"Eagles love fish.";"eagles data"]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            ["X-152";"Bears love honey.";"bears data"]
+        ])", FulltextSearch(db, "bears"));
+        CompareYson(R"([
+            ["X-150";"Birds love rabbits.";"birds data"]
+        ])", FulltextSearch(db, "rabbits"));
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)
 
 Y_UNIT_TEST_SUITE(KqpJsonCompact) {
@@ -1535,38 +1722,6 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 
     NYdb::TResultSetParser parser(ReadIndex(db));
     UNIT_ASSERT(parser.RowsCount() > 0);
-}
-
-Y_UNIT_TEST(JsonCompactUpdateRequiresStreamWrite) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    featureFlags.SetEnableJsonIndex(true);
-    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
-    auto kikimr = TKikimrRunner(settings);
-    auto db = kikimr.GetQueryClient();
-
-    ExecuteQuery(db, R"sql(
-        CREATE TABLE `/Root/Texts` (
-            Key Uint64,
-            Text Json,
-            Data String,
-            PRIMARY KEY (Key),
-            INDEX json_idx GLOBAL USING json ON (Text)
-        );
-    )sql");
-
-    TVector<TString> queries = {
-        "INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, '{\"nested\":\"value\"}', \"data3\")",
-        "UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, '{\"nested\":\"value\"}', \"data3\")",
-        "UPDATE `/Root/Texts` SET Text='{\"nested\":\"value\"}' WHERE Key=150",
-        "DELETE FROM `/Root/Texts` WHERE Key=150"
-    };
-    for (auto& query: queries) {
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-    }
 }
 
 } // Y_UNIT_TEST_SUITE(KqpJsonCompact)

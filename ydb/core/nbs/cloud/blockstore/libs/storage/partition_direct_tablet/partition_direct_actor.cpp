@@ -1,5 +1,6 @@
 #include "partition_direct_actor.h"
 
+#include "bsc_proxy.h"
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
@@ -24,6 +25,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/system/fs.h>
@@ -142,19 +144,9 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         CleanupActor = {};
     }
 
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
-    if (AddHostInFlight) {
-        NTabletPipe::CloseAndForgetClient(
-            SelfId(),
-            AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
-    if (RemoveHostInFlight) {
-        NTabletPipe::CloseAndForgetClient(
-            SelfId(),
-            RemoveHostInFlight->BSPipeClient);
-        RemoveHostInFlight.reset();
-    }
+    StopBscProxy(ctx);
+    AddHostInFlight.reset();
+    RemoveHostInFlight.reset();
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -422,17 +414,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void TPartitionActor::CreateBSControllerPipeClient(
-    const NActors::TActorContext& ctx)
-{
-    BSControllerPipeClient = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-}
-
 void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
-    CreateBSControllerPipeClient(ctx);
-
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
     const ui64 regionsCount = GetRegionCount(
@@ -449,7 +432,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+    SendToBsc(ctx, THolder<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -739,8 +722,6 @@ void TPartitionActor::HandleInitialAllocationResult(
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
-
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -904,6 +885,35 @@ void TPartitionActor::HandleUpdateDirtyMapState(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+void TPartitionActor::SendToBsc(
+    const TActorContext& ctx,
+    THolder<IEventBase> request,
+    ui64 cookie)
+{
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
+    if (!BscProxy) {
+        BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
+    }
+    ctx.Send(BscProxy, new TBscProxy::TEvSend(std::move(request)), 0, cookie);
+}
+
+void TPartitionActor::StopBscProxy(const TActorContext& ctx)
+{
+    if (!BscProxy) {
+        return;
+    }
+    ctx.Send(BscProxy, new TEvents::TEvPoisonPill());
+    BscProxy = {};
+}
 
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {

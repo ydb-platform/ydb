@@ -20,6 +20,7 @@
 
 #include <util/generic/array_ref.h>
 #include <util/generic/scope.h>
+#include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
@@ -199,20 +200,27 @@ std::optional<ui32> MemberCountOfType(const TType* type) {
 constexpr ui32 MaxResultTypeSearchDepth = 8;
 constexpr ui32 MaxResultTypeSearchNodes = 256;
 
-//! Look through a declared result type for a type `accept` recognises. Every
-//! layer a value can sit under is followed -- Optional, List, Dict key and
-//! payload, Variant alternatives, Tuple and Struct members -- because the
+//! Walk a declared result type and collect every type `accept` recognises.
+//! Every layer a value can sit under is followed -- Optional, List, Dict key
+//! and payload, Variant alternatives, Tuple and Struct members -- because the
 //! guest builds a nested container bottom-up while the intrinsic building it
-//! sees only the result type of the whole call.
+//! sees only the result type of the whole call. A match does not stop the
+//! walk: List<List<T>> and same-arity sibling Tuples all have to be candidates.
 template <class TAccept>
-const TType* FindTypeIn(const TType* type, const TAccept& accept, ui32 depth, ui32& budget) {
+void CollectTypesIn(
+    const TType* type,
+    const TAccept& accept,
+    ui32 depth,
+    ui32& budget,
+    TVector<const TType*>& out)
+{
     const auto* helper = CurrentTypeHelper();
     if (!type || !helper || depth > MaxResultTypeSearchDepth || budget == 0) {
-        return nullptr;
+        return;
     }
     --budget;
     if (accept(type)) {
-        return type;
+        out.push_back(type);
     }
     const TType* const wrapped[] = {
         OptionalItemTypeOf(type),
@@ -221,29 +229,30 @@ const TType* FindTypeIn(const TType* type, const TAccept& accept, ui32 depth, ui
         DictPayloadTypeOf(type),
     };
     for (const TType* item : wrapped) {
-        if (const TType* found = FindTypeIn(item, accept, depth + 1, budget)) {
-            return found;
-        }
+        CollectTypesIn(item, accept, depth + 1, budget, out);
     }
     if (const TVariantTypeInspector variant(*helper, type); variant) {
-        if (const TType* found = FindTypeIn(variant.GetUnderlyingType(), accept, depth + 1, budget)) {
-            return found;
-        }
+        CollectTypesIn(variant.GetUnderlyingType(), accept, depth + 1, budget, out);
     }
     if (const auto arity = MemberCountOfType(type)) {
         for (ui32 i = 0; i < *arity; ++i) {
-            if (const TType* found = FindTypeIn(ElementTypeOf(type, i), accept, depth + 1, budget)) {
-                return found;
-            }
+            CollectTypesIn(ElementTypeOf(type, i), accept, depth + 1, budget, out);
         }
     }
-    return nullptr;
+}
+
+template <class TAccept>
+TVector<const TType*> CollectTypesIn(const TType* type, const TAccept& accept) {
+    TVector<const TType*> out;
+    ui32 budget = MaxResultTypeSearchNodes;
+    CollectTypesIn(type, accept, /*depth*/ 0, budget, out);
+    return out;
 }
 
 template <class TAccept>
 const TType* FindTypeIn(const TType* type, const TAccept& accept) {
-    ui32 budget = MaxResultTypeSearchNodes;
-    return FindTypeIn(type, accept, /*depth*/ 0, budget);
+    const auto found = CollectTypesIn(type, accept);
+    return found.empty() ? nullptr : found.front();
 }
 
 //! The Variant a UDF with this result type is allowed to build.
@@ -257,29 +266,26 @@ const TType* FindVariantTypeIn(const TType* type) {
     });
 }
 
-//! The List a UDF with this result type is allowed to build. Its items are
-//! read back as this list's item type, so a lookup that finds nothing leaves
-//! BridgeMakeList building a list nothing can check.
-const TType* FindListTypeIn(const TType* type) {
+TVector<const TType*> CollectListTypesIn(const TType* type) {
     const auto* helper = CurrentTypeHelper();
     if (!helper) {
-        return nullptr;
+        return {};
     }
-    return FindTypeIn(type, [helper](const TType* candidate) {
+    return CollectTypesIn(type, [helper](const TType* candidate) {
         return static_cast<bool>(TListTypeInspector(*helper, candidate));
     });
 }
 
-//! Same lookup for the Struct / Tuple a UDF with this result type is allowed
-//! to build. A result type may name more than one candidate, so the arity the
-//! guest is building picks between them; `arity` is nothing when the caller
-//! only asks whether the declaration mentions such a type at all.
-const TType* FindMemberedTypeIn(const TType* type, bool wantStruct, std::optional<ui32> arity) {
+TVector<const TType*> CollectMemberedTypesIn(
+    const TType* type,
+    bool wantStruct,
+    std::optional<ui32> arity)
+{
     const auto* helper = CurrentTypeHelper();
     if (!helper) {
-        return nullptr;
+        return {};
     }
-    return FindTypeIn(type, [helper, wantStruct, arity](const TType* candidate) {
+    return CollectTypesIn(type, [helper, wantStruct, arity](const TType* candidate) {
         const bool membered = wantStruct
             ? static_cast<bool>(TStructTypeInspector(*helper, candidate))
             : static_cast<bool>(TTupleTypeInspector(*helper, candidate));
@@ -321,6 +327,12 @@ void EnsureStringKind(const TWasmBridgeNodeTable::TNode& node, const char* what)
 std::optional<EBridgeKindFamily> NodeValueFamily(const TWasmBridgeNodeTable::TNode& node) {
     return BridgeNodeValueFamily(node, CurrentTypeHelper());
 }
+
+std::optional<EBridgeValueKind> NodeValueKind(const TWasmBridgeNodeTable::TNode& node) {
+    return BridgeNodeValueKind(node, CurrentTypeHelper());
+}
+
+bool SlotAcceptsNull(const TType* type);
 
 //! Guard for a guest handle the host is about to hand to MiniKQL as a value of
 //! `expected`. MiniKQL reads it as the declared type without re-checking, and
@@ -372,6 +384,209 @@ void EnsureNodeMatchesType(
     ythrow yexception()
         << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily)
         << " value, got " << BridgeKindFamilyAsStr(*family);
+}
+
+//! Same family comparison EnsureNodeMatchesType uses, without throwing. Used
+//! when several declared containers share an arity and the handles themselves
+//! have to pick which one the guest is building. A handle the guard would not
+//! let into the slot cannot belong to that candidate.
+bool HandleMatchesExpectedType(ui64 handle, const TType* expected) {
+    if (handle == NullBridgeHandle) {
+        return SlotAcceptsNull(expected);
+    }
+    const auto& node = CurrentBridgeTable().Resolve(handle);
+    if (IsBridgeIteratorKind(node.Kind)) {
+        return false;
+    }
+    const auto* helper = CurrentTypeHelper();
+    if (!expected || !helper) {
+        return true;
+    }
+    const auto expectedFamily =
+        BridgeKindFamily(BridgeKindsFromType(PeelOptional(expected), helper).Value);
+    if (expectedFamily == EBridgeKindFamily::Null) {
+        return true;
+    }
+    if (!node.Value) {
+        return true;
+    }
+    const auto family = NodeValueFamily(node);
+    return !family || *family == expectedFamily;
+}
+
+//! Whether the handle carries the very kind the slot declares, as opposed to
+//! merely a kind of the same family. Families put Int32 next to Int64 and
+//! String next to Utf8 on purpose -- MiniKQL stores those alike, so the guard
+//! has no reason to refuse one for the other -- which leaves the family
+//! comparison unable to tell two sibling containers apart when they differ
+//! only in the width of a member. This is the finer evidence that does.
+bool HandleHasDeclaredKind(ui64 handle, const TType* expected) {
+    const auto* helper = CurrentTypeHelper();
+    if (handle == NullBridgeHandle || !expected || !helper) {
+        return false;
+    }
+    const auto declared = BridgeKindsFromType(PeelOptional(expected), helper).Value;
+    if (declared == EBridgeValueKind::Null) {
+        // A slot the bridge has no name for: nothing to be exact about.
+        return false;
+    }
+    const auto kind = NodeValueKind(CurrentBridgeTable().Resolve(handle));
+    return kind && *kind == declared;
+}
+
+const ui64* PeekHandles(ui64 handlesOff, i32 n, const char* what) {
+    if (n < 0) {
+        ythrow yexception() << "Bridge: " << what << " negative count";
+    }
+    if (n == 0) {
+        return nullptr;
+    }
+    return PtrFromVM(
+        CurrentCompartmentOrThrow(),
+        std::bit_cast<ui64*>(static_cast<uintptr_t>(handlesOff)),
+        static_cast<size_t>(n));
+}
+
+//! What one declared candidate makes of the handles the guest passed.
+struct TCandidateFit {
+    //! Every handle would pass the guard in the slot it lands in, so the guest
+    //! could be building this candidate.
+    bool Accepts = true;
+    //! Slots whose handle carries the very kind declared there. Finer than the
+    //! family comparison exactly where two candidates look alike to it.
+    i32 ExactSlots = 0;
+};
+
+template <class TSlotOf>
+TCandidateFit FitHandles(const TType* candidate, const ui64* handles, i32 n, const TSlotOf& slotOf) {
+    TCandidateFit fit;
+    for (i32 i = 0; i < n; ++i) {
+        const TType* slot = slotOf(candidate, i);
+        if (!HandleMatchesExpectedType(handles[i], slot)) {
+            fit.Accepts = false;
+            continue;
+        }
+        if (HandleHasDeclaredKind(handles[i], slot)) {
+            ++fit.ExactSlots;
+        }
+    }
+    return fit;
+}
+
+//! Pick the declared container the guest is building; `slotOf` names the type
+//! of slot `i` inside a candidate. Candidates come from the result type, which
+//! is why there can be several: the guest builds a nested container bottom-up
+//! while the intrinsic sees the whole call's result type.
+//!
+//! A candidate every handle fits is a possible reading of the call, and the
+//! one naming the most slots exactly is the reading taken. A tie there means
+//! the handles cannot tell those candidates apart -- two Lists of the same
+//! item type, say -- and leaves the node untyped for the guest to name with a
+//! typed Make*.
+//!
+//! Otherwise the closest candidate is handed back although it fits no better
+//! than partially, so the per-slot guard reports which slot is wrong and why,
+//! the way it did when the first match was stamped unconditionally. That
+//! covers both "nothing fits" and a coarse match that another candidate beats
+//! on kinds: a guest that means Tuple<Int64,String> and gets its second member
+//! wrong hears about that member, instead of having its tuple silently rebuilt
+//! as the sibling Tuple<Int32,Int32>, which accepts two Int64 handles because
+//! Int32 and Int64 share a family.
+template <class TSlotOf>
+const TType* NarrowCandidates(
+    const TVector<const TType*>& candidates,
+    const ui64* handles,
+    i32 n,
+    const TSlotOf& slotOf)
+{
+    const TType* match = nullptr;
+    i32 matchExact = -1;
+    bool ambiguous = false;
+    const TType* closest = nullptr;
+    i32 closestExact = -1;
+    for (const TType* candidate : candidates) {
+        const auto fit = FitHandles(candidate, handles, n, slotOf);
+        if (fit.ExactSlots > closestExact) {
+            closest = candidate;
+            closestExact = fit.ExactSlots;
+        }
+        if (!fit.Accepts) {
+            continue;
+        }
+        if (fit.ExactSlots > matchExact) {
+            match = candidate;
+            matchExact = fit.ExactSlots;
+            ambiguous = false;
+        } else if (fit.ExactSlots == matchExact) {
+            ambiguous = true;
+        }
+    }
+    if (!match || closestExact > matchExact) {
+        return closest;
+    }
+    return ambiguous ? nullptr : match;
+}
+
+//! Pick the List the guest is building from the declared result type. A single
+//! candidate is taken as-is (item checks still run later); several -- nested
+//! Lists, sibling Lists in a Tuple -- go through the narrowing above.
+const TType* InferListType(const TType* resultType, ui64 itemsOff, i32 n, const char* what) {
+    auto candidates = CollectListTypesIn(resultType);
+    if (candidates.empty()) {
+        return nullptr;
+    }
+    if (candidates.size() == 1) {
+        return candidates.front();
+    }
+    const ui64* handles = PeekHandles(itemsOff, n, what);
+    return NarrowCandidates(candidates, handles, n, [](const TType* candidate, i32) {
+        return ListItemTypeOf(candidate);
+    });
+}
+
+//! Same narrowing for Struct / Tuple. An arity the declaration never names is
+//! still refused when any container of that kind is present -- a wrong width
+//! used to drop the type and every per-member check with it.
+const TType* InferMemberedType(
+    const TType* resultType,
+    bool wantStruct,
+    i32 n,
+    ui64 elemsOff,
+    const char* what)
+{
+    auto candidates = CollectMemberedTypesIn(resultType, wantStruct, static_cast<ui32>(n));
+    if (candidates.empty()) {
+        if (!CollectMemberedTypesIn(resultType, wantStruct, std::nullopt).empty()) {
+            ythrow yexception()
+                << "Bridge: " << what << " builds " << n
+                << " members, which matches no " << (wantStruct ? "Struct" : "Tuple")
+                << " in the declared result type";
+        }
+        return nullptr;
+    }
+    if (candidates.size() == 1) {
+        return candidates.front();
+    }
+    const ui64* handles = PeekHandles(elemsOff, n, what);
+    return NarrowCandidates(candidates, handles, n, [](const TType* candidate, i32 index) {
+        return ElementTypeOf(candidate, static_cast<ui32>(index));
+    });
+}
+
+ui64 RegisterTypeRef(const TType* type) {
+    return CurrentBridgeTable().Register(
+        EBridgeNodeKind::TypeRef,
+        EBridgeValueKind::Null,
+        type,
+        {});
+}
+
+const TType* TypeFromHandle(ui64 typeHandle, const char* what) {
+    const TType* type = CurrentBridgeTable().Resolve(typeHandle).Type;
+    if (!type) {
+        ythrow yexception() << "Bridge: " << what << " needs a typed type node";
+    }
+    return type;
 }
 
 //! Whether a null handle may sit in a slot declared as `type`. MiniKQL stores
@@ -940,28 +1155,48 @@ TVector<TUnboxedValue> ResolveHandleArray(
     return values;
 }
 
-ui64 MakeArrayLike(ui64 elemsOff, i32 n, EBridgeNodeKind kind, EBridgeValueKind valueKind, const char* what) {
+ui64 MakeArrayLike(
+    ui64 elemsOff,
+    i32 n,
+    EBridgeNodeKind kind,
+    EBridgeValueKind valueKind,
+    const char* what,
+    ui64 typeHandle = NullBridgeHandle)
+{
     if (n < 0) {
         ythrow yexception() << "Bridge: " << what << " negative count";
     }
     // Untyped the guest cannot read back what it just built: GetMemberCount,
-    // GetElement and GetMemberIndex all need a type. Take the one the declared
-    // result type names for this arity -- a container of a different width is
-    // a different type.
-    auto* invocation = GetCurrentInvocationContext();
-    const TType* resultType = invocation ? invocation->ResultType : nullptr;
+    // GetElement and GetMemberIndex all need a type. An explicit typeHandle
+    // names it the way BridgeMakeDict does; otherwise take the unique match
+    // among candidates of this arity, narrowed by member families when the
+    // declaration holds several.
     const bool wantStruct = valueKind == EBridgeValueKind::Struct;
-    const TType* type = FindMemberedTypeIn(resultType, wantStruct, static_cast<ui32>(n));
-    if (!type && FindMemberedTypeIn(resultType, wantStruct, std::nullopt)) {
-        // The declaration names such a type, just not of this width. Dropping
-        // the type here instead would take every per-member check with it and
-        // leave MiniKQL reading the declared number of members out of an array
-        // that holds n -- a wrong n would be all it takes to bypass the checks
-        // below. A guest that means a different width means a different type.
-        ythrow yexception()
-            << "Bridge: " << what << " builds " << n
-            << " members, which matches no " << (wantStruct ? "Struct" : "Tuple")
-            << " in the declared result type";
+    const auto* helper = CurrentTypeHelper();
+    const TType* type = nullptr;
+    if (typeHandle != NullBridgeHandle) {
+        type = PeelOptional(TypeFromHandle(typeHandle, what));
+        if (!helper) {
+            ythrow yexception() << "Bridge: " << what << " needs a type info helper";
+        }
+        const bool membered = wantStruct
+            ? static_cast<bool>(TStructTypeInspector(*helper, type))
+            : static_cast<bool>(TTupleTypeInspector(*helper, type));
+        if (!membered) {
+            ythrow yexception()
+                << "Bridge: " << what << " expected a "
+                << (wantStruct ? "Struct" : "Tuple") << " type";
+        }
+        if (MemberCountOfType(type) != static_cast<ui32>(n)) {
+            ythrow yexception()
+                << "Bridge: " << what << " builds " << n
+                << " members, but the named type has "
+                << MemberCountOfType(type).value_or(0);
+        }
+    } else {
+        auto* invocation = GetCurrentInvocationContext();
+        const TType* resultType = invocation ? invocation->ResultType : nullptr;
+        type = InferMemberedType(resultType, wantStruct, n, elemsOff, what);
     }
     // Every member lands in a declared slot and will be read as that slot's
     // type, so each is checked against its own.
@@ -983,6 +1218,36 @@ ui64 MakeArrayLike(ui64 elemsOff, i32 n, EBridgeNodeKind kind, EBridgeValueKind 
     return RegisterOwned(kind, valueKind, std::move(result), type);
 }
 
+ui64 MakeListLike(ui64 itemsOff, i32 n, const char* what, ui64 typeHandle = NullBridgeHandle) {
+    if (n < 0) {
+        ythrow yexception() << "Bridge: " << what << " negative count";
+    }
+    // Items are read back as the item type of the list being built, so they
+    // are checked against it the way BridgeMakeDict checks its pairs. An
+    // explicit typeHandle names that list; otherwise the declaration is
+    // searched and narrowed by item families when several Lists appear.
+    const auto* helper = CurrentTypeHelper();
+    const TType* listType = nullptr;
+    if (typeHandle != NullBridgeHandle) {
+        listType = PeelOptional(TypeFromHandle(typeHandle, what));
+        if (!helper || !TListTypeInspector(*helper, listType)) {
+            ythrow yexception() << "Bridge: " << what << " expected a List type";
+        }
+    } else {
+        auto* invocation = GetCurrentInvocationContext();
+        const TType* resultType = invocation ? invocation->ResultType : nullptr;
+        listType = InferListType(resultType, itemsOff, n, what);
+    }
+    const TType* const itemTypes[] = {ListItemTypeOf(listType)};
+    auto values = ResolveHandleArray(itemsOff, n, what, itemTypes);
+    auto* builder = CurrentValueBuilderOrThrow();
+    auto result = builder->NewList(values.data(), static_cast<ui64>(n));
+    // Typed: a list the guest built is read back later on -- by itself through
+    // the list intrinsics, or by the host as a result -- and the item check
+    // there has nothing to compare against without the type.
+    return RegisterOwned(EBridgeNodeKind::List, EBridgeValueKind::List, std::move(result), listType);
+}
+
 ui64 BridgeMakeArrayHost(ui64 elemsOff, i32 n) {
     return MakeArrayLike(elemsOff, n, EBridgeNodeKind::Tuple, EBridgeValueKind::Tuple, "BridgeMakeArray");
 }
@@ -994,18 +1259,31 @@ ui64 BridgeMakeStructHost(ui64 membersOff, i32 n) {
 }
 
 ui64 BridgeMakeListHost(ui64 itemsOff, i32 n) {
-    // Items are read back as the item type of the list the declaration names,
-    // so they are checked against it the way BridgeMakeDict checks its pairs.
-    auto* invocation = GetCurrentInvocationContext();
-    const TType* listType = invocation ? FindListTypeIn(invocation->ResultType) : nullptr;
-    const TType* const itemTypes[] = {ListItemTypeOf(listType)};
-    auto values = ResolveHandleArray(itemsOff, n, "BridgeMakeList", itemTypes);
-    auto* builder = CurrentValueBuilderOrThrow();
-    auto result = builder->NewList(values.data(), static_cast<ui64>(n));
-    // Typed: a list the guest built is read back later on -- by itself through
-    // the list intrinsics, or by the host as a result -- and the item check
-    // there has nothing to compare against without the type.
-    return RegisterOwned(EBridgeNodeKind::List, EBridgeValueKind::List, std::move(result), listType);
+    return MakeListLike(itemsOff, n, "BridgeMakeList");
+}
+
+ui64 BridgeMakeArrayTypedHost(ui64 typeHandle, ui64 elemsOff, i32 n) {
+    return MakeArrayLike(
+        elemsOff,
+        n,
+        EBridgeNodeKind::Tuple,
+        EBridgeValueKind::Tuple,
+        "BridgeMakeArrayTyped",
+        typeHandle);
+}
+
+ui64 BridgeMakeStructTypedHost(ui64 typeHandle, ui64 membersOff, i32 n) {
+    return MakeArrayLike(
+        membersOff,
+        n,
+        EBridgeNodeKind::Struct,
+        EBridgeValueKind::Struct,
+        "BridgeMakeStructTyped",
+        typeHandle);
+}
+
+ui64 BridgeMakeListTypedHost(ui64 typeHandle, ui64 itemsOff, i32 n) {
+    return MakeListLike(itemsOff, n, "BridgeMakeListTyped", typeHandle);
 }
 
 ui64 BridgeMakeVariantHost(i32 index, ui64 itemHandle) {
@@ -1055,17 +1333,45 @@ ui64 BridgeMakeVariantHost(i32 index, ui64 itemHandle) {
 }
 
 //! Type of the value the running UDF has to return, as a value-less node.
-//! Needed by BridgeMakeDict: only the host knows the MiniKQL dict type.
+//! Needed by BridgeMakeDict and the typed Make* helpers: only the host knows
+//! the MiniKQL type tree.
 ui64 BridgeGetResultTypeHost() {
     auto* invocation = GetCurrentInvocationContext();
     if (!invocation || !invocation->ResultType) {
         ythrow yexception() << "Bridge: BridgeGetResultType outside a typed bridge call";
     }
-    return CurrentBridgeTable().Register(
-        EBridgeNodeKind::TypeRef,
-        EBridgeValueKind::Null,
-        invocation->ResultType,
-        {});
+    return RegisterTypeRef(invocation->ResultType);
+}
+
+ui64 BridgeTypeOptionalItemHost(ui64 typeHandle) {
+    const TType* item = OptionalItemTypeOf(TypeFromHandle(typeHandle, "BridgeTypeOptionalItem"));
+    if (!item) {
+        ythrow yexception() << "Bridge: BridgeTypeOptionalItem expected an Optional type";
+    }
+    return RegisterTypeRef(item);
+}
+
+ui64 BridgeTypeListItemHost(ui64 typeHandle) {
+    const TType* item = ListItemTypeOf(PeelOptional(TypeFromHandle(typeHandle, "BridgeTypeListItem")));
+    if (!item) {
+        ythrow yexception() << "Bridge: BridgeTypeListItem expected a List type";
+    }
+    return RegisterTypeRef(item);
+}
+
+ui64 BridgeTypeMemberHost(ui64 typeHandle, i32 index) {
+    if (index < 0) {
+        ythrow yexception() << "Bridge: BridgeTypeMember negative index";
+    }
+    const TType* type = PeelOptional(TypeFromHandle(typeHandle, "BridgeTypeMember"));
+    const TType* member = ElementTypeOf(type, static_cast<ui32>(index));
+    if (!member) {
+        ythrow yexception()
+            << "Bridge: BridgeTypeMember index " << index
+            << " is out of range for the named type with "
+            << MemberCountOfType(type).value_or(0) << " members";
+    }
+    return RegisterTypeRef(member);
 }
 
 //! `pairsOff` points at 2*n handles: key, payload, key, payload, ...
@@ -1312,6 +1618,12 @@ void BridgeUnrefHost(ui64 handle) {
     X(BridgeMakeList, BridgeMakeListHost, ui64(ui64, i32)) \
     X(BridgeMakeVariant, BridgeMakeVariantHost, ui64(i32, ui64)) \
     X(BridgeGetResultType, BridgeGetResultTypeHost, ui64()) \
+    X(BridgeTypeOptionalItem, BridgeTypeOptionalItemHost, ui64(ui64)) \
+    X(BridgeTypeListItem, BridgeTypeListItemHost, ui64(ui64)) \
+    X(BridgeTypeMember, BridgeTypeMemberHost, ui64(ui64, i32)) \
+    X(BridgeMakeArrayTyped, BridgeMakeArrayTypedHost, ui64(ui64, ui64, i32)) \
+    X(BridgeMakeStructTyped, BridgeMakeStructTypedHost, ui64(ui64, ui64, i32)) \
+    X(BridgeMakeListTyped, BridgeMakeListTypedHost, ui64(ui64, ui64, i32)) \
     X(BridgeMakeDict, BridgeMakeDictHost, ui64(ui64, ui64, i32)) \
     X(BridgeRun, BridgeRunHost, ui64(ui64, ui64, i32)) \
     X(BridgeGetResourceTagLen, BridgeGetResourceTagLenHost, i64(ui64)) \

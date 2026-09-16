@@ -225,6 +225,14 @@ public:
 
     virtual void OnAddHostFailed(const NProto::TError& error) = 0;
 
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
+
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may
     // start. Zero means it may start immediately or throttling is disabled.

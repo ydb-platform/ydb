@@ -49,7 +49,9 @@ message TTableServiceConfig {
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
         optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
-        optional double SpillingPercent = 22 [default = 80]; // 100 MiB
+        // Percent of the query memory limit (node total and resource pool) past which the tasks see memory
+        // pressure: spilling, optional memory requests refused, channel back pressure. Above 100 behaves as 100.
+        optional double SpillingPercent = 22 [default = 80];
 
         optional uint64 MinMemAllocSize = 23 [default = 1048576]; // 1 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
@@ -63,6 +65,13 @@ message TTableServiceConfig {
 
         optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
         optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
+
+        // Bind the compute actor memory quota to the memory hungry operators (RFC dq_memory_quota_20), so that
+        // DqHashCombine / DqHashAggregate / DqBlockHashJoin can request memory before growing, read a numeric
+        // memory availability instead of the allocator yellow zone and give memory back explicitly.
+        // Off: the operators use the allocator heuristics only. Takes effect once the operators consult the
+        // bound quota (the operator side of the RFC); until then the flag only binds the quota.
+        optional bool EnableOperatorMemoryQuota = 34 [default = false];
     }
 
     message TSpillingServiceConfig {
@@ -572,8 +581,8 @@ message TTableServiceConfig {
 
     optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
 
-    // DQ channels 2.0: when the receiver node reports the resource manager spilling signal
-    // (NRm::TTxState::IsReasonableToStartSpilling), shrink the sender inflight window down to
+    // DQ channels 2.0: when the receiver node reports the resource manager memory pressure signal
+    // (NRm::TTxState::GetMemoryAvailability() < 0), shrink the sender inflight window down to
     // the cold inflight value instead of letting channels soak the full per channel limit.
     optional bool EnableSpillingChannelBackpressure = 146 [default = false];
 

@@ -15,6 +15,7 @@ import requests
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -433,6 +434,77 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
 
+def get_streaming_query_diagnostics(context, path: str) -> str:
+    try:
+        query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+        if hasattr(context, "kikimr"):
+            result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "driver"):
+            with ydb.QuerySessionPool(context.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries(query)
+        else:
+            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+        return (
+            "\n".join(
+                "Status: {status}\nIssues:\n{issues}".format(
+                    status=row["Status"],
+                    issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                )
+                for row in result_sets[0].rows
+            )
+            if result_sets
+            else []
+        )
+    except Exception as error:
+        return f"failed to retrieve Status / Issues: {error}"
+
+
+def read_and_check_data(
+    context,
+    query_path,
+    expected_output,
+    endpoint,
+    database_path,
+    consumer_name,
+    topic_name,
+    allowed_dublicates=True,
+):
+    try:
+        logger.debug("read data from stream")
+        timeout = plain_or_under_sanitizer_wrapper(60, 300)
+        deadline = time.time() + timeout
+        read_data = read_stream(
+            path=topic_name,
+            messages_count=len(expected_output),
+            consumer_name=consumer_name,
+            database=database_path,
+            endpoint=endpoint,
+            timeout=timeout,
+        )
+
+        if not allowed_dublicates:
+            assert sorted(read_data) == sorted(expected_output)
+            return
+
+        while len(read_data) < len(expected_output) or sorted(read_data[-len(expected_output) :]) != sorted(
+            expected_output
+        ):
+            remaining_timeout = deadline - time.time()
+            assert remaining_timeout > 0, f"Timed out waiting for expected data: {expected_output}, got: {read_data}"
+            read_data.extend(
+                read_stream(
+                    path=topic_name,
+                    messages_count=1,
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
+    except AssertionError as error:
+        raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
+
+
 class Kikimr:
     def __init__(
         self,
@@ -543,25 +615,7 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            diagnostics = "failed to retrieve Status / Issues"
-            try:
-                result_sets = kikimr.ydb_client.query(
-                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-                )
-                diagnostics = (
-                    "\n".join(
-                        "Status: {status}\nIssues:\n{issues}".format(
-                            status=row["Status"],
-                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                        )
-                        for row in result_sets[0].rows
-                    )
-                    if result_sets
-                    else []
-                )
-            except Exception as diagnostics_error:
-                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
-            raise AssertionError(f"{error}\n{diagnostics}") from error
+            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(

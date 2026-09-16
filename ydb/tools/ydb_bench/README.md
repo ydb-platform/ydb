@@ -173,8 +173,7 @@ discrete ternary search and, after confirming a plateau, selects the lowest
 CPU-saturated load within the configured throughput tolerance of the best
 saturated measurement. A plateau is confirmed only when the selected role's
 CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
-first failing point, then a binary search to find the highest load whose
-millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+first failing point, then alternates linear interpolation of the nearest latency measurements with binary steps to find the highest load whose millisecond percentile, error count, and achieved-rate ratio satisfy the SLO. It finishes only when that load and the next integer have been measured: the selected load passes and the next one fails. `resolution-percent` applies only to throughput search; older SLO configurations may still contain it, but it no longer stops refinement early. A passing configured maximum remains a lower bound, not a discovered capacity limit. This is an observed discrete boundary, not a guarantee against latency noise or nonmonotonic workloads.
 Automatic search is limited to 64 measurements per cluster-geometry stage.
 The `storage` preset can run a separate search after each dynamic-node scaling
 step, so a complete profile can contain more than 64 measurements.
@@ -192,7 +191,6 @@ For example:
         start: 1000
         maximum: 1000000
         multiplier: 2
-        resolution-percent: 2
       objective:
         type: latency-slo
         percentile: p99
@@ -226,13 +224,9 @@ post-search samples are included when deriving the conservative default
 cluster-control command budget. An explicitly configured `timeout` also caps
 each workload command; it remains a per-command safety bound rather than an
 absolute profile deadline.
-Verification never
-changes the selected load or dynamic-node scaling decision. Its holdout samples
-are written separately to `verification-repetitions.csv` and
-`verification-summary.csv`; a completed holdout becomes the reported metric
-source while the search measurements remain intact for diagnostics. Latency
-holdout metrics are evaluated with the same aggregate SLO contract as a search
-point. A throughput holdout is diagnostic: its request-error acceptance,
+For automatic latency-SLO search, verification participates in selection: a rejected candidate is marked failed and search resumes below it, reusing existing measurements in the selected geometry. Rejected verification samples and commands are retained in `verification-rejected-NNN/`, with their paths recorded in `run.json`. The final accepted samples are written to `verification-repetitions.csv` and `verification-summary.csv` and become the reported metrics. This adaptive verification is not an independent holdout. If no feasible point remains, no passing result is published. Cancellation, command failure and malformed output still fail the execution rather than being treated as latency evidence. The 64-search-measurement safety limit still applies across resumptions; exhausting it does not publish a precise boundary.
+
+For explicit points and throughput searches, verification does not change the selected load or dynamic-node scaling decision and remains an independent holdout. A throughput holdout is diagnostic: its request-error acceptance,
 throughput drift, and CPU saturation do not claim statistical reproducibility.
 
 When the winning stage is the last one, its cluster remains open until

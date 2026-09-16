@@ -201,9 +201,13 @@ Y_UNIT_TEST_SUITE(TGrpcRequestProxySimpleIgnoreRoot) {
     Y_UNIT_TEST(ResolvesRuntimeRequestsBeforeDispatch) {
         TSimpleProxySetup setup(true);
         for (const auto& [database, expected] : TVector<std::pair<TString, TString>>{
+            {"/ru", "/backup"},
+            {"/ru/", "/backup"},
             {"/ru/team/db", "/backup/team/db"},
-            {"/kfront", "/backup/kfront"},
+            {"/kfront", "/backup"},
+            {"/backup", "/backup"},
             {"/backup/team/db", "/backup/team/db"},
+            {"ru", "ru"},
             {"team/db", "team/db"},
             {"", ""},
         }) {
@@ -222,16 +226,20 @@ Y_UNIT_TEST_SUITE(TGrpcRequestProxySimpleIgnoreRoot) {
 
     Y_UNIT_TEST(SkipsInternalRequests) {
         TSimpleProxySetup setup(true);
-        auto context = setup.RuntimeRequest("/ru/db", true);
-        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/ru/db");
+        for (const auto& database : TVector<TString>{"/ru", "/ru/db"}) {
+            auto context = setup.RuntimeRequest(database, true);
+            UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, database);
+        }
     }
 
     Y_UNIT_TEST(DisabledDoesNotRequireDomain) {
         TSimpleProxySetup setup(false, "");
-        auto context = setup.RuntimeRequest("/ru/db");
-        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/ru/db");
+        for (const auto& database : TVector<TString>{"/ru", "/ru/db", "/backup", "ru", "team/db"}) {
+            auto context = setup.RuntimeRequest(database);
+            UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, database);
+        }
         auto discovery = setup.DiscoveryRequest("/ru/db", "/ru/other");
         UNIT_ASSERT(*discovery->Status == Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(discovery->EffectiveDatabase, "/ru/other");
@@ -239,6 +247,13 @@ Y_UNIT_TEST_SUITE(TGrpcRequestProxySimpleIgnoreRoot) {
 
     Y_UNIT_TEST(ResolvesDiscoveryBodyAndHeader) {
         TSimpleProxySetup setup(true);
+        for (const auto& body : TVector<TString>{"/ru", "/ru/", "/backup"}) {
+            for (const auto& header : TVector<TString>{"", "/ru", "/backup"}) {
+                auto context = setup.DiscoveryRequest(body, header);
+                UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/backup");
+            }
+        }
         for (const auto& header : TVector<TString>{"", "/ru/team/db", "/backup/team/db"}) {
             auto context = setup.DiscoveryRequest("/ru/team/db", header);
             UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
@@ -248,8 +263,14 @@ Y_UNIT_TEST_SUITE(TGrpcRequestProxySimpleIgnoreRoot) {
 
     Y_UNIT_TEST(RejectsDiscoveryMismatchBeforeAuthentication) {
         TSimpleProxySetup setup(true);
-        auto context = setup.DiscoveryRequest("/ru/db", "/ru/other", true);
-        UNIT_ASSERT(*context->Status == Ydb::StatusIds::BAD_REQUEST);
+        for (const auto& [body, header] : TVector<std::pair<TString, TString>>{
+            {"/ru/db", "/ru/other"},
+            {"/ru", "/backup/ru"},
+            {"/ru/db", "/backup"},
+        }) {
+            auto context = setup.DiscoveryRequest(body, header, true);
+            UNIT_ASSERT(*context->Status == Ydb::StatusIds::BAD_REQUEST);
+        }
     }
 }
 

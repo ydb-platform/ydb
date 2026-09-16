@@ -22,9 +22,8 @@ TString ResolveDatabasePath(const TString& database, const TString& root) {
     if (path.substr(0, separator) == rootPath) {
         return path;
     }
-    // A former root database becomes a tenant without losing its name.
     if (separator == TString::npos) {
-        return rootPath + path;
+        return rootPath;
     }
     return rootPath + path.substr(separator);
 }

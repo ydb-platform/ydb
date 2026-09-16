@@ -60,15 +60,21 @@ TString DoCanonizePathOld(const TString& path)
 Y_UNIT_TEST_SUITE(Path) {
     Y_UNIT_TEST(ResolveDatabasePath) {
         const TVector<std::pair<TString, TString>> cases = {
+            {"/ru", "/backup"},
             {"/ru/mydb123", "/backup/mydb123"},
             {"/ru/team/mydb123", "/backup/team/mydb123"},
-            {"/kfront", "/backup/kfront"},
+            {"/kfront", "/backup"},
             {"/backup", "/backup"},
+            {"/backup/", "/backup"},
+            {"/backup2", "/backup"},
             {"/backup/mydb123", "/backup/mydb123"},
             {"/backup2/mydb123", "/backup/mydb123"},
             {"//ru///team/mydb123//", "/backup/team/mydb123"},
-            {"/kfront/", "/backup/kfront"},
+            {"/ru/", "/backup"},
+            {"//ru//", "/backup"},
+            {"/kfront/", "/backup"},
             {"", ""}, {"/", "/"}, {"///", "///"},
+            {"ru", "ru"}, {"ru/mydb123", "ru/mydb123"},
             {"mydb123", "mydb123"}, {"team/mydb123", "team/mydb123"},
             {"backup/mydb123", "backup/mydb123"},
         };
@@ -76,7 +82,8 @@ Y_UNIT_TEST_SUITE(Path) {
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(input, "/backup"), expected, input);
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(expected, "/backup"), expected, input);
         }
-        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/kfront", "/root"), "/root/kfront");
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/ru", "/failover"), "/failover");
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/ru/mydb", "/failover"), "/failover/mydb");
     }
 
     Y_UNIT_TEST(CanonizeOld) {

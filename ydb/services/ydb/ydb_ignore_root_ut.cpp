@@ -82,10 +82,10 @@ public:
 
     TEnvironment(bool singleComponent, bool ignoreRoot, bool authenticated = true,
         bool nested = false, bool useRealThreads = true)
-        : Root(singleComponent ? "root" : "backup")
-        , Name(nested ? "team/mydb123" : singleComponent ? "kfront" : "mydb123")
-        , OldDatabase(nested ? "/ru/team/mydb123" : singleComponent ? "/kfront" : "/ru/mydb123")
-        , Database("/" + Root + "/" + Name)
+        : Root("failover")
+        , Name(nested ? "team/mydb123" : "mydb123")
+        , OldDatabase(nested ? "/ru/team/mydb123" : singleComponent ? "/ru" : "/ru/mydb123")
+        , Database(singleComponent ? "/" + Root : "/" + Root + "/" + Name)
         , Token(authenticated ? "root@builtin" : "")
         , Runner(Settings(Root, ignoreRoot, authenticated, useRealThreads))
         , Tenants(&Runner.GetTestServer())
@@ -110,7 +110,9 @@ public:
             });
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
-        UNIT_ASSERT_VALUES_EQUAL(CreateDatabase(Name), Database);
+        if (!singleComponent) {
+            UNIT_ASSERT_VALUES_EQUAL(CreateDatabase(Name), Database);
+        }
         Discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(
             grpc::CreateChannel(Runner.GetEndpoint(), grpc::InsecureChannelCredentials()));
         Ydb::Discovery::ListEndpointsRequest request;
@@ -538,9 +540,10 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
         for (bool ignoreRoot : {false, true}) {
             TEnvironment env(SingleComponent, ignoreRoot);
             for (const TString& database : {env.Name, TString("missing"), TString("team/missing"),
-                "/" + env.Root + "/missing", TString("/old/missing"), TString("/missing")}) {
+                "/" + env.Root + "/missing", TString("/old/missing")}) {
                 env.Call(*env.Table, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database, false);
             }
+            env.Call(*env.Discovery, &TDiscovery::WhoAmI, Ydb::Discovery::WhoAmIRequest{}, "/missing", ignoreRoot);
             for (const TString& database : {TString("/"), TString("///")}) {
                 env.Call(*env.Table, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database,
                     true, Ydb::StatusIds::BAD_REQUEST);

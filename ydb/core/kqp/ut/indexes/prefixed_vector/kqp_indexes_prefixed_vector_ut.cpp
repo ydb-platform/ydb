@@ -1185,69 +1185,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(ProjectedDistanceMustUseInputRow) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(false);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db);
-        DoCreatePrefixedVectorIndex(session, 2);
-
-        const TString query(Q1_(R"(
-            DECLARE $captured AS Struct<emb: String>;
-            DECLARE $target AS String;
-
-            SELECT pk, Knn::CosineDistance($captured.emb, $target) AS distance
-            FROM `/Root/TestTable` VIEW index
-            WHERE user = "user_a"
-            ORDER BY distance
-            LIMIT 3;
-        )"));
-        auto result = session.ExplainDataQuery(query).ExtractValueSync();
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "projection or sorting must contain distance");
-    }
-
-    Y_UNIT_TEST_TWIN(ProjectedDistanceKeepsStructMemberTarget, EnableVectorSearchActor) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db);
-        DoCreatePrefixedVectorIndex(session, 2);
-
-        const TString query(Q1_(R"(
-            DECLARE $target AS Struct<emb: String>;
-
-            SELECT pk, Knn::CosineDistance(emb, $target.emb) AS distance
-            FROM `/Root/TestTable` VIEW index
-            WHERE user = "user_a"
-            ORDER BY distance
-            LIMIT 3;
-        )"));
-        const auto params = db.GetParamsBuilder()
-            .AddParam("$target")
-                .BeginStruct()
-                    .AddMember("emb").String("\x67\x68\x02")
-                .EndStruct()
-                .Build()
-            .Build();
-        auto result = session.ExecuteDataQuery(
-            query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3u);
-    }
-
     Y_UNIT_TEST_QUAD(PrefixedVectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);

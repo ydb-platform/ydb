@@ -475,29 +475,6 @@ TString TargetDeclWith(const TString& declares) {
     return SearchPragma + declares + TargetExpr;
 }
 
-size_t CountSubstring(TStringBuf text, TStringBuf needle) {
-    size_t count = 0;
-    for (size_t pos = 0; (pos = text.find(needle, pos)) != TStringBuf::npos; pos += needle.size()) {
-        ++count;
-    }
-    return count;
-}
-
-size_t CountUdfApplications(TStringBuf ast, TStringBuf methodName, size_t applicationsFrom = 0) {
-    const TString udfPattern = TStringBuilder() << "(Udf '\"" << methodName << "\"";
-    const size_t udfPos = ast.find(udfPattern);
-    UNIT_ASSERT_C(udfPos != TStringBuf::npos, TStringBuilder() << "UDF " << methodName << " not found in:\n" << ast);
-
-    const size_t bindingPos = ast.rfind("(let $", udfPos);
-    UNIT_ASSERT_C(bindingPos != TStringBuf::npos, TStringBuilder() << "UDF binding not found in:\n" << ast);
-    const size_t nameBegin = bindingPos + TStringBuf("(let ").size();
-    const size_t nameEnd = ast.find(' ', nameBegin);
-    UNIT_ASSERT_C(nameEnd != TStringBuf::npos, TStringBuilder() << "malformed UDF binding in:\n" << ast);
-
-    const TString applyPattern = TStringBuilder() << "(Apply " << ast.SubStr(nameBegin, nameEnd - nameBegin) << ' ';
-    return CountSubstring(ast.SubStr(applicationsFrom), applyPattern);
-}
-
 std::vector<ui64> RunKeys(TQueryClient& db, const TString& sql) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2087,39 +2064,6 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
-    }
-
-    Y_UNIT_TEST_TWIN(PrefixedVectorReusesProjectedDistance, EnableVectorSearchActor) {
-        auto kikimr = MakeRunner(
-            /*enableHybridSearch=*/true,
-            /*enableCompactFulltextIndex=*/false,
-            /*enableIndexStreamWrite=*/false,
-            /*useRealThreads=*/true,
-            /*enableVectorSearchActor=*/EnableVectorSearchActor);
-        auto db = kikimr.GetQueryClient();
-        CreateDocs(db);
-        UpsertDocs(db);
-        AddPrefixedFulltextIndex(db);
-        AddPrefixedVectorIndex(db);
-
-        auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
-        auto result = db.ExecuteQuery(TargetDecl + R"sql(
-            SELECT Key FROM `/Root/Docs`
-            WHERE Category = "a"
-            ORDER BY HybridRank(
-                FullTextScore(Text, "cats"),
-                Knn::CosineDistance(Embedding, $target),
-                ("ft_idx", "vp_idx") AS Indexes)
-            LIMIT 4;
-        )sql", TTxControl::NoTx(), explainSettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetStats());
-        const auto ast = result.GetStats()->GetAst();
-        UNIT_ASSERT_C(ast.has_value(), "missing optimized AST");
-
-        const size_t scoreColumnPos = ast->find("__ydb_hybrid_distance_1");
-        UNIT_ASSERT_C(scoreColumnPos != TString::npos, TStringBuilder() << "hybrid score column not found in:\n" << *ast);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountUdfApplications(*ast, "Knn.CosineDistance", scoreColumnPos), 1u, *ast);
     }
 
     Y_UNIT_TEST(UsesFullPrefixWithPkInVectorIndex) {

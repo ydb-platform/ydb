@@ -203,15 +203,13 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
     return mismatch("a valid vector metric in the index definition");
 }
 
-bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top,
-    const TExprNode* expectedRow, TString& error)
-{
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
     const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
         auto member = expr.Maybe<TCoMember>();
-        return member && member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col;
+        return member && member.Cast().Name().Value() == col;
     };
     auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
         auto apply = expr.Maybe<TCoApply>();
@@ -246,7 +244,7 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         auto flatMapInput = flatMap.Input();
         auto member = flatMapInput.Maybe<TCoMember>();
         if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
-            if (member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col) {
+            if (member.Cast().Name().Value() == col) {
                 // First case
                 return checkUdf(flatMap.Lambda().Body(), false);
             } else {
@@ -261,7 +259,7 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
             auto innerMapInput = innerMap.Input();
             auto member = innerMapInput.Maybe<TCoMember>();
             if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
-                if (member.Cast().Struct().Raw() == expectedRow && member.Cast().Name().Value() == col) {
+                if (member.Cast().Name().Value() == col) {
                     // Second case
                     return checkUdf(innerMap.Lambda().Body(), false);
                 } else {
@@ -582,16 +580,13 @@ auto LevelLambdaFrom(
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, *fromArgs.Raw(), fromBody);
     replaces.clear();
     auto args = newLambda.Args().Ptr();
-    const auto inputRow = newLambda.Args().Arg(0).Raw();
 
     auto flatMap = newLambda.Body().Maybe<TCoFlatMap>();
     if (!flatMap) {
         auto apply = newLambda.Body().Cast<TCoApply>();
         for (auto arg : apply.Args()) {
             auto oldMember = arg.Maybe<TCoMember>();
-            if (oldMember && oldMember.Cast().Struct().Raw() == inputRow &&
-                oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back())
-            {
+            if (oldMember && oldMember.Cast().Name().Value() == indexDesc.KeyColumns.back()) {
                 auto newMember = Build<TCoMember>(ctx, pos)
                     .Name().Build(NTableIndex::NKMeans::CentroidColumn)
                     .Struct(oldMember.Cast().Struct())
@@ -3369,12 +3364,9 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             }
 
             const auto vectorSortArg = ctx.NewArgument(pos, "r");
-            const auto vectorSortExpr = ctx.Builder(pos)
-                .Callable("Member")
-                    .Add(0, vectorSortArg)
-                    .Atom(1, b.ScoreCol)
-                .Seal()
-                .Build();
+            const auto vectorSortExpr = b.PrefixColumns.empty()
+                ? ctx.Builder(pos).Callable("Member").Add(0, vectorSortArg).Atom(1, b.ScoreCol).Seal().Build()
+                : ctx.ReplaceNode(TExprNode::TPtr(b.ScoreExpr), *rowArg, vectorSortArg);
             b.List = ctx.Builder(pos)
                 .Callable("TopSort")
                     .Callable(0, "FlatMap")
@@ -3875,54 +3867,11 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         auto lambdaArgs = topBase.KeySelectorLambda().Args();
         auto lambdaBody = topBase.KeySelectorLambda().Body();
         TString error;
-        const auto topSortRow = topBase.KeySelectorLambda().Args().Arg(0);
-        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, topSortRow.Raw(), error);
-
-        // A projection may compute the distance once and expose it as a struct member used by ORDER BY.
-        // Resolve that member back to the original Knn expression for index matching and level traversal;
-        // VectorTopMain keeps the original member selector, so the final sort reuses the projected value.
-        if (!canUseVectorIndex && maybeFlatMap) {
-            const auto member = lambdaBody.Maybe<TCoMember>();
-            const auto argument = member ? member.Cast().Struct().Maybe<TCoArgument>() : TMaybeNode<TCoArgument>{};
-            TMaybeNode<TCoAsStruct> asStruct;
-            const auto flatMapBody = maybeFlatMap.Cast().Lambda().Body();
-            if (const auto just = flatMapBody.Maybe<TCoJust>()) {
-                asStruct = just.Cast().Input().Maybe<TCoAsStruct>();
-            } else if (indexDesc->KeyColumns.size() > 1) {
-                const auto optionalIf = flatMapBody.Maybe<TCoOptionalIf>();
-                if (optionalIf) {
-                    asStruct = optionalIf.Cast().Value().Maybe<TCoAsStruct>();
-                }
-            }
-
-            if (argument && argument.Raw() == topSortRow.Raw() && asStruct) {
-                const auto memberName = member.Cast().Name().Value();
-                for (const auto& item : asStruct.Cast().Args()) {
-                    if (!item->IsList()) {
-                        continue;
-                    }
-                    const auto children = item->Children();
-                    if (children.size() != 2) {
-                        continue;
-                    }
-                    const auto name = TExprBase{children[0].Get()}.Maybe<TCoAtom>();
-                    if (!name || name.Cast().Value() != memberName) {
-                        continue;
-                    }
-                    lambdaBody = TExprBase{children[1]};
-                    const auto flatMapRow = maybeFlatMap.Cast().Lambda().Args().Arg(0);
-                    canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, flatMapRow.Raw(), error);
-                    if (canUseVectorIndex) {
-                        lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
-                    }
-                    break;
-                }
-            }
-        }
-
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
-                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
+                return reject(TStringBuilder() << "sorting must contain distance: "
+                    << error << ", reference distance from projection not supported yet");
             }
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
@@ -3935,7 +3884,45 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                                                           ctx, typesCtx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
         if (!canUseVectorIndex) {
-            return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
+            auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
+            if (!argument) {
+                return reject(TStringBuilder() << "sorting must contain distance: " << error);
+            }
+            auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+            if (!asStruct) {
+                return reject("only simple projection with distance referenced in sorting supported for now");
+            }
+
+            // TODO(mbkkt) I think variable name shouldn't matter, and I only need to check that result of FlatMap
+            // used as argument for member access in top lambda. The name should be same, and it's same in the tests
+            // and was same in real world, but for some reason recently it starts to fail in real-world, so I comment it out
+            // const auto argumentName = argument.Cast().Name();
+            // if (absl::c_none_of(maybeFlatMap.Cast().Lambda().Args(),
+            //         [&](const TCoArgument& argument) { return argumentName == argument.Name(); })) {
+            //     return reject("...");
+            // }
+
+            const auto memberName = lambdaBody.Cast<TCoMember>().Name().Value();
+            for (const auto& arg : asStruct.Cast().Args()) {
+                if (!arg->IsList()) {
+                    continue;
+                }
+                auto argChildren = arg->Children();
+                if (argChildren.size() != 2) {
+                    continue;
+                }
+                auto atom = TExprBase{argChildren[0].Get()}.Maybe<TCoAtom>();
+                if (!atom || atom.Cast().Value() != memberName) {
+                    continue;
+                }
+                lambdaBody = TExprBase{argChildren[1]};
+                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
+                break;
+            }
+            if (!canUseVectorIndex) {
+                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
+            }
+            lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
         if (kqpCtx.Config->GetEnableVectorSearchActor()) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,

@@ -57,16 +57,17 @@ struct TSslHelpers {
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         int res;
         res = SSL_CTX_use_certificate_chain_file(ctx.Get(), certificate.c_str());
-        if (res < 0) {
+        if (res <= 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
         // Load key. The key can be set through explicit key field or with the same file with certificate
         res = SSL_CTX_use_PrivateKey_file(ctx.Get(), key.empty() ? certificate.c_str() : key.c_str(), SSL_FILETYPE_PEM);
-        if (res < 0) {
+        if (res <= 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
+<<<<<<< HEAD
         if (!caFile.empty()) {
             if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
                 // TODO(yurikiselev): more diagnostics?
@@ -75,6 +76,14 @@ struct TSslHelpers {
             // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
             // but doesn't fail if not provided
             SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
+=======
+        // The key loader compares the key only with a certificate of the same type.
+        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
+            return nullptr;
+        }
+        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
+            return nullptr;
+>>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
         }
 
         return ctx;
@@ -89,7 +98,8 @@ struct TSslHelpers {
         if (cert == nullptr) {
             return false;
         }
-        if (SSL_CTX_use_certificate(ctx.Get(), cert.Release()) <= 0) {
+        // SSL_CTX_use_certificate retains its own reference.
+        if (SSL_CTX_use_certificate(ctx.Get(), cert.Get()) <= 0) {
             return false;
         }
         SSL_CTX_clear_chain_certs(ctx.Get());
@@ -111,7 +121,8 @@ struct TSslHelpers {
             return false;
         }
         TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.Get(), nullptr, nullptr, nullptr));
-        if (SSL_CTX_use_PrivateKey(ctx.Get(), pkey.Release()) <= 0) {
+        // SSL_CTX_use_PrivateKey retains its own reference.
+        if (SSL_CTX_use_PrivateKey(ctx.Get(), pkey.Get()) <= 0) {
             return false;
         }
         return true;
@@ -126,6 +137,7 @@ struct TSslHelpers {
         if (!LoadPrivateKey(ctx, pem)) {
             return nullptr;
         }
+<<<<<<< HEAD
         if (!caFile.empty()) {
             if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
                 // TODO(yurikiselev): more diagnostics?
@@ -134,6 +146,13 @@ struct TSslHelpers {
             // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
             // but doesn't fail if not provided
             SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
+=======
+        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
+            return nullptr;
+        }
+        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
+            return nullptr;
+>>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
         }
 
         return ctx;

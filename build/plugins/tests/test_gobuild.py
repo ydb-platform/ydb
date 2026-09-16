@@ -232,7 +232,7 @@ def test_gofmt_deduplicates_normalized_explicit_and_glob_paths():
     gobuild._GO_PROCESS_SRCS(unit)
 
     assert unit.checks == [['gofmt', '$S/project/pkg/main.go']]
-    assert unit.get('_GO_SRCS_VALUE') == 'main.go $S/project/pkg/./main.go ${CURDIR}/sub/../main.go'
+    assert unit.get('_GO_SRCS_VALUE') == 'main.go'
 
 
 def test_gofmt_groups_sources_by_resolved_directory():
@@ -436,3 +436,110 @@ def test_go_reports_unmatched_cgo_export(srcs, errors):
     gobuild._GO_PROCESS_SRCS(unit)
 
     assert errors == ['Unmatched CGO_EXPORT keyword in SRCS() macro']
+
+
+@pytest.mark.parametrize('coverage', [False, True])
+@pytest.mark.parametrize('explicit_first', [False, True])
+@pytest.mark.parametrize(
+    'alias',
+    [
+        'main.go',
+        '$S/project/pkg/main.go',
+        '${ARCADIA_ROOT}/project/pkg/main.go',
+        '${CURDIR}/main.go',
+        '${CURDIR}/sub/../main.go',
+        r'$S/project\pkg\main.go',
+        '/checkout/project/pkg/main.go',
+        'from_srcdir.go',
+    ],
+)
+def test_go_sources_deduplicate_paths_before_compile_and_coverage(alias, explicit_first, coverage):
+    glob = '${ARCADIA_ROOT}/project/pkg/main.go'
+    paths = [alias, glob] if explicit_first else [glob, alias]
+    unit = FakeUnit(
+        variables={'_GO_SRCS_VALUE': ' '.join(paths + ['other.go']), '_GO_PACKAGE_VALUE': 'pkg'},
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE') + (('GO_TEST_COVER',) if coverage else ()),
+        sources=('main.go', 'other.go'),
+        resolutions={
+            '/checkout/project/pkg/main.go': '$S/project/pkg/main.go',
+            'from_srcdir.go': '$S/project/pkg/main.go',
+        },
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    expected = [paths[0], 'other.go']
+    assert unit.get('_GO_SRCS_VALUE') == ('' if coverage else ' '.join(expected))
+    assert unit.calls == ([('on_go_gen_cover', ['pkg'] + expected)] if coverage else [])
+    assert unit.checks == [['gofmt', '$S/project/pkg/main.go', '$S/project/pkg/other.go']]
+
+
+@pytest.mark.parametrize('coverage', [False, True])
+@pytest.mark.parametrize('cgo_only', [False, True])
+@pytest.mark.parametrize('cgo_path', ['cgo.go', '${ARCADIA_ROOT}/project/pkg/cgo.go', '${CURDIR}/cgo.go'])
+def test_go_sources_exclude_cgo_originals_but_keep_cgo_pipeline(cgo_path, cgo_only, coverage):
+    unit = FakeUnit(
+        variables={
+            '_GO_SRCS_VALUE': '${ARCADIA_ROOT}/project/pkg/cgo.go cgo.go' + ('' if cgo_only else ' main.go'),
+            '_CGO_SRCS_VALUE': cgo_path,
+            '_GO_PACKAGE_VALUE': 'pkg',
+            'MODDIR': 'project/pkg',
+            'GOSTD': 'contrib/go/_std',
+            'GO_ARCADIA_PROJECT_PREFIX': 'a.yandex-team.ru/',
+            'GO_CONTRIB_PROJECT_PREFIX': 'vendor/',
+        },
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE', 'CGO_ENABLED') + (('GO_TEST_COVER',) if coverage else ()),
+        sources=('cgo.go', 'main.go'),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    go_files = [] if cgo_only else ['main.go']
+    assert unit.get('_GO_SRCS_VALUE') == ('' if coverage else ' '.join(go_files))
+    assert [args for name, args in unit.calls if name == 'on_go_gen_cover'] == (
+        [['pkg'] + go_files] if coverage else []
+    )
+    assert [args[1] for name, args in unit.calls if name == 'on_go_compile_cgo1'] == [cgo_path]
+    assert [args[1] for name, args in unit.calls if name == 'on_go_compile_cgo2'] == [cgo_path]
+    assert unit.checks == [['gofmt', '$S/project/pkg/cgo.go'] + ['$S/project/pkg/' + f for f in go_files]]
+
+
+def test_go_sources_preserve_distinct_unresolved_and_generated_inputs():
+    files = ['main.go', '$B/project/pkg/main.go', '${BINDIR}/generated.go', 'missing.go', 'other.go', 'src/main.go']
+    unit = FakeUnit(variables={'_GO_SRCS_VALUE': ' '.join(files)}, sources=('main.go', 'src/main.go'))
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == ' '.join(files)
+
+
+@pytest.mark.parametrize('coverage', [False, True])
+def test_go_generated_sources_keep_build_inputs_and_do_not_enter_source_coverage(coverage):
+    unit = FakeUnit(
+        variables={
+            '_GO_SRCS_VALUE': 'main.go generated.go ${BINDIR}/generated.go $B/project/pkg/generated.go missing.go',
+            '_GO_PACKAGE_VALUE': 'pkg',
+        },
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE') + (('GO_TEST_COVER',) if coverage else ()),
+        sources=('main.go',),
+        resolutions={'generated.go': '$B/project/pkg/generated.go'},
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == ('' if coverage else 'main.go ') + 'generated.go missing.go'
+    assert unit.calls == ([('on_go_gen_cover', ['pkg', 'main.go'])] if coverage else [])
+    assert unit.checks == [['gofmt', '$S/project/pkg/main.go']]
+
+
+def test_go_test_for_curdir_is_not_the_tested_library_directory():
+    files = ['${ARCADIA_ROOT}/project/pkg/main.go', '${CURDIR}/main.go']
+    unit = FakeUnit(
+        path='project/pkg/gotest',
+        variables={'_GO_SRCS_VALUE': ' '.join(files), 'GO_TEST_FOR_DIR': '$S/project/pkg'},
+        flags=('_GO_FMT_ADD_CHECK', 'GO_TEST_MODULE'),
+    )
+
+    gobuild._GO_PROCESS_SRCS(unit)
+
+    assert unit.get('_GO_SRCS_VALUE') == ' '.join(files)

@@ -6,6 +6,10 @@
 #include "util_basics.h"
 #include "util_fmt_abort.h"
 
+#include <util/generic/hash_set.h>
+
+#include <memory>
+
 namespace NKikimr {
 namespace NTable {
     class TRowState;
@@ -108,6 +112,13 @@ namespace NTable {
             */
 
             ui32 LargeEdge = Max<ui32>();
+
+            /* External blobs left in these BlobStorage groups are materialized
+                regardless of LargeEdge, so that a compaction rewrites them
+                instead of carrying the original references over.
+             */
+
+            std::shared_ptr<const THashSet<ui32>> ForceMaterializeGroups;
 
             // Scan can override default read ahead settings
             ui64 ReadAheadLo = Max<ui64>();

@@ -778,7 +778,7 @@ protected:
                 YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::SUCCESS",
                     {"keyValue", TabletID()});
                 // now proceed with basic executor
-                Executor()->StartMoveDataVacuumFromOwner();
+                Executor()->StartMoveDataVacuumFromOwner(State.GetMoveDataGroups());
                 break;
 
             case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::ERROR:

@@ -37,6 +37,7 @@ public:
     bool TryStartVacuum(TVacuumTag tag, const TActorContext& ctx);
     void OnCompactionPrepared(ui32 tableId, ui64 compactionId);
     void WaitCompaction();
+    bool IsCompacting(ui32 tableId) const;
     void OnCompleteCompaction(ui32 tableId, const TFinishedCompactionInfo& finishedCompactionInfo);
     bool NeedLogSnaphot();
     void OnMakeLogSnapshot(ui32 generation, ui32 step);

@@ -847,7 +847,10 @@ namespace NKikimr {
             }
             const ui32 num = ChunksToUse - (ReservedChunks.size() + ChunkReservePending);
             ChunkReservePending += num;
-            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num);
+            // Compaction output: this is what gives space back, so it is not held behind
+            // the static group reserve the way a write of newly accepted data is.
+            return std::make_unique<NPDisk::TEvChunkReserve>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, num,
+                /*forHousekeeping=*/true);
         }
 
         ui32 GetMaxInFlightWrites() {

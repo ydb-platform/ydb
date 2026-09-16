@@ -1,25 +1,26 @@
 #include "mon_render.h"
 
 #include "mon_render_chaos.h"
+#include "mon_render_dbg.h"
+#include "mon_render_local_db.h"
+#include "mon_render_memory.h"
 #include "mon_render_overview.h"
+#include "mon_util.h"
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <library/cpp/resource/resource.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
-#include <util/generic/map.h>
 #include <util/generic/strbuf.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
-#include <util/string/subst.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -27,99 +28,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void AddResource(IOutputStream& str, TStringBuf tag, TStringBuf resourceName)
-{
-    TString content;
-    if (!NResource::FindExact(resourceName, &content)) {
-        str << "<!-- resource " << resourceName << " not found -->";
-        return;
-    }
-    str << "<" << tag << ">" << content << "</" << tag << ">";
-}
-
-void AddScript(IOutputStream& str, TStringBuf resourceName)
-{
-    AddResource(str, "script", resourceName);
-}
-
-void AddStyle(IOutputStream& str, TStringBuf resourceName)
-{
-    AddResource(str, "style", resourceName);
-}
-
-TString HtmlEscape(TStringBuf in)
-{
-    TString escaped(in);
-    SubstGlobal(escaped, "&", "&amp;");
-    SubstGlobal(escaped, "<", "&lt;");
-    SubstGlobal(escaped, ">", "&gt;");
-    SubstGlobal(escaped, "\"", "&quot;");
-    return escaped;
-}
-
-const char* PageParam(EMonPage page)
-{
-    switch (page) {
-        case EMonPage::Overview:
-            return "overview";
-        case EMonPage::Dbg:
-            return "dbg";
-        case EMonPage::Chaos:
-            return "chaos";
-        case EMonPage::LocalDb:
-            return "localdb";
-        case EMonPage::VChunk:
-            return "vchunk";
-        case EMonPage::VChunkCounters:
-            return "vchunkcounters";
-        case EMonPage::Latency:
-            return "latency";
-    }
-    return "overview";
-}
-
-const char* PageTitle(EMonPage page)
-{
-    switch (page) {
-        case EMonPage::Overview:
-            return "Overview";
-        case EMonPage::Dbg:
-            return "DBGs";
-        case EMonPage::Chaos:
-            return "Chaos";
-        case EMonPage::LocalDb:
-            return "Local DB";
-        case EMonPage::VChunk:
-            return "VChunk";
-        case EMonPage::VChunkCounters:
-            return "VChunk counters";
-        case EMonPage::Latency:
-            return "Latency";
-    }
-    return "";
-}
-
 // Mon page of the DDisk actor behind the id; the "/node/<id>" prefix makes the
 // link work from any node's mon. The path format mirrors
 // TDDiskActor::RegisterMonPage.
-TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId)
-{
-    return TStringBuilder()
-           << "/node/" << ddiskId.NodeId
-           << Sprintf(
-                  "/actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
-                  ddiskId.PDiskId,
-                  ddiskId.DDiskSlotId);
-}
-
-void RenderDDiskLink(
-    IOutputStream& str,
-    const NKikimr::NBsController::TDDiskId& ddiskId)
-{
-    str << "<a href='" << MakeDDiskMonPageUrl(ddiskId) << "'>"
-        << HtmlEscape(ddiskId.ToString()) << "</a>";
-}
-
 // Mon page of the persistent buffer behind the id: the node's "Persistent
 // Buffer" page filtered to this pbuffer's service actor (its "pb" filter
 // matches ToString of the well-known service id).
@@ -142,65 +53,7 @@ void RenderPBufferLink(
         << HtmlEscape(pbufferId.ToString()) << "</a>";
 }
 
-// "6 Online" or "4 Online / 2 Sufferer".
-TString HealthRollup(const TMap<EHostHealth, size_t>& counts)
-{
-    TStringBuilder sb;
-    for (const auto& [health, count]: counts) {
-        if (!sb.empty()) {
-            sb << " / ";
-        }
-        sb << count << " " << ToString(health);
-    }
-    return sb.empty() ? TString("-") : TString(sb);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-
-void RenderHeader(IOutputStream& str, const TTabletInfo& tabletInfo)
-{
-    HTML (str) {
-        TAG (TH3) {
-            str << "partition_direct tablet " << tabletInfo.TabletId;
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEBODY () {
-                TABLER () {
-                    TABLED () {
-                        str << "TabletId";
-                    }
-                    TABLED () {
-                        str << tabletInfo.TabletId;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Generation";
-                    }
-                    TABLED () {
-                        str << tabletInfo.Generation;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "DiskId";
-                    }
-                    TABLED () {
-                        str << HtmlEscape(tabletInfo.DiskId);
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "State";
-                    }
-                    TABLED () {
-                        str << HtmlEscape(tabletInfo.State);
-                    }
-                }
-            }
-        }
-    }
-}
 
 void RenderMenu(
     IOutputStream& str,
@@ -215,6 +68,7 @@ void RenderMenu(
         EMonPage::VChunk,
         EMonPage::VChunkCounters,
         EMonPage::Latency,
+        EMonPage::Memory,
     };
     str << "<div class='pd-menu'>";
     for (EMonPage page: pages) {
@@ -225,363 +79,6 @@ void RenderMenu(
             << "&page=" << PageParam(page) << "'>" << PageTitle(page) << "</a>";
     }
     str << "</div>";
-}
-
-void RenderFreshPercentage(
-    IOutputStream& str,
-    const TDbgSnapshot& dbg,
-    ui32 blockSize)
-{
-    for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
-        TStringBuilder w;
-        for (auto host: vChunkConfig.GetDDisks()) {
-            if (auto watermark = vChunkConfig.GetWatermark(host)) {
-                w << PrintHostIndex(host) << ":" << *watermark / blockSize;
-            }
-        }
-
-        if (w) {
-            str << PrintVChunkId(vChunkId) << "[" << w << "] ";
-        }
-    }
-}
-
-void RenderDbgList(
-    IOutputStream& str,
-    const TTabletInfo& tabletInfo,
-    const TVector<TDbgSnapshot>& dbgs)
-{
-    HTML (str) {
-        TAG (TH3) {
-            str << "Direct Block Groups";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "DBG";
-                    }
-                    TABLEH () {
-                        str << "Hosts";
-                    }
-                    TABLEH () {
-                        str << "VChunks";
-                    }
-                    TABLEH () {
-                        str << "Host health";
-                    }
-                    TABLEH () {
-                        str << "Inflight";
-                    }
-                    TABLEH () {
-                        str << "Consecutive success / errors";
-                    }
-                    TABLEH () {
-                        str << "PBuffers usage";
-                    }
-                    TABLEH () {
-                        str << "Ahead";
-                    }
-                    TABLEH () {
-                        str << "Behind";
-                    }
-                    TABLEH () {
-                        str << "Fresh";
-                    }
-                }
-            }
-            TABLEBODY () {
-                for (const auto& dbg: dbgs) {
-                    TMap<EHostHealth, size_t> healthCounts;
-                    size_t inflight = 0;
-                    size_t consecutiveErrors = 0;
-                    size_t consecutiveSuccesses = 0;
-                    TCountAndSize pBuffersUsage;
-                    TCountAndSize aheadBlocks;
-                    TCountAndSize behindBlocks;
-                    for (const auto& host: dbg.Hosts) {
-                        ++healthCounts[host.Health];
-                        consecutiveErrors += host.Errors.ConsecutiveErrorCount;
-                        consecutiveSuccesses +=
-                            host.Errors.ConsecutiveSuccessCount;
-                        for (size_t operation = 0; operation < OperationCount;
-                             ++operation)
-                        {
-                            inflight += host.InflightByOperation[operation];
-                        }
-                        pBuffersUsage += host.PBuffersUsage;
-                        aheadBlocks += host.AheadBlocks;
-                        behindBlocks += host.BehindBlocks;
-                    }
-                    TABLER () {
-                        TABLED () {
-                            str << "<a href='?TabletID=" << tabletInfo.TabletId
-                                << "&page=dbg&dbg=" << dbg.Index << "'>#"
-                                << dbg.Index << "</a>";
-                        }
-                        TABLED () {
-                            str << dbg.Hosts.size();
-                        }
-                        TABLED () {
-                            str << dbg.VChunkCount;
-                        }
-                        TABLED () {
-                            str << HealthRollup(healthCounts);
-                        }
-                        TABLED () {
-                            str << inflight;
-                        }
-                        TABLED () {
-                            str << consecutiveSuccesses << " / "
-                                << consecutiveErrors;
-                        }
-                        TABLED () {
-                            str << pBuffersUsage.Print(true);
-                        }
-                        TABLED () {
-                            str << aheadBlocks.Print(true);
-                        }
-                        TABLED () {
-                            str << behindBlocks.Print(true);
-                        }
-                        TABLED () {
-                            RenderFreshPercentage(
-                                str,
-                                dbg,
-                                tabletInfo.BlockSize);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-void RenderDbgDetail(
-    IOutputStream& str,
-    const TTabletInfo& tabletInfo,
-    const TDbgSnapshot& dbg)
-{
-    str << "<div class='pd-block'><a href='?TabletID=" << tabletInfo.TabletId
-        << "&page=dbg'>&larr; back to DBGs</a></div>";
-    // POST, not a link: link prefetching must not add hosts.
-    //
-    // The same parameters go into both the action URL and the hidden fields
-    // because the request has two readers, each looking at one place only:
-    // the mon proxy picks the target tablet from the POST body, while the
-    // tablet's Cgi() reads the URL query.
-    str << "<form method='post' action='?TabletID=" << tabletInfo.TabletId
-        << "&page=dbg&dbg=" << dbg.Index
-        << "&action=addhost' class='pd-block'>"
-           "<input type='hidden' name='TabletID' value='"
-        << tabletInfo.TabletId
-        << "'/>"
-           "<input type='hidden' name='page' value='dbg'/>"
-           "<input type='hidden' name='dbg' value='"
-        << dbg.Index
-        << "'/>"
-           "<input type='hidden' name='action' value='addhost'/>"
-           "<button type='submit' class='btn btn-default'>Add host</button>"
-           "</form>";
-    HTML (str) {
-        TAG (TH3) {
-            str << "DBG #" << dbg.Index;
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "Host";
-                    }
-                    TABLEH () {
-                        str << "State";
-                    }
-                    TABLEH () {
-                        str << "Health";
-                    }
-                    TABLEH () {
-                        str << "PBuffer used";
-                    }
-                    TABLEH () {
-                        str << "Ahead blocks";
-                    }
-                    TABLEH () {
-                        str << "Behind blocks";
-                    }
-                    TABLEH () {
-                        str << "Consecutive errors";
-                    }
-                    TABLEH () {
-                        str << "Consecutive success";
-                    }
-                }
-            }
-            TABLEBODY () {
-                for (const auto& host: dbg.Hosts) {
-                    TABLER () {
-                        TABLED () {
-                            str << PrintHostIndex(host.Index);
-                        }
-                        TABLED () {
-                            str << ToString(host.State);
-                        }
-                        TABLED () {
-                            str << ToString(host.Health);
-                        }
-                        TABLED () {
-                            str << host.PBuffersUsage.Print(true);
-                        }
-                        TABLED () {
-                            str << host.AheadBlocks.Print(true);
-                        }
-                        TABLED () {
-                            str << host.BehindBlocks.Print(true);
-                        }
-                        TABLED () {
-                            str << host.Errors.ConsecutiveErrorCount;
-                        }
-                        TABLED () {
-                            str << host.Errors.ConsecutiveSuccessCount;
-                        }
-                    }
-                }
-            }
-        }
-        TAG (TH4) {
-            str << "Inflight by operation";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "Host";
-                    }
-                    for (size_t operation = 0; operation < OperationCount;
-                         ++operation)
-                    {
-                        TABLEH () {
-                            str << ToString(static_cast<EOperation>(operation));
-                        }
-                    }
-                }
-            }
-            TABLEBODY () {
-                for (const auto& host: dbg.Hosts) {
-                    TABLER () {
-                        TABLED () {
-                            str << PrintHostIndex(host.Index);
-                        }
-                        for (size_t operation = 0; operation < OperationCount;
-                             ++operation)
-                        {
-                            TABLED () {
-                                str << host.InflightByOperation[operation];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        TAG (TH4) {
-            str << "Connections";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "Host";
-                    }
-                    TABLEH () {
-                        str << "DDisk";
-                    }
-                    TABLEH () {
-                        str << "PBuffer";
-                    }
-                }
-            }
-            TABLEBODY () {
-                for (const auto& connection: dbg.Connections) {
-                    TABLER () {
-                        TABLED () {
-                            str << PrintHostIndex(connection.HostIndex);
-                        }
-                        TABLED () {
-                            RenderDDiskLink(str, connection.DDiskId);
-                            if (connection.DDiskConnected) {
-                                str << " connected";
-                            }
-                            str << " " << connection.DDiskSession;
-                        }
-                        TABLED () {
-                            RenderPBufferLink(str, connection.PBufferId);
-                            if (connection.PBufferConnected) {
-                                str << " connected";
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-void RenderProtoDump(
-    IOutputStream& str,
-    const char* name,
-    const std::optional<TString>& dump)
-{
-    if (!dump) {
-        str << "<div class='pd-block'>" << name << " (none)</div>";
-        return;
-    }
-    // display:list-item brings back the fold triangle that the page CSS
-    // hides; the pointer marks the line as clickable.
-    str << "<details class='pd-details'>"
-           "<summary class='pd-summary'>"
-        << name << "</summary><pre>" << HtmlEscape(*dump) << "</pre></details>";
-}
-
-void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
-{
-    HTML (str) {
-        TAG (TH3) {
-            str << "Local DB";
-        }
-        RenderProtoDump(str, "VolumeConfig", db.VolumeConfig);
-        RenderProtoDump(
-            str,
-            "DirectBlockGroupsConnections",
-            db.DirectBlockGroupsConnections);
-        RenderProtoDump(str, "AddHostInProgress", db.AddHostInProgress);
-        TAG (TH4) {
-            str << "VChunkConfigs (persisted overrides)";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEHEAD () {
-                TABLER () {
-                    TABLEH () {
-                        str << "VChunkIndex";
-                    }
-                    TABLEH () {
-                        str << "Config";
-                    }
-                }
-            }
-            TABLEBODY () {
-                for (const auto& [vChunkIndex, config]: db.VChunkConfigs) {
-                    TABLER () {
-                        TABLED () {
-                            str << config.GetVChunkIndex();
-                        }
-                        TABLED () {
-                            str << "<pre>" << HtmlEscape(config.DebugPrint())
-                                << "</pre>";
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 void RenderVChunk(IOutputStream& str, const TMonPageData& data)
@@ -881,25 +378,6 @@ void RenderVChunkCounters(IOutputStream& str, const TMonPageData& data)
     }
 
     AddScript(str, "partition_direct/mon_page/vchunk_counters.js");
-}
-
-void RenderDbg(IOutputStream& str, const TMonPageData& data)
-{
-    if (!data.SelectedDbg) {
-        RenderDbgList(str, data.TabletInfo, data.Dbgs);
-        return;
-    }
-    for (const auto& dbg: data.Dbgs) {
-        if (dbg.Index == *data.SelectedDbg) {
-            RenderDbgDetail(str, data.TabletInfo, dbg);
-            return;
-        }
-    }
-    HTML (str) {
-        DIV_CLASS ("alert alert-warning") {
-            str << "DBG #" << *data.SelectedDbg << " not found.";
-        }
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1581,7 +1059,6 @@ TString RenderMonPage(const TMonPageData& data)
     TStringStream str;
 
     AddStyle(str, "partition_direct/mon_page/mon_page.css");
-    RenderHeader(str, data.TabletInfo);
     RenderMenu(str, data.TabletInfo, data.Page);
 
     if (data.RuntimeError) {
@@ -1616,6 +1093,9 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::Latency:
             RenderLatency(str, data);
+            break;
+        case EMonPage::Memory:
+            RenderMemory(str, data);
             break;
     }
     return str.Str();

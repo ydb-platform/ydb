@@ -47,9 +47,8 @@ public:
         TBaseActor<TSchemaOperationActor>::PassAway();
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "SchemaOperation"},
             {"path", Path});
     }
 

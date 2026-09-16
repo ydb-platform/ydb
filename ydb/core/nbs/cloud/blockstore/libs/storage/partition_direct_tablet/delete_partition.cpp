@@ -49,6 +49,7 @@ void TPartitionActor::HandleDeletePartition(
 // Start partition teardown, stop FastPathService first
 void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
 {
+    UnregisterFrontendVolume(ctx);
     Become(&TThis::StateDelete);
 
     LOG_INFO(
@@ -144,7 +145,7 @@ void TPartitionActor::StartCleanupActor(
         .DDiskPoolName = StorageConfig->GetDDiskPoolName(),
         .PersistentBufferDDiskPoolName =
             StorageConfig->GetPersistentBufferDDiskPoolName(),
-        .DirectBlockGroupsCount = DirectBlockGroupsCount,
+        .DirectBlockGroupsCount = DefaultVolumeDirectBlockGroupCount,
     }));
 }
 

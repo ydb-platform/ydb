@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
-#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
+#include <ydb/core/kqp/ut/olap/helpers/test_case.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -5468,6 +5468,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 c Int64,
                 d Int64,
                 e Int64,
+                f Decimal(22,9),
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -5517,6 +5518,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 addCell(rows, "c", c);
                 addCell(rows, "d", d);
                 addCell(rows, "e", e);
+                rows.AddMember("f");
+                if (e) {
+                    rows.BeginOptional().Decimal(NYdb::TDecimalValue(TStringBuilder() << *e << ".5", 22, 9)).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(22, 9)).Build());
+                }
                 rows.EndStruct();
             }
             rows.EndList();
@@ -5880,14 +5887,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     const THashSet<TString> WindowQueriesNotLoweredYet{
-        // Aggregates over a whole partition need the frame to be folded and broadcast.
-        "partitioned sum",
-        "partitioned average",
-        "multi column partition",
-        "named window without an order",
-        "two windows with different specifications",
-        "window result inside an expression",
-        "explicit whole partition frame",
+        // A frame that ends after the current row but does not span the whole partition still
+        // needs a row queue.
         "suffix frame",
         // Frames that do not run from the partition start to the current row need a row queue.
         "sliding frame ending at the current row",
@@ -6967,21 +6968,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(AggregateShuffleEliminationUsesAndPreservesMapConnection) {
         struct TCase {
-            bool Enabled;
+            bool ShuffleEliminationEnabled;
+            bool AggregateShuffleEliminationEnabled;
             TVector<TInfoUnit> ShuffledBy;
             TVector<TInfoUnit> GroupBy;
             bool EliminateShuffle;
         };
 
         const TVector<TCase> cases = {
-            {false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
-            {true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
-            {true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
+            {false, true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
+            {true, false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
+            {true, true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
         };
 
         for (const auto& testCase : cases) {
             TMapRuleTestContext testContext;
-            testContext.Config->OptShuffleEliminationForAggregation = testCase.Enabled;
+            testContext.Config->OptShuffleElimination = testCase.ShuffleEliminationEnabled;
+            testContext.Config->OptShuffleEliminationForAggregation = testCase.AggregateShuffleEliminationEnabled;
             TPlanProps planProps;
             const auto pos = NYql::TPositionHandle();
 
@@ -9420,18 +9423,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {},
-                        /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {
+                        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+                        /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         /*queriesWithoutCboCheck=*/{13});
     }
 
-    // Compiled 79 from 99.
+    // Compiled 87 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
-                        {1,  2,  3,  4,  5,  6,  7,  8,  10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33,
-                         34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 49, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71,
-                         72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
+                        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, /*14,*/ 15, 16, /*17,*/ 18, 19, 20,
+                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, /*39,*/ 40,
+                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, 53, 54, 55, 56, /*57,*/ 58, 59, 60,
+                        61, 62, 63, 64, 65, 66, 67, 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, /*86,*/ 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.
@@ -11851,7 +11856,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return ExplainHashCompatibilityQueryWithAst(tables, query).first;
     }
 
-    Y_UNIT_TEST(AggregationShuffleEliminationSettingEnablesTransactionLayout) {
+    Y_UNIT_TEST(AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         const auto preparedQuery = CompilePreparedQuery(kikimr, R"(
             PRAGMA ydb.OptShuffleElimination = "false";
@@ -11863,7 +11868,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto& transactions = preparedQuery->GetTransactions();
         UNIT_ASSERT(!transactions.empty());
         for (const auto& transaction : transactions) {
-            UNIT_ASSERT(transaction->EnableShuffleElimination());
+            UNIT_ASSERT(!transaction->EnableShuffleElimination());
         }
     }
 

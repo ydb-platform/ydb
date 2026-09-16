@@ -110,6 +110,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockHashJoinForCross);
     REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
+    REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -303,7 +304,7 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     ui64 mask = EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
-    if (!WindowFunctionsV2.Get().GetOrElse(false)) {
+    if (!GetWindowFunctionsV2()) {
         mask &= ~ui64(NYql::NDq::EEnabledSpillingNodes::WideSort);
     }
     return mask;
@@ -401,6 +402,10 @@ bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
 }
 
+bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {
+    return EnableBlockHashJoinEqualNulls.Get().GetOrElse(TTableServiceConfig::GetEnableBlockHashJoinEqualNulls());
+}
+
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
     return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
         TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
@@ -408,6 +413,10 @@ bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
     return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
+}
+
+bool TKikimrConfiguration::GetWindowFunctionsV2() const {
+    return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
 }
 
 } // namespace NYql

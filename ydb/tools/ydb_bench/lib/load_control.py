@@ -376,6 +376,35 @@ def _latency_probe(config, low, high, measured, predictive):
     return min(high - 1, max(low + 1, low + int((high - low) * fraction)))
 
 
+def _latency_growth_probe(config, current, measured, attempt_count):
+    search = config["search"]
+    fallback = _next_geometric(current, search["maximum"], search["multiplier"])
+    lower = max((load for load, record in measured.items() if load < current and record["passed"]), default=None)
+    if lower is None:
+        return fallback
+    objective = config["objective"]
+    metric = objective.get("latency_metric", objective["percentile"] + "_ms")
+    left, right = measured[lower].get(metric), measured[current].get(metric)
+    if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (left, right)):
+        return fallback
+    # Small or flat changes are dominated by measurement noise and percentile rounding.
+    if left < 0 or right - left < max(0.05 * right, 0.01 * objective["max_ms"]):
+        return fallback
+    distance = (objective["max_ms"] - right) / (right - left) * (current - lower)
+    if not math.isfinite(distance) or distance <= 0:
+        return fallback
+    # Approach the predicted crossing without treating extrapolated loads as evidence.
+    candidate = min(search["maximum"], current * 4, current + int(0.85 * distance))
+    if candidate <= fallback:
+        return fallback
+    # A wider first-failure bracket must still fit the existing 64-attempt budget.
+    failure_cost = 1 + 2 * _binary_probe_count(current, candidate, 1)
+    success_cost = _maximum_latency_attempts({**search, "start": candidate})
+    if attempt_count + max(failure_cost, success_cost) > MAX_AUTOMATIC_SEARCH_ATTEMPTS:
+        return fallback
+    return candidate
+
+
 def _run_latency(config, measure, on_attempt, previous_attempts=()):
     search = config["search"]
     attempts = list(previous_attempts)
@@ -416,7 +445,7 @@ def _run_latency(config, measure, on_attempt, previous_attempts=()):
                     "lower-bound",
                     passing_load=current,
                 )
-            current = _next_geometric(current, search["maximum"], search["multiplier"])
+            current = _latency_growth_probe(config, current, measured, len(attempts))
         else:
             first_fail = current
             break
@@ -433,6 +462,14 @@ def _run_latency(config, measure, on_attempt, previous_attempts=()):
     # Reuse closer evidence when resuming after a rejected verification.
     high = min(load for load, record in measured.items() if not record["passed"])
     low = max(load for load, record in measured.items() if record["passed"] and load < high)
+    # Verification can reject an otherwise passing boundary by a single load step.
+    # Try its immediate predecessor once before returning to bracket refinement.
+    if measured[high].get("verification_rejected") and high - low > 1:
+        candidate = high - 1
+        if sample(candidate)["passed"]:
+            low = candidate
+        else:
+            high = candidate
     predictive = True
     while high - low > 1:
         candidate = _latency_probe(config, low, high, measured, predictive)

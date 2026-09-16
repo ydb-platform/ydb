@@ -115,6 +115,8 @@ public:
             Self->IncrementalRestoreStates.FindPtr(restoreId));
 
         Self->IncrementalRestoreStates.erase(restoreId);
+        // Restart can reload the completed restore's metadata before FORGET.
+        Self->LongIncrementalRestoreOps.erase(TOperationId(restoreId, 0));
 
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();

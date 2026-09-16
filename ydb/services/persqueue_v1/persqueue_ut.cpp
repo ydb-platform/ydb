@@ -31,6 +31,7 @@
 
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 
 #include <grpcpp/client_context.h>
@@ -2908,6 +2909,172 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(readStream->Read(&resp));
         Cerr << "Got read response " << resp << "\n";
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+    }
+
+    enum class ECustomCodecsMode {
+        None,
+        Known,
+        Mixed,
+        CustomOnly,
+    };
+
+    static  TVector<i32> GetCustomCodecs(ECustomCodecsMode customCodecsMode) {
+        TVector<i32> customCodecs;
+        switch (customCodecsMode) {
+            case ECustomCodecsMode::None:
+                break;
+            case ECustomCodecsMode::Known:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_ZSTD};
+                break;
+            case ECustomCodecsMode::Mixed:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_CUSTOM + 5, Ydb::Topic::CODEC_ZSTD, Ydb::Topic::CODEC_CUSTOM + 7};
+                break;
+            case ECustomCodecsMode::CustomOnly:
+                customCodecs = {Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
+                break;
+        }
+        return customCodecs;
+    }
+
+    static void TopicServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic";
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--custom-codecs-topic");
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            for (const auto codec : customCodecs) {
+                request.mutable_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+            }
+            request.add_consumers()->set_name("user");
+
+            grpc::ClientContext rcontext;
+            auto status = topicStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.AnnoyingClient->WaitTopicInit(topicShortName);
+            server.AnnoyingClient->AddTopic(topicShortName);
+        }
+
+        grpc::ClientContext wcontext;
+        auto writeStream = topicStub->StreamWrite(&wcontext);
+        UNIT_ASSERT(writeStream);
+
+        Ydb::Topic::StreamWriteMessage::FromClient req;
+        Ydb::Topic::StreamWriteMessage::FromServer resp;
+        req.mutable_init_request()->set_path(topicShortName);
+        req.mutable_init_request()->set_producer_id("producer");
+        req.mutable_init_request()->set_message_group_id("producer");
+
+        UNIT_ASSERT(writeStream->Write(req));
+        UNIT_ASSERT(writeStream->Read(&resp));
+        Cerr << "===Got init response: " << resp.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+
+        const auto& initCodecs = resp.init_response().supported_codecs().codecs();
+        TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        Sort(customCodecs);
+        Sort(gotCodecs);
+        UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, customCodecs, resp.init_response().ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseNone) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::None);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseKnown) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Known);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseMixed) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Mixed);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseCustomOnly) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::CustomOnly);
+    }
+
+    static void PersQueueServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+        auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic-pqv1";
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--custom-codecs-topic-pqv1");
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            for (const auto codec : customCodecs) {
+                request.mutable_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+            }
+            request.add_consumers()->set_name("user");
+
+            grpc::ClientContext rcontext;
+            auto status = topicStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.AnnoyingClient->WaitTopicInit(topicShortName);
+            server.AnnoyingClient->AddTopic(topicShortName);
+        }
+
+        grpc::ClientContext wcontext;
+        auto writeStream = pqStub->StreamingWrite(&wcontext);
+        UNIT_ASSERT(writeStream);
+
+        Ydb::PersQueue::V1::StreamingWriteClientMessage req;
+        Ydb::PersQueue::V1::StreamingWriteServerMessage resp;
+        req.mutable_init_request()->set_topic(topicShortName);
+        req.mutable_init_request()->set_message_group_id("producer");
+
+        UNIT_ASSERT(writeStream->Write(req));
+        UNIT_ASSERT(writeStream->Read(&resp));
+        Cerr << "===Got init response: " << resp.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(resp.server_message_case() == Ydb::PersQueue::V1::StreamingWriteServerMessage::kInitResponse);
+
+        TVector<i32> expectedCodecs;
+        for (const auto codec : customCodecs) {
+            if (Ydb::PersQueue::V1::Codec_IsValid(codec)) {
+                expectedCodecs.push_back(codec);
+            }
+        }
+
+        const auto& initCodecs = resp.init_response().supported_codecs();
+        TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        Sort(expectedCodecs);
+        Sort(gotCodecs);
+        UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, expectedCodecs, resp.init_response().ShortDebugString());
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseNone) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::None);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseKnown) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::Known);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseMixed) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::Mixed);
+    }
+
+    Y_UNIT_TEST(PersQueueServiceCustomCodecsInInitResponseCustomOnly) {
+        PersQueueServiceCustomCodecsInInitResponse(ECustomCodecsMode::CustomOnly);
     }
 
     Y_UNIT_TEST(SetupWriteSession) {

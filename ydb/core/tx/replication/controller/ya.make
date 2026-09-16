@@ -63,6 +63,7 @@ SRCS(
     tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
+    tx_run_worker.cpp
     tx_worker_error.cpp
 )
 

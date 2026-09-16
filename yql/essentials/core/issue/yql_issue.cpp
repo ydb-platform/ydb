@@ -11,6 +11,10 @@ static_assert(DEFAULT_ERROR == TIssuesIds::DEFAULT_ERROR,
 static_assert(UNEXPECTED_ERROR == TIssuesIds::UNEXPECTED,
               "value of particular and common error mismatched for \"UNEXPECTED_ERROR\"");
 
+void PreloadIssueRegistry() {
+    GetSeverity(TIssuesIds::DEFAULT_ERROR);
+}
+
 void CheckFatalIssues(TIssues& issues, const TString& reportTarget) {
     bool isFatal = false;
     auto checkIssue = [&](const TIssue& issue) {

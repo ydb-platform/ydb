@@ -234,6 +234,22 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
     return NullNode;
 }
 
+TExprBase BuildOlapJsonValue(const TCoJsonValue& jsonValue, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos,
+                             const TPushdownOptions& pushdownOptions) {
+    YQL_ENSURE(CanBePushedAsOlapJsonValue(jsonValue, &argument), "JSON_VALUE can not be pushed down as KqpOlapJsonValue");
+    const TString colName = GetOlapColumnName(jsonValue.Json().Cast<TCoMember>().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
+
+    return Build<TKqpOlapJsonValue>(ctx, pos)
+        .Column<TCoAtom>()
+            .Value(colName)
+        .Build()
+        .Path(jsonValue.JsonPath().Cast<TCoUtf8>())
+        .ReturningType<TCoDataType>()
+            .Type().Value("Utf8", TNodeFlags::Default).Build()
+        .Build()
+        .Done();
+}
+
 TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
 {
     auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
@@ -382,27 +398,12 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
         }
 
         if (auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
-            auto maybeColMember = maybeJsonValue.Cast().Json().Maybe<TCoMember>();
-            auto maybePathUtf8 = maybeJsonValue.Cast().JsonPath().Maybe<TCoUtf8>();
-            auto maybeReturningType = maybeJsonValue.Cast().ReturningType();
+            return BuildOlapJsonValue(maybeJsonValue.Cast(), argument, ctx, pos, pushdownOptions);
+        }
 
-            YQL_ENSURE(maybeColMember, "Expected TCoMember in column field of JSON_VALUE function for pushdown");
-            YQL_ENSURE(maybePathUtf8, "Expected TCoUtf8 in path of JSON_VALUE function for pushdown");
-            const TString colName = GetOlapColumnName(maybeColMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
-
-            auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
-                .Column<TCoAtom>()
-                    .Value(colName)
-                .Build()
-                .Path(maybePathUtf8.Cast());
-            if (maybeReturningType) {
-                builder.ReturningType(maybeReturningType.Cast());
-            } else {
-                builder.ReturningType<TCoDataType>()
-                    .Type().Value("Utf8", TNodeFlags::Default).Build()
-                    .Build();
-            }
-            return builder.Done();
+        if (const auto externalArg = pushdownOptions.FindExternalArg(node.Ref())) {
+            // The argument stands for an OLAP expression (e.g. `KqpOlapJsonValue`) computed by the column shard.
+            return TExprBase(externalArg);
         }
 
         if (auto maybeJsonExists = node.Maybe<TCoJsonExists>()) {
@@ -738,14 +739,29 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         return false;
     });
 
+    // External arguments stand for OLAP expressions (e.g. `KqpOlapJsonValue`) which are computed by the column shard
+    // before `KqpOlapApply` and passed into it instead of the whole column.
+    const auto externalArgs = FindNodes(apply.Ptr(), [&pushdownOptions] (const TExprNode::TPtr& node) {
+        return pushdownOptions.IsExternalArg(*node);
+    });
+
     // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
-    if (!members.size()) {
+    if (members.empty() && externalArgs.empty()) {
         return nullptr;
     }
 
-    TNodeOnNodeOwnedMap replacements(members.size());
+    TNodeOnNodeOwnedMap replacements(members.size() + externalArgs.size());
     TExprNode::TListType realArgs;
     TExprNode::TListType lambdaArgs;
+
+    for (const auto& externalArg : externalArgs) {
+        auto olapExpr = pushdownOptions.FindExternalArg(*externalArg);
+        YQL_ENSURE(olapExpr, "External argument " << externalArg->Content() << " has no OLAP expression");
+        realArgs.push_back(std::move(olapExpr));
+        TString argumentName = "external_" + TString(externalArg->Content());
+        lambdaArgs.emplace_back(ctx.NewArgument(externalArg->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(externalArg.Get(), lambdaArgs.back());
+    }
 
     for (const auto& member : members) {
         const auto columnName = GetOlapColumnName(TCoMember(member).Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
@@ -777,6 +793,34 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         .Args().Add(std::move(realArgs)).Build()
         .KernelName(ctx.NewAtom(apply.Pos(), ""))
         .Done();
+}
+
+TExprNode::TPtr ReplaceJsonValuesWithExternalArgs(const TExprNode::TPtr& predicate, const TExprNode& argument, TExprContext& ctx,
+                                                  const TPushdownOptions& pushdownOptions, TVector<TOlapExternalArg>& externalArgs)
+{
+    const auto jsonValues = FindNodes(predicate, [&argument](const TExprNode::TPtr& node) {
+        if (const auto maybeJsonValue = TMaybeNode<TCoJsonValue>(node)) {
+            return CanBePushedAsOlapJsonValue(maybeJsonValue.Cast(), &argument);
+        }
+        return false;
+    });
+    if (jsonValues.empty()) {
+        return predicate;
+    }
+
+    TNodeOnNodeOwnedMap replacements(jsonValues.size());
+    for (const auto& jsonValue : jsonValues) {
+        TOlapExternalArg externalArg;
+        externalArg.Arg = ctx.NewArgument(jsonValue->Pos(), TStringBuilder() << "json_value_" << externalArgs.size());
+        externalArg.OlapExpression = BuildOlapJsonValue(TCoJsonValue(jsonValue), argument, ctx, jsonValue->Pos(), pushdownOptions).Ptr();
+        externalArg.Type = jsonValue->GetTypeAnn();
+        YQL_ENSURE(externalArg.Type, "JSON_VALUE callable has no type annotation");
+        replacements.emplace(jsonValue.Get(), externalArg.Arg);
+        YQL_CLOG(TRACE, ProviderKqp) << "[KQP_PUSH_OLAP_FILTER] JSON_VALUE is replaced by external argument " << externalArg.Arg->Content()
+                                     << ": " << KqpExprToPrettyString(TExprBase(externalArg.OlapExpression), ctx);
+        externalArgs.push_back(std::move(externalArg));
+    }
+    return ctx.ReplaceNodes(TExprNode::TPtr(predicate), replacements);
 }
 
 TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& pushdownOptions) {
@@ -872,12 +916,12 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
 }
 
 namespace {
-TExprNode::TPtr IsSuitableToCollectProjection(TExprNode::TPtr node) {
+TExprNode::TPtr IsSuitableToCollectProjection(TExprNode::TPtr node, const TExprNode& arg) {
     // Currently support only `JsonValue`.
     auto jsonValuePred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoJsonValue>(node); };
     if (auto jsonValues = FindNodes(node, jsonValuePred); jsonValues.size() == 1) {
         auto jsonValue = TExprBase(jsonValues.front()).Cast<TCoJsonValue>();
-        return jsonValue.Json().Maybe<TCoMember>() && jsonValue.JsonPath().Maybe<TCoUtf8>() ? jsonValue.Ptr() : nullptr;
+        return CanBePushedAsOlapJsonValue(jsonValue, &arg) ? jsonValue.Ptr() : nullptr;
     }
     return nullptr;
 }
@@ -896,7 +940,7 @@ void CollectPredicateMembers(TExprNode::TPtr predicate, THashSet<TString>& predi
 bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& arg, const THashSet<TString>& predicateMembers, THashSet<TString>& projectionMembers,
                                        TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,
                                        ui32& nextMemberId, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
-    if (auto projection = IsSuitableToCollectProjection(input)) {
+    if (auto projection = IsSuitableToCollectProjection(input, arg)) {
         if (auto olapOperations = ConvertComparisonNode(TExprBase(projection), arg, ctx, input->Pos(), pushdownOptions); olapOperations.size() == 1) {
             Y_ENSURE(TMaybeNode<TCoMember>(projection->ChildPtr(0)));
             auto originalMember = TExprBase(projection->ChildPtr(0)).Cast<TCoMember>();
@@ -1126,21 +1170,31 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         TVector<TOLAPPredicateNode> remainingAfterApply;
         for (const auto &predicateExprHolder : remaining) {
             // Closure an original predicate, we cannot call `Peephole` for free args.
-            TVector<const TTypeAnnotationNode *> argTypes{lambda.Args().Arg(0).Ptr()->GetTypeAnn()};
+            // Pushable JSON_VALUE calls become extra arguments of the closure, so that the column shard computes
+            // `KqpOlapJsonValue` and passes its value into `KqpOlapApply` instead of the whole JSON column.
+            TVector<TOlapExternalArg> externalArgs;
+            const auto predicateWithExternalArgs =
+                ReplaceJsonValuesWithExternalArgs(predicateExprHolder.ExprNode, lambdaArg, ctx, pushdownOptions, externalArgs);
+
+            const auto rowArg = ctx.NewArgument(node.Pos(), "arg");
+            TExprNode::TListType closureArgs{rowArg};
+            TVector<const TTypeAnnotationNode *> argTypes{lambdaArg.GetTypeAnn()};
+            for (const auto& externalArg : externalArgs) {
+                closureArgs.push_back(externalArg.Arg);
+                argTypes.push_back(externalArg.Type);
+            }
+
+            TNodeOnNodeOwnedMap rowArgReplaces;
+            rowArgReplaces.emplace(&lambdaArg, rowArg);
+            auto closureBody = ctx.ReplaceNodes(
+                Build<TCoOptionalIf>(ctx, node.Pos())
+                    .Predicate(TExprBase(predicateWithExternalArgs))
+                    .Value(value)
+                .Done().Ptr(),
+                rowArgReplaces);
+
             auto olapPredicateClosure = Build<TKqpPredicateClosure>(ctx, node.Pos())
-                .Lambda<TCoLambda>()
-                    .Args({"arg"})
-                    .Body<TCoOptionalIf>()
-                        .Predicate<TExprApplier>()
-                            .Apply(TExprBase(predicateExprHolder.ExprNode))
-                            .With(lambda.Args().Arg(0), "arg")
-                        .Build()
-                        .Value<TExprApplier>()
-                            .Apply(value)
-                            .With(lambda.Args().Arg(0), "arg")
-                        .Build()
-                    .Build()
-                .Build()
+                .Lambda(ctx.NewLambda(node.Pos(), ctx.NewArguments(node.Pos(), std::move(closureArgs)), std::move(closureBody)))
                 .ArgsType(ExpandType(node.Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
             .Done();
 
@@ -1160,6 +1214,14 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             auto lambda = TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda();
             auto &lArg = lambda.Args().Arg(0).Ref();
 
+            // Peephole may rebuild the lambda, so external arguments are matched by their positions.
+            YQL_ENSURE(lambda.Args().Size() == externalArgs.size() + 1, "Unexpected number of lambda arguments after peephole");
+            TNodeOnNodeOwnedMap externalArgsMap(externalArgs.size());
+            for (size_t i = 0; i < externalArgs.size(); ++i) {
+                externalArgsMap.emplace(lambda.Args().Arg(i + 1).Raw(), externalArgs[i].OlapExpression);
+            }
+            const auto applyPushdownOptions = pushdownOptions.WithExternalArgs(&externalArgsMap);
+
             const auto maybeIf = lambda.Body().Maybe<TCoIf>();
             if (!maybeIf.IsValid()) {
                 YQL_CLOG(TRACE, ProviderKqp) << "[KQP_PUSH_OLAP_FILTER] Cannot convert to TCoIf after peephole. " << Endl;
@@ -1169,16 +1231,16 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicate = maybeIf.Cast().Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), pushdownOptions.WithAllowOlapApply(true));
+            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), applyPushdownOptions.WithAllowOlapApply(true));
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
             for (const auto &p : pushable) {
                 if (p.CanBePushed) {
-                    auto pred = PredicatePushdown(TExprBase(p.ExprNode), lArg, ctx, node.Pos(), pushdownOptions);
+                    auto pred = PredicatePushdown(TExprBase(p.ExprNode), lArg, ctx, node.Pos(), applyPushdownOptions);
                     pushedPredicates.emplace_back(pred);
                 } else {
-                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lArg, ctx, pushdownOptions);
+                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lArg, ctx, applyPushdownOptions);
                     TFilterOpsLevels pred(expr);
                     pushedPredicates.emplace_back(pred);
                 }

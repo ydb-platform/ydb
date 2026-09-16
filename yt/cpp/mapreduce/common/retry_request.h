@@ -44,7 +44,10 @@ TResult RequestWithRetry(
                     retryPolicy->GetAttemptDescription());
             }
 
-            useSameMutationId = e.IsTransportError();
+            // NB(achains): Timed out request may have been applied by the server, so the mutation id must be reused.
+            //              HTTP backend wraps timeout errors as transport error.
+            //              RPC backend instead reports NYT::EErrorCode::Timeout.
+            useSameMutationId = e.IsTransportError() || e.IsRequestTimedOut();
 
             if (!IsRetriable(e)) {
                 throw;

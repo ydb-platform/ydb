@@ -1,17 +1,8 @@
-# Working with SelfHeal
+# Storage SelfHeal
 
-{{ ydb-short-name }} has two automatic recovery (SelfHeal) mechanisms:
+Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
 
-1. **Storage SelfHeal** (this article) — for disks and [storage groups](../../concepts/glossary.md#storage-group) that hold data.
-2. **State Storage SelfHeal** — for [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. See [{#T}](selfheal_statestorage.md).
-
-Both mechanisms restore cluster fault tolerance after prolonged failures. If a faulty node or disk is restored before the timeout expires (about one hour by default for disks), SelfHeal does not start relocation.
-
-{% note info %}
-
-State Storage SelfHeal is available only with [configuration V2](../../devops/configuration-management/configuration-v2/config-overview.md). Storage SelfHeal does not depend on the configuration version.
-
-{% endnote %}
+For an overview of the mechanisms and their operating conditions, see [SelfHeal](selfheal.md). Recovery of State Storage, Board, and SchemeBoard replicas is described in [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md).
 
 ## How storage SelfHeal works {#how-it-works}
 
@@ -19,9 +10,7 @@ Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously mon
 
 The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
 
-Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
-
-The sections below describe how to enable, disable, and configure storage SelfHeal.
+Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
 
 ## Enabling and disabling SelfHeal {#on-off}
 

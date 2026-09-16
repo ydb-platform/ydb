@@ -1,17 +1,8 @@
-# Работа с SelfHeal
+# SelfHeal хранилища
 
-В {{ ydb-short-name }} есть два механизма автоматического восстановления (SelfHeal):
+SelfHeal хранилища — механизм автоматического восстановления отказоустойчивости хранилища {{ ydb-short-name }}.
 
-1. **SelfHeal хранилища** (эта статья) — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
-2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board). См. [{#T}](selfheal_statestorage.md).
-
-Оба механизма восстанавливают отказоустойчивость кластера после длительных отказов. Если неисправный узел или диск восстановлен до истечения таймаута (для дисков по умолчанию около часа), SelfHeal не начинает перенос.
-
-{% note info %}
-
-SelfHeal State Storage доступен только при [конфигурации V2](../../devops/configuration-management/configuration-v2/config-overview.md). SelfHeal хранилища от версии конфигурации не зависит.
-
-{% endnote %}
+Общий обзор механизмов и условий их работы приведён в разделе [SelfHeal](selfheal.md). Восстановление реплик State Storage, Board и SchemeBoard описано в разделе [SelfHeal подсистем распространения метаданных](selfheal-metadata-distribution.md).
 
 ## Как работает SelfHeal хранилища {#how-it-works}
 
@@ -19,9 +10,7 @@ SelfHeal State Storage доступен только при [конфигура�
 
 Команду исполняет [Blob Storage Controller](../../concepts/glossary.md#ds-controller): данные реплицируются в фоне. Сам перенос может занять от минут до суток в зависимости от объёма данных и оборудования. После принятия команды для CMS задача уже поставлена; завершение репликации обеспечивает распределённое хранилище.
 
-SelfHeal хранилища включён по умолчанию для [динамических групп](../../concepts/glossary.md#dynamic-group). В кластерах с конфигурацией V2 можно также включить [SelfHeal статической группы](../../devops/configuration-management/configuration-v2/static-group-self-heal.md). На конфигурации V1 SelfHeal статической группы включить нельзя.
-
-Ниже — как включать, выключать и настраивать SelfHeal хранилища.
+SelfHeal хранилища включён по умолчанию для [динамических групп](../../concepts/glossary.md#dynamic-group). В кластерах с конфигурацией V2 можно также включить [SelfHeal статической группы](../configuration-management/configuration-v2/static-group-self-heal.md). На конфигурации V1 SelfHeal статической группы включить нельзя.
 
 ## Включение и выключение SelfHeal {#on-off}
 
@@ -33,7 +22,7 @@ SelfHeal хранилища включён по умолчанию для [ди�
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
 
-`<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
+`<bs_endpoint>` — эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
 
 Чтобы выключить SelfHeal выполните команду:
 

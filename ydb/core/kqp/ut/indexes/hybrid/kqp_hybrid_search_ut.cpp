@@ -486,6 +486,21 @@ std::vector<ui64> RunKeys(TQueryClient& db, const TString& sql) {
     return keys;
 }
 
+void AssertVectorIndexInPlan(TQueryClient& db, const TString& sql, const TString& expectedIndex,
+        const TVector<TString>& otherIndexes) {
+    auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), explainSettings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetStats());
+    const auto plan = result.GetStats()->GetPlan();
+    UNIT_ASSERT_C(plan.has_value(), "missing query plan");
+    UNIT_ASSERT_C(plan->find(expectedIndex.c_str()) != std::string::npos, *plan);
+    for (const auto& index : otherIndexes) {
+        UNIT_ASSERT_C(plan->find(index.c_str()) == std::string::npos,
+            TStringBuilder() << "unexpected vector index '" << index << "' in plan:\n" << *plan);
+    }
+}
+
 std::vector<ui64> RunKeysWithContext(TQueryClient& db, const TString& sql, const TString& context) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
@@ -496,17 +511,6 @@ std::vector<ui64> RunKeysWithContext(TQueryClient& db, const TString& sql, const
         keys.push_back(*parser.ColumnParser("Key").GetOptionalUint64());
     }
     return keys;
-}
-
-std::vector<ui64> RunUint64Column(TQueryClient& db, const TString& sql, const TString& column) {
-    auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    std::vector<ui64> values;
-    TResultSetParser parser(result.GetResultSet(0));
-    while (parser.TryNextRow()) {
-        values.push_back(*parser.ColumnParser(column).GetOptionalUint64());
-    }
-    return values;
 }
 
 std::vector<ui64> RunUint64Column(TQueryClient& db, const TString& sql, const TString& column, const TParams& params) {
@@ -1973,6 +1977,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_STRING_CONTAINS(issues, "must be a bare FullTextScore expression");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "use Weights or ScoreLambda instead");
     }
 
     // The TableServiceConfig.EnableHybridSearch kill-switch. It is on by default (so every other test
@@ -2087,12 +2092,12 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u}), keys);
     }
 
-    Y_UNIT_TEST(UsesLeadingSubPrefixWithPkInVectorIndex) {
+    Y_UNIT_TEST(RejectsLeadingSubPrefixWithPkInVectorIndex) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         SetupUserPkPrefixedDocs(db);
 
-        const auto keys = RunUint64Column(db, TargetDecl + R"sql(
+        const auto issues = RunBadRequestIssues(db, TargetDecl + R"sql(
             SELECT pk FROM `/Root/UserDocs`
             WHERE user = "alice"
             ORDER BY HybridRank(
@@ -2100,9 +2105,9 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                 Knn::CosineDistance(embedding, $target),
                 ("ft_idx", "vec_idx") AS Indexes)
             LIMIT 4;
-        )sql", "pk");
-        UNIT_ASSERT_C((std::set<ui64>{keys.begin(), keys.end()} == std::set<ui64>{1u, 2u}),
-            TStringBuilder() << "unexpected keys; result count: " << keys.size());
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues,
+            "prefixed vector index 'vec_idx' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(UsesPrefixedCompactFulltextIndexWithPlainVectorIndex) {
@@ -2367,7 +2372,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql", params);
         UNIT_ASSERT_STRING_CONTAINS(vectorIssues,
-            "prefixed vector index 'vec_prefixed' requires equality predicates on a contiguous leading prefix");
+            "prefixed vector index 'vec_prefixed' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(UsesNullablePrefix) {
@@ -2451,9 +2456,12 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                     const THybridPrefixMatrixShape shape{multiPrefix, nullablePrefix, pkSuffix};
                     SetupHybridPrefixMatrixFixture(db, shape);
                     const TString table = HybridPrefixMatrixTable(shape);
-                    const TString predicates = multiPrefix
+                    TString predicates = multiPrefix
                         ? R"sql(Tenant = "a" AND Region = "r1")sql"
                         : R"sql(Tenant = "a")sql";
+                    if (pkSuffix) {
+                        predicates += " AND Key = 2u";
+                    }
 
                     for (const auto& fusionCase : fusionCases) {
                         const TString context = TStringBuilder()
@@ -2474,7 +2482,9 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                             fusionCase.Options), context);
                         ++executedQueries;
 
-                        if (fusionCase.ExpectedOrder == EExpectedOrder::TextFirst) {
+                        if (pkSuffix) {
+                            UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{2u}), keys, context);
+                        } else if (fusionCase.ExpectedOrder == EExpectedOrder::TextFirst) {
                             UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{1u, 2u}), keys, context);
                         } else {
                             UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{2u, 1u}), keys, context);
@@ -2509,7 +2519,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
 
         auto vectorIssues = RunBadRequestIssues(db, TargetDecl + R"sql(
             SELECT Key FROM `/Root/MultiDocs`
-            WHERE Category = "a"
+            WHERE Region = "r1"
             ORDER BY HybridRank(
                 FullTextScore(Text, "cats"),
                 Knn::CosineDistance(Embedding, $target),
@@ -2517,7 +2527,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_STRING_CONTAINS(vectorIssues,
-            "prefixed vector index 'vec_multi' requires equality predicates on a contiguous leading prefix");
+            "prefixed vector index 'vec_multi' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(RejectsPrefixEqualityUnderOr) {
@@ -2541,6 +2551,115 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             "prefixed fulltext index 'ft_idx' requires equality predicates on every prefix column");
     }
 
+    Y_UNIT_TEST_TWIN(AutoDetectionPrefersBoundPrefixedVectorIndex, EnableVectorSearchActor) {
+        auto kikimr = MakeRunner(
+            /*enableHybridSearch=*/true,
+            /*enableCompactFulltextIndex=*/false,
+            /*enableIndexStreamWrite=*/false,
+            /*useRealThreads=*/true,
+            /*enableVectorSearchActor=*/EnableVectorSearchActor);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        AddPrefixedVectorIndex(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            WHERE Category = "a"
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), RunKeys(db, query));
+        AssertVectorIndexInPlan(db, query, "vp_idx", {"vec_idx"});
+    }
+
+    Y_UNIT_TEST_TWIN(AutoDetectionPrefersLongestBoundVectorPrefix, EnableVectorSearchActor) {
+        auto kikimr = MakeRunner(
+            /*enableHybridSearch=*/true,
+            /*enableCompactFulltextIndex=*/false,
+            /*enableIndexStreamWrite=*/false,
+            /*useRealThreads=*/true,
+            /*enableVectorSearchActor=*/EnableVectorSearchActor);
+        auto db = kikimr.GetQueryClient();
+        CreateMultiPrefixDocs(db);
+        AddFulltextIndex(db, "/Root/MultiDocs");
+        AddVectorIndex(db, "/Root/MultiDocs", "vec_d_plain");
+        AddPrefixedVectorIndex(db, "/Root/MultiDocs", "vec_a_short");
+        AddPrefixedVectorIndex(db, "/Root/MultiDocs", "vec_b_short");
+        AddMultiPrefixedVectorIndex(db, "vec_c_long");
+
+        // A unique longer prefix resolves the tie between the two shorter prefixed indexes.
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/MultiDocs`
+            WHERE Category = "a" AND Region = "r1"
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), RunKeys(db, query));
+        AssertVectorIndexInPlan(db, query, "vec_c_long", {"vec_d_plain", "vec_a_short", "vec_b_short"});
+    }
+
+    Y_UNIT_TEST(AutoDetectionRejectsEquallySpecificVectorIndexes) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        AddPrefixedVectorIndex(db, "/Root/Docs", "vp_a");
+        AddPrefixedVectorIndex(db, "/Root/Docs", "vp_b");
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            WHERE Category = "a"
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, query), "multiple vector indexes match column");
+
+        for (const TString& index : {TString{"vp_a"}, TString{"vp_b"}}) {
+            const TString explicitQuery = TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                WHERE Category = "a"
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                    ("ft_idx", "%s") AS Indexes)
+                LIMIT 4;
+            )sql", index.c_str());
+            UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), RunKeys(db, explicitQuery));
+        }
+    }
+
+    Y_UNIT_TEST(AutoDetectionSkipsPartiallyBoundVectorPrefixes) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        CreateMultiPrefixDocs(db);
+        AddFulltextIndex(db, "/Root/MultiDocs");
+        AddVectorIndex(db, "/Root/MultiDocs");
+        ExecOk(db, R"sql(
+            ALTER TABLE `/Root/MultiDocs` ADD INDEX vec_region
+                GLOBAL USING vector_kmeans_tree
+                ON (Region, Embedding)
+                WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+        )sql");
+        AddMultiPrefixedVectorIndex(db);
+
+        // Only vec_region has its full prefix bound; vec_multi is unusable without Category.
+        const TString partiallyBoundQuery = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/MultiDocs`
+            WHERE Region = "r1"
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u, 4u}), RunKeys(db, partiallyBoundQuery));
+        AssertVectorIndexInPlan(db, partiallyBoundQuery, "vec_region", {"vec_idx", "vec_multi"});
+
+        const TString fullyBoundQuery = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/MultiDocs`
+            WHERE Region = "r1" AND Category = "a"
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), RunKeys(db, fullyBoundQuery));
+        AssertVectorIndexInPlan(db, fullyBoundQuery, "vec_multi", {"vec_idx", "vec_region"});
+    }
+
     Y_UNIT_TEST(AutoDetectionSkipsUnboundPrefixedIndexes) {
         auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
         auto db = kikimr.GetQueryClient();
@@ -2560,7 +2679,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     }
 
     // A prefixed vector index cannot be used without a predicate that binds its prefix.
-    Y_UNIT_TEST(ErrorWhenPrefixedVectorIndex) {
+    Y_UNIT_TEST(ReportsMissingPrefixForAutoDetectedVectorIndex) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         CreateDocs(db);
@@ -2568,13 +2687,14 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AddFulltextIndex(db);
         AddPrefixedVectorIndex(db);  // only a prefixed vector index exists
 
-        // Auto-detect filters out the prefixed index, so no usable vector index is found.
+        // Auto-detect reports why the matching prefixed index is unusable.
         auto issues = RunFailIssues(db, TargetDecl + R"sql(
             SELECT Key FROM `/Root/Docs`
             ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
             LIMIT 4;
         )sql");
-        UNIT_ASSERT_STRING_CONTAINS(issues, "no ready vector");
+        UNIT_ASSERT_STRING_CONTAINS(issues,
+            "prefixed vector index 'vp_idx' requires equality predicates on every prefix column");
 
         // Naming it explicitly reports the missing prefix binding precisely.
         auto issues2 = RunFailIssues(db, TargetDecl + R"sql(
@@ -2584,6 +2704,23 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_STRING_CONTAINS(issues2, "prefixed vector index");
+    }
+
+    Y_UNIT_TEST(ReportsMissingPrefixForAutoDetectedFulltextIndex) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        AddPrefixedFulltextIndex(db);
+        AddVectorIndex(db);
+
+        const auto issues = RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues,
+            "prefixed fulltext index 'ft_idx' requires equality predicates on every prefix column");
     }
 
     // An explicit Limits override is the escape hatch: it lets a parameterised LIMIT work.

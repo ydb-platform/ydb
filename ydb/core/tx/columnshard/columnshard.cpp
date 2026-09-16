@@ -732,14 +732,16 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
         MoveDataState.ReportedRejections = queues.Rejected;
     }
+    // Read running-cleanup state first: the boundary freeze below must include it.
+    const auto runningCleanupOldest = BackgroundController.GetActiveCleanupOldestRemove();
     if (queues.GetTotal() != 0) {
         MoveDataState.CleanupWatermark.reset();
     } else if (!MoveDataState.CleanupWatermark) {
-        // Whoever retired a target portion, it now waits in CleanupPortions, sits in the running cleanup, or is gone.
-        MoveDataState.CleanupWatermark = HasIndex() ? GetIndexAs<NOlap::TColumnEngineForLogs>().GetMaxCleanupPortionInstant() : TInstant::Zero();
+        // Whoever retired a target portion sits in CleanupPortions, in the running cleanup, or is gone; include runningOldest so in-flight cleanup does not slip past.
+        const TInstant maxPending = HasIndex() ? GetIndexAs<NOlap::TColumnEngineForLogs>().GetMaxCleanupPortionInstant() : TInstant::Zero();
+        MoveDataState.CleanupWatermark = NOlap::NActualizer::FreezeCleanupWatermark(maxPending, runningCleanupOldest);
     }
     // A running cleanup holds its portions outside CleanupPortions, but only one reaching back to the watermark can hold target data.
-    const auto runningCleanupOldest = BackgroundController.GetActiveCleanupOldestRemove();
     const bool hasCleanupPortions =
         !MoveDataState.CleanupWatermark || (runningCleanupOldest && *runningCleanupOldest <= *MoveDataState.CleanupWatermark) ||
         (HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().HasCleanupPortionsAtOrBefore(*MoveDataState.CleanupWatermark));

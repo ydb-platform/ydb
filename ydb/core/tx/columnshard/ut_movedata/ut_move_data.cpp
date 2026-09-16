@@ -280,19 +280,14 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasCleanup, HasBlobs) == EMoveDataGate::BlockedByGC);
     }
 
-    // Pure predicate: no TColumnEngineForLogs needed to catch a watermark regression.
-    Y_UNIT_TEST(CleanupWatermarkFiltering) {
-        using NOlap::NActualizer::CleanupBlocksGate;
-
+    Y_UNIT_TEST(FreezeCleanupWatermarkRaisesToRunningOldest) {
+        using NOlap::NActualizer::FreezeCleanupWatermark;
         const TInstant kT = TInstant::Seconds(100);
-        // No cleanup at all: never blocks.
-        UNIT_ASSERT(!CleanupBlocksGate(std::nullopt, kT));
-        // Cleanup exactly at the watermark: blocks (portion was made by this session).
-        UNIT_ASSERT(CleanupBlocksGate(kT, kT));
-        // Cleanup strictly before the watermark: blocks.
-        UNIT_ASSERT(CleanupBlocksGate(kT - TDuration::MilliSeconds(1), kT));
-        // Cleanup strictly after the watermark: must NOT block (from a different session).
-        UNIT_ASSERT(!CleanupBlocksGate(kT + TDuration::MilliSeconds(1), kT));
+        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(TInstant::Zero(), kT), kT);
+        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT, std::nullopt), kT);
+        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT - TDuration::Seconds(1), kT), kT);
+        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT, kT), kT);
+        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(TInstant::Zero(), std::nullopt), TInstant::Zero());
     }
 
     // Portions created mid-session still land in the doomed group; the deadline bounds adoption.

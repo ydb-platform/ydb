@@ -45,6 +45,11 @@ inline bool CleanupBlocksGate(const std::optional<TInstant>& earliestCleanupInst
     return earliestCleanupInstant.has_value() && *earliestCleanupInstant <= watermark;
 }
 
+// FreezeCleanupWatermark raises the boundary to Max(maxPending, runningOldest) so that cleanup already in flight (portions already moved out of CleanupPortions) still blocks the gate.
+inline TInstant FreezeCleanupWatermark(const TInstant maxPending, const std::optional<TInstant>& runningOldest) {
+    return runningOldest ? Max(maxPending, *runningOldest) : maxPending;
+}
+
 inline EMoveDataGate ClassifyMoveDataGate(
     const bool vacuumCompleted, const TMoveDataQueueSizes& queues, const bool hasCleanupPortions, const bool hasBlobsForGroups) {
     if (!vacuumCompleted) {

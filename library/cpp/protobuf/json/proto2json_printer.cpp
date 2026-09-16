@@ -31,7 +31,7 @@ namespace NProtobufJson {
 
             if (config.UseJsonName) {
                 Y_ASSERT(!field.json_name().empty());
-                NewKeyStr = field.json_name();
+                NewKeyStr = TString{field.json_name()};
                 if (!field.has_json_name() && !NewKeyStr.empty()) {
                     // FIXME: https://st.yandex-team.ru/CONTRIB-139
                     NewKeyStr[0] = AsciiToLower(NewKeyStr[0]);
@@ -122,10 +122,10 @@ namespace NProtobufJson {
 
     template <bool InMapContext>
     Y_NO_INLINE void TProto2JsonPrinter::PrintStringValue(const FieldDescriptor& field,
-                                              const TStringBuf& key, const TString& value,
+                                              const TStringBuf& key, TStringBuf value,
                                               IJsonOutput& json) {
         if (!GetConfig().StringTransforms.empty()) {
-            TString tmpBuf = value;
+            TString tmpBuf{value};
             for (const TStringTransformPtr& stringTransform : GetConfig().StringTransforms) {
                 Y_ASSERT(stringTransform);
                 if (stringTransform) {
@@ -151,8 +151,8 @@ namespace NProtobufJson {
         }
 
         if (Config.UseJsonEnumValue) {
-            auto jsonEnumValue = value->options().GetExtension(json_enum_value);
-            if (!jsonEnumValue) {
+            const auto& jsonEnumValue = value->options().GetExtension(json_enum_value);
+            if (jsonEnumValue.empty()) {
                 ythrow yexception() << "Trying to using json enum value for field " << value->name() << " which is not set.";
             }
             WriteWithMaybeEmptyKey<InMapContext>(json, key, jsonEnumValue);
@@ -176,14 +176,14 @@ namespace NProtobufJson {
             }
 
             case TProto2JsonConfig::EnumNameLowerCase: {
-                TString newName = value->name();
+                TString newName{value->name()};
                 newName.to_lower();
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, newName);
                 break;
             }
 
             case TProto2JsonConfig::EnumFullNameLowerCase: {
-                TString newName = value->full_name();
+                TString newName{value->full_name()};
                 newName.to_lower();
                 WriteWithMaybeEmptyKey<InMapContext>(json, key, newName);
                 break;
@@ -222,8 +222,8 @@ namespace NProtobufJson {
             return false;
         }
         const Reflection* const reflection = proto.GetReflection();
-        const TString& typeUrl = reflection->GetString(proto, typeUrlField);
-        TString fullTypeName;
+        const TProtoStringType typeUrl = reflection->GetString(proto, typeUrlField);
+        TProtoStringType fullTypeName;
         if (!Any::ParseAnyTypeUrl(typeUrl, &fullTypeName)) {
             return false;
         }
@@ -233,7 +233,7 @@ namespace NProtobufJson {
         }
         DynamicMessageFactory factory;
         const THolder<Message> valueMessage{factory.GetPrototype(valueDesc)->New()};
-        const TString& serializedValue = reflection->GetString(proto, valueField);
+        const TProtoStringType serializedValue = reflection->GetString(proto, valueField);
         if (!valueMessage->ParseFromString(serializedValue)) {
             return false;
         }
@@ -317,8 +317,8 @@ namespace NProtobufJson {
                 }
 
                 case FieldDescriptor::CPPTYPE_STRING: {
-                    TString scratch;
-                    const TString& value = reflection->GetStringReference(proto, &field, &scratch);
+                    TProtoStringType scratch;
+                    const TProtoStringType& value = reflection->GetStringReference(proto, &field, &scratch);
                     PrintStringValue<true>(field, key, value, json);
                     break;
                 }
@@ -427,9 +427,9 @@ namespace NProtobufJson {
                 }
 
                 case FieldDescriptor::CPPTYPE_STRING: {
-                    TString scratch;
+                    TProtoStringType scratch;
                     for (int i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
-                        const TString& value =
+                        const TProtoStringType& value =
                             reflection->GetRepeatedStringReference(proto, &field, i, &scratch);
                         PrintStringValue<false>(field, TStringBuf(), value, json);
                     }
@@ -516,17 +516,17 @@ namespace NProtobufJson {
                         result = ToString(value->number());
                         break;
                     case TProto2JsonConfig::EnumName:
-                        result = value->name();
+                        result = TString{value->name()};
                         break;
                     case TProto2JsonConfig::EnumFullName:
-                        result = value->full_name();
+                        result = TString{value->full_name()};
                         break;
                     case TProto2JsonConfig::EnumNameLowerCase:
-                        result = value->name();
+                        result = TString{value->name()};
                         result.to_lower();
                         break;
                     case TProto2JsonConfig::EnumFullNameLowerCase:
-                        result = value->full_name();
+                        result = TString{value->full_name()};
                         result.to_lower();
                         break;
                     default:

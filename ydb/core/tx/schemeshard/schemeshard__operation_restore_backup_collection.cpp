@@ -74,7 +74,7 @@ public:
         auto path = context.SS->PathsById.at(targetPathId);
 
         // Find the backup collection path from the long incremental restore operation
-        auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
+        auto itOp = context.SS->LongIncrementalRestoreOps.find(TOperationId(OperationId.GetTxId(), 0));
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
             LOG_E(DebugHint() << "Failed to find long incremental restore operation");
             return false;
@@ -229,7 +229,7 @@ public:
             return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
         }
 
-        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+        const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -296,8 +296,11 @@ public:
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
-        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, OperationId);
-        context.SS->LongIncrementalRestoreOps[OperationId] = op;
+        // Restore metadata is keyed by the parent transaction, as on restart
+        // and in finalization; the control part can have a nonzero suboperation ID.
+        const TOperationId restoreId(OperationId.GetTxId(), 0);
+        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, restoreId);
+        context.SS->LongIncrementalRestoreOps[restoreId] = op;
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
@@ -378,7 +381,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     }
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    const auto& bc = context.SS->BackupCollections.at(bcPath->PathId);
 
     TString lastFullBackupName;
     TVector<TString> incrBackupNames;

@@ -142,7 +142,22 @@
         }
     }
 
+    // The column header strip is an ordinary SVG element, so CSS positioning
+    // does not apply to it: it is moved by hand to the top of the viewport on
+    // every scroll instead. It is the last element of the document, so it paints
+    // over the plans it slides across.
+    function update_column_headers() {
+        var headers = document.getElementById("columnHeaders");
+        if (headers) {
+            var y = window.scrollY || window.pageYOffset || 0;
+            headers.setAttribute("transform", "translate(0," + y + ")");
+        }
+    }
+
+    window.addEventListener("scroll", update_column_headers, false);
+
     window.onload = function() {
+        update_column_headers();
         var nodes = document.querySelectorAll(".selected");
         if (nodes.length > 0) {
             selectedGroups = [];

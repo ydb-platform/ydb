@@ -162,6 +162,7 @@
 #include <ydb/services/view/grpc_service.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
+#include <ydb/services/nbs/classic_grpc_service.h>
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -781,6 +782,9 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
+    const auto& appConfig = runConfig.AppConfig;
+    EnabledGrpcService = appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy();
+
     if (!GRpcServersWrapper) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
@@ -1233,7 +1237,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
-        EnabledGrpcService = true;
         NYdbGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
@@ -1328,7 +1331,15 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (grpcConfig.GetPort()) {
             grpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(opts, Counters) });
 
-            fillFn(grpcConfig, *grpcServers.back().second, opts);
+            auto& server = *grpcServers.back().second;
+            fillFn(grpcConfig, server, opts);
+
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+            if (auto blockStore = NYdb::NBS::NBlockStore::GetNbsFrontendBlockStore()) {
+                server.AddService(new NGRpcService::TClassicNbsGrpcService(
+                    std::move(blockStore)));
+            }
+#endif
         }
 
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
@@ -1437,7 +1448,8 @@ void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConf
                 xdsServerJson.EraseValue("channel_creds");
                 for (auto& channelCredJson : channelCreds) {
                     if (channelCredJson.Has("config")) {
-                        ConvertStringToJsonValue(channelCredJson["config"].GetString(), &channelCredJson["config"]);
+                        const TString configJson = channelCredJson["config"].GetString();
+                        ConvertStringToJsonValue(configJson, &channelCredJson["config"]);
                     }
                     xdsServerJson["channel_creds"].AppendValue(channelCredJson);
                 }

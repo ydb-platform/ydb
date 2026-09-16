@@ -1093,6 +1093,56 @@ Y_UNIT_TEST(DiagnosticMandatoryAsTable) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:36: Error: Expecting mandatory AS here");
 }
 
+Y_UNIT_TEST(DefaultWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 3);
+}
+
+Y_UNIT_TEST(EnableWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        PRAGMA WarnOnAnsiAliasShadowing;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 3);
+}
+
+Y_UNIT_TEST(DisableWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        PRAGMA DisableWarnOnAnsiAliasShadowing;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 0);
+}
+
 Y_UNIT_TEST(NamedNodeSubqueryScalar) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

@@ -121,7 +121,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
-        Self->SubDomains[Self->RootPathId()] = newDomain;
+        Self->SubDomains.Set(Self->RootPathId(), newDomain);
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
@@ -437,6 +437,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         if (processingParams.HasBackupController()) {
             RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetBackupController()}, TTabletTypes::BackupController);
         }
+        if (processingParams.HasWasmCompileController()) {
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetWasmCompileController()}, TTabletTypes::WasmCompileController);
+        }
 
         subdomain->Initialize(Self->ShardInfos);
 
@@ -453,7 +456,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
 
-        Self->SubDomains[Self->RootPathId()] = subdomain;
+        Self->SubDomains.Set(Self->RootPathId(), subdomain);
 
         Self->InitState = initiateMigration ? TTenantInitState::Inprogress : TTenantInitState::Done;
         Self->PersistInitState(db);

@@ -125,7 +125,7 @@ Y_UNIT_TEST(SharedConsumer) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     const auto* consumer = NPQ::GetConsumer(config, "test_consumer");
@@ -173,7 +173,7 @@ Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     const auto& partitionConfig = topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetWriteSpeedInMessagesPerSecond(), 777);
@@ -225,7 +225,7 @@ Y_UNIT_TEST(ContentBasedDeduplication) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     UNIT_ASSERT_VALUES_EQUAL(config.GetContentBasedDeduplication(), true);

@@ -23,6 +23,8 @@ from ydb.tests.stress.common.common import WorkloadBase
 
 
 class WorkloadRegisterNode(WorkloadBase):
+    NODE_POOL_SIZE = 10_000
+
     def __init__(self, client, stop):
         super().__init__(client, "", "register_node", stop)
         self.registered = 0
@@ -36,7 +38,10 @@ class WorkloadRegisterNode(WorkloadBase):
     def _get_next_id(self):
         with self.lock:
             node_id = self.next_id
-            self.next_id += 1
+            # Re-register a bounded set of nodes. Dynamic node IDs are kept
+            # until their leases expire, so using a new endpoint forever
+            # eventually exhausts the NodeBroker ID range.
+            self.next_id = (self.next_id + 1) % self.NODE_POOL_SIZE
             return node_id
 
     def _register_node(self, node_id):

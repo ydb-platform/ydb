@@ -109,6 +109,7 @@ void TWasmConfiguredCallable::DestroyObjectIfAlive() const {
     }
 
     auto* compartment = queryHandle->Compartment.get();
+    StartUdfDeadlineUnlessNested(compartment);
     TCurrentCompartmentGuard compartmentGuard(compartment);
     TWasmUdfInvocationContext context(compartment);
     TCurrentInvocationContextGuard invocationGuard(&context);
@@ -147,6 +148,7 @@ void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) con
     DestroyObjectIfAlive();
 
     auto* compartment = queryHandle->Compartment.get();
+    StartUdfDeadlineUnlessNested(compartment);
     TCurrentCompartmentGuard compartmentGuard(compartment);
     TWasmUdfInvocationContext context(compartment);
     TCurrentInvocationContextGuard invocationGuard(&context);
@@ -212,8 +214,7 @@ TUnboxedValue TWasmConfiguredCallable::Run(
 
         auto* queryHandle = GetCurrentQueryCompartment();
         auto* compartment = queryHandle->Compartment.get();
-        compartment->SetTimeout(TDuration::Minutes(1));
-        compartment->StartDeadlineTimer();
+        StartUdfDeadlineUnlessNested(compartment);
         TCurrentCompartmentGuard compartmentGuard(compartment);
         TWasmUdfInvocationContext context(compartment);
         TCurrentInvocationContextGuard invocationGuard(&context);
@@ -266,6 +267,11 @@ TUnboxedValue TWasmConfiguredCallable::Run(
                     case EUdfValueType::Null:
                         value.Type = EAbiValueType::Null;
                         break;
+                    default:
+                        ythrow yexception()
+                            << "Wasm object method argument type "
+                            << ValueTypeToString(Descriptor_.Args[i])
+                            << " requires calling_convention=bridge";
                 }
             }
             argSlots.push_back(MakeEphemeralValue(compartment, value));
@@ -293,9 +299,9 @@ TUnboxedValue TWasmConfiguredCallable::Run(
         }
         switch (Descriptor_.Result) {
             case EUdfValueType::Int64:
-                return TUnboxedValuePod(result.Data.Int64);
+                return TUnboxedValuePod(static_cast<i64>(result.Data.Int64));
             case EUdfValueType::Uint64:
-                return TUnboxedValuePod(result.Data.Uint64);
+                return TUnboxedValuePod(static_cast<ui64>(result.Data.Uint64));
             case EUdfValueType::Double:
                 return TUnboxedValuePod(result.Data.Double);
             case EUdfValueType::Boolean:
@@ -311,6 +317,11 @@ TUnboxedValue TWasmConfiguredCallable::Run(
             }
             case EUdfValueType::Null:
                 return {};
+            default:
+                ythrow yexception()
+                    << "Wasm object method result type "
+                    << ValueTypeToString(Descriptor_.Result)
+                    << " requires calling_convention=bridge";
         }
         return {};
     } catch (const std::exception& ex) {

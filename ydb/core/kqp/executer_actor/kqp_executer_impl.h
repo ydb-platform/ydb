@@ -573,7 +573,7 @@ protected:
             for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
                 const auto& result = tx->GetResults(i);
                 const auto& connection = result.GetConnection();
-                const auto& inputStageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(txIdx, connection.GetStageIndex()));
+                const auto& inputStageInfo = TasksGraph.GetStageInfo(TasksGraph.MakeStageId(txIdx, connection.GetStageIndex()));
                 if (inputStageInfo.Tasks.size() >= 1) {
                     continue;
                 }
@@ -903,7 +903,9 @@ protected:
             if (CollectBasicStats(Request.StatsMode)) {
                 ui64 cycleCount = GetCycleCountFast();
 
-                if (Stats->DeadlockedStageId) {
+                if (Stats->DeadlockedStageId &&
+                    !CheckpointCoordinatorId // If graph has checkpoint coordinator, deadlock will be automatically detected due to checkpoint propagation logic
+                ) {
                     NYql::TIssues issues;
                     issues.AddIssue(TStringBuilder() << "Deadlock detected: stage " << *Stats->DeadlockedStageId << " waits for input while peer(s) wait for output");
                     auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, issues);

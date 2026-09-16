@@ -43,6 +43,41 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
     }
 
+    Y_UNIT_TEST(WindowFunctionsV2Override) {
+        for (const bool serviceDefault : {false, true}) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(serviceDefault);
+
+            TKikimrRunner kikimr(appConfig);
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            const auto usesV2Plan = [&](TMaybe<bool> pragmaValue) {
+                TStringBuilder query;
+                query << "--!syntax_v1\n";
+                if (pragmaValue) {
+                    query << "PRAGMA ydb.WindowFunctionsV2 = \""
+                          << (*pragmaValue ? "true" : "false") << "\";\n";
+                }
+                query << "SELECT Key, Text,\n"
+                      << "    row_number() OVER (PARTITION BY Text ORDER BY Key) AS rn\n"
+                      << "FROM `/Root/EightShard`\n"
+                      << "WHERE Text = 'Value2';\n";
+
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const TString ast{result.GetAst()};
+                const bool hasV2 = ast.Contains("WideSort") && ast.Contains("Chopper");
+                const bool hasV1 = ast.Contains("SqueezeToDict");
+                UNIT_ASSERT_C(hasV2 != hasV1, ast);
+                return hasV2;
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(Nothing()), serviceDefault);
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(!serviceDefault), !serviceDefault);
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(Nothing()), serviceDefault);
+        }
+    }
+
     Y_UNIT_TEST(NewRboPhysicalStagePeepholeOverride) {
         for (const bool serviceDefault : {false, true}) {
             NKikimrConfig::TAppConfig appConfig;
@@ -81,6 +116,46 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
             UNIT_ASSERT_VALUES_EQUAL(hasWideChannels(Nothing()), serviceDefault);
             UNIT_ASSERT_VALUES_EQUAL(hasWideChannels(!serviceDefault), !serviceDefault);
             UNIT_ASSERT_VALUES_EQUAL(hasWideChannels(Nothing()), serviceDefault);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(NewRboPhysicalStagePeepholeUnionAll, Peephole) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t_repro` (k Uint64 NOT NULL, PRIMARY KEY(k));
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        auto rows = TValueBuilder().BeginList()
+            .AddListItem().BeginStruct().AddMember("k").Uint64(1).EndStruct()
+            .AddListItem().BeginStruct().AddMember("k").Uint64(2).EndStruct()
+            .EndList().Build();
+        auto upsert = kikimr.GetTableClient().BulkUpsert("/Root/t_repro", std::move(rows)).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        const TString pragma = TStringBuilder()
+            << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \""
+            << (Peephole ? "true" : "false") << "\";\n";
+        const TString source = R"(
+            ((SELECT k FROM `/Root/t_repro`) UNION ALL (SELECT k FROM `/Root/t_repro`))
+        )";
+        for (const auto& [projection, expected] : TVector<std::pair<TString, TString>>{
+            {"*", R"([[1u];[1u];[2u];[2u]])"},
+            {"COUNT(*) AS cnt", R"([[4u]])"},
+        }) {
+            const TString query = pragma + "SELECT " + projection + " FROM " + source + ";";
+            auto result = session.ExecuteDataQuery(
+                query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYsonUnordered(expected, FormatResultSetYson(result.GetResultSet(0)));
+
+            auto queryResult = kikimr.GetQueryClient().ExecuteQuery(
+                query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            CompareYsonUnordered(expected, FormatResultSetYson(queryResult.GetResultSet(0)));
         }
     }
 
@@ -207,6 +282,22 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         CompareYson(R"([
             [[1u];[4u]];
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(DecimalCommonTypeConversionMode) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+
+        auto result = client.ExecuteQuery(R"(
+            PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
+            SELECT Decimal("1.234", 4, 3) + Decimal("1234567.89", 9, 2);
+        )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetDecimal().ToString(), "1234569.124");
+        UNIT_ASSERT(!parser.TryNextRow());
     }
 }
 

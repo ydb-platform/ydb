@@ -19,13 +19,11 @@
 - Tests include build
 - No `-j`
 - No force rebuild
+- Do not edit sources during compilation: this can cause `null character ignored` errors.
 - Use `2>&1 | tail` for test output
+
+- Test name formats for `-F`: ydb/agents/TESTS.md
 
 ## C++
 
 - Use C++20 or earlier
-
-## Actors
-
-Most YDB code is `TActor` subclasses. Develop and change actors according to
-@ydb/library/actors/AGENTS.md

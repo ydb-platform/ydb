@@ -1,20 +1,20 @@
 #include "string_transform.h"
 
-#include <google/protobuf/stubs/strutil.h>
+#include <library/cpp/protobuf/runtime/escaping.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
 namespace NProtobufJson {
     void TCEscapeTransform::Transform(TString& str) const {
-        str = google::protobuf::CEscape(str);
+        str = NProtoBufRuntime::CEscape(str);
     }
 
     void TSafeUtf8CEscapeTransform::Transform(TString& str) const {
-        str = google::protobuf::strings::Utf8SafeCEscape(str);
+        str = NProtoBufRuntime::Utf8SafeCEscape(str);
     }
 
     void TDoubleEscapeTransform::Transform(TString& str) const {
-        TString escaped = google::protobuf::CEscape(str);
+        TString escaped = NProtoBufRuntime::CEscape(str);
         str = "";
         for (char* it = escaped.begin(); *it; ++it) {
             if (*it == '\\' || *it == '\"')
@@ -24,7 +24,7 @@ namespace NProtobufJson {
     }
 
     void TDoubleUnescapeTransform::Transform(TString& str) const {
-        str = google::protobuf::UnescapeCEscapeString(Unescape(str));
+        str = NProtoBufRuntime::UnescapeCEscapeString(Unescape(str));
     }
 
     TString TDoubleUnescapeTransform::Unescape(const TString& str) const {

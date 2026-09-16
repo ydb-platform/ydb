@@ -11,7 +11,6 @@ bool TPushFilterUnderMapRule::QuickMatch(const TIntrusivePtr<IOperator>& input) 
 TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
-    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Filter) {
         return input;
@@ -38,7 +37,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
     }
 
     for (const auto & c : conjuncts) {
-        if (IUSetIntersect(c.GetInputIUs(false,true), newMapColumns).empty()){
+        if (!ReferencesUnresolvedSubplan(c, props) && IUSetIntersect(c.GetInputIUs(false,true), newMapColumns).empty()){
             pushedFilters.push_back(c);
         } else {
             remainingFilters.push_back(c);

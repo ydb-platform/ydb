@@ -526,6 +526,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             if (Types_.UdfBridgeBinaryPath.empty()) {
                 ctx.AddError(TIssue(pos, "udf_bridge is not available"));
                 return false;

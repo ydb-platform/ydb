@@ -708,6 +708,11 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
@@ -1414,6 +1419,12 @@ private:
 
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
         }
 
         auto rowType = table->SchemeNode;
@@ -3438,6 +3449,12 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        if (auto sampleRate = node.SampleRate(); sampleRate && !sampleRate.Maybe<TCoDouble>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                "ANALYZE SAMPLE rate must evaluate to Double"));
+            return TStatus::Error;
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
             return TStatus::Error;

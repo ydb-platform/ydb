@@ -20,6 +20,23 @@ Y_UNIT_TEST_SUITE(SqsTopicQueueUrl) {
         TString result = PackQueueUrlPath(qu);
         UNIT_ASSERT_VALUES_EQUAL(result, "/v1/5//Root/10/topic/path/16/ydb_sqs_consumer");
         UNIT_ASSERT(*ParseQueueUrlPath(result) == qu);
+        UNIT_ASSERT(*ParseQueueUrl(result) == qu);
+    }
+
+    Y_UNIT_TEST(ParsePackedRelativePath) {
+        TRichQueueUrl qu{
+            .Database = "/Root",
+            .TopicPath = "NotATopicQueue",
+            .Consumer = "consumer",
+            .Fifo = false,
+        };
+        const TString packed = PackQueueUrlPath(qu);
+        auto parsedPath = ParseQueueUrlPath(packed);
+        UNIT_ASSERT_C(parsedPath.has_value(), parsedPath.error());
+        UNIT_ASSERT(*parsedPath == qu);
+        auto parsed = ParseQueueUrl(packed);
+        UNIT_ASSERT_C(parsed.has_value(), parsed.error());
+        UNIT_ASSERT(*parsed == qu);
     }
 
     Y_UNIT_TEST(BasicPackFifo) {

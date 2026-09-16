@@ -4,6 +4,7 @@ TEST_SRCS(
     conftest.py
     test_ydb_backup.py
     test_ydb_common.py
+    test_ydb_config_migration.py
     test_ydb_flame_graph.py
     test_ydb_impex.py
     test_ydb_interactive_ai.py

@@ -258,6 +258,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         rpc_nbs_io.cpp
     )
     PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/common
         ydb/core/nbs/cloud/blockstore/libs/service
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/public/api/protos

@@ -271,6 +271,8 @@ message THullHugeRecoveryLogPos {
     optional uint64 HugeBlobLoggedLsn = 3;
     optional uint64 LogoBlobsDbSlotDelLsn = 4;
     optional uint64 EntryPointLsn = 5;
+    optional uint64 BlocksDbSlotDelLsn = 6;
+    optional uint64 BarriersDbSlotDelLsn = 7;
 }
 
 message THugeKeeperHeap {

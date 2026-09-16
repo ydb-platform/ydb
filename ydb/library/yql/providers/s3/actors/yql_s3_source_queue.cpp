@@ -178,7 +178,7 @@ public:
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
         bool allowLocalFiles,
-        IDqSchedulerContextPtr schedulerContext)
+        IDqSchedulableWorkFactoryPtr workFactory)
         : TxId(std::move(txId))
         , PrefetchSize(prefetchSize)
         , FileSizeLimit(fileSizeLimit)
@@ -197,8 +197,8 @@ public:
         , PatternVariant(patternVariant)
         , PatternType(patternType)
         , AllowLocalFiles(allowLocalFiles) {
-        if (schedulerContext) {
-            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(schedulerContext->GetWorkScope());
+        if (workFactory) {
+            HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(workFactory->GetWorkScope());
         }
         for (size_t i = 0; i < paths.size(); ++i) {
             NS3::FileQueue::TObjectPath object;
@@ -671,7 +671,7 @@ NActors::IActor* CreateS3FileQueueActor(
         NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
         bool allowLocalFiles,
-        IDqSchedulerContextPtr schedulerContext) {
+        IDqSchedulableWorkFactoryPtr workFactory) {
     return new TS3FileQueueActor(
         txId,
         paths,
@@ -690,7 +690,7 @@ NActors::IActor* CreateS3FileQueueActor(
         patternVariant,
         patternType,
         allowLocalFiles,
-        std::move(schedulerContext)
+        std::move(workFactory)
     );
 }
 

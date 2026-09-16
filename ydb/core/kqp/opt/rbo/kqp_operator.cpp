@@ -1419,6 +1419,196 @@ NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
     return res;
 }
 
+/**
+ * OpGroupingSets operator. Logical representation of grouping sets.
+ */
+TOpGroupingSets::TOpGroupingSets(TIntrusivePtr<TOpAggregate> input, TVector<TVector<TInfoUnit>> groupingSets, TPositionHandle pos)
+    : IUnaryOperator(EOperator::GroupingSets, pos, input)
+    , GroupingSets(std::move(groupingSets)) {
+    Y_ENSURE(!GroupingSets.empty(), "Grouping sets list must not be empty");
+}
+
+void TOpGroupingSets::ComputeOutputIUs() {
+    Props.OutputIUs = GetInput()->GetOutputIUs();
+}
+
+TString TOpGroupingSets::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    TStringBuilder result;
+    result << "GroupingSets [";
+    for (size_t setIndex = 0; setIndex < GroupingSets.size(); ++setIndex) {
+        if (setIndex != 0) {
+            result << ", ";
+        }
+        result << "(" << FormatInfoUnits(GroupingSets[setIndex]) << ")";
+    }
+    return result << "]";
+}
+
+/***
+ * OpWindow operator methods
+ */
+TString ToStringWindowFuncKind(EWindowFuncKind kind) {
+    return kind == EWindowFuncKind::Aggregate ? "Aggregate" : "Native";
+}
+
+EWindowFuncKind WindowFuncKindFromString(const TString& kind) {
+    if (kind == "Aggregate") {
+        return EWindowFuncKind::Aggregate;
+    }
+    Y_ENSURE(kind == "Native", "Unknown window function kind: " << kind);
+    return EWindowFuncKind::Native;
+}
+
+TString ToStringWindowFrameType(EWindowFrameType type) {
+    switch (type) {
+        case EWindowFrameType::Rows:
+            return "Rows";
+        case EWindowFrameType::Range:
+            return "Range";
+        case EWindowFrameType::Groups:
+            return "Groups";
+    }
+    Y_ENSURE(false, "Unknown window frame type");
+}
+
+EWindowFrameType WindowFrameTypeFromString(const TString& type) {
+    if (type == "Rows") {
+        return EWindowFrameType::Rows;
+    } else if (type == "Range") {
+        return EWindowFrameType::Range;
+    }
+    Y_ENSURE(type == "Groups", "Unknown window frame type: " << type);
+    return EWindowFrameType::Groups;
+}
+
+TString ToStringWindowFrameBound(EWindowFrameBound bound) {
+    switch (bound) {
+        case EWindowFrameBound::UnboundedPreceding:
+            return "UnboundedPreceding";
+        case EWindowFrameBound::Preceding:
+            return "Preceding";
+        case EWindowFrameBound::CurrentRow:
+            return "CurrentRow";
+        case EWindowFrameBound::Following:
+            return "Following";
+        case EWindowFrameBound::UnboundedFollowing:
+            return "UnboundedFollowing";
+    }
+    Y_ENSURE(false, "Unknown window frame bound");
+}
+
+EWindowFrameBound WindowFrameBoundFromString(const TString& bound) {
+    if (bound == "UnboundedPreceding") {
+        return EWindowFrameBound::UnboundedPreceding;
+    } else if (bound == "Preceding") {
+        return EWindowFrameBound::Preceding;
+    } else if (bound == "CurrentRow") {
+        return EWindowFrameBound::CurrentRow;
+    } else if (bound == "Following") {
+        return EWindowFrameBound::Following;
+    }
+    Y_ENSURE(bound == "UnboundedFollowing", "Unknown window frame bound: " << bound);
+    return EWindowFrameBound::UnboundedFollowing;
+}
+
+TOpWindow::TOpWindow(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TOpWindowFunc>& windowFuncs,
+                     const TVector<TInfoUnit>& partitionKeys, const TVector<TSortElement>& sortElements, const TOpWindowFrame& frame)
+    : IUnaryOperator(EOperator::Window, pos, input)
+    , WindowFuncs(windowFuncs)
+    , PartitionKeys(partitionKeys)
+    , SortElements(sortElements)
+    , Frame(frame) {
+}
+
+void TOpWindow::ComputeOutputIUs() {
+    TVector<TInfoUnit> outputIUs = GetInput()->GetOutputIUs();
+    for (const auto& func : WindowFuncs) {
+        outputIUs.push_back(func.ResultColName);
+    }
+    Props.OutputIUs = std::move(outputIUs);
+}
+
+TVector<TInfoUnit> TOpWindow::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result = PartitionKeys;
+    for (const auto& element : SortElements) {
+        result.push_back(element.SortColumn);
+    }
+    for (const auto& func : WindowFuncs) {
+        result.insert(result.end(), func.Arguments.begin(), func.Arguments.end());
+    }
+    return result;
+}
+
+TString TOpWindow::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "Window [";
+    for (size_t i = 0; i < WindowFuncs.size(); ++i) {
+        if (i != 0) {
+            res << ", ";
+        }
+        res << WindowFuncs[i].ResultColName.GetFullName() << ": " << WindowFuncs[i].Function << "("
+            << FormatInfoUnits(WindowFuncs[i].Arguments) << ")";
+    }
+    res << "]";
+    if (!PartitionKeys.empty()) {
+        res << " PartitionBy: [" << FormatInfoUnits(PartitionKeys) << "]";
+    }
+    if (!SortElements.empty()) {
+        res << " OrderBy: [";
+        for (size_t i = 0; i < SortElements.size(); ++i) {
+            if (i != 0) {
+                res << ", ";
+            }
+            res << SortElements[i].SortColumn.GetFullName() << (SortElements[i].Ascending ? " asc" : " desc");
+        }
+        res << "]";
+    }
+    res << " Frame: " << ToStringWindowFrameType(Frame.Type) << "[" << ToStringWindowFrameBound(Frame.BeginKind);
+    if (Frame.BeginKind == EWindowFrameBound::Preceding || Frame.BeginKind == EWindowFrameBound::Following) {
+        res << " " << Frame.BeginValue;
+    }
+    res << ", " << ToStringWindowFrameBound(Frame.EndKind);
+    if (Frame.EndKind == EWindowFrameBound::Preceding || Frame.EndKind == EWindowFrameBound::Following) {
+        res << " " << Frame.EndValue;
+    }
+    res << "]";
+    return res;
+}
+
+NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+
+    TStringBuilder functions;
+    functions << "{";
+    for (size_t i = 0; i < WindowFuncs.size(); ++i) {
+        if (i != 0) {
+            functions << ", ";
+        }
+        functions << WindowFuncs[i].ResultColName.GetFullName() << ": " << WindowFuncs[i].Function << "("
+                  << FormatInfoUnits(WindowFuncs[i].Arguments) << ")";
+    }
+    functions << "}";
+    res["WindowFunctions"] = functions;
+
+    if (!PartitionKeys.empty()) {
+        res["PartitionBy"] = FormatInfoUnits(PartitionKeys);
+    }
+    if (!SortElements.empty()) {
+        TVector<TInfoUnit> sortColumns;
+        for (const auto& element : SortElements) {
+            sortColumns.push_back(element.SortColumn);
+        }
+        res["OrderBy"] = FormatInfoUnits(sortColumns);
+    }
+    res["Frame"] = ToStringWindowFrameType(Frame.Type);
+
+    return res;
+}
+
 /***
  * OpCBOTree operator methods
  */
@@ -1478,6 +1668,108 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
     }
     res << "]";
     return res;
+}
+
+/**
+* Table Effect operator methods: these are inserts/updates/deletes
+*/
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+    : IUnaryOperator(EOperator::TableEffect, pos, input)
+    , Table(table)
+    , EffectType(type)
+    , Options(options) {
+
+    if (options.ReturningColumns.has_value()) {
+        for (const auto & c : options.ReturningColumns.value()) {
+            OutputIUs.push_back(TInfoUnit(c));
+        }
+    }
+
+    UsedIUs = GetInput()->GetOutputIUs();
+}
+
+TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return UsedIUs;
+}
+
+void TOpTableEffect::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TString TOpTableEffect::GetExplainName() const {
+    switch (EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            return "InsertRows";
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            return "UpdateRows";
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            return "DeleteRows";
+        default:
+            Y_ENSURE(false, "Uknown table effect type");
+    }
+}
+
+TString TOpTableEffect::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return GetExplainName();
+}
+
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
+    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
+        Y_ENSURE(false, "Returning columns not supported in new optimizer");
+    }
+
+    TString mode;
+    
+    if (EffectType == EEffectType::InsertRows) {
+        mode = "insert";
+    } else if (EffectType == EEffectType::UpdateRows) {
+        mode = "update";
+    } else if (EffectType == EEffectType::UpsertRows) {
+        mode = "upsert";
+    } else if (EffectType == EEffectType::DeleteRows) {
+        mode = "delete";
+    } else {
+        Y_ENSURE(false, "Unsupported DML in new optimizer");
+    }
+
+    TString isBatch = "false";
+    if (Options.IsBatch.has_value() && Options.IsBatch.value()){
+        isBatch = "true";
+    }
+
+    TVector<TExprNode::TPtr> defaultColumns;
+    if (Options.DefaultColumns.has_value()) {
+        for (auto c : Options.DefaultColumns.value()) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+        }
+    }
+
+    TVector<TExprNode::TPtr> settings;
+    if (Options.Settings.has_value()) {
+        settings = Options.Settings.value();
+    }
+
+    return Build<TKqpTableSinkSettings>(ctx, Pos)
+            .Table(Table)
+            .InconsistentWrite().Build("false")
+            .Mode().Build(mode)
+            .Priority().Build("0")
+            .StreamWrite().Build("false")
+            .IsBatch().Build(isBatch)
+            .IsIndexImplTable().Build("false")
+            .DefaultColumns()
+                .Add(defaultColumns)
+            .Build()
+            .ReturningColumns().Build()
+            .Settings()
+                .Add(settings)
+            .Build()
+            .Done().Ptr();
 }
 
 /**

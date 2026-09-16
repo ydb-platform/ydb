@@ -247,7 +247,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress,
                 DiskAddr, Item->IgnoreBlock, Item->IssueKeepFlag, Item->SenderId, Item->Cookie, Item->HandleClass,
-                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe), 0, 0,
+                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe,
+                Item->FreshSpaceAdmission), 0, 0,
                 Span.GetTraceId());
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -726,7 +727,9 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
             } else if (reason == EProcessWriteReason::OUT_OF_SPACE) {
-                // cancel this item because we have no space left to allocate a chunk
+                if (msg.SpaceTracker) {
+                    msg.SpaceTracker->CommitAdmission(msg.FreshSpaceAdmission);
+                }
                 msg.Result->UpdateStatus(NKikimrProto::ERROR, "out of space");
                 SendVDiskResponse(ctx, msg.SenderId, msg.Result.release(), msg.Cookie, HugeKeeperCtx->VCtx, msg.HandleClass);
                 return true;
@@ -1194,10 +1197,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
 
             if (done) {
+                std::vector<bool> isStripe;
+                isStripe.reserve(task->Result.size());
+                for (const TDiskPart& p : task->Result) {
+                    isStripe.push_back(State.Pers->IsStripeAddr(p));
+                }
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper TryToFulfillTask",
                     {"VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
                     {"TEvHugeAllocateSlotsResult", FormatList(task->Result)});
-                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result)), 0, task->Cookie);
+                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result), std::move(isStripe)), 0,
+                    task->Cookie);
             }
         }
 

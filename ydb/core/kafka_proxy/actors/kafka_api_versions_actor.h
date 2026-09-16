@@ -13,6 +13,10 @@ inline bool IsApiVersionsRequestVersionSupported(TKafkaVersion version) {
         && version <= TApiVersionsRequestData::MessageMeta::PresentVersions.Max;
 }
 
+// KIP-511: parse an unknown ApiVersions version as v0 (empty body, request header v1).
+static constexpr TKafkaVersion ApiVersionsFallbackRequestVersion = 0;
+static constexpr TKafkaVersion ApiVersionsFallbackRequestHeaderVersion = 1;
+
 // KIP-511: unsupported ApiVersions requests are answered with a v0 body so any client can parse it.
 inline TKafkaVersion ApiVersionsResponseWriteVersion(TKafkaVersion requestVersion) {
     return IsApiVersionsRequestVersionSupported(requestVersion) ? requestVersion : TKafkaVersion{0};

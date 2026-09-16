@@ -75,6 +75,7 @@ public:
         UndeliveredEvent /* "UndeliveredEvent" */,
         CannotAddInFlight /* "CannotAddInFlight" */,
         ProblemOnStart /*ProblemOnStart*/,
+        BrokenLock /* "BrokenLock" */,
 
         COUNT
     };
@@ -279,6 +280,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRawBytes;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceRecords;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceConflictingCount;
+    NMonitoring::TDynamicCounters::TCounterPtr StartedSourceNonconflictingCount;
     NMonitoring::THistogramPtr HistogramFilteredResultCount;
 
     TScanCounters(const TString& module = "Scan");
@@ -290,6 +293,15 @@ public:
         HistogramFilteredResultCount->Collect(filteredRecordsCount);
         if (!filteredRecordsCount) {
             ProcessedSourceEmptyCount->Add(1);
+        }
+    }
+
+    // Sources handed to the scan pipeline, whatever becomes of them afterwards
+    void OnSourceStartProcessing(const bool conflicting) const {
+        if (conflicting) {
+            StartedSourceConflictingCount->Add(1);
+        } else {
+            StartedSourceNonconflictingCount->Add(1);
         }
     }
 

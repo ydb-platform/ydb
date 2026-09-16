@@ -134,7 +134,13 @@ public:
 class TCommandConfigToggleSelfManagement : public TCommandConfigToggle {
 public:
     TCommandConfigToggleSelfManagement();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
+
+private:
+    bool UseMirror3dc3NodesLayout = false;
+    bool Force = false;
 };
 
 class TCommandConfigCleanupV2 : public TCommandConfigTransform {

@@ -6,7 +6,6 @@ import json
 import math
 import time
 import warnings
-import zlib
 from concurrent.futures import Executor
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -82,7 +81,7 @@ class StreamResponse(BaseClass, HeadersMixin):
     _keep_alive: Optional[bool] = None
     _chunked: bool = False
     _compression: bool = False
-    _compression_strategy: int = zlib.Z_DEFAULT_STRATEGY
+    _compression_strategy: Optional[int] = None
     _compression_force: Optional[ContentCoding] = None
     _req: Optional["BaseRequest"] = None
     _payload_writer: Optional[AbstractStreamWriter] = None
@@ -90,6 +89,7 @@ class StreamResponse(BaseClass, HeadersMixin):
     _must_be_empty_body: Optional[bool] = None
     _body_length = 0
     _cookies: Optional[SimpleCookie] = None
+    _send_headers_immediately = True
 
     def __init__(
         self,
@@ -190,7 +190,7 @@ class StreamResponse(BaseClass, HeadersMixin):
     def enable_compression(
         self,
         force: Optional[Union[bool, ContentCoding]] = None,
-        strategy: int = zlib.Z_DEFAULT_STRATEGY,
+        strategy: Optional[int] = None,
     ) -> None:
         """Enables response compression encoding."""
         # Backwards compatibility for when force was a bool <0.17.
@@ -231,6 +231,7 @@ class StreamResponse(BaseClass, HeadersMixin):
         httponly: Optional[bool] = None,
         version: Optional[str] = None,
         samesite: Optional[str] = None,
+        partitioned: Optional[bool] = None,
     ) -> None:
         """Set or update response cookie.
 
@@ -266,6 +267,9 @@ class StreamResponse(BaseClass, HeadersMixin):
             c["version"] = version
         if samesite is not None:
             c["samesite"] = samesite
+
+        if partitioned is not None:
+            c["partitioned"] = partitioned
 
     def del_cookie(
         self,
@@ -368,6 +372,9 @@ class StreamResponse(BaseClass, HeadersMixin):
             )
         elif isinstance(value, str):
             self._headers[hdrs.LAST_MODIFIED] = value
+        else:
+            msg = f"Unsupported type for last_modified: {type(value).__name__}"
+            raise TypeError(msg)
 
     @property
     def etag(self) -> Optional[ETag]:
@@ -534,6 +541,9 @@ class StreamResponse(BaseClass, HeadersMixin):
         version = request.version
         status_line = f"HTTP/{version[0]}.{version[1]} {self._status} {self._reason}"
         await writer.write_headers(status_line, self._headers)
+        # Send headers immediately if not opted into buffering
+        if self._send_headers_immediately:
+            writer.send_headers()
 
     async def write(self, data: Union[bytes, bytearray, memoryview]) -> None:
         assert isinstance(
@@ -604,10 +614,14 @@ class StreamResponse(BaseClass, HeadersMixin):
     def __eq__(self, other: object) -> bool:
         return self is other
 
+    def __bool__(self) -> bool:
+        return True
+
 
 class Response(StreamResponse):
 
     _compressed_body: Optional[bytes] = None
+    _send_headers_immediately = False
 
     def __init__(
         self,
@@ -708,6 +722,9 @@ class Response(StreamResponse):
     def text(self) -> Optional[str]:
         if self._body is None:
             return None
+        # Note: When _body is a Payload (e.g. FilePayload), this may do blocking I/O
+        # This is generally safe as most common payloads (BytesPayload, StringPayload)
+        # don't do blocking I/O, but be careful with file-based payloads
         return self._body.decode(self.charset or "utf-8")
 
     @text.setter
@@ -761,6 +778,7 @@ class Response(StreamResponse):
             await super().write_eof()
         elif isinstance(self._body, Payload):
             await self._body.write(self._payload_writer)
+            await self._body.close()
             await super().write_eof()
         else:
             await super().write_eof(cast(bytes, body))
@@ -771,8 +789,8 @@ class Response(StreamResponse):
                 del self._headers[hdrs.CONTENT_LENGTH]
         elif not self._chunked:
             if isinstance(self._body, Payload):
-                if self._body.size is not None:
-                    self._headers[hdrs.CONTENT_LENGTH] = str(self._body.size)
+                if (size := self._body.size) is not None:
+                    self._headers[hdrs.CONTENT_LENGTH] = str(size)
             else:
                 body_len = len(self._body) if self._body else "0"
                 # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6-7

@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -102,6 +103,35 @@ void DoWriteJsonTextRows(TTestBasicRuntime& runtime, bool withRowId) {
             valueTags.push_back(3);
         }
         UploadRow(runtime, "/MyRoot/texts", 0, {1}, valueTags, keys, values);
+    }
+}
+
+void EnableJsonRowIdFlags(TTestActorRuntime& runtime) {
+    auto& appData = runtime.GetAppData();
+    appData.FeatureFlags.SetEnableJsonIndex(true);
+    appData.FeatureFlags.SetEnableFulltextIndex(true);
+    appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+    appData.FeatureFlags.SetEnableUniqConstraint(true);
+}
+
+// Same as EnableJsonRowIdFlags plus the compact-index flag so a JSON build proto is materialized as a
+// compact (rowid-mode) index. The schemeshard caches EnableCompactFulltextIndex at activation (it read
+// appData before this runs), so reboot it to pick up the updated value.
+void EnableJsonCompactRowIdFlags(TTestActorRuntime& runtime) {
+    EnableJsonRowIdFlags(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+    RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+}
+
+void RebootJsonTableShardsAndAssertPartitions(TTestBasicRuntime& runtime, const TString& path,
+    ui32 expectedPartitions)
+{
+    const auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard,
+        path, /*returnPartitioning=*/ true, /*returnBoundaries=*/ true, /*showPrivate=*/ true);
+    const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+    UNIT_ASSERT_VALUES_EQUAL_C(partitions.size(), expectedPartitions, path);
+    for (const auto& partition : partitions) {
+        RebootTablet(runtime, partition.GetDatashardId(), runtime.AllocateEdgeActor());
     }
 }
 
@@ -553,6 +583,265 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
         });
 
         // The transient row-id source build table was dropped on completion.
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactTopologyImplSplitMainMergeRebootAndRebuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonCompactRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        const ui64 initialBuildTx = ++txId;
+        TestBuildIndex(runtime, initialBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, initialBuildTx);
+        const auto initialBuild = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot", initialBuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(initialBuild.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, initialBuild.DebugString());
+
+        const TString compactImpl = "/MyRoot/texts/json_idx/indexImplTable";
+        const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
+            << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts"), {
+            NLs::CheckColumns("texts",
+                {"pk", "data", NTableIndex::NFulltext::RowIdColumn},
+                {}, {"pk"}, /*strictCount=*/ true),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, compactImpl), {
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        // Distinct JSON tokens: key/value pairs for a=1, b=2 and c=3.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+        const TString mainRowsBeforeTopology = ReadShards(
+            runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts").at(0);
+
+        auto split = [&](const TString& path, const TString& boundary) {
+            const auto before = DescribePath(runtime, TTestTxConfig::SchemeShard,
+                path, /*returnPartitioning=*/ true, /*returnBoundaries=*/ true, /*showPrivate=*/ true);
+            const auto& partitions = before.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL_C(partitions.size(), 1u, path);
+            TestSplitTable(runtime, TTestTxConfig::SchemeShard, ++txId, path,
+                Sprintf(R"(
+                    SourceTabletId: %lu
+                    SplitBoundary { KeyPrefix { %s } }
+                )", partitions[0].GetDatashardId(), boundary.c_str()));
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard,
+                path, true, true, true), {
+                NLs::PathExist,
+                NLs::PartitionCount(2),
+            });
+        };
+
+        split("/MyRoot/texts", R"(Tuple { Optional { Text: "ptwo" } })");
+        // JSON tokens are binary strings, but a String key-prefix remains a supported deterministic
+        // split boundary even when one side happens to be empty for a particular small corpus.
+        split(compactImpl, R"(Tuple { Optional { Bytes: "m" } })");
+        split(rowIdImpl, R"(Tuple { Optional { Uint64: 9223372036854775808 } })");
+
+        RebootJsonTableShardsAndAssertPartitions(runtime, "/MyRoot/texts", 2);
+        RebootJsonTableShardsAndAssertPartitions(runtime, compactImpl, 2);
+        RebootJsonTableShardsAndAssertPartitions(runtime, rowIdImpl, 2);
+
+        const auto mainAfterReboot = DescribePath(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts", /*returnPartitioning=*/ true, /*returnBoundaries=*/ true,
+            /*showPrivate=*/ true);
+        const auto& mainChildren = mainAfterReboot.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(mainChildren.size(), 2u);
+        const auto& mainSelf = mainAfterReboot.GetPathDescription().GetSelf();
+        const TTableId mainTableId(mainSelf.GetSchemeshardId(), mainSelf.GetPathId());
+        for (const auto& child : mainChildren) {
+            const auto result = CompactTable(runtime, child.GetDatashardId(), mainTableId,
+                /*compactBorrowed=*/ true, /*compactSinglePartedShards=*/ true);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                NKikimrTxDataShard::TEvCompactTableResult::OK, result.DebugString());
+        }
+
+        // Compact and generated unique implementation tables currently cannot be merged after a split:
+        // DataShard's borrow logic rejects back-borrowed parts. Preserve their supported split/reboot
+        // coverage and exercise the merge transition only on the main table.
+        const auto compactRowsAfterSplit = ReadShards(runtime, TTestTxConfig::SchemeShard, compactImpl);
+        const auto rowIdRowsAfterSplit = ReadShards(runtime, TTestTxConfig::SchemeShard, rowIdImpl);
+        TestSplitTable(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/texts",
+            Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )", mainChildren[0].GetDatashardId(), mainChildren[1].GetDatashardId()));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts", true, true, true), {
+            NLs::PathExist,
+            NLs::PartitionCount(1),
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts").at(0), mainRowsBeforeTopology);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            compactImpl), compactRowsAfterSplit);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            rowIdImpl), rowIdRowsAfterSplit);
+
+        // Update an existing first-range row, preserving its generated row id. As in the fulltext build
+        // harness, UploadRow is intentionally a raw main-table write, so a second build is the oracle that
+        // the post-topology scan observes this DML without relying on asynchronous index writes.
+        const TString pk = "pone";
+        const TString json = R"({"topology": 9})";
+        UploadRow(runtime, "/MyRoot/texts", 0, {1}, {2},
+            {TCell(pk.data(), pk.size())}, {TCell(json.data(), json.size())});
+
+        const ui64 rebuildTx = ++txId;
+        TestBuildIndex(runtime, rebuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", JsonIndexConfig("json_after_topology"));
+        env.TestWaitNotification(runtime, rebuildTx);
+        const auto rebuild = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", rebuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(rebuild.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, rebuild.DebugString());
+
+        const TString rebuiltImpl = "/MyRoot/texts/json_after_topology/indexImplTable";
+        // a=1 remains in ptwo; replacing pone adds the new topology key and value token: 6 + 2.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rebuiltImpl), 8u);
+        TString physicalRows;
+        for (const auto& shard : ReadShards(runtime, TTestTxConfig::SchemeShard, rebuiltImpl)) {
+            physicalRows += shard;
+        }
+        UNIT_ASSERT_C(physicalRows.Contains("topology"), physicalRows);
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CancelCompactPrepassThenRestartAndRetryReusesInfra) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonCompactRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        runtime.WaitFor("JSON row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        const auto running = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(running.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA, running.DebugString());
+
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        prepassBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildTx);
+
+        const auto cancelled = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(cancelled.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_CANCELLED, cancelled.DebugString());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        const ui64 retryTx = ++txId;
+        TestBuildIndex(runtime, retryTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        env.TestWaitNotification(runtime, retryTx);
+        const auto retry = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(retry.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, retry.DebugString());
+
+        const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
+            << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactPrepassSurvivesSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableJsonCompactRowIdFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkJsonTable(runtime, env, txId);
+        DoWriteJsonTextRows(runtime, /*withRowId=*/ false);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", JsonIndexConfig());
+        runtime.WaitFor("JSON row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        prepassBlocker.Stop().Unblock();
+
+        Ydb::Table::IndexBuildState::State state = Ydb::Table::IndexBuildState::STATE_UNSPECIFIED;
+        for (int i = 0; i < 100; ++i) {
+            const auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            state = op.GetIndexBuild().GetState();
+            if (state == Ydb::Table::IndexBuildState::STATE_DONE ||
+                state == Ydb::Table::IndexBuildState::STATE_REJECTED ||
+                state == Ydb::Table::IndexBuildState::STATE_CANCELLED) {
+                break;
+            }
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(state, Ydb::Table::IndexBuildState::STATE_DONE,
+            "compact JSON build did not finish after SchemeShard restart");
+
+        const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
+            << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/json_idx/indexImplTable"), 6u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
         TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/json_idx")), {
             NLs::PathNotExist,
         });

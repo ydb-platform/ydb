@@ -77,6 +77,18 @@ PEERDIR(
     ydb/core/tx/schemeshard
 )
 
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
+
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+    )
+ENDIF()
+
 END()
 
 RECURSE(

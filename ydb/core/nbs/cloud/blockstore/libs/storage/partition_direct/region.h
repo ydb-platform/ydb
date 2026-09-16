@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
@@ -30,6 +31,8 @@ public:
         const TVChunkConfigs& vChunkConfigs,
         const TDirtyMapStateProtos& dirtyMapStates,
         ui32 syncRequestsBatchSize,
+        // Volume block size, distinct from the 4 KiB DDisk integrity unit.
+        ui32 blockSize,
         ui64 vChunkSize);
 
     void Run();

@@ -51,13 +51,24 @@ def get_dstool_binary_path():
     return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
 
 
-def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
+def execute_dstool_grpc(
+    cluster,
+    token,
+    cmd,
+    check_exit_code=True,
+    allowed_failure=None,
+    expected_stderr_substrings=(),
+):
     full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
-    if check_exit_code and proc_result.exit_code != 0:
-        assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
+    stderr = proc_result.std_err.decode('utf-8')
+    failure_allowed = allowed_failure is not None and allowed_failure in stderr
+    if check_exit_code and proc_result.exit_code != 0 and not failure_allowed:
+        assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{stderr}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
+    for substring in expected_stderr_substrings:
+        assert substring in stderr, f'Expected {substring!r} in stderr:\n\n{stderr}'
     return proc_result.std_out
 
 
@@ -194,3 +205,33 @@ class CanonicalCaptureAuditFileOutput:
             universal_lines=True,
             path=make_test_file_with_content('audit_log.json', self.captured)
         )
+
+
+def capture_dstool_evict_vdisk_audit(cluster, token, allowed_failure=None, expect_fallback=False):
+    list_result = json.loads(execute_dstool_grpc(cluster, token, ['vdisk', 'list', '--format', 'json']))
+    assert len(list_result) > 0
+    vdisk_id = list_result[0]['VDiskId']
+    assert vdisk_id
+
+    evict_cmd = [
+        'vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check',
+        '--ignore-failure-model-group-check',
+    ]
+    expected_stderr_substrings = ()
+    if expect_fallback:
+        evict_cmd.insert(0, '--verbose')
+        expected_stderr_substrings = (
+            'gRPC method StreamStorageState is unavailable at ',
+            'falling back to BlobStorageConfig',
+        )
+
+    capture_audit = CanonicalCaptureAuditFileOutput(cluster.config.audit_file_path)
+    with capture_audit:
+        execute_dstool_grpc(
+            cluster,
+            token,
+            evict_cmd,
+            allowed_failure=allowed_failure,
+            expected_stderr_substrings=expected_stderr_substrings,
+        )
+    return capture_audit.canonize()

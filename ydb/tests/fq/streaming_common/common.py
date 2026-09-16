@@ -4,7 +4,6 @@ import logging
 import os
 import tempfile
 import time
-from typing import Optional, Self
 import yatest.common
 import yaml
 import ydb
@@ -12,8 +11,13 @@ import pytest
 import random
 import requests
 
+from collections import defaultdict
+from typing import List, Dict, Optional, Self
+
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -53,18 +57,18 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
-        "enable_dq_source_stream_lookup_join_local_lookups", False
-    )  # TODO YQ-5431
+        "enable_dq_source_stream_lookup_join_local_lookups", True
+    )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
 
     extra_feature_flags = {
-        "enable_external_data_sources",
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
@@ -72,12 +76,19 @@ def get_ydb_config(request, enable_fq_connector=None):
         "allow_ydb_requests_without_database",
         "enable_updating_partitions_on_streaming_query_restart",
     }
+    disabled_feature_flags = []
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
+
     if enable_shared_reading_structured_json_parsing:
         extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
+    else:
+        disabled_feature_flags.append("enable_streaming_queries")
+
     if enable_dq_source_stream_lookup_join_local_lookups:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
     if enable_dq_source_stream_lookup_join_fullscan:
@@ -85,7 +96,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     if enable_dq_source_stream_lookup_join_shuffle_mode:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_shuffle_mode")
 
-    disabled_feature_flags = []
     if enable_user_attributes_in_topic_query:
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
@@ -99,6 +109,11 @@ def get_ydb_config(request, enable_fq_connector=None):
         disabled_feature_flags.append("enable_access_service_v2_interface")
 
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+
+    if enable_external_data_sources:
+        extra_feature_flags.add("enable_external_data_sources")
+    else:
+        disabled_feature_flags.append("enable_external_data_sources")
 
     replication_config = {
         "iam_service_control": {
@@ -159,8 +174,14 @@ def get_ydb_config(request, enable_fq_connector=None):
     return config
 
 
+def counter_nodes(cluster: KiKiMR) -> dict:
+    # Tests that create a tenant database run streaming queries on dynamic nodes (slots).
+    # Compatibility tests use only static nodes, so fall back to them when no slots exist.
+    return cluster.slots if cluster.slots else cluster.nodes
+
+
 def monitoring_endpoint(cluster: KiKiMR, node_id: int) -> str:
-    node = cluster.slots[node_id]
+    node = counter_nodes(cluster)[node_id]
     return f"http://localhost:{node.mon_port}"
 
 
@@ -174,7 +195,7 @@ def get_checkpoint_coordinator_metric(
 ) -> int:
     sensor_sum = 0
     found = False
-    for node_id in cluster.slots:
+    for node_id in counter_nodes(cluster):
         sensor = get_sensors(cluster, node_id, "kqp").find_sensor(
             {"path": path, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
         )
@@ -415,6 +436,151 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
 
+def get_streaming_query_diagnostics(context, path: str) -> str:
+    try:
+        query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+        if hasattr(context, "kikimr"):
+            result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "driver"):
+            with ydb.QuerySessionPool(context.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries(query)
+        else:
+            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+        return (
+            "\n".join(
+                "Status: {status}\nIssues:\n{issues}".format(
+                    status=row["Status"],
+                    issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                )
+                for row in result_sets[0].rows
+            )
+            if result_sets
+            else []
+        )
+    except Exception as error:
+        return f"failed to retrieve Status / Issues: {error}"
+
+
+class MessageAcceptor:
+    class MessageGroup:
+        def __init__(self):
+            self.messages: List[str] = []
+            self.messages_index: Dict[str, int] = {}
+            self.unaccepted_count = 0
+            self.receive_idx: Optional[int] = None
+            self.start_idx = 0
+
+        def accept(self, messages: List[str]):
+            for message in messages:
+                idx = len(self.messages_index)
+                self.messages_index[message] = idx
+
+            self.messages.extend(messages)
+            self.unaccepted_count += len(messages)
+
+        def reset(self):
+            self.receive_idx = None
+
+        def advance(self, data: str):
+            data_idx = self.messages_index[data]
+
+            if self.receive_idx is not None:
+                assert self.receive_idx + 1 < len(self.messages), (
+                    f"All messages in order group already received, got unexpected message: '{data}' "
+                    f"(index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                assert data_idx == self.receive_idx + 1, (
+                    f"Expected message '{self.messages[self.receive_idx + 1]}' "
+                    f"(index {self.receive_idx + 1} / {len(self.messages) - 1}), "
+                    f"but got '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx += 1
+            else:
+                if self.unaccepted_count > 0:
+                    max_expected_idx = len(self.messages) - self.unaccepted_count
+                    assert data_idx <= max_expected_idx, (
+                        f"Unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                        f"{data_idx - max_expected_idx} unseen messages were skipped, {self.debug_info()}"
+                    )
+                assert data_idx >= self.start_idx, (
+                    f"Unexpected starting message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                    f"previous query start was on newer message {self.messages[self.start_idx]} "
+                    f"(index {self.start_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx = data_idx
+                self.start_idx = data_idx
+
+            if data_idx == len(self.messages) - self.unaccepted_count:
+                self.unaccepted_count -= 1
+
+        def __len__(self) -> int:
+            if self.receive_idx is not None:
+                return len(self.messages) - self.receive_idx - 1
+            return self.unaccepted_count
+
+        def debug_info(self) -> str:
+            return (
+                f"full expected messages order: {self.messages}, start_idx: {self.start_idx}, "
+                f"receive_idx: {self.receive_idx}, unaccepted_count: {self.unaccepted_count}"
+            )
+
+    def __init__(self):
+        self.all_messages: Dict[str, int] = {}
+        self.groups = defaultdict(MessageAcceptor.MessageGroup)
+
+    def accept(self, messages: List[str], ordered_group: int = 0):
+        for message in messages:
+            assert message not in self.all_messages, (
+                f"All test messages must be unique, got validation set: {self.all_messages} "
+                f"(failed after adding duplicated '{message}')"
+            )
+            self.all_messages[message] = ordered_group
+
+        self.groups[ordered_group].accept(messages)
+
+    # Must be called on query restart, when may occur duplicates
+    def reset(self):
+        for group in self.groups.values():
+            group.reset()
+
+    def advance(self, read_data: List[str]):
+        for data in read_data:
+            group_id = self.all_messages.get(data)
+            assert group_id is not None, f"Unexpected message: {data}, only expected messages are: {self.all_messages}"
+            self.groups[group_id].advance(data)
+
+    def debug_info(self) -> str:
+        return ";\n".join(f"{idx}: {group.debug_info()}" for idx, group in self.groups.items())
+
+    def __len__(self) -> int:
+        return sum(len(group) for group in self.groups.values())
+
+
+def read_and_check_data(
+    context, query_path, acceptor: MessageAcceptor, endpoint, database_path, consumer_name, topic_name
+):
+    try:
+        logger.debug("read data from stream")
+        deadline = time.time() + plain_or_under_sanitizer_wrapper(60, 300)
+
+        while len(acceptor) != 0:
+            remaining_timeout = deadline - time.time()
+            assert remaining_timeout > 0, f"Timed out waiting for expected data: {acceptor.debug_info()}"
+
+            acceptor.advance(
+                read_stream(
+                    path=topic_name,
+                    messages_count=len(acceptor),
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
+    except AssertionError as error:
+        raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
+
+
 class Kikimr:
     def __init__(
         self,
@@ -487,6 +653,22 @@ class StreamingTestBase(TestYdsBase):
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
         return kikimr.endpoint if local_topics else kikimr.external_endpoint
 
+    def set_cloud_id(self, kikimr: Kikimr, cloud_id: str = "test-cloud-id") -> None:
+        """Set the cloud_id user attribute on the root of the database under test.
+
+        DescribeResourceId describes the database path itself and looks for the
+        cloud_id attribute there, so we must use ESchemeOpAlterUserAttributes
+        rather than ALTER TABLE which only supports table-level settings.
+
+        The database is the tenant created by the kikimr fixture (/Root/my_tenant),
+        not /Root, so the attribute has to be set on the tenant path: an attribute
+        on /Root is never read by DescribeResourceId and leaves resource_id empty,
+        which silently degrades the IAM token to no-auth.
+        """
+        database = kikimr.get_database_name().rstrip("/")
+        working_dir, _, name = database.rpartition("/")
+        kikimr.cluster.client.add_attr(working_dir or "/", name, {"cloud_id": cloud_id}, token="root@builtin")
+
     def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
         return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
 
@@ -502,11 +684,14 @@ class StreamingTestBase(TestYdsBase):
         timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
         checkpoints_count=2,
     ) -> None:
+
         path = f"{kikimr.get_database_name()}/{query_name}"
-        print(f"wait_completed_checkpoints {path}")
-        wait_completed_checkpoints(
-            kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
-        )
+        try:
+            wait_completed_checkpoints(
+                kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
+            )
+        except AssertionError as error:
+            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -514,13 +699,41 @@ class StreamingTestBase(TestYdsBase):
         )
         return result if result is not None else 0
 
+    def restart_node(self, kikimr: Kikimr, node_id: int) -> None:
+        """Restart a specific node in the cluster."""
+        node = kikimr.cluster.slots[node_id]
+        logger.info(f"Restarting node {node_id}")
+        node.stop()
+        node.set_log_file_prefix("logfile_restarted_")
+        node.start()
+
+    def restart_streaming_node(self, kikimr: Kikimr) -> int:
+        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        Returns the restarted node ID."""
+
+        def _find_node():
+            for node_id in kikimr.cluster.slots:
+                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                    return node_id
+            return None
+
+        wait_for(
+            lambda: _find_node() is not None,
+            timeout_seconds=30,
+            step_seconds=1,
+        )
+        restart_node_id = _find_node()
+        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        self.restart_node(kikimr, restart_node_id)
+        return restart_node_id
+
     def get_streaming_query_metric(
         self, kikimr: Kikimr, query_name: str, metric_name: str, expect_counters_exist: bool = False
     ) -> int:
         path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         sum = 0
         found = False
-        for node_id in kikimr.cluster.slots:
+        for node_id in counter_nodes(kikimr.cluster):
             sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
             )
@@ -532,7 +745,7 @@ class StreamingTestBase(TestYdsBase):
 
     def get_schemeshard_counter(self, kikimr: Kikimr, counter_name: str) -> int:
         total = 0
-        for node_id in kikimr.cluster.slots:
+        for node_id in counter_nodes(kikimr.cluster):
             sensor = get_sensors(kikimr.cluster, node_id, "tablets").find_sensor(
                 {"type": "SchemeShard", "category": "app", "sensor": counter_name}
             )
@@ -580,7 +793,8 @@ class StreamingTestBase(TestYdsBase):
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared=shared)
+        if not local_topics:
+            self.create_source(kikimr, source_name, shared=shared)
 
         if local_topics:
             return f"`{self.input_topic}`", endpoint

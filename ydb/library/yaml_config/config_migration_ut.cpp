@@ -368,6 +368,7 @@ config:
     generation: 10
 )";
 
+        UNIT_ASSERT(!NYamlConfig::IsSelfManagementEnabled(input));
         auto enabled = NYamlConfig::SetSelfManagement(input, true);
         auto selfManagement = Config(enabled).at("self_management_config").Map();
 
@@ -376,6 +377,7 @@ config:
 
         TStringStream serialized;
         serialized << enabled;
+        UNIT_ASSERT(NYamlConfig::IsSelfManagementEnabled(serialized.Str()));
         auto disabled = NYamlConfig::SetSelfManagement(serialized.Str(), false);
         UNIT_ASSERT_VALUES_EQUAL(Config(disabled).at("self_management_config").Map().at("enabled").Scalar(), "false");
 
@@ -390,6 +392,14 @@ config:
             NYamlConfig::SetSelfManagement("config: {}", true),
             NYamlConfig::TYamlConfigEx,
             "switch_to_config_v2: true");
+    }
+
+    Y_UNIT_TEST(SetDiskFailDomainType) {
+        auto result = NFyaml::TDocument::Parse("config: {}");
+        UNIT_ASSERT(!NYamlConfig::HasDiskFailDomainType(result));
+        NYamlConfig::SetDiskFailDomainType(result);
+        UNIT_ASSERT_VALUES_EQUAL(Config(result).at("fail_domain_type").Scalar(), "disk");
+        UNIT_ASSERT(NYamlConfig::HasDiskFailDomainType(result));
     }
 
     Y_UNIT_TEST(V2DisableRequiresSelfManagementOff) {

@@ -11,6 +11,8 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
+
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -125,6 +127,7 @@ private:
 
     void PassAway() override {
         if (MemoryQuota) {
+            MemoryQuota->UnbindOperatorQuota(); // the graph dies without a quota, maybe under the execution scope
             MemoryQuota->TryReleaseQuota();
         }
         TaskRunner.Reset();
@@ -165,6 +168,8 @@ private:
 
     void OnContinueRun(TEvContinueRun::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : ev->Get()->MemLimit);
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
         const auto& inputMap = ev->Get()->AskFreeSpace
             ? Inputs
             : ev->Get()->InputChannels;
@@ -213,7 +218,7 @@ private:
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(guard.GetMutex());
+            MemoryQuota->TryShrinkMemory();
         }
 
         {
@@ -461,10 +466,11 @@ private:
 
         auto guard = TaskRunner->BindAllocator(MemoryQuota ? TMaybe<ui64>(MemoryQuota->GetMkqlMemoryLimit()) : Nothing());
         if (MemoryQuota) {
+            MemoryQuota->BindScopedAlloc(guard.GetMutex());
             if (settings.GetEnableSpilling()) {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl();
             } else {
-                MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
+                MemoryQuota->TrySetIncreaseMemoryLimitCallback();
             }
         }
 
@@ -540,8 +546,8 @@ private:
     TVector<ui32> Sources;
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
+    THolder<TDqMemoryQuota> MemoryQuota; // declared before TaskRunner: the graph must die before its quota
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
-    THolder<TDqMemoryQuota> MemoryQuota;
     ui64 ActorElapsedTicks = 0;
     bool HasActiveCheckpoint = false;
     ui32 UnsentCheckpoints = 0;

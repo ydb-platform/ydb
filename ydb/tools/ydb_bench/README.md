@@ -253,6 +253,35 @@ per node. The attempt view retains at most 300 samples / 2 MiB and reports
 truncation; the full saved file can be downloaded. Historical runs without the
 artifact show an empty metrics page.
 
+Alongside the chart projection, local and distributed measurements archive full
+YDB dynamic-counter snapshots every five seconds in `ydb-counters/*.jsonl.gz`.
+Each record identifies the host, node role/index, monitoring port, timestamp and
+attempt/repetition context. `/counters/json?@private=1` includes public and private
+counter groups, labels and histograms without the chart counter whitelist.
+These archives do not add charts. No uncompressed snapshot files are retained.
+The versioned `ydb-counters-delta-v1` format uses a per-part metric dictionary
+(`definitions`: ID and labels/type) and per-node `changes` (ID and new value or
+histogram, not arithmetic differences). `present`, emitted initially and when
+membership/order changes, lists the complete ordered set of metric IDs. Newly
+present scalar metrics default to integer zero; later transitions to zero are
+explicit changes. Missing IDs in a new `present` list cease to exist. Failed
+polls contain an error and do not change the last successful state. Duplicate
+label sets retain separate IDs; negative gauges and histograms are preserved.
+Each node's first successful record in a part is a checkpoint; subsequent parts
+never depend on earlier files. A sequence number detects missing/reordered records.
+`gzip -dc` exposes the encoded records; `read_counters_archive(path)` in
+`ydb/tools/ydb_bench/lib/ydb_telemetry.py` reconstructs complete snapshots and
+also accepts legacy full-snapshot gzip files. The reader supports concatenated
+gzip members. Archives rotate around 16 MiB compressed, or when dictionary/value
+JSON state reaches 32 MiB (not a strict Python heap limit), and are copied with distributed results.
+They are excluded from the 128 MiB aggregate workload-transfer budget, while the
+32 MiB per-file and 1000-file transfer safety limits still apply. Portable ZIP
+export retains its separate archive-size limit.
+Collection is best-effort: individual requests have a 16 MiB response bound and
+network deadlines; failed samples contain an explicit error instead of counters.
+Slow sampling cycles do not overlap. Disk errors stop collection and are logged;
+collected archive parts are retained rather than discarded.
+
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
 The web profile page shows the same live phase with elapsed time and a countdown

@@ -27,6 +27,7 @@
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -1095,6 +1096,7 @@ struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
+    std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> TablesMetricsLevel;
 };
 
 struct TTruncateTableSettings {
@@ -1763,6 +1765,7 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
 bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error);
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error);
 
 } // namespace NYql
 

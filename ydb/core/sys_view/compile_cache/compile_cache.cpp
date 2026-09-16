@@ -464,6 +464,12 @@ private:
             return false;
         }
 
+        // Internal compile cache warmup fetches queries on behalf of all users
+        // in this database using the metadata system token.
+        if (UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID()) {
+            return true;
+        }
+
         // Filter by user SID: non-admin user can only see their own queries
         return entry.GetUserSID() == UserToken->GetUserSID();
     }

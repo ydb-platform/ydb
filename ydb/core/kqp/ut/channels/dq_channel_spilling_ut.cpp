@@ -270,6 +270,44 @@ struct TSpillEarlyFinishTest : public TSpillTest {
     }
 };
 
+// The consumer early-finishes with a checkpoint after the finish in the storage and the storage slow to
+// load: the confirmation of the finish is pushed while that checkpoint is still loading
+struct TSpillEarlyFinishConfirmTest : public TSpillTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings.MessageCount = 200;
+        ProducerSettings.MinMessageSize = ProducerSettings.MaxMessageSize = 10000;
+        ProducerSettings.CheckpointAfterFinish = true;
+        ProducerSettings.ExpectEarlyFinished = true;
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10000, .MaxMessageSize = 10000,
+            .EarlyFinish = true, .PauseMessageIndex = 0, .PauseDelayMs = 1000 };
+
+        StartChannel(1, true);
+        WaitSpilled();
+        // the last blob in is the checkpoint after the finish, pushed right behind it; it is the one
+        // which is slow to load
+        UNIT_ASSERT_C(WaitFor([&]() { return Bind() && Descriptor->FinishPushed.load(); }, TDuration::Seconds(10)),
+            TStringBuilder() << "the producer stopped at SoftLimit, " << Details());
+        Sleep(TDuration::MilliSeconds(200));
+        Storage->SetStuckBlob(Storage->GetLastPutBlobId());
+        UNIT_ASSERT_VALUES_EQUAL_C(Storage->GetLastPutBlobId(), BlobIds().first, Details());
+
+        // the early finish reads the finish back and the peer confirms it while the checkpoint still loads
+        UNIT_ASSERT_C(WaitFor([&]() { return Bind() && Descriptor->EarlyFinished.load() && Descriptor->Finished.load(); }, TDuration::Seconds(10)),
+            TStringBuilder() << "the finish did not come back, " << Details());
+        UNIT_ASSERT_C(LoadingQueueSize() > 0, TStringBuilder() << "the checkpoint is not loading, " << Details());
+        Storage->SetStuckBlob(std::nullopt);
+        UNIT_ASSERT_C(WaitFor([&]() { WakeUp(); return LoadingQueueSize() == 0; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the wake-up did not drain the loading queue, " << Details());
+
+        WaitChannel([&]() { return Details(); });
+        Finish();
+    }
+};
+
 // Node level memory pressure at the receiver shrinks the window to the cold one; with a storage the
 // producer spills past it instead of stalling at HardLimit
 struct TSpillUnderPressureTest : public TSpillTest {
@@ -391,6 +429,12 @@ Y_UNIT_TEST_SUITE(Channels20Spilling) {
     // the finish of the early finish must not queue behind the spilled backlog nobody reads
     Y_UNIT_TEST(SpillThenEarlyFinish2n) {
         TSpillEarlyFinishTest test;
+        test.Local = false;
+        test.Run();
+    }
+
+    Y_UNIT_TEST(SpillThenEarlyFinishConfirm2n) {
+        TSpillEarlyFinishConfirmTest test;
         test.Local = false;
         test.Run();
     }

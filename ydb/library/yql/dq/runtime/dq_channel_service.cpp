@@ -54,6 +54,7 @@ void BufferToData(TDataChunk& data, TBuffer&& buffer) {
     data.TransportVersion = static_cast<NDqProto::EDataTransportVersion>(ReadNumber<ui32>(source));
     data.PackerVersion = static_cast<NKikimr::NMiniKQL::EValuePackerVersion>(ReadNumber<ui32>(source));
     data.Finished = ReadNumber<bool>(source);
+    data.ConfirmFinish = ReadNumber<bool>(source);
     data.Timestamp = TInstant::MicroSeconds(ReadNumber<ui64>(source));
 
     bool hasCheckpoint = ReadNumber<bool>(source);
@@ -82,6 +83,7 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     AppendNumber<ui32>(result, static_cast<ui32>(data.TransportVersion));
     AppendNumber<ui32>(result, static_cast<ui32>(data.PackerVersion));
     AppendNumber<bool>(result, data.Finished);
+    AppendNumber<bool>(result, data.ConfirmFinish);
     AppendNumber<ui64>(result, data.Timestamp.MicroSeconds());
     AppendNumber<bool>(result, !data.Checkpoint.Empty());
     if (data.Checkpoint) {
@@ -499,7 +501,8 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         auto maxInflightBytes = GetMaxInflightBytes();
 
         if (Storage) {
-            if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
+            // a confirmation of the finish carries no bytes and may pass the checkpoints still in the storage
+            if (!data.ConfirmFinish && ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes))) {
                 if (SpilledChunks.empty()) {
                     LOG_D("START SPILLING, ChannelId=" << Info.ChannelId << ", PushBytes=" << PushBytes.load()
                         << ", PopBytes=" << RemotePopBytes.load() << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes

@@ -188,6 +188,7 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
     const bool isBreaker = params.BreakerQuerySpanId.Defined() && *params.BreakerQuerySpanId != 0;
+
     ui64 parentQueryId = 0;
     if (isBreaker) {
         YDB_LOG_UPDATE_MESSAGE(message, {"breakerTxSpanId", ToString(*params.BreakerQuerySpanId)});
@@ -199,32 +200,17 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     // Use appropriate field names based on breaker vs victim
     if (!params.AllQueries.empty()) {
-        bool hasParent = false;
         for(auto& allQueriesItem : params.AllQueries) {
-            hasParent = hasParent || (allQueriesItem.Id == parentQueryId);
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
                 message,
                 {"querySpanId", allQueriesItem.Id},
                 {"queryText", allQueriesItem.Text});
-        }
-
-        if (!hasParent && params.IsCommitAction) {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
-                message,
-                {"querySpanId", parentQueryId},
-                {"queryText", "COMMIT"});
         }
     } else {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
             message,
             {"querySpanId", parentQueryId},
             {"queryText", isBreaker ? params.QueryText : params.VictimQueryText});
-        if (params.IsCommitAction) {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TLI, "",
-                message,
-                {"querySpanId", parentQueryId},
-                {"queryText", "COMMIT"});
-        }
     }
 }
 

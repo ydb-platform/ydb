@@ -308,6 +308,7 @@ def main():
 
     victim_tx_items: List[Tuple[str, str]] = []
     breaker_tx_items: List[Tuple[str, str]] = []
+    breaker_query_text = None
 
     for t, line in relevant_lines:
         if not in_window(t, w_start, w_end):
@@ -332,18 +333,25 @@ def main():
             if ("broke other locks" in line) and \
                ("component=DataShard" in line or "datashard_integrity_trails" in line) and \
                check_victim_query_id_in_line(line, victim_id):
-                breaker_log_ds = line.rstrip("\n")
+                breaker_log_ds = line
                 breaker_id = extract_breaker_id(line)
+
+    for t, line in relevant_lines:
+        if not in_window(t, w_start, w_end):
+            continue
+
+        line = line.rstrip("\n")
 
         # Breaker SessionActor lines: "had broken other locks" + Component: SessionActor
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
         if ("had broken other locks" in line) and ("component=SessionActor" in line):
             bid = extract_breaker_tx_id(line)
-            if bid:
-                breaker_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
-                if breaker_query_text:
-                    breaker_sa_with_text_by_id[bid] = breaker_query_text
-                    breaker_tx_items.append((bid, breaker_query_text))
+            if bid==breaker_id:
+                line_query_id = extract_field(line, "querySpanId")
+                line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
+                if line_query_id and line_query_text:
+                    breaker_sa_with_text_by_id[bid] = line_query_text
+                    breaker_tx_items.append((line_query_id, line_query_text))
 
     if breaker_id and (breaker_id in breaker_sa_with_text_by_id):
         breaker_query_text = breaker_sa_with_text_by_id[breaker_id]

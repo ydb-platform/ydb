@@ -1058,14 +1058,18 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            UpdateStats(ev->Get()->Record.GetTxStats());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
-            RuntimeError(
-                NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
-                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
-                    << TablePath << "`.",
-                getIssues());
+            if (!InconsistentTx)  {
+                UpdateStats(ev->Get()->Record.GetTxStats());
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
+                    TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
+                        << TablePath << "`.",
+                    getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
@@ -1075,15 +1079,19 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            UpdateStats(ev->Get()->Record.GetTxStats());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
-            RuntimeError(
-                NYql::NDqProto::StatusIds::OVERLOADED,
-                NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
-                    << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
-                    << TablePath << "`.",
-                getIssues());
+            if (!InconsistentTx) {
+                UpdateStats(ev->Get()->Record.GetTxStats());
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::OVERLOADED,
+                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
+                        << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
+                        << TablePath << "`.",
+                    getIssues());
+            } else {
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED: {

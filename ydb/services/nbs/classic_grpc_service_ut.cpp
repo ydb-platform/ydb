@@ -74,12 +74,15 @@ namespace NKikimr::NGRpcService {
         // Runs the classic service on a real YDB gRPC server for transport tests.
         class TClassicNbsGrpcTestServer final {
         public:
-            explicit TClassicNbsGrpcTestServer(IBlockStorePtr blockStore)
+            explicit TClassicNbsGrpcTestServer(
+                IBlockStorePtr blockStore,
+                size_t maxMessageSize = NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT)
                 : Port(PortManager.GetPort())
             {
                 NYdbGrpc::TServerOptions options;
                 options.SetHost("localhost");
                 options.SetPort(Port);
+                options.SetMaxMessageSize(maxMessageSize);
 
                 Server = std::make_unique<NYdbGrpc::TGRpcServer>(options);
                 Server->AddService(
@@ -320,6 +323,43 @@ namespace NKikimr::NGRpcService {
         }
 
         Y_UNIT_TEST_SUITE(TClassicNbsGrpcServiceTest) {
+            Y_UNIT_TEST(ShouldRejectOversizedTransportMessageBeforeFacade) {
+                constexpr ui32 blockSize = NNative::DefaultBlockSize;
+                constexpr size_t maxMessageSize = 2 * blockSize;
+                auto blockStore = std::make_shared<TRecordingBlockStore>();
+                TClassicNbsGrpcTestServer server(blockStore, maxMessageSize);
+                auto stub = server.CreateControlStub();
+
+                NProto::TWriteBlocksRequest request;
+                request.SetDiskId(NNative::NTests::TestDiskId);
+                request.MutableHeaders()->SetClientId(NNative::NTests::TestClientId);
+                request.SetBlockSize(blockSize);
+                auto* buffer = request.MutableBlocks()->AddBuffers();
+                *buffer = TString(blockSize, 'w');
+                UNIT_ASSERT(request.ByteSizeLong() < maxMessageSize);
+
+                NProto::TWriteBlocksResponse response;
+                grpc::ClientContext acceptedContext;
+                SetDeadline(&acceptedContext);
+                const auto accepted = stub->WriteBlocks(&acceptedContext, request, &response);
+                UNIT_ASSERT_C(accepted.ok(), accepted.error_message());
+                UNIT_ASSERT(!NYdb::NBS::HasError(response));
+                UNIT_ASSERT_VALUES_EQUAL(blockStore->GetLastRequest().CallCount, 1);
+
+                // The payload fits the transport budget, but its protobuf does not.
+                // Both payloads are well below the frontend's 32 MiB ceiling.
+                buffer->resize(maxMessageSize, 'w');
+                UNIT_ASSERT(request.ByteSizeLong() > maxMessageSize);
+                grpc::ClientContext rejectedContext;
+                SetDeadline(&rejectedContext);
+                response.Clear();
+                const auto rejected = stub->WriteBlocks(&rejectedContext, request, &response);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    rejected.error_code(), grpc::StatusCode::RESOURCE_EXHAUSTED,
+                    rejected.error_message());
+                UNIT_ASSERT_VALUES_EQUAL(blockStore->GetLastRequest().CallCount, 1);
+            }
+
             Y_UNIT_TEST(ShouldIsolateProtobufDescriptors) {
                 const auto* file = google::protobuf::DescriptorPool::generated_pool()
                                        ->FindFileByName(

@@ -62,8 +62,8 @@ TPartitionActor::~TPartitionActor()
     // Actor-system cleanup can destroy a partition without PassAway(). Its
     // frontend registration must not retain FastPath beyond the actor system.
     if (!FrontendRegistrationId.empty()) {
-        if (auto& frontend = GetNbsService()->Frontend; frontend) {
-            frontend->UnregisterVolume(FrontendRegistrationId);
+        if (auto service = GetNbsService(); service && service->Frontend) {
+            service->Frontend->UnregisterVolume(FrontendRegistrationId);
         }
     }
 }

@@ -5,6 +5,7 @@
 #include <util/generic/hash.h>
 
 #include <mutex>
+#include <optional>
 
 namespace NYql::NDq {
 
@@ -34,6 +35,7 @@ public:
         Y_ABORT_UNLESS(result.second);
         UsedSpace += result.first->second.Size();
         PutCount++;
+        LastPutBlobId = blobId;
     }
 
     bool Get(ui64 blobId, TBuffer& data, ui64 /* cookie = 0 */) override {
@@ -44,6 +46,9 @@ public:
 
         if (GetBlankRequests) {
             --GetBlankRequests;
+            return false;
+        }
+        if (StuckBlobId && *StuckBlobId == blobId) {
             return false;
         }
 
@@ -78,6 +83,17 @@ public:
     void SetBlankGetRequests(ui32 count) {
         std::lock_guard lock(Mutex);
         GetBlankRequests = count;
+    }
+
+    // this blob is "not ready yet" for every Get() until released, whatever the others do
+    void SetStuckBlob(std::optional<ui64> blobId) {
+        std::lock_guard lock(Mutex);
+        StuckBlobId = blobId;
+    }
+
+    ui64 GetLastPutBlobId() {
+        std::lock_guard lock(Mutex);
+        return LastPutBlobId;
     }
 
     // forces IsFull() regardless of the capacity, to stage the HardLimit / SoftLimit transitions
@@ -115,6 +131,8 @@ private:
     THashMap<ui64, TChunkedBuffer> Blobs;
     ui64 UsedSpace = 0;
     ui32 GetBlankRequests = 0;
+    std::optional<ui64> StuckBlobId;
+    ui64 LastPutBlobId = 0;
     bool Full = false;
     ui64 PutCount = 0;
     ui64 GetCount = 0;

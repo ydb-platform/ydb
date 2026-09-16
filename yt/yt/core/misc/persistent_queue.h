@@ -2,13 +2,15 @@
 
 #include "public.h"
 
+#include <cstddef>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Forward declarations.
 
 template <class T, size_t ChunkSize>
-struct TPersistentQueueChunk;
+class TPersistentQueueChunk;
 
 template <class T, size_t ChunkSize>
 class TPersistentQueueBase;
@@ -26,11 +28,22 @@ class TIndexedPersistentQueue;
 // Implementation.
 
 template <class T, size_t ChunkSize>
-struct TPersistentQueueChunk
+class TPersistentQueueChunk
     : public TRefCounted
 {
+public:
     TIntrusivePtr<TPersistentQueueChunk<T, ChunkSize>> Next;
-    T Elements[ChunkSize];
+
+    TPersistentQueueChunk();
+    ~TPersistentQueueChunk();
+
+    void Append(T&& value);
+    T& GetElement(size_t index);
+    const T& GetElement(size_t index) const;
+
+private:
+    alignas(T) std::byte Storage_[ChunkSize][sizeof(T)];
+    size_t ConstructedSize_ = 0;
 };
 
 template <class T, size_t ChunkSize>

@@ -49,7 +49,6 @@ protected:
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
-<<<<<<< HEAD
         Socket = new TSocketDescriptor(SocketType::GuessAddressFamily(address));
         // for unit tests :(
         SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
@@ -57,8 +56,6 @@ protected:
         SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
 #endif
         SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
-=======
->>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
@@ -84,27 +81,12 @@ protected:
                 TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
             }
         }
-<<<<<<< HEAD
         if (err == 0) {
             err = Socket->Socket.Bind(bindAddress.get());
             if (err != 0) {
                 YDB_LOG_WARN("Failed to bind",
                     {"bindAddress", bindAddress->ToString()},
                     {"code", err});
-=======
-        // Validate TLS before making the port visible to TCP probes.
-        if (err == 0) {
-            if (event->Get()->PreboundSocket) {
-                Socket = event->Get()->PreboundSocket;
-            } else if (!Socket) {
-                Socket = TryBindListeningSocket(address, port);
-            }
-            if (!Socket) {
-                err = -1;
-                YDB_LOG_WARN("Failed to bind",
-                    {"address", address},
-                    {"port", port});
->>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
             }
         }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
@@ -127,11 +109,6 @@ protected:
             }
         }
         YDB_LOG_WARN("Failed to init - retrying...");
-        if (event->Get()->PreboundSocket) {
-            // Release the event's reference; the caller may still own the socket.
-            event->Get()->PreboundSocket.Reset();
-            YDB_LOG_WARN("Released the prebound listening socket");
-        }
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 

@@ -67,7 +67,10 @@ struct TSslHelpers {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
-<<<<<<< HEAD
+        // The key loader compares the key only with a certificate of the same type.
+        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
+            return nullptr;
+        }
         if (!caFile.empty()) {
             if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
                 // TODO(yurikiselev): more diagnostics?
@@ -76,14 +79,6 @@ struct TSslHelpers {
             // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
             // but doesn't fail if not provided
             SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
-=======
-        // The key loader compares the key only with a certificate of the same type.
-        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
-            return nullptr;
-        }
-        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
-            return nullptr;
->>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
         }
 
         return ctx;
@@ -137,7 +132,9 @@ struct TSslHelpers {
         if (!LoadPrivateKey(ctx, pem)) {
             return nullptr;
         }
-<<<<<<< HEAD
+        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
+            return nullptr;
+        }
         if (!caFile.empty()) {
             if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
                 // TODO(yurikiselev): more diagnostics?
@@ -146,13 +143,6 @@ struct TSslHelpers {
             // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
             // but doesn't fail if not provided
             SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
-=======
-        if (SSL_CTX_check_private_key(ctx.Get()) != 1) {
-            return nullptr;
-        }
-        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
-            return nullptr;
->>>>>>> 0050f1980e3 (Validate TLS before opening the HTTP listener (#52596))
         }
 
         return ctx;

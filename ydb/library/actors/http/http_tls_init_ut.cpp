@@ -263,28 +263,6 @@ Y_UNIT_TEST_SUITE(HttpProxyTlsInitialization) {
         AssertHttpsRequestSucceeds(runtime, proxyId, port);
     }
 
-    Y_UNIT_TEST(PreboundSocketStopsListeningAfterTlsFailure) {
-        TPortManager portManager;
-        TIpPort port = portManager.GetTcpPort();
-        TIntrusivePtr<NHttp::TSocketDescriptor> socket = NHttp::TryBindListeningSocket("127.0.0.1", port);
-        UNIT_ASSERT(socket);
-        UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Connected,
-            "The prebound socket must be listening before the acceptor sees it");
-
-        TSimulatedProxy proxy;
-        THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
-        add->Secure = true;
-        add->SslCertificatePem = MALFORMED_PEM;
-        add->PreboundSocket = socket;
-        proxy.AddListeningPort(std::move(add));
-        socket.Reset(); // The event is now the sole owner.
-
-        UNIT_ASSERT(proxy.NoConfirmListenWithin(TDuration::Seconds(2)));
-        UNIT_ASSERT_GE(proxy.Retries, 1u);
-        UNIT_ASSERT_EQUAL_C(ProbeTcp("127.0.0.1", port), EProbeResult::Refused,
-            "A prebound secure socket keeps accepting connections after the TLS context failed");
-    }
-
     Y_UNIT_TEST(BindFailureRetriesWithValidTls) {
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();

@@ -449,19 +449,21 @@ TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(int rootId
 
     TVector<TKqpParamBinding> paramBindings;
     THashSet<TString> paramsCollected;
-    const auto params = FindNodes(rootStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
-    for (const auto& param : params) {
-        const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
-        if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
-            // clang-format off
-            const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-                .Name<TCoAtom>()
-                    .Value(paramName)
-                .Build()
-            .Done();
-            // clang-format on
-            paramBindings.push_back(paramBinding);
-            paramsCollected.insert(paramName);
+    for (const auto& physicalStage : physicalStages) {
+        const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
+        for (const auto& param : params) {
+            const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
+            if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
+                // clang-format off
+                const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                    .Name<TCoAtom>()
+                        .Value(paramName)
+                    .Build()
+                .Done();
+                // clang-format on
+                paramBindings.push_back(paramBinding);
+                paramsCollected.insert(paramName);
+            }
         }
     }
 

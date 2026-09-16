@@ -27,7 +27,6 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/backup/common/feature_flags.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -240,8 +239,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(Ydb::TOperationId::IMPORT, request.GetRequest().GetOperationParams());
-        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::IMPORT, uid},
+        const TString& uid = GetUid(EOperationUidKind::Import, request.GetRequest().GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::Import, uid},
             TOperationUidAdmission::EDuplicatePolicy::Replay,
             [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {
@@ -1013,7 +1012,7 @@ private:
         Y_ABORT_UNLESS(item.State == EState::BuildIndexes);
 
         const auto uid = MakeIndexBuildUid(importInfo, itemIdx);
-        const auto* id = Self->OperationsByUid.FindPtr(TOperationUidKey{Ydb::TOperationId::BUILD_INDEX, uid});
+        const auto* id = Self->OperationsByUid.FindPtr(TOperationUidKey{EOperationUidKind::IndexBuild, uid});
         return id ? TTxId(*id) : InvalidTxId;
     }
 

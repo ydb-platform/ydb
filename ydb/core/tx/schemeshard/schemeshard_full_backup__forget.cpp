@@ -1,8 +1,6 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-
 // Precondition: the row must be in a terminal state and the control op must not be in flight; we refuse to delete in-flight rows because AbortUnsafe expects the row to exist for cleanup.
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
@@ -96,7 +94,7 @@ public:
         const ui64 id = info.Id;
         NIceDb::TNiceDb db(txc.DB);
         if (info.Uid) {
-            Self->OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::FULL_BACKUP, info.Uid});
+            Self->OperationsByUid.erase(TOperationUidKey{EOperationUidKind::FullBackup, info.Uid});
         }
         Self->PersistRemoveFullBackup(db, info);
         Self->FullBackups.erase(id);

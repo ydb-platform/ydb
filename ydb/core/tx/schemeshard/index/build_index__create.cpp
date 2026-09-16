@@ -7,7 +7,6 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
@@ -43,8 +42,8 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(Ydb::TOperationId::BUILD_INDEX, request.GetOperationParams());
-        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::BUILD_INDEX, uid},
+        const TString& uid = GetUid(EOperationUidKind::IndexBuild, request.GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::IndexBuild, uid},
             TOperationUidAdmission::EDuplicatePolicy::Reject,
             [&](const auto& key) { return Self->FindOperationByUid(key); });
         if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {

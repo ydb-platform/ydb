@@ -3,7 +3,6 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -13,8 +12,8 @@ namespace NKikimr::NSchemeShard {
 
 Y_UNIT_TEST_SUITE(OperationUidSupport) {
     Y_UNIT_TEST(LegacyRpcUidSupportDoesNotEnableSql) {
-        for (auto kind : {Ydb::TOperationId::EXPORT, Ydb::TOperationId::IMPORT,
-                Ydb::TOperationId::BUILD_INDEX, Ydb::TOperationId::SET_NOT_NULL}) {
+        for (auto kind : {EOperationUidKind::Export, EOperationUidKind::Import,
+                EOperationUidKind::IndexBuild, EOperationUidKind::SetColumnConstraint}) {
             UNIT_ASSERT(SupportsOperationUid(kind));
             UNIT_ASSERT(!SupportsSqlOperationIdempotency(kind));
 
@@ -35,17 +34,17 @@ Y_UNIT_TEST_SUITE(OperationUidSupport) {
     Y_UNIT_TEST(SchemeMappingsPreserveKindAndPayloadValidation) {
         using TKqpOperation = NKqpProto::TKqpSchemeOperation;
         struct TCase {
-            Ydb::TOperationId::EKind Kind;
+            EOperationUidKind Kind;
             NKikimrSchemeOp::EOperationType Type;
             TStringBuf SqlWriteMode;
             NKikimrSchemeOp::TModifyScheme* (TKqpOperation::*MutablePayload)();
         };
         const TCase cases[] = {
-            {Ydb::TOperationId::FULL_BACKUP, NKikimrSchemeOp::ESchemeOpBackupBackupCollection,
+            {EOperationUidKind::FullBackup, NKikimrSchemeOp::ESchemeOpBackupBackupCollection,
                 "backup", &TKqpOperation::MutableBackup},
-            {Ydb::TOperationId::INCREMENTAL_BACKUP, NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection,
+            {EOperationUidKind::IncrementalBackup, NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection,
                 "backupIncremental", &TKqpOperation::MutableBackupIncremental},
-            {Ydb::TOperationId::RESTORE, NKikimrSchemeOp::ESchemeOpRestoreBackupCollection,
+            {EOperationUidKind::Restore, NKikimrSchemeOp::ESchemeOpRestoreBackupCollection,
                 "restore", &TKqpOperation::MutableRestore},
         };
         for (const auto& test : cases) {
@@ -69,13 +68,9 @@ Y_UNIT_TEST_SUITE(OperationUidSupport) {
     }
 
     Y_UNIT_TEST(UnlistedOperationsDoNotAcquireUidSupport) {
-        for (auto kind : {Ydb::TOperationId::UNUSED, Ydb::TOperationId::OPERATION_DDL,
-                Ydb::TOperationId::OPERATION_DML, Ydb::TOperationId::SCRIPT_EXECUTION,
-                Ydb::TOperationId::SS_BG_TASKS, Ydb::TOperationId::COMPACTION,
-                Ydb::TOperationId::ANALYZE, static_cast<Ydb::TOperationId::EKind>(1000)}) {
-            UNIT_ASSERT(!SupportsOperationUid(kind));
-            UNIT_ASSERT(!SupportsSqlOperationIdempotency(kind));
-        }
+        const auto unknownKind = static_cast<EOperationUidKind>(1000);
+        UNIT_ASSERT(!SupportsOperationUid(unknownKind));
+        UNIT_ASSERT(!SupportsSqlOperationIdempotency(unknownKind));
         UNIT_ASSERT(!SupportsOperationIdempotency(NKikimrSchemeOp::ESchemeOpCreateTable));
         UNIT_ASSERT(!SupportsSqlOperationIdempotency("create"));
         UNIT_ASSERT(!GetSchemeOperationForIdempotency(NKqpProto::TKqpSchemeOperation{}));
@@ -89,7 +84,7 @@ Y_UNIT_TEST_SUITE(OperationUidAdmission) {
 
     Y_UNIT_TEST(MissingUidDoesNotLookupButStillPersistsOperation) {
         bool persisted = false;
-        auto admission = TAdmission::Prepare({Ydb::TOperationId::EXPORT, {}}, EPolicy::Replay,
+        auto admission = TAdmission::Prepare({EOperationUidKind::Export, {}}, EPolicy::Replay,
             [](const auto&) -> TMaybe<TOperationUidRecord> {
                 UNIT_FAIL("An empty legacy UID must not be looked up");
                 return Nothing();
@@ -99,16 +94,16 @@ Y_UNIT_TEST_SUITE(OperationUidAdmission) {
     }
 
     Y_UNIT_TEST(FailedAdmissionDoesNotBindUid) {
-        auto admission = TAdmission::Prepare({Ydb::TOperationId::FULL_BACKUP, "uid"}, EPolicy::Replay,
+        auto admission = TAdmission::Prepare({EOperationUidKind::FullBackup, "uid"}, EPolicy::Replay,
             [](const auto&) -> TMaybe<TOperationUidRecord> { return Nothing(); });
         UNIT_ASSERT(admission.GetDecision() == EDecision::Proceed);
         UNIT_ASSERT(!admission.Commit(false, [] { UNIT_FAIL("Failed work must not persist a UID"); }));
     }
 
     Y_UNIT_TEST(LegacyRecordsKeepTheirDuplicatePolicy) {
-        for (auto kind : {Ydb::TOperationId::EXPORT, Ydb::TOperationId::IMPORT,
-                Ydb::TOperationId::BUILD_INDEX, Ydb::TOperationId::SET_NOT_NULL}) {
-            const bool replay = kind == Ydb::TOperationId::EXPORT || kind == Ydb::TOperationId::IMPORT;
+        for (auto kind : {EOperationUidKind::Export, EOperationUidKind::Import,
+                EOperationUidKind::IndexBuild, EOperationUidKind::SetColumnConstraint}) {
+            const bool replay = kind == EOperationUidKind::Export || kind == EOperationUidKind::Import;
             // Existing records have no original request identity. New code must
             // neither require one nor attach the retry's body to that record.
             const TOperationUidRecord legacy{42, {}, {}};
@@ -127,7 +122,7 @@ Y_UNIT_TEST_SUITE(OperationUidAdmission) {
     Y_UNIT_TEST(IdentityChecksKeepOwnerBeforeBody) {
         const TOperationUidRecord stored{42, "owner", "original"};
         const auto check = [&](const TOperationUidIdentity& requested, EDecision expected) {
-            auto admission = TAdmission::Prepare({Ydb::TOperationId::RESTORE, "uid"}, EPolicy::Replay,
+            auto admission = TAdmission::Prepare({EOperationUidKind::Restore, "uid"}, EPolicy::Replay,
                 [&](const auto&) -> TMaybe<TOperationUidRecord> { return stored; },
                 [&](const auto& receipt) {
                     return CompareOperationUid(
@@ -143,9 +138,9 @@ Y_UNIT_TEST_SUITE(OperationUidAdmission) {
 
     Y_UNIT_TEST(OperationKindsKeepIndependentNamespaces) {
         TMap<TOperationUidKey, TOperationUidRecord> records;
-        for (auto kind : {Ydb::TOperationId::EXPORT, Ydb::TOperationId::IMPORT,
-                Ydb::TOperationId::BUILD_INDEX, Ydb::TOperationId::SET_NOT_NULL,
-                Ydb::TOperationId::FULL_BACKUP, Ydb::TOperationId::INCREMENTAL_BACKUP, Ydb::TOperationId::RESTORE}) {
+        for (auto kind : {EOperationUidKind::Export, EOperationUidKind::Import,
+                EOperationUidKind::IndexBuild, EOperationUidKind::SetColumnConstraint,
+                EOperationUidKind::FullBackup, EOperationUidKind::IncrementalBackup, EOperationUidKind::Restore}) {
             const TOperationUidKey key{kind, "same uid"};
             auto admission = TAdmission::Prepare(key, EPolicy::Reject,
                 [&](const auto& uid) -> TMaybe<TOperationUidRecord> {

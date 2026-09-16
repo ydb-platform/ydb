@@ -1,7 +1,5 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-
 namespace NKikimr::NSchemeShard {
 
 TMaybe<TOperationUidRecord> TSchemeShard::FindOperationByUid(const TOperationUidKey& key) const {
@@ -10,20 +8,20 @@ TMaybe<TOperationUidRecord> TSchemeShard::FindOperationByUid(const TOperationUid
         return Nothing();
     }
     switch (key.first) {
-        case Ydb::TOperationId::EXPORT:
-        case Ydb::TOperationId::IMPORT:
-        case Ydb::TOperationId::BUILD_INDEX:
-        case Ydb::TOperationId::SET_NOT_NULL:
+        case EOperationUidKind::Export:
+        case EOperationUidKind::Import:
+        case EOperationUidKind::IndexBuild:
+        case EOperationUidKind::SetColumnConstraint:
             return TOperationUidRecord{*id, {}, {}};
-        case Ydb::TOperationId::FULL_BACKUP: {
+        case EOperationUidKind::FullBackup: {
             const auto& info = *FullBackups.at(*id);
             return TOperationUidRecord{*id, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
-        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
+        case EOperationUidKind::IncrementalBackup: {
             const auto& info = *IncrementalBackups.at(*id);
             return TOperationUidRecord{*id, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
-        case Ydb::TOperationId::RESTORE: {
+        case EOperationUidKind::Restore: {
             const auto& info = IncrementalRestoreStates.at(*id);
             return TOperationUidRecord{*id, info.UserSID, info.OriginalDdl};
         }
@@ -37,21 +35,21 @@ void TSchemeShard::BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
 {
     const auto& ddl = tx.GetOperationIdempotency().GetOriginalDdl();
     switch (key.first) {
-        case Ydb::TOperationId::FULL_BACKUP: {
+        case EOperationUidKind::FullBackup: {
             auto& info = *FullBackups.at(id);
             info.Uid = key.second;
             info.OriginalDdl = ddl;
             info.UserSID = userSID;
             break;
         }
-        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
+        case EOperationUidKind::IncrementalBackup: {
             auto& info = *IncrementalBackups.at(id);
             info.Uid = key.second;
             info.OriginalDdl = ddl;
             info.UserSID = userSID;
             break;
         }
-        case Ydb::TOperationId::RESTORE: {
+        case EOperationUidKind::Restore: {
             Y_ABORT_UNLESS(!IncrementalRestoreStates.contains(id));
             auto& info = IncrementalRestoreStates[id];
             info.Uid = key.second;
@@ -74,21 +72,21 @@ void TSchemeShard::BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
 void TSchemeShard::PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOperationUidKey& key) {
     const auto id = OperationsByUid.at(key);
     switch (key.first) {
-        case Ydb::TOperationId::FULL_BACKUP: {
+        case EOperationUidKind::FullBackup: {
             const auto& info = *FullBackups.at(id);
             db.Table<Schema::FullBackups>().Key(id).Update(
                 NIceDb::TUpdate<Schema::FullBackups::Uid>(info.Uid),
                 NIceDb::TUpdate<Schema::FullBackups::OriginalDdl>(info.OriginalDdl));
             break;
         }
-        case Ydb::TOperationId::INCREMENTAL_BACKUP: {
+        case EOperationUidKind::IncrementalBackup: {
             const auto& info = *IncrementalBackups.at(id);
             db.Table<Schema::IncrementalBackups>().Key(id).Update(
                 NIceDb::TUpdate<Schema::IncrementalBackups::Uid>(info.Uid),
                 NIceDb::TUpdate<Schema::IncrementalBackups::OriginalDdl>(info.OriginalDdl));
             break;
         }
-        case Ydb::TOperationId::RESTORE: {
+        case EOperationUidKind::Restore: {
             const auto& info = IncrementalRestoreStates.at(id);
             using T = Schema::IncrementalRestoreState;
             db.Table<T>().Key(id).Update(

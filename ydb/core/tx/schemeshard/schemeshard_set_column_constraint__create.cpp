@@ -6,7 +6,6 @@
 #include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -48,8 +47,8 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
-        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
+        const TString& uid = GetUid(EOperationUidKind::SetColumnConstraint, request.GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::SetColumnConstraint, uid},
             TOperationUidAdmission::EDuplicatePolicy::Reject,
             [&](const auto& key) { return Self->FindOperationByUid(key); });
         if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {

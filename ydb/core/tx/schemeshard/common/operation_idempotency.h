@@ -9,10 +9,6 @@
 #include <functional>
 #include <utility>
 
-namespace Ydb {
-enum TOperationId_EKind : int;
-}
-
 namespace Ydb::Operations {
 class OperationParams;
 }
@@ -31,15 +27,27 @@ inline bool IsValidOperationUid(TStringBuf key) {
     return !key.empty() && key.size() <= 128;
 }
 
+// Internal UID namespaces, independent of public operation-ID encoding.
+// These discriminators are not persisted; each operation owns its UID column.
+enum class EOperationUidKind {
+    Export,
+    Import,
+    IndexBuild,
+    SetColumnConstraint,
+    FullBackup,
+    IncrementalBackup,
+    Restore,
+};
+
 // UID availability is independent of SQL support and of duplicate handling.
 // Some legacy operations reject duplicates instead of returning an existing ID.
-bool SupportsOperationUid(Ydb::TOperationId_EKind kind);
-bool SupportsSqlOperationIdempotency(Ydb::TOperationId_EKind kind);
+bool SupportsOperationUid(EOperationUidKind kind);
+bool SupportsSqlOperationIdempotency(EOperationUidKind kind);
 
 TString GetUid(const Ydb::Operations::OperationParams& operationParams);
 // Admission handlers pass their fixed operation kind; an unregistered kind is
 // a programming error. Keep the untyped extractor for diagnostics such as audit.
-TString GetUid(Ydb::TOperationId_EKind kind, const Ydb::Operations::OperationParams& operationParams);
+TString GetUid(EOperationUidKind kind, const Ydb::Operations::OperationParams& operationParams);
 
 struct TOperationUidIdentity {
     TMaybe<TStringBuf> UserSID;
@@ -47,7 +55,7 @@ struct TOperationUidIdentity {
 };
 
 // The kind preserves the separate UID namespaces of the existing operations.
-using TOperationUidKey = std::pair<Ydb::TOperationId_EKind, TString>;
+using TOperationUidKey = std::pair<EOperationUidKind, TString>;
 
 struct TOperationUidRecord {
     ui64 OperationId = 0;
@@ -87,7 +95,7 @@ private:
 TOperationUidAdmission::EDecision CompareOperationUid(
     const TOperationUidIdentity& stored, const TOperationUidIdentity& requested);
 
-TMaybe<Ydb::TOperationId_EKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType);
+TMaybe<EOperationUidKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType);
 
 // Capabilities of keyed TModifyScheme submissions and their SQL/KQP forms.
 // Legacy RPC admission paths use the UID helpers above.

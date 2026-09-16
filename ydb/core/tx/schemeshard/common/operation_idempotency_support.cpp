@@ -2,7 +2,6 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <array>
 #include <optional>
@@ -21,7 +20,7 @@ struct TSchemeOperationUidSupport {
 };
 
 struct TOperationUidSupport {
-    Ydb::TOperationId::EKind Kind;
+    EOperationUidKind Kind;
     std::optional<TSchemeOperationUidSupport> SchemeOperation;
 };
 
@@ -29,24 +28,24 @@ struct TOperationUidSupport {
 // the operation uses its existing RPC admission path and has no SQL UID support.
 // Duplicate handling remains specific to the operation's existing protocol.
 const std::array SupportedOperations = {
-    TOperationUidSupport{Ydb::TOperationId::EXPORT, std::nullopt},
-    TOperationUidSupport{Ydb::TOperationId::IMPORT, std::nullopt},
-    TOperationUidSupport{Ydb::TOperationId::BUILD_INDEX, std::nullopt},
-    TOperationUidSupport{Ydb::TOperationId::SET_NOT_NULL, std::nullopt},
-    TOperationUidSupport{Ydb::TOperationId::FULL_BACKUP,
+    TOperationUidSupport{EOperationUidKind::Export, std::nullopt},
+    TOperationUidSupport{EOperationUidKind::Import, std::nullopt},
+    TOperationUidSupport{EOperationUidKind::IndexBuild, std::nullopt},
+    TOperationUidSupport{EOperationUidKind::SetColumnConstraint, std::nullopt},
+    TOperationUidSupport{EOperationUidKind::FullBackup,
         TSchemeOperationUidSupport{NKikimrSchemeOp::ESchemeOpBackupBackupCollection,
             "backup", TKqpOperation::kBackup, &TKqpOperation::GetBackup}},
-    TOperationUidSupport{Ydb::TOperationId::INCREMENTAL_BACKUP,
+    TOperationUidSupport{EOperationUidKind::IncrementalBackup,
         TSchemeOperationUidSupport{NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection,
             "backupIncremental", TKqpOperation::kBackupIncremental, &TKqpOperation::GetBackupIncremental}},
-    TOperationUidSupport{Ydb::TOperationId::RESTORE,
+    TOperationUidSupport{EOperationUidKind::Restore,
         TSchemeOperationUidSupport{NKikimrSchemeOp::ESchemeOpRestoreBackupCollection,
             "restore", TKqpOperation::kRestore, &TKqpOperation::GetRestore}},
 };
 
 } // namespace
 
-bool SupportsOperationUid(Ydb::TOperationId::EKind kind) {
+bool SupportsOperationUid(EOperationUidKind kind) {
     for (const auto& supported : SupportedOperations) {
         if (supported.Kind == kind) {
             return true;
@@ -55,7 +54,7 @@ bool SupportsOperationUid(Ydb::TOperationId::EKind kind) {
     return false;
 }
 
-bool SupportsSqlOperationIdempotency(Ydb::TOperationId::EKind kind) {
+bool SupportsSqlOperationIdempotency(EOperationUidKind kind) {
     for (const auto& supported : SupportedOperations) {
         if (supported.Kind == kind) {
             return supported.SchemeOperation.has_value();
@@ -64,7 +63,7 @@ bool SupportsSqlOperationIdempotency(Ydb::TOperationId::EKind kind) {
     return false;
 }
 
-TMaybe<Ydb::TOperationId_EKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType) {
+TMaybe<EOperationUidKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType) {
     for (const auto& supported : SupportedOperations) {
         if (supported.SchemeOperation && supported.SchemeOperation->OperationType == operationType) {
             return supported.Kind;

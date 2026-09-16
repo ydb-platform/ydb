@@ -167,7 +167,6 @@ TAppData::TAppData(
     , UdfStoreConfig(Impl->UdfStoreConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
-    , UserFacingTracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}
 
 TAppData::~TAppData()

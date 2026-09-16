@@ -18,6 +18,7 @@
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 
+#include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
 
@@ -287,9 +288,11 @@ public:
         Settings_.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
     }
 
-    void Run() {
+    void Run(bool enableGrpc = true) {
         Server_ = MakeHolder<TServer>(Settings_);
-        Server_->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
+        if (enableGrpc) {
+            Server_->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcPort_));
+        }
     }
 
     NPersQueueTests::TFlatMsgBusPQClient& PQClient() {
@@ -457,7 +460,6 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         }
     }
 
-
     Y_UNIT_TEST(TestBaselineReturnsAllClusters) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tfancy_datacenter");
@@ -486,6 +488,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             UNIT_ASSERT_STRINGS_EQUAL(dc1.Balancer, "localhost");
             UNIT_ASSERT(dc1.IsEnabled);
             UNIT_ASSERT(dc1.IsLocal);
+            UNIT_ASSERT(!dc1.IsFnx);
             UNIT_ASSERT_VALUES_EQUAL(dc1.Weight, 1000);
 
             const auto& dc2 = event->ClustersList->Clusters[1];
@@ -494,6 +497,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             UNIT_ASSERT_STRINGS_EQUAL(dc2.Balancer, "dc2.logbroker.yandex.net");
             UNIT_ASSERT(dc2.IsEnabled);
             UNIT_ASSERT(!dc2.IsLocal);
+            UNIT_ASSERT(!dc2.IsFnx);
             UNIT_ASSERT_VALUES_EQUAL(dc2.Weight, 1000);
         }
 
@@ -777,6 +781,220 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         UNIT_ASSERT_VALUES_EQUAL(counters.PrimaryClusterSelectionReasons[WriteSessionClusters::CLIENT_LOCATION]->GetAtomic(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters.PrimaryClusterSelectionReasons[WriteSessionClusters::CONSISTENT_DISTRIBUTION]->GetAtomic(), 1);
     }
-}
 
-} // namespace NKikimr::NPQCDTests
+    static TVector<TString> ReadClusterNames(const DiscoverClustersResult& result) {
+        TVector<TString> names;
+        UNIT_ASSERT_VALUES_EQUAL(result.read_sessions_clusters_size(), 1);
+        for (const auto& cluster : result.read_sessions_clusters(0).clusters()) {
+            names.push_back(cluster.name());
+        }
+        Sort(names);
+        return names;
+    }
+
+    static DiscoverClustersRequest AllOriginalRequest() {
+        DiscoverClustersRequest request;
+        request.add_read_sessions()->mutable_all_original();
+        return request;
+    }
+
+    Y_UNIT_TEST(TestTrackerMigratesOldClusterSchema) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        auto fnxColumn = server.PQClient().RunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+        UNIT_ASSERT(fnxColumn.Defined());
+        auto balancerTable = server.PQClient().RunYqlDataQuery("SELECT name, clusters FROM `/Root/PQ/Config/V2/Balancer`;");
+        UNIT_ASSERT(balancerTable.Defined());
+
+        server.PQClient().CheckClustersList(&server.ActorSystem(), false);
+
+        {
+            auto& actorSystem = server.ActorSystem();
+            const TActorId sender = actorSystem.AllocateEdgeActor();
+            actorSystem.Send(new IEventHandle(
+                NPQ::NClusterTracker::MakeClusterTrackerID(),
+                sender,
+                new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList()));
+            TAutoPtr<IEventHandle> handle;
+            const auto event = actorSystem.GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse>(handle);
+            UNIT_ASSERT(event->Success);
+            UNIT_ASSERT(event->ClustersList);
+            UNIT_ASSERT_VALUES_EQUAL(event->ClustersList->Clusters.size(), 2);
+            UNIT_ASSERT(event->ClustersList->DebugString().Contains("dc1"));
+        }
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+        DiscoverClustersResult result;
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+    }
+
+    Y_UNIT_TEST(TestTrackerAcceptsPreMigratedSchema) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().MkDir("/Root/PQ", "Config");
+        server.PQClient().MkDir("/Root/PQ/Config", "V2");
+        server.PQClient().RunYqlSchemeQuery(R"___(
+            CREATE TABLE `/Root/PQ/Config/V2/Cluster` (
+                name Utf8,
+                balancer Utf8,
+                local Bool,
+                enabled Bool,
+                weight Uint64,
+                fnx Bool,
+                PRIMARY KEY (name)
+            );
+            CREATE TABLE `/Root/PQ/Config/V2/Balancer` (
+                name Utf8,
+                clusters Utf8,
+                PRIMARY KEY (name)
+            );
+            CREATE TABLE `/Root/PQ/Config/V2/Versions` (
+                name Utf8,
+                version Int64,
+                PRIMARY KEY (name)
+            );
+        )___");
+        server.PQClient().RunYqlDataQuery(R"___(
+            UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight, fnx) VALUES
+                ("dc1", "localhost", true, true, 1000, false),
+                ("dc2", "dc2.logbroker.yandex.net", false, true, 1000, false);
+            UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Cluster", 1), ("Topics", 0);
+        )___");
+
+        server.WaitUntilHealthy();
+        server.PQClient().CheckClustersList(&server.ActorSystem(), false);
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+        DiscoverClustersResult result;
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+    }
+
+    Y_UNIT_TEST(TestFnxHiddenUnlessBalancerMatches) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        server.PQClient().UpsertCluster("myt", "myt.logbroker.yandex.net", false, true, 1000, true);
+        wrapper.WaitForExactClustersDataVersion(2);
+
+        auto assertOrdinaryOnly = [&](const TString& authority) {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result, authority), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+        };
+
+        assertOrdinaryOnly({});
+        assertOrdinaryOnly("localhost");
+        assertOrdinaryOnly("sas.logbroker.yandex.net");
+        assertOrdinaryOnly("logbroker.yandex.net");
+
+        {
+            DiscoverClustersRequest request;
+            auto* writeSessionParams = request.add_write_sessions();
+            writeSessionParams->set_topic("topic");
+            writeSessionParams->set_source_id("topic1.log");
+            writeSessionParams->set_preferred_cluster_name("myt");
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
+        wrapper.WaitForExactClustersDataVersion(3);
+
+        assertOrdinaryOnly({});
+        assertOrdinaryOnly("logbroker.yandex.net");
+
+        auto assertWithMyt = [&](const TString& authority) {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result, authority), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
+        };
+
+        assertWithMyt("logbroker-fnx.yandex.net");
+        assertWithMyt("LOGBROKER-FNX.YANDEX.NET:2135");
+
+        {
+            DiscoverClustersRequest request;
+            auto* writeSessionParams = request.add_write_sessions();
+            writeSessionParams->set_topic("topic");
+            writeSessionParams->set_source_id("topic1.log");
+            writeSessionParams->set_preferred_cluster_name("myt");
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result, "logbroker-fnx.yandex.net"), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.write_sessions_clusters(0).clusters(0).name(), "myt");
+            UNIT_ASSERT_VALUES_EQUAL(result.write_sessions_clusters(0).clusters_size(), 3);
+        }
+
+        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "", 2);
+        wrapper.WaitForExactClustersDataVersion(4);
+        assertOrdinaryOnly("logbroker-fnx.yandex.net");
+
+        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt,missing", 3);
+        wrapper.WaitForExactClustersDataVersion(5);
+        assertWithMyt("logbroker-fnx.yandex.net");
+    }
+
+    Y_UNIT_TEST(TestAllFnxClustersHiddenWithoutBalancer) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        server.PQClient().UpsertCluster("dc1", "localhost", true, true, 1000, true);
+        server.PQClient().UpsertCluster("dc2", "dc2.logbroker.yandex.net", false, true, 1000, true);
+        wrapper.WaitForExactClustersDataVersion(3);
+
+        {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.read_sessions_clusters(0).clusters_size(), 0);
+        }
+        {
+            DiscoverClustersRequest request;
+            auto* writeSessionParams = request.add_write_sessions();
+            writeSessionParams->set_topic("topic");
+            writeSessionParams->set_source_id("topic1.log");
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.write_sessions_clusters(0).clusters_size(), 0);
+        }
+        {
+            DiscoverClustersRequest request;
+            auto* writeSessionParams = request.add_write_sessions();
+            writeSessionParams->set_topic("topic");
+            writeSessionParams->set_source_id("topic1.log");
+            writeSessionParams->set_preferred_cluster_name("dc1");
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
+}
+}

@@ -35,10 +35,7 @@ void TClustersUpdater::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluste
         return;
     }
 
-    TVector<TString> clusters;
-    clusters.reserve(list->Clusters.size());
     for (const auto& cluster : list->Clusters) {
-        clusters.push_back(cluster.Name);
         if (cluster.IsLocal) {
             const bool changed = LocalCluster != cluster.Name || Enabled != cluster.IsEnabled;
             if (changed) {
@@ -48,10 +45,7 @@ void TClustersUpdater::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluste
             }
         }
     }
-    if (Clusters != clusters) {
-        Clusters = clusters;
-        Callback->CheckClustersListChange(Clusters);
-    }
+    Callback->ClustersListUpdated(list);
 }
 
 }

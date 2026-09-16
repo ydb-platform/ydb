@@ -6,8 +6,11 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 #include <vector>
 
@@ -26,6 +29,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         TString Balancer;
         bool IsEnabled = false;
         bool IsLocal = false;
+        bool IsFnx = false;
         ui64 Weight = 1000;
 
         TString DebugString() const;
@@ -39,7 +43,12 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     std::vector<TCluster> Clusters;
     const TCluster* LocalCluster = nullptr;
 
+    // Normalized balancer host -> FNX cluster names listed in Balancer.clusters.
+    THashMap<TString, TVector<TString>> Balancers;
+
     i64 Version = 0;
+    i64 ClusterVersion = 0;
+    i64 BalancerVersion = 0;
 };
 
 struct TEvClusterTracker {

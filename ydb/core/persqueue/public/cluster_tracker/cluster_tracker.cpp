@@ -1,19 +1,16 @@
 #include "cluster_tracker.h"
+#include "cluster_select.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <util/generic/hash.h>
-#include <util/generic/scope.h>
-#include <util/string/builder.h>
-#include <util/string/join.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 
-#include <ranges>
-#include <tuple>
+#include <string>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_CLUSTER_TRACKER
 
@@ -22,31 +19,6 @@ namespace NKikimr::NPQ::NClusterTracker {
 inline auto& Ctx() {
     return TActivationContext::AsActorContext();
 }
-
-bool TClustersList::TCluster::operator==(const TCluster& rhs) const {
-    return std::tie(Name, Datacenter, Balancer, IsLocal, IsEnabled, Weight) ==
-           std::tie(rhs.Name, rhs.Datacenter, rhs.Balancer, rhs.IsLocal, rhs.IsEnabled, rhs.Weight);
-}
-
-bool TClustersList::operator==(const TClustersList& rhs) const {
-    return Clusters == rhs.Clusters && Version == rhs.Version;
-}
-
-TString TClustersList::DebugString() const {
-    auto names = Clusters | std::views::transform([](const auto& cluster) { return cluster.Name; });
-    return TStringBuilder() << "[" << JoinSeq(", ", names) << "]";
-}
-
-TString TClustersList::TCluster::DebugString() const {
-    TStringBuilder builder;
-    builder << "(" << Name << ", " << Datacenter << ", " << Balancer << ", ";
-    builder << (IsEnabled ? "enabled" : "disabled")  << ", ";
-    builder << (IsLocal ? "local" : "remote") << ", ";
-    builder << Weight << ")";
-
-    return TString(builder);
-}
-
 
 class TClusterTracker: public TActorBootstrapped<TClusterTracker> {
 public:
@@ -59,16 +31,19 @@ public:
     }
 
     void Bootstrap() {
-        ListClustersQuery = MakeListClustersQuery();
-
-        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
-        //     ClustersList = MakeIntrusive<TClustersList>();
-        // }
-
         Become(&TThis::WaitingForSubscribers);
     }
 
 private:
+    enum class EQueryKind {
+        None,
+        MigrateAddFnx,
+        MigrateCreateBalancer,
+        MigrateBackfillFnx,
+        ListClusters,
+        ListBalancers,
+    };
+
     void AddSubscriber(const TActorId subscriberId) {
         YDB_LOG_DEBUG_CTX(Ctx(), "AddSubscriber",
             {"subscribersSize", Subscribers.size()});
@@ -86,10 +61,6 @@ private:
     void HandleWhileWaiting(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
         YDB_LOG_DEBUG_CTX(Ctx(), "AddSubscriber TEvSubscriber");
 
-        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
-        //     return SendClustersList(ev->Sender);
-        // }
-
         Become(&TThis::Working);
 
         AddSubscriber(ev->Sender);
@@ -97,12 +68,6 @@ private:
     }
 
     void HandleWhileWaiting(TEvClusterTracker::TEvGetClustersList::TPtr& ev) {
-        YDB_LOG_DEBUG_CTX(Ctx(), "HandleWhileWaiting TEvGetClustersList");
-
-        // if (Cfg().GetTopicsAreFirstClassCitizen()) {
-        //     return SendGetClustersListResponse(ev->Sender);
-        // }
-
         Become(&TThis::Working);
 
         GetClustersListRequests.push_back(ev->Sender);
@@ -117,14 +82,8 @@ private:
         return Database;
     }
 
-    TString MakeListClustersQuery() const {
-        return Sprintf(
-            R"(
-               --!syntax_v1
-               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, V.version FROM `%s` AS C
-               CROSS JOIN
-               (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
-            )", Cfg().GetClusterTablePath().c_str(), Cfg().GetVersionTablePath().c_str());
+    TString GetBalancerTablePath() const {
+        return BalancerTablePathFromClusterTable(Cfg().GetClusterTablePath());
     }
 
     STATEFN(Working) {
@@ -202,51 +161,185 @@ private:
         GetClustersListRequests.clear();
     }
 
-    void HandleWhileWorking(TEvents::TEvWakeup::TPtr&) {
+    void SendDdl(const TString& query) {
         auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+        req->Record.MutableRequest()->SetKeepSession(false);
+        req->Record.MutableRequest()->SetQuery(query);
+        req->Record.MutableRequest()->SetDatabase(GetDatabase());
+        Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
+    }
 
+    void SendDml(const TString& query) {
+        auto req = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         req->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         req->Record.MutableRequest()->SetKeepSession(false);
-        req->Record.MutableRequest()->SetQuery(MakeListClustersQuery());
+        req->Record.MutableRequest()->SetQuery(query);
         req->Record.MutableRequest()->SetDatabase(GetDatabase());
         req->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
-        // useless without explicit session
-        // req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
         req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         req->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-
         Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
+    }
+
+    void StartMigrateOrList() {
+        if (QueryInFlight) {
+            return;
+        }
+        QueryInFlight = true;
+        if (!SchemaMigrated) {
+            CurrentQuery = EQueryKind::MigrateAddFnx;
+            YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: ALTER ADD COLUMN fnx");
+            SendDdl(MakeAlterAddFnxQuery(Cfg().GetClusterTablePath()));
+        } else {
+            CurrentQuery = EQueryKind::ListClusters;
+            SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
+        }
+    }
+
+    void HandleWhileWorking(TEvents::TEvWakeup::TPtr&) {
+        StartMigrateOrList();
+    }
+
+    void FailAndRetry(bool remigrateSchema = true) {
+        QueryInFlight = false;
+        CurrentQuery = EQueryKind::None;
+        if (remigrateSchema) {
+            SchemaMigrated = false;
+        }
+        PendingClustersList = nullptr;
+        ClustersList = nullptr;
+        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
+        ReplyAllGetClustersListRequests(false);
+    }
+
+    bool SchemaChangeOk(bool success, TStringBuf issues) const {
+        return success || IssuesLookLikeAlreadyExists(issues);
     }
 
     void HandleWhileWorking(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         YDB_LOG_DEBUG_CTX(Ctx(), "HandleWhileWorking TEvQueryResponse");
 
         const auto& record = ev->Get()->Record;
-        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
-            if (parser.RowsCount()) {
-                YDB_LOG_DEBUG_CTX(Ctx(), "HandleWhileWorking TEvQueryResponse UpdateClustersList");
-                UpdateClustersList(parser);
+        const TString issues = record.ShortDebugString();
+        const bool success = record.GetYdbStatus() == Ydb::StatusIds::SUCCESS;
+        const EQueryKind kind = CurrentQuery;
+        QueryInFlight = false;
 
-                AFL_ENSURE(ClustersList);
-                AFL_ENSURE(ClustersList->Clusters.size());
-                AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
-
-                BroadcastClustersUpdate();
-                ReplyAllGetClustersListRequests();
-
-                Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutSec()), new TEvents::TEvWakeup);
+        switch (kind) {
+            case EQueryKind::MigrateAddFnx:
+                if (!success && IssuesLookLikeMissingTable(issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Cluster table is missing, retry listing later",
+                        {"record", record});
+                    FailAndRetry();
+                    return;
+                }
+                if (!SchemaChangeOk(success, issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to ALTER ADD COLUMN fnx",
+                        {"record", record});
+                    FailAndRetry();
+                    return;
+                }
+                QueryInFlight = true;
+                CurrentQuery = EQueryKind::MigrateCreateBalancer;
+                SendDdl(MakeCreateBalancerQuery(GetBalancerTablePath()));
                 return;
-            }
+
+            case EQueryKind::MigrateCreateBalancer:
+                if (!SchemaChangeOk(success, issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to CREATE TABLE Balancer",
+                        {"record", record});
+                    FailAndRetry();
+                    return;
+                }
+                QueryInFlight = true;
+                CurrentQuery = EQueryKind::MigrateBackfillFnx;
+                SendDml(MakeBackfillFnxQuery(Cfg().GetClusterTablePath()));
+                return;
+
+            case EQueryKind::MigrateBackfillFnx:
+                if (!success) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to backfill Cluster.fnx",
+                        {"record", record});
+                    FailAndRetry(IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues));
+                    return;
+                }
+                SchemaMigrated = true;
+                QueryInFlight = true;
+                CurrentQuery = EQueryKind::ListClusters;
+                SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
+                return;
+
+            case EQueryKind::ListClusters:
+                if (success && record.GetResponse().YdbResultsSize() > 0) {
+                    NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+                    if (parser.RowsCount()) {
+                        UpdateClustersList(parser);
+                        QueryInFlight = true;
+                        CurrentQuery = EQueryKind::ListBalancers;
+                        SendDml(MakeListBalancersQuery(GetBalancerTablePath(), Cfg().GetVersionTablePath()));
+                        return;
+                    }
+                }
+                {
+                    const bool remigrate = !success && (IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues));
+                    if (remigrate) {
+                        YDB_LOG_ERROR_CTX(Ctx(), "Failed to list clusters, remigrate schema",
+                            {"record", record});
+                    } else {
+                        YDB_LOG_ERROR_CTX(Ctx(), "Failed to list",
+                            {"clusters", record});
+                    }
+                    FailAndRetry(remigrate);
+                }
+                return;
+
+            case EQueryKind::ListBalancers:
+                if (success) {
+                    if (record.GetResponse().YdbResultsSize() > 0) {
+                        NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
+                        UpdateBalancersList(parser);
+                    } else if (PendingClustersList) {
+                        FinishClustersList(std::move(PendingClustersList));
+                    }
+                    return;
+                }
+                {
+                    const bool remigrate = IssuesLookLikeMissingTable(issues) || IssuesLookLikeMissingColumn(issues);
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with empty balancer cache",
+                        {"record", record});
+                    if (remigrate) {
+                        SchemaMigrated = false;
+                    }
+                    if (PendingClustersList) {
+                        FinishClustersList(std::move(PendingClustersList));
+                    } else {
+                        FailAndRetry(remigrate);
+                    }
+                }
+                return;
+
+            case EQueryKind::None:
+                YDB_LOG_ERROR_CTX(Ctx(), "Unexpected query response",
+                    {"record", record});
+                return;
         }
+    }
 
-        YDB_LOG_ERROR_CTX(Ctx(), "Failed to list",
-            {"clusters", record});
+    void FinishClustersList(TIntrusivePtr<TClustersList> clustersList) {
+        AFL_ENSURE(clustersList);
+        AFL_ENSURE(clustersList->Clusters.size());
+        clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion;
+        ClustersList = std::move(clustersList);
+        ClustersListUpdateTimestamp = Ctx().Now();
+        AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
 
-        ClustersList = nullptr;
-        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
-        ReplyAllGetClustersListRequests(false);
+        BroadcastClustersUpdate();
+        ReplyAllGetClustersListRequests();
+        CurrentQuery = EQueryKind::None;
+        Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutSec()), new TEvents::TEvWakeup);
     }
 
     template<typename TProtoRecord>
@@ -256,39 +349,64 @@ private:
 
         bool firstRow = parser.TryNextRow();
         YQL_ENSURE(firstRow);
-        clustersList->Version = *parser.ColumnParser(5).GetOptionalInt64();
+        clustersList->ClusterVersion = parser.ColumnParser(6).GetOptionalInt64().value_or(0);
         size_t i = 0;
 
         do {
             auto& cluster = clustersList->Clusters[i];
 
-            cluster.Name = *parser.ColumnParser(0).GetOptionalUtf8();
+            cluster.Name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
             cluster.Datacenter = cluster.Name;
-            cluster.Balancer = *parser.ColumnParser(1).GetOptionalUtf8();
+            cluster.Balancer = TString(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
 
-            cluster.IsLocal = *parser.ColumnParser(2).GetOptionalBool();
-            cluster.IsEnabled = *parser.ColumnParser(3).GetOptionalBool();
-            cluster.Weight = *parser.ColumnParser(4).GetOptionalUint64();
+            cluster.IsLocal = parser.ColumnParser(2).GetOptionalBool().value_or(false);
+            cluster.IsEnabled = parser.ColumnParser(3).GetOptionalBool().value_or(false);
+            cluster.Weight = parser.ColumnParser(4).GetOptionalUint64().value_or(1000);
+            cluster.IsFnx = parser.ColumnParser(5).GetOptionalBool().value_or(false);
 
             ++i;
         } while (parser.TryNextRow());
 
         clustersList->LocalCluster = FindIfPtr(clustersList->Clusters, [](const auto& cluster) { return cluster.IsLocal; });
+        PendingClustersList = std::move(clustersList);
+    }
 
-        ClustersList = std::move(clustersList);
-        ClustersListUpdateTimestamp = Ctx().Now();
+    template<typename TProtoRecord>
+    void UpdateBalancersList(TProtoRecord& parser) {
+        auto clustersList = PendingClustersList;
+        PendingClustersList = nullptr;
+        if (!clustersList) {
+            FailAndRetry();
+            return;
+        }
+
+        while (parser.TryNextRow()) {
+            TString name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
+            name.to_lower();
+            const TString csv = TString(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
+            if (!name.empty()) {
+                clustersList->Balancers[name] = ParseFnxClusterCsv(csv);
+            }
+            clustersList->BalancerVersion = std::max(
+                clustersList->BalancerVersion,
+                parser.ColumnParser(2).GetOptionalInt64().value_or(0));
+        }
+
+        FinishClustersList(std::move(clustersList));
     }
 
 private:
-    TString ListClustersQuery;
-    TString PreparedQueryId;
-
     TClustersList::TConstPtr ClustersList = nullptr;
+    TIntrusivePtr<TClustersList> PendingClustersList;
 
     TMaybe<TInstant> ClustersListUpdateTimestamp;
     THashSet<TActorId> Subscribers;
     TVector<TActorId> GetClustersListRequests;
     TString Database;
+
+    bool SchemaMigrated = false;
+    bool QueryInFlight = false;
+    EQueryKind CurrentQuery = EQueryKind::None;
 };
 
 NActors::IActor* CreateClusterTracker() {

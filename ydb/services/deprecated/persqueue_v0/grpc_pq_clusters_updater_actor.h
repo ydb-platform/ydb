@@ -20,9 +20,9 @@ public:
         Y_UNUSED(enabled);
     }
 
-    virtual void CheckClustersListChange(const TVector<TString>& clusters)
+    virtual void ClustersListUpdated(NPQ::NClusterTracker::TClustersList::TConstPtr list)
     {
-        Y_UNUSED(clusters);
+        Y_UNUSED(list);
     }
 
     virtual void NetClassifierUpdated(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier) {
@@ -53,7 +53,6 @@ public:
 private:
     IPQClustersUpdaterCallback* Callback;
     TString LocalCluster;
-    TVector<TString> Clusters;
     bool Enabled = false;
     TStatus::TPtr Status;
 

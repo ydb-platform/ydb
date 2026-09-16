@@ -2,6 +2,8 @@
 
 #include <ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering.h>
 
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_select.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -10,6 +12,7 @@
 #include <util/string/ascii.h>
 
 #include <algorithm>
+#include <vector>
 
 
 namespace NKikimr::NPQ::NClusterDiscovery::NWorker {
@@ -57,12 +60,10 @@ public:
         return true;
     }
 
-    bool FillWriteSessionClusters(const TClustersList& clustersList,
+    bool FillWriteSessionClusters(std::vector<TClustersList::TCluster> clusters,
                                   const WriteSessionParams& sessionParams,
                                   WriteSessionClusters& sessionClusters) const
     {
-        auto clusters = clustersList.Clusters; // make a copy for reordering
-
         bool movedFirstPriorityCluster = false;
         WriteSessionClusters::SelectionReason primaryClusterSelectionReason = WriteSessionClusters::CONSISTENT_DISTRIBUTION;
 
@@ -120,25 +121,25 @@ public:
         return true;
     }
 
-    bool FillReadSessionClusters(const TClustersList& clustersList,
+    bool FillReadSessionClusters(const std::vector<TClustersList::TCluster>& clusters,
                                  const ReadSessionParams& sessionParams,
                                  ReadSessionClusters& sessionClusters) const
     {
         if (sessionParams.has_all_original()) {
-            for (const auto& cluster : clustersList.Clusters) {
+            for (const auto& cluster : clusters) {
                 auto& clusterInfo = *sessionClusters.add_clusters();
                 clusterInfo.set_endpoint(cluster.Balancer);
                 clusterInfo.set_name(cluster.Name);
                 clusterInfo.set_available(true); // at the moment we can't logically disable reading
             }
         } else {
-            auto it = std::find_if(begin(clustersList.Clusters), end(clustersList.Clusters),
+            auto it = std::find_if(begin(clusters), end(clusters),
                 [mirror_to_cluster = sessionParams.mirror_to_cluster()](const auto& cluster) {
                     return AsciiEqualsIgnoreCase(cluster.Name, mirror_to_cluster);
                 }
             );
 
-            if (it != end(clustersList.Clusters)) {
+            if (it != end(clusters)) {
                 auto& clusterInfo = *sessionClusters.add_clusters();
                 clusterInfo.set_endpoint(it->Balancer);
                 clusterInfo.set_name(it->Name);
@@ -173,9 +174,11 @@ public:
                 IsInfracloudClient = true;
             }
 
-            statusCode = ProcessWriteSessions(*result);
+            const auto visibleClusters = SelectClustersForBalancer(*ClustersList, Request->GetAuthority());
+
+            statusCode = ProcessWriteSessions(visibleClusters, *result);
             if (statusCode == Ydb::StatusIds::SUCCESS) {
-                statusCode = ProcessReadSessions(*result);
+                statusCode = ProcessReadSessions(visibleClusters, *result);
             }
 
             result->set_version(ClustersList->Version);
@@ -188,10 +191,12 @@ public:
         return PassAway();
     }
 
-    Ydb::StatusIds::StatusCode ProcessWriteSessions(DiscoverClustersResult& result) const {
+    Ydb::StatusIds::StatusCode ProcessWriteSessions(
+        const std::vector<TClustersList::TCluster>& clusters, DiscoverClustersResult& result) const
+    {
         const size_t sessionsCount = Request->GetProtoRequest()->write_sessions_size();
         for (size_t i = 0; i < sessionsCount; ++i) {
-            if (!FillWriteSessionClusters(*ClustersList,
+            if (!FillWriteSessionClusters(clusters,
                                           Request->GetProtoRequest()->write_sessions(i),
                                           *result.add_write_sessions_clusters()))
             {
@@ -202,10 +207,12 @@ public:
         return Ydb::StatusIds::SUCCESS;
     }
 
-    Ydb::StatusIds::StatusCode ProcessReadSessions(DiscoverClustersResult& result) const {
+    Ydb::StatusIds::StatusCode ProcessReadSessions(
+        const std::vector<TClustersList::TCluster>& clusters, DiscoverClustersResult& result) const
+    {
         const size_t sessionsCount = Request->GetProtoRequest()->read_sessions_size();
         for (size_t i = 0; i < sessionsCount; ++i) {
-            if (!FillReadSessionClusters(*ClustersList,
+            if (!FillReadSessionClusters(clusters,
                                          Request->GetProtoRequest()->read_sessions(i),
                                          *result.add_read_sessions_clusters()))
             {

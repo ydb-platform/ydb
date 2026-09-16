@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    cluster_select.cpp
     cluster_tracker.cpp
 )
 
@@ -11,3 +12,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

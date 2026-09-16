@@ -12,7 +12,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullTest) {
-    Y_UNIT_TEST(UidIdempotencyPreservesLegacyForgetAndRebootBehavior) {
+    Y_UNIT_TEST_TWIN(UidPersistsUntilForgetAcrossReboots, RebootWhileRunning) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -39,20 +39,32 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             const auto* response = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
             UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), expected, response->Record.ShortDebugString());
         };
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validation(runtime);
         create("value", Ydb::StatusIds::SUCCESS);
         const ui64 operationId = txId;
+        if (RebootWhileRunning) {
+            runtime.WaitFor("constraint validation", [&] { return !validation.empty(); });
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            create("other", Ydb::StatusIds::ALREADY_EXISTS);
+        }
+        validation.Stop().Unblock();
         env.TestWaitNotification(runtime, operationId);
 
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         create("other", Ydb::StatusIds::ALREADY_EXISTS);
         TestCheckColumnsNotNull(runtime, "/MyRoot/Table", {{"value", true}, {"other", false}});
 
         TestForgetSetColumnConstraint(runtime, ++txId, "/MyRoot", operationId, Ydb::StatusIds::SUCCESS);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         create("other", Ydb::StatusIds::SUCCESS);
-        env.TestWaitNotification(runtime, txId);
+        const ui64 secondOperationId = txId;
+        env.TestWaitNotification(runtime, secondOperationId);
         TestCheckColumnsNotNull(runtime, "/MyRoot/Table", {{"other", true}});
 
-        // Unlike import/export/index build, the existing constraint schema has
-        // no UID column. This refactor preserves its in-memory-only deduplication.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        create("third", Ydb::StatusIds::ALREADY_EXISTS);
+        TestCheckColumnsNotNull(runtime, "/MyRoot/Table", {{"third", false}});
+        TestForgetSetColumnConstraint(runtime, ++txId, "/MyRoot", secondOperationId, Ydb::StatusIds::SUCCESS);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         create("third", Ydb::StatusIds::SUCCESS);
         env.TestWaitNotification(runtime, txId);

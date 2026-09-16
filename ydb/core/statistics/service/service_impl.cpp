@@ -169,6 +169,11 @@ private:
     }
 
     void LogNavigateFailure(const TNavigate& navigate, ui64 requestId, bool resolvingDatabase) const {
+        auto ctx = NActors::TlsActivationContext;
+        if (!ctx || !IS_CTX_LOG_PRIORITY_ENABLED(*ctx, NActors::NLog::PRI_ERROR, YDB_LOG_THIS_FILE_COMPONENT, 0ull)) {
+            return;
+        }
+
         constexpr size_t maxDetails = 16;
         THashSet<std::pair<TTableId, ui32>> failures;
         TStringBuilder failureDetails;

@@ -3646,11 +3646,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 destination_path: "/MyRoot/Table"
               }
             }
-<<<<<<< HEAD
-        )", Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", EnableDataShardDirectPartImport);
-=======
-        )", enableDataShardDirectPartImport, expectedStatus);
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+        )", expectedStatus, "/MyRoot", false, "", enableDataShardDirectPartImport);
 
         if (expectedStatus == Ydb::StatusIds::SUCCESS) {
             auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
@@ -6528,14 +6524,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-<<<<<<< HEAD
-    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables) {
-=======
-    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport = false,
             const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -6596,10 +6589,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(1, AddedScheme, "UINT32");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(ChangefeedsWithPartitioning) {
-        TestImportChangefeeds(3, AddedScheme, "UINT64");
-=======
     Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {
         TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
             future_write_limit: 1048576
@@ -6620,9 +6609,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST_FLAG(ChangefeedsWithPartitioning, EnableDataShardDirectPartImport) {
-        TestImportChangefeeds(EnableDataShardDirectPartImport, 3, AddedScheme, "UINT64");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+    Y_UNIT_TEST(ChangefeedsWithPartitioning) {
+        TestImportChangefeeds(3, AddedScheme, "UINT64");
     }
 
     Y_UNIT_TEST(Changefeeds) {

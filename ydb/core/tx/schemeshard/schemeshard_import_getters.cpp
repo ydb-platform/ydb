@@ -617,36 +617,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
-<<<<<<< HEAD
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
-=======
             if (!NYdb::NBackup::ParseProto(content, request)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << SchemeKey << ": cannot parse topic scheme");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
         } else if (IsSysView(SchemeKey)) {
             Ydb::Table::DescribeSystemViewResult sysView;
-<<<<<<< HEAD
-            if (!google::protobuf::TextFormat::ParseFromString(content, &sysView)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
-=======
             if (!NYdb::NBackup::ParseProto(content, sysView)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST,
-                    TStringBuilder() << SchemeKey << ": cannot parse system view description");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
             }
             item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
-<<<<<<< HEAD
-            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
-=======
             if (!NYdb::NBackup::ParseProto(content, request)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << SchemeKey << ": cannot parse scheme");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
             }
             item.Table = request;
         } else {
@@ -693,14 +677,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-<<<<<<< HEAD
-        if (!google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse permissions");
-=======
         if (!NYdb::NBackup::ParseProto(content, permissions)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << PermissionsKey << ": cannot parse permissions");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse permissions");
         }
         item.Permissions = std::move(permissions);
 
@@ -740,14 +718,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::CreateTableRequest request;
-<<<<<<< HEAD
-        if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
-=======
         if (!NYdb::NBackup::ParseProto(content, request)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": cannot parse index");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
         }
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
@@ -797,14 +769,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::ChangefeedDescription changefeed;
-<<<<<<< HEAD
-        if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse changefeed");
-=======
         if (!NYdb::NBackup::ParseProto(content, changefeed)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << CurrentChangefeedDescriptionKey() << ": cannot parse changefeed");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse changefeed");
         }
 
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
@@ -846,14 +812,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Topic::DescribeTopicResult topic;
-<<<<<<< HEAD
-        if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic");
-=======
         if (!NYdb::NBackup::ParseProto(content, topic)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << CurrentTopicDescriptionKey() << ": cannot parse topic");
->>>>>>> 209d443bdf9 (Export/Import s3: hide unknown fields (#53067))
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 

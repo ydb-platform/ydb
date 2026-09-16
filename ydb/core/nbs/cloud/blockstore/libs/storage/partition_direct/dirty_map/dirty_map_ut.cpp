@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H4+{Disabled,0};",
             dirtyMap->DebugPrintDDiskState());
 
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, false);
         vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             MakePrimaryHosts(),
             MakePrimaryHosts());
 
-        vchunkConfig.PromoteHost(4);
+        vchunkConfig.PromoteHost(4, true);
         vchunkConfig.SetWatermark(4, 50 * DefaultBlockSize);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
         vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
         dirtyMap->UpdateConfig(vchunkConfig);
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Offline H1
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H0
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // Can't switch H2 offline
-        vchunkConfig.EvacuateHost(2);
+        vchunkConfig.EvacuateHost(2, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H3
-        vchunkConfig.EvacuateHost(3);
+        vchunkConfig.EvacuateHost(3, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // Offline H4
-        vchunkConfig.EvacuateHost(4);
+        vchunkConfig.EvacuateHost(4, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0-{Disabled,0};"
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
 
         // Can't switch H2 offline
-        vchunkConfig.EvacuateHost(2);
+        vchunkConfig.EvacuateHost(2, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Fresh+,0};"
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         // Promote hand-off H3 to primary.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -919,7 +919,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Promote hand-off H3 to primary and make it Fresh with a low
         // watermark so tracking is enabled and writes above the watermark are
         // recorded as "ahead".
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -972,9 +972,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Host 0 disabled, hosts 1,2,3 primary, host 4 hand-off.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         TString error;
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
@@ -1019,9 +1019,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Hosts 0,1 disabled; hosts 2,3,4 are primary.
         TString error;
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
         UNIT_ASSERT_VALUES_EQUAL("", error);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
         vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         // Host 0 disabled; hosts 1,2,3 primary; host 4 hand-off.
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
@@ -1124,7 +1124,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Promote DDisks H3 (hosts 0,1,2,3 primary)
         // Available DDisks is enough for a quorum.
         vchunkConfig.DisableHost(2);
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, 100);
         auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
@@ -2152,7 +2152,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Evacuate host 1 — this promotes host 3 as replacement.
         // DDisk set changes from {0, 1, 2} to {0, 2, 3}, making host 1
         // "removed".
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
         dirtyMap->UpdateConfig(vchunkConfig);
 
         // Flush to promoted host requested.
@@ -2217,7 +2217,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
         // Evacuate host 1
-        vchunkConfig.EvacuateHost(1);
+        vchunkConfig.EvacuateHost(1, true);
         dirtyMap->UpdateConfig(vchunkConfig);
 
         // The inflight item should be fully erased and removed from the map.
@@ -2248,7 +2248,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         }
 
         // Evacuate host 2 — host 3 gets promoted; DDisk set becomes {0, 1, 3}.
-        vchunkConfig.EvacuateHost(2);
+        vchunkConfig.EvacuateHost(2, true);
         dirtyMap->UpdateConfig(vchunkConfig);
 
         // Hosts counters should be unchanged.
@@ -2339,7 +2339,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // out of the DDisk set (promoting host 3 as replacement). The write is
         // still pending (WriteRequested is empty), so UpdateConfig's
         // RemoveHosts is a no-op and the inflight item survives.
-        vchunkConfig.EvacuateHost(0);
+        vchunkConfig.EvacuateHost(0, true);
         dirtyMap->UpdateConfig(vchunkConfig);
         UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
 
@@ -2605,7 +2605,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // H3 is fresh; writes above watermark populate its Ahead field.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
@@ -2667,7 +2667,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // H3 is fresh; writes above watermark populate its Ahead field.
         // H1 is lagging; writes populate Behind field.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
         vchunkConfig.DisableHost(1);
 
@@ -2787,7 +2787,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto vchunkConfig = MakeTestVChunkConfig();
 
         // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
-        vchunkConfig.PromoteHost(3);
+        vchunkConfig.PromoteHost(3, true);
         vchunkConfig.SetWatermark(3, std::nullopt);
 
         auto dirtyMap = MakeDirtyMap(vchunkConfig);

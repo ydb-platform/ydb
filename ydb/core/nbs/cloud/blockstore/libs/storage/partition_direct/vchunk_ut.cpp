@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     {
         Init();
 
-        VChunkConfig.PromoteHost(3);
+        VChunkConfig.PromoteHost(3, true);
         VChunkConfig.SetWatermark(3, std::nullopt);
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     {
         Init();
 
-        VChunkConfig.PromoteHost(3);
+        VChunkConfig.PromoteHost(3, true);
         VChunkConfig.DisableHost(0);
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -555,9 +555,57 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldPromoteOperationalHostWhenDDiskUntouched, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            3,
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]
+            {
+                vchunk->SetHostState(0, EHostState::Offline);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            PartitionDirectService->UpdateConfigRequests.size());
+        const auto& config =
+            PartitionDirectService->UpdateConfigRequests.front().Config;
+        UNIT_ASSERT(config.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(!config.GetWatermark(3).has_value());
+
+        UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0-{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToOfflineAndBack, TBaseFixture)
     {
         Init();
+        DirtyMapStateProto.SetDDiskTouched(true);
 
         bool isHostOffline = false;
         DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
@@ -1017,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         ShouldNotPersistDirtyMapStateWhileAlreadyPersisting,
         TBaseFixture)
     {
-        VChunkConfig.PromoteHost(3);
+        VChunkConfig.PromoteHost(3, true);
         VChunkConfig.SetWatermark(3, BlockSize * 5);
 
         Init();

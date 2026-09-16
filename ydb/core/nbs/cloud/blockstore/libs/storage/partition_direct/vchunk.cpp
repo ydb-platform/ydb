@@ -1224,7 +1224,8 @@ TVChunkConfig TVChunk::PrepareNewConfig(
         }
         case EHostState::Offline: {
             newConfig.DisableHost(hostIndex);
-            const TString message = newConfig.PromoteHostIfNeeded();
+            const TString message =
+                newConfig.PromoteHostIfNeeded(BlocksDirtyMap->IsDDiskTouched());
             if (!message.empty()) {
                 LOG_WARN(
                     *ActorSystem,

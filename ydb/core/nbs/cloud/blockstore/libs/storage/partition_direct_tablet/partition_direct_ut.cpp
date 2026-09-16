@@ -1886,6 +1886,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         };
 
         const ui64 partition = CreatePartitionTablet(env);
+        PersistDDiskTouch(env, partition, 0);
 
         // Grow the group to six hosts, then remove host 2: slot 2 is dead and
         // the group is at generation 2.

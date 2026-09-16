@@ -83,7 +83,7 @@ struct TFixture
             BlockSize,
             VChunkBlockCount);
 
-        VChunkConfig.PromoteHost(3);
+        VChunkConfig.PromoteHost(3, true);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
         DirtyMap->UpdateConfig(VChunkConfig);
 

@@ -279,6 +279,7 @@ private:
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
+        FillMetricsSettings(scheme, tableDesc);
 
         TString error;
         Ydb::StatusIds::StatusCode status;
@@ -1132,6 +1133,72 @@ Y_UNIT_TEST(TableReadReplicas) {
                 PRIMARY KEY (`Key`)
             )
             WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevel) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "DATABASE"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'DATABASE');
         )"
     );
 }

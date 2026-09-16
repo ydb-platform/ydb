@@ -22,9 +22,8 @@ TString ResolveDatabasePath(const TString& database, const TString& root) {
     if (path.substr(0, separator) == rootPath) {
         return path;
     }
-    // A former root database becomes a tenant without losing its name.
     if (separator == TString::npos) {
-        return rootPath + path;
+        return rootPath;
     }
     return rootPath + path.substr(separator);
 }
@@ -225,7 +224,7 @@ TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf d
     const TString target = CanonizePath(TString{database});
     const TString source = CanonizePath(TString{databaseFromRequest});
     const TString resource = CanonizePath(TString{path});
-    // A target path can also be under the old alias, for example /root -> /root/db.
+    // Preserve paths already resolved to the target database.
     if (target.empty() || source.empty() || resource == target || IsPathUnderDatabase(target, resource)) {
         return TString{path};
     }

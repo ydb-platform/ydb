@@ -103,6 +103,11 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
             createImport.MutableImportFromS3Settings()->set_destination_path(
                 this->Request->GetDatabaseRelativePath(request.settings().destination_path()));
+            for (auto& item : *createImport.MutableImportFromS3Settings()->mutable_items()) {
+                if (TStringBuf(item.destination_path()).StartsWith('/')) {
+                    item.set_destination_path(this->Request->GetDatabaseRelativePath(item.destination_path()));
+                }
+            }
         }
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
@@ -110,6 +115,11 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
             fsSettings->set_destination_path(
                 this->Request->GetDatabaseRelativePath(fsSettings->destination_path()));
+            for (auto& item : *fsSettings->mutable_items()) {
+                if (TStringBuf(item.destination_path()).StartsWith('/')) {
+                    item.set_destination_path(this->Request->GetDatabaseRelativePath(item.destination_path()));
+                }
+            }
         }
 
         return ev.Release();

@@ -60,15 +60,21 @@ TString DoCanonizePathOld(const TString& path)
 Y_UNIT_TEST_SUITE(Path) {
     Y_UNIT_TEST(ResolveDatabasePath) {
         const TVector<std::pair<TString, TString>> cases = {
+            {"/ru", "/backup"},
             {"/ru/mydb123", "/backup/mydb123"},
             {"/ru/team/mydb123", "/backup/team/mydb123"},
-            {"/kfront", "/backup/kfront"},
+            {"/kfront", "/backup"},
             {"/backup", "/backup"},
+            {"/backup/", "/backup"},
+            {"/backup2", "/backup"},
             {"/backup/mydb123", "/backup/mydb123"},
             {"/backup2/mydb123", "/backup/mydb123"},
             {"//ru///team/mydb123//", "/backup/team/mydb123"},
-            {"/kfront/", "/backup/kfront"},
+            {"/ru/", "/backup"},
+            {"//ru//", "/backup"},
+            {"/kfront/", "/backup"},
             {"", ""}, {"/", "/"}, {"///", "///"},
+            {"ru", "ru"}, {"ru/mydb123", "ru/mydb123"},
             {"mydb123", "mydb123"}, {"team/mydb123", "team/mydb123"},
             {"backup/mydb123", "backup/mydb123"},
         };
@@ -76,7 +82,8 @@ Y_UNIT_TEST_SUITE(Path) {
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(input, "/backup"), expected, input);
             UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::ResolveDatabasePath(expected, "/backup"), expected, input);
         }
-        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/kfront", "/root"), "/root/kfront");
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/ru", "/failover"), "/failover");
+        UNIT_ASSERT_VALUES_EQUAL(NKikimr::ResolveDatabasePath("/ru/mydb", "/failover"), "/failover/mydb");
     }
 
     Y_UNIT_TEST(CanonizeOld) {
@@ -277,14 +284,31 @@ Y_UNIT_TEST_SUITE(Path) {
             UNIT_ASSERT_VALUES_EQUAL_C(result, expected, path);
             UNIT_ASSERT_VALUES_EQUAL_C(ResolvePathToDatabase("/backup/team/db", result, "/ru/team/db"), expected, path);
         }
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/kfront", "/kfront/dir/table", "/kfront"),
-            "/root/kfront/dir/table");
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathRootToRoot) {
+        for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+            {"/ru", "/failover"},
+            {"/ru/dir/table", "/failover/dir/table"},
+            {"//ru//dir/table/", "/failover/dir/table"},
+            {"/failover", "/failover"},
+            {"/failover/dir/table", "/failover/dir/table"},
+            {"dir/table", "/failover/dir/table"},
+            {"ru", "/failover/ru"},
+            {"ru/dir/table", "/failover/ru/dir/table"},
+            {"/ru2/dir/table", "/ru2/dir/table"},
+            {"/other/dir/table", "/other/dir/table"},
+        }) {
+            const auto result = ResolvePathToDatabase("/failover", path, "/ru/");
+            UNIT_ASSERT_VALUES_EQUAL_C(result, expected, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(ResolvePathToDatabase("/failover", result, "/ru"), expected, path);
+        }
     }
 
     Y_UNIT_TEST(ResolveResourcePathIgnoreRootPreservesTargetPrefix) {
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db/table", "/root"), "/root/db/table");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db", "/root"), "/root/db");
-        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/table", "/root"), "/root/db/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db/table", "/root/db"), "/root/db/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db", "/root/db"), "/root/db");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root", "/root/table", "/root"), "/root/table");
     }
 
     Y_UNIT_TEST(ResolveResourcePathWithoutAbsoluteAlias) {

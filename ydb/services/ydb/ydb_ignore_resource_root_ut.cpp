@@ -52,14 +52,14 @@ public:
     }
 
     TResourceEnvironment(bool singleComponent, bool ignoreRoot)
-        : Root(singleComponent ? "root" : "backup")
-        , Name(singleComponent ? "kfront" : "mydb123")
-        , OldDatabase(singleComponent ? "/kfront" : "/ru/mydb123")
-        , Database("/" + Root + "/" + Name)
+        : Root("failover")
+        , Name("mydb123")
+        , OldDatabase(singleComponent ? "/ru" : "/ru/mydb123")
+        , Database(singleComponent ? "/" + Root : "/" + Root + "/" + Name)
         , Runner(Settings(Root, ignoreRoot))
     {
         auto& runtime = *Runner.GetTestServer().GetRuntime();
-        {
+        if (!singleComponent) {
             // CreateDatabase uses an anonymous local RPC. Restore authentication before test requests.
             auto& allowedSids = runtime.GetAppData().AdministrationAllowedSIDs;
             auto savedAllowedSids = std::exchange(allowedSids, {});
@@ -223,6 +223,27 @@ void CheckTopicPaths(const TResourceEnvironment& env, const TDriver& driver, NYd
 } // namespace
 
 Y_UNIT_TEST_SUITE(YdbIgnoreResourceRoot) {
+    Y_UNIT_TEST(SlashlessFormerRootRemainsRelative) {
+        TResourceEnvironment env(true, true);
+        auto driver = env.Driver(env.OldDatabase);
+        NYdb::NScheme::TSchemeClient scheme(driver);
+        Success(scheme.MakeDirectory("ru"));
+        Success(scheme.MakeDirectory("ru/nested"));
+        Success(scheme.DescribePath(env.Database + "/ru/nested"));
+        Success(scheme.DescribePath(env.OldDatabase + "/ru/nested"));
+        const auto rootPath = Await(scheme.DescribePath(env.OldDatabase + "/nested"));
+        UNIT_ASSERT_C(rootPath.GetStatus() == EStatus::SCHEME_ERROR, rootPath.GetIssues().ToString());
+
+        NTopic::TTopicClient topic(driver);
+        NTopic::TCreateTopicSettings settings;
+        settings.BeginConfigurePartitioningSettings().MinActivePartitions(1).EndConfigurePartitioningSettings();
+        Success(topic.CreateTopic("ru/topic", settings));
+        Success(topic.DescribeTopic(env.Database + "/ru/topic"));
+        Success(topic.DescribeTopic(env.OldDatabase + "/ru/topic"));
+        const auto rootTopic = Await(topic.DescribeTopic(env.OldDatabase + "/topic"));
+        UNIT_ASSERT_C(rootTopic.GetStatus() == EStatus::SCHEME_ERROR, rootTopic.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST_TWIN(SchemaAndStreamingPaths, SingleComponent) {
         TResourceEnvironment env(SingleComponent, true);
         // The SDK keeps the original database through discovery and subsequent RPCs.

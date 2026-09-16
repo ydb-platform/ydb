@@ -17,6 +17,14 @@ using namespace NYdb;
 using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
+class TBackupRootAliasTestFixture : public TS3BackupTestFixture {
+private:
+    void SetUp(NUnitTest::TTestContext&) override {
+        AppConfig().MutableGRpcConfig()->SetIgnoreRoot(true);
+        AppConfig().MutableFeatureFlags()->SetEnableExportFiltering(true);
+    }
+};
+
 namespace {
 
 using namespace fmt::literals;
@@ -1977,6 +1985,80 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE_F(BackupRootAliasTest, TBackupRootAliasTestFixture) {
+    Y_UNIT_TEST_TWIN(ExportAndImportItems, Tenant) {
+        const TString database = Tenant ? "/Root/db" : "/Root";
+        const TString alias = Tenant ? "/ru/db" : "/ru";
+        auto& server = Server();
+        if (Tenant) {
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path(database);
+            auto* storage = request.mutable_resources()->add_storage_units();
+            storage->set_unit_kind("ssd");
+            storage->set_count(1);
+            server.Tenants_->CreateTenant(std::move(request));
+            server.GetServer().EnableGRpc(
+                server.GetPortManager().GetPort(),
+                server.Tenants_->List(database).front(), database);
+        }
+        auto& runtime = *server.GetRuntime();
+        for (ui32 node = 1; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).DataShardExportFactory = runtime.GetAppData().DataShardExportFactory;
+        }
+        YdbDriverConfig().SetDatabase(database).SetDiscoveryMode(EDiscoveryMode::Sync);
+
+        const auto sessionResult = YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        const auto createResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `dir/Table2` (key Uint32 NOT NULL, PRIMARY KEY (key));
+            CREATE TABLE `Table2` (key Uint32 NOT NULL, PRIMARY KEY (key));
+        )").GetValueSync();
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+        const auto fillResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `dir/Table2` (key) VALUES (42u);
+            UPSERT INTO `Table2` (key) VALUES (99u);
+        )", NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(fillResult.IsSuccess(), fillResult.GetIssues().ToString());
+
+        NExport::TExportClient exportClient(YdbDriver(), TCommonClientSettings().Database(alias));
+        const TVector<std::pair<TString, TString>> paths = {
+            {"", alias + "/dir/Table2"},
+            {alias + "/dir", alias + "/dir/Table2"},
+            {alias + "/dir", "Table2"},
+            {alias + "/dir", "/Table2"},
+        };
+        for (size_t i = 0; i < paths.size(); ++i) {
+            const auto& [sourcePath, itemPath] = paths[i];
+            const TString prefix = TStringBuilder() << "Case" << i;
+            auto settings = MakeExportSettings(sourcePath, prefix);
+            settings.AppendItem({.Src = itemPath, .Dst = "Table2"});
+            const auto result = exportClient.ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(result, TStringBuilder() << "Source: " << sourcePath << ", item: " << itemPath);
+
+            const auto& data = GetS3Data();
+            const TString key = "/test_bucket/" + prefix + "/Table2/data_00.csv";
+            const auto it = data.find(key);
+            UNIT_ASSERT_C(it != data.end(), "Missing exported data: " << key);
+            UNIT_ASSERT_VALUES_EQUAL_C(it->second, "42\n", key);
+        }
+
+        NImport::TImportClient importClient(YdbDriver(), TCommonClientSettings().Database(alias));
+        auto importSettings = MakeImportSettings("", "");
+        importSettings.AppendItem({.Src = "Case0/Table2", .Dst = alias + "/restored"});
+        WaitOpSuccess(importClient.ImportFromS3(importSettings).GetValueSync());
+
+        const auto readResult = session.ExecuteDataQuery(
+            TStringBuilder() << "SELECT key FROM `" << database << "/restored`;",
+            NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(readResult.IsSuccess(), readResult.GetIssues().ToString());
+        TResultSetParser parser(readResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetUint32(), 42u);
+        UNIT_ASSERT(!parser.TryNextRow());
+    }
+}
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {

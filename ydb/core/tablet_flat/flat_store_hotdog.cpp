@@ -40,7 +40,7 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
 
     for (auto &one : pc.PageCollectionComponents)
-        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.PageCollection.Get());
+        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.RawMeta);
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
@@ -115,10 +115,18 @@ void TPageCollectionProtoHelper::Bundle(
         const TLargeGlobId &largeGlobId,
         const NPageCollection::TPageCollection *pack)
 {
+    return Bundle(pageCollectionProto, largeGlobId, pack ? pack->Meta.Raw : TSharedData());
+}
+
+void TPageCollectionProtoHelper::Bundle(
+        NKikimrExecutorFlat::TPageCollection *pageCollectionProto,
+        const TLargeGlobId &largeGlobId,
+        const TSharedData &rawMeta)
+{
     TLargeGlobIdProto::Put(*pageCollectionProto->MutableLargeGlobId(), largeGlobId);
 
-    if (PutMeta && pack) {
-        pageCollectionProto->SetMeta(pack->Meta.Raw.ToString());
+    if (PutMeta && rawMeta) {
+        pageCollectionProto->SetMeta(rawMeta.ToString());
     }
 }
 
@@ -133,7 +141,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
         if (pageCollection.HasMeta()) {
-            item.ParsePageCollection(TSharedData::Copy(pageCollection.GetMeta()));
+            item.RawMeta = TSharedData::Copy(pageCollection.GetMeta());
         }
     }
 
@@ -148,7 +156,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         }
     }
 
-    return NTable::TPartComponents{ std::move(components), std::move(opaque), std::move(opaqueExt), epoch };
+    return NTable::TPartComponents{ std::move(components), std::move(opaque), std::move(opaqueExt), { }, epoch };
 }
 
 }

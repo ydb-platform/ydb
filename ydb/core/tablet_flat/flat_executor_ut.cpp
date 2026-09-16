@@ -6495,7 +6495,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         WakeupSharedCache(env);
     }
 
-    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}, bool bTreeIndexV2 = false) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
 
@@ -6503,6 +6503,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             auto &appData = env->GetAppData();
             appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
             appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(bTreeIndexV2);
         }
     }
 
@@ -6606,6 +6607,36 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         // should have the same behaviour
+        DoFullScan(env, failedAttempts, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+    }
+
+    Y_UNIT_TEST(TestSticky_BTreeIndexV2History) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, false, true);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        // 10 historic pages followed by 10 current pages.
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        DoFullScan(env, failedAttempts);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
     }
@@ -6992,7 +7023,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         WakeupSharedCache(env);
     }
 
-    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}, bool bTreeIndexV2 = false) {
         env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
 
@@ -7000,6 +7031,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
             auto &appData = env->GetAppData();
             appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
             appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(bTreeIndexV2);
         }
     }
 
@@ -7077,6 +7109,46 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
+    }
+
+    Y_UNIT_TEST(TestTryKeepInMemory_BTreeIndexV2History) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        SetupEnvironment(env, false, true);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        // a zeroed shared cache would evict the best-effort (non-sticky) pages before the scan
+        SetSharedCacheSize(env, 8_MB);
+        auto cacheCounters = GetSharedPageCounters(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+
+        // 10 historic pages followed by 10 current pages.
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        DoFullScan(env, failedAttempts);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+        // the part was just written, so nothing had to be read from storage
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+
+        // restart tablet
+        RestartAndClearCache(env, 8_MB);
+        const ui64 bootMisses = cacheCounters->CacheMissPages->Val();
+        const ui64 bootMissesInMemory = cacheCounters->CacheMissInMemoryPages->Val();
+        UNIT_ASSERT(bootMisses > 0); // the cache was dropped, so the preload has to read the part back
+
+        DoFullScan(env, failedAttempts, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+        // the preloaded pages must cover the whole scan: no reads and no in-memory re-reads on top
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), bootMisses);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), bootMissesInMemory);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemoryMain) {

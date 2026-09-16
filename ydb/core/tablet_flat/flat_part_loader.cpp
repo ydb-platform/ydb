@@ -9,27 +9,45 @@
 namespace NKikimr {
 namespace NTable {
 
-TLoader::TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections,
-        TString legacy,
-        TString opaque,
-        TVector<TString> deltas,
-        TEpoch epoch)
-    : PageCollections(std::move(pageCollections))
-    , Legacy(std::move(legacy))
-    , Opaque(std::move(opaque))
-    , Deltas(std::move(deltas))
-    , Epoch(epoch)
+TLoader::TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollection>> prebuiltPageCollections)
+    : PageCollections(std::move(prebuiltPageCollections))
+    , Components(std::move(components))
+    , Legacy(Components.Legacy)
+    , Opaque(Components.Opaque)
+    , Deltas(std::move(Components.Deltas))
+    , Epoch(Components.Epoch)
 {
-    if (PageCollections.size() < 1) {
-        Y_TABLET_ERROR("Cannot load TPart from " << PageCollections.size() << " page collections");
-    }
-    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
 }
 
 TLoader::~TLoader() { }
 
 void TLoader::StageParseMeta()
 {
+    if (PageCollections.size() < Components.PageCollectionComponents.size()) {
+        PageCollections.resize(Components.PageCollectionComponents.size());
+    }
+
+    // Build slot 0 first — its meta is needed for the full layout parse
+    if (PageCollections.size() > 0 && !PageCollections[0]) {
+        auto& comp = Components.PageCollectionComponents[0];
+        Y_ENSURE(comp.RawMeta, "Slot 0 has no raw meta data");
+
+        auto cache = MakeIntrusive<TPageCollection>(
+            MakeIntrusiveConst<NPageCollection::TPageCollection>(
+                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+
+        for (auto& p : comp.StickyPages) {
+            cache->AddStickyPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+        for (auto& p : comp.RegularPages) {
+            cache->AddPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+
+        PageCollections[0] = std::move(cache);
+    }
+
     auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(PageCollections.at(0)->PageCollection.Get());
     if (!metaPacket) {
         Y_TABLET_ERROR("Unexpected IPageCollection type " << TypeName(*PageCollections.at(0)->PageCollection));
@@ -112,7 +130,7 @@ void TLoader::StageParseMeta()
         }
 
         // Offline readers of a page collection have no feature flags to consult, and then whatever
-        // index the part holds is kept.
+        // index the part holds is kept, the V2 root included.
         if (HasAppData()) {
             if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && FlatGroupIndexes) {
                 BTreeGroupIndexes.clear();
@@ -121,6 +139,36 @@ void TLoader::StageParseMeta()
             if (!AppData()->FeatureFlags.GetEnableLocalDBFlatIndex() && BTreeGroupIndexes) {
                 FlatGroupIndexes.clear();
                 FlatHistoricIndexes.clear();
+            }
+        }
+        auto forEachIndexMeta = [&](auto&& fn) {
+            for (auto* metas : {&BTreeGroupIndexes, &BTreeHistoricIndexes}) {
+                for (auto& meta : *metas) {
+                    fn(meta);
+                }
+            }
+        };
+
+        if (HasAppData()) {
+            if (!AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2()) {
+                // V2 read disabled: for dual-root (V2+V1) parts, strip RootV2 to use V1 index
+                forEachIndexMeta([](auto& meta) {
+                    if (meta.HasRootV2() && meta.HasRootV1()) {
+                        meta.RootV2 = NPage::TPageLocation::Max();
+                        meta.LevelCountV2 = Max<ui32>();
+                    }
+                });
+                // if no RootV1, keep RootV2 even if disable
+            } else {
+                // For dual-root (V2+V1) parts, strip V1 tree and mark the index
+                // page collection so the shared cache skips dead V1 BTreeIndex pages.
+                forEachIndexMeta([&](auto& meta) {
+                    if (meta.HasRootV2() && meta.HasRootV1()) {
+                        meta.RootV1 = Max<TPageId>();
+                        meta.LevelCountV1 = Max<ui32>();
+                        PageCollections[0]->PageCollection->SetSkipBTreeIndexV1Shadow(true);
+                    }
+                });
             }
         }
 
@@ -151,12 +199,51 @@ void TLoader::StageParseMeta()
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
-    // Wrap remaining raw page collections — use TOuterPageCollection for the outer blob slot
-    if (RawComponents) {
-        auto groupsCount = Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size());
-        auto outerIdx = (SmallId != Max<TPageId>()) ? groupsCount - 1 : Max<ui32>();
-        TPartStore::Construct(PageCollections, std::move(RawComponents), outerIdx);
+    bool isOuterSlot = (SmallId != Max<TPageId>());
+
+    for (ui32 i = 1; i < PageCollections.size() - isOuterSlot; i++) {
+        if (PageCollections[i]) {
+            continue; // Prebuilt by caller
+        }
+        auto& comp = Components.PageCollectionComponents[i];
+        Y_ENSURE(comp.RawMeta, "Slot " << i << " has no raw meta data");
+
+        auto collection = MakeIntrusive<TPageCollection>(
+            MakeIntrusiveConst<NPageCollection::TPageCollection>(
+                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+        for (auto& p : comp.StickyPages) {
+            collection->AddStickyPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+        for (auto& p : comp.RegularPages) {
+            collection->AddPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+        PageCollections[i] = std::move(collection);
     }
+
+    // Construct the outer blob slot as TOuterPageCollection if needed
+    if (isOuterSlot && !PageCollections.back()) {
+        auto& comp = Components.PageCollectionComponents.back();
+        Y_ENSURE(comp.RawMeta, "Outer blob slot has no raw meta data");
+
+        auto cache = MakeIntrusive<TPageCollection>(
+            MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
+                comp.LargeGlobId, TSharedData(comp.RawMeta)));
+
+        for (auto& p : comp.StickyPages) {
+            cache->AddStickyPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+        for (auto& p : comp.RegularPages) {
+            cache->AddPage(p.Location.Offset, p.Location.Size,
+                NSharedCache::TSharedPageRef::MakePrivate(std::move(p.Data)));
+        }
+
+        PageCollections.back() = std::move(cache);
+    }
+
+    LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
@@ -377,12 +464,59 @@ TLoader::TFetch TLoader::StagePreloadData()
 {
     auto partStore = PartView.As<TPartStore>();
 
-    // Note: preload works only for main group pages
+    // V2 preload: walk current and historic B-trees to discover room 0 pages
+    if (partStore->IndexPages.HasBTree() && !BTreeGroupIndexes.empty() && BTreeGroupIndexes[0].HasRootV2())
+    {
+        if (PreloadBTreeWalkers.empty()) {
+            auto addWalkers = [&](const auto& indexes, bool historic) {
+                for (ui32 groupIndex : xrange(indexes.size())) {
+                    if (indexes[groupIndex].HasRootV2()) {
+                        auto& item = PreloadBTreeWalkers.emplace_back();
+                        item.Walker = MakeHolder<TBTreePartWalker>();
+                        item.Walker->Start(indexes[groupIndex]);
+                        item.GroupId = NPage::TGroupId(groupIndex, historic);
+                        item.SkipDataPages = groupIndex != 0;
+                    }
+                }
+            };
+
+            addWalkers(BTreeGroupIndexes, false);
+            addWalkers(BTreeHistoricIndexes, true);
+        }
+
+        bool anyMissed = false;
+        for (auto& item : PreloadBTreeWalkers) {
+            if (!item.Walker) {
+                continue;
+            }
+
+            if (item.Walker->Step(
+                    PartView.Part.Get(), LoaderEnv.Get(), item.GroupId, item.SkipDataPages))
+            {
+                item.Walker.Reset();
+            } else {
+                anyMissed = true;
+            }
+        }
+
+        if (anyMissed) {
+            return LoaderEnv->GetFetch();
+        }
+
+        // All groups walked.
+        PreloadBTreeWalkers.clear();
+        return {};
+    }
+
+    // V1 path
     auto pageCollection = partStore->PageCollections[0]->PageCollection;
-    auto total = pageCollection->Total();
+    auto total = pageCollection->MetaPages();
     auto* part = PartView.Part.Get();
 
     for (TPageId pageId : xrange(total)) {
+        if (pageCollection->Page(pageId).Type == ui32(NPage::EPage::Skip)) {
+            continue;
+        }
         LoaderEnv->TryGetPage(part, pageCollection->GetLocation(pageId), {});
     }
 

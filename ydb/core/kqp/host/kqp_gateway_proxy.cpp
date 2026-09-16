@@ -318,6 +318,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         proto.mutable_storage_settings()->set_external_data_channels_count(*count);
     }
 
+    if (const auto level = metadata->TableSettings.MetricsLevel) {
+        proto.mutable_metrics_settings()->set_metrics_level(*level);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;

@@ -275,6 +275,7 @@ struct TEvPrivate {
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
         EvWarmupDeadline,
+        EvAdjustArena,
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
@@ -284,6 +285,9 @@ struct TEvPrivate {
     };
 
     struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
+    };
+
+    struct TEvAdjustArena : public TEventLocal<TEvAdjustArena, EEv::EvAdjustArena> {
     };
 };
 
@@ -510,6 +514,10 @@ public:
         }
 
         bool adjustArena = false;
+        if (resources.ExternalMemory || resources.ExecutionUnits) {
+            adjustArena = !ArenaFastUpdate(resources, /* allocate */ false);
+        }
+
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
@@ -519,17 +527,9 @@ public:
                         it->second->Release(resources.Memory);
                     }
                 }
-                if (resources.ExternalMemory || resources.ExecutionUnits) {
-                    ApplyArenaDemandLocked(resources, /* allocate */ false);
-                    ReconcileArenaLocked();
-                    adjustArena = ArenaPlanLocked(ArenaUsedLocked()) != Arena.Size;
-                } else {
-                    // the freed node memory may be the room a pending arena growth was missing
-                    adjustArena = ArenaGrowPending.load(std::memory_order_relaxed);
-                }
             }
-        } else {
-            ApplyArenaDemand(resources, /* allocate */ false);
+            // the freed node memory may be the room a pending arena growth was missing
+            adjustArena = adjustArena || ArenaGrowPending.load(std::memory_order_relaxed);
         }
 
         if (adjustArena) {
@@ -606,7 +606,7 @@ public:
         with_lock (Lock) {
             result.ExecutionUnits = ExecutionUnitsResource.load();
             result.Memory = TotalMemoryResource->Available();
-            result.ExternalMemory = Arena.ExternalMemory;
+            result.ExternalMemory = ArenaExternalMemory.load();
         }
 
         return result;
@@ -724,9 +724,13 @@ public:
     // memory and the execution units in use. The demand is always satisfied; the arena is resized afterwards to
     // Used + (MinFree + MaxFree) / 2 whenever its free part leaves that band. Its footprint Max(Size, Used) is
     // charged to the node total, so Memory admission, the spilling cookies and the published resources are precise.
+    //
+    // The demand is tracked lock-free. While the arena covers it the charge is Size either way, so a task that
+    // starts or ends only moves two atomics and reads the ceiling below; the lock is taken to grow, to shrink, and
+    // whenever the arena needs attention. Deferring a shrink leaves the arena above the demand, never below it.
 
-    ui64 ArenaUsedLocked() const {
-        return Arena.ExternalMemory + Arena.ExecutionUnits * ExecutionUnitMemory.load();
+    ui64 ArenaUsed() const {
+        return ArenaExternalMemory.load() + ArenaExecutionUnits.load() * ExecutionUnitMemory.load();
     }
 
     ui64 ArenaDeficitLocked(ui64 used) const {
@@ -735,7 +739,7 @@ public:
 
     // Returns true when the charge moved.
     bool ReconcileArenaLocked() {
-        const ui64 used = ArenaUsedLocked();
+        const ui64 used = ArenaUsed();
         const ui64 footprint = EnableMemoryArena.load() ? Max(Arena.Size, used) : 0;
         const bool changed = footprint != Arena.Charged;
         if (footprint > Arena.Charged) {
@@ -744,8 +748,12 @@ public:
             TotalMemoryResource->Release(Arena.Charged - footprint);
         }
         Arena.Charged = footprint;
-        // the demand moves on every call, the other two only when the arena is resized
-        Counters->RmArenaUsed->Set(used);
+        // only what moved, and only from here: an idle resource manager must not publish over a busy one, and the
+        // lock-free path leaves the gauges to the periodic pass rather than racing on them
+        if (used != Arena.ShownUsed) {
+            Counters->RmArenaUsed->Set(used);
+            Arena.ShownUsed = used;
+        }
         if (Arena.Size != Arena.ShownSize) {
             Counters->RmArenaSize->Set(Arena.Size);
             Arena.ShownSize = Arena.Size;
@@ -780,16 +788,43 @@ public:
         return limit > others + Arena.Size ? limit - others - Arena.Size : 0;
     }
 
-    void ApplyArenaDemandLocked(const TKqpResourcesRequest& resources, bool allocate) {
+    // The demand a change may reach before the arena needs the lock: one past the growth threshold while the arena
+    // is healthy, Max when it is off (nothing to do at all) and 0 whenever a change must be looked at. Without a
+    // band (MaxFree 0) nothing absorbs a change, so every one of them is looked at. Must be called under Lock.
+    ui64 ArenaFastCeilingLocked() const {
+        if (!EnableMemoryArena.load()) {
+            return Max<ui64>();
+        }
+        const ui64 minFree = MemoryArenaMinFreeSize.load();
+        // the same states in which ArenaPlanLocked cannot act: a ceiling published under any of them would either
+        // describe a size that is about to change, or leave the recheck below nothing to make progress with
+        if (MemoryArenaMaxFreeSize.load() == 0 || Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker
+            || Arena.Charged != Arena.Size || ArenaGrowPending.load() || Arena.Size < minFree)
+        {
+            return 0;
+        }
+        return Arena.Size - minFree + 1;
+    }
+
+    // Applies the demand without the lock. True when the arena covers it: the charge is Max(Size, Used) == Size
+    // either way, so only the gauge and a possible shrink are left to the adjuster.
+    bool ArenaFastUpdate(const TKqpResourcesRequest& resources, bool allocate) {
         if (allocate) {
-            Arena.ExternalMemory += resources.ExternalMemory;
-            Arena.ExecutionUnits += resources.ExecutionUnits;
+            ArenaExternalMemory.fetch_add(resources.ExternalMemory);
+            ArenaExecutionUnits.fetch_add(resources.ExecutionUnits);
         } else {
-            // TTxState::Released has already verified the tx part of the demand
-            Y_DEBUG_ABORT_UNLESS(Arena.ExternalMemory >= resources.ExternalMemory);
-            Y_DEBUG_ABORT_UNLESS(Arena.ExecutionUnits >= resources.ExecutionUnits);
-            Arena.ExternalMemory -= resources.ExternalMemory;
-            Arena.ExecutionUnits -= resources.ExecutionUnits;
+            ArenaExternalMemory.fetch_sub(resources.ExternalMemory);
+            ArenaExecutionUnits.fetch_sub(resources.ExecutionUnits);
+        }
+        // sequentially consistent, as is the adjuster's store of the ceiling followed by its own read of the
+        // demand: the two cannot miss each other, so a change that skips here was seen by the adjuster
+        const ui64 ceiling = ArenaFastCeiling.load();
+        return ceiling && ArenaUsed() < ceiling;
+    }
+
+    void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
+        if ((resources.ExternalMemory || resources.ExecutionUnits) && !ArenaFastUpdate(resources, allocate)) {
+            AdjustArena();
         }
     }
 
@@ -807,16 +842,10 @@ public:
         return target;
     }
 
-    void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
-        if (resources.ExternalMemory || resources.ExecutionUnits) {
-            AdjustArena(&resources, allocate);
-        }
-    }
-
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
     // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A refused
     // growth is not asked again here but stays pending for the next free, broker attach or config change.
-    void AdjustArena(const TKqpResourcesRequest* demand = nullptr, bool allocate = false) {
+    void AdjustArena() {
         bool publish = false;
         bool growRefused = false;
         for (;;) {
@@ -826,15 +855,18 @@ public:
             ui64 target = 0;
             ui64 deficit = 0;
             with_lock (Lock) {
-                if (demand) {
-                    ApplyArenaDemandLocked(*demand, allocate);
-                    demand = nullptr;
-                }
+                // while this section runs every demand change takes the lock and waits for its outcome
+                ArenaFastCeiling.store(0);
                 publish |= ReconcileArenaLocked();
-                const ui64 used = ArenaUsedLocked();
+                const ui64 used = ArenaUsed();
                 size = Arena.Size;
                 target = ArenaPlanLocked(used);
                 if (target == size || (growRefused && target > size)) {
+                    const ui64 ceiling = ArenaFastCeilingLocked();
+                    ArenaFastCeiling.store(ceiling);
+                    if (ceiling && ArenaUsed() >= ceiling) {
+                        continue; // a change landed while this section ran
+                    }
                     break;
                 }
                 taskId = Arena.TaskId;
@@ -951,6 +983,7 @@ public:
             Arena.Stopped = true;
             Arena.Size = 0;
             Arena.TaskId = 0;
+            ArenaFastCeiling.store(0);
             ArenaGrowPending.store(false, std::memory_order_relaxed);
             ReconcileArenaLocked();
         }
@@ -984,17 +1017,21 @@ public:
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
 
+    // the demand, tracked without the lock; the execution units are a count, priced when it is read, so that a
+    // config change re-prices the ones in use
+    std::atomic<ui64> ArenaExternalMemory = 0;
+    std::atomic<ui64> ArenaExecutionUnits = 0;
+    // the demand a change may reach before the arena needs the lock, see ArenaFastCeilingLocked
+    std::atomic<ui64> ArenaFastCeiling = 0;
+
     // the memory arena (guarded by Lock), see AdjustArena
     struct TMemoryArena {
-        // the demand; the execution units are a count, priced when the arena is adjusted, so that a config change
-        // re-prices the ones in use
-        ui64 ExternalMemory = 0;
-        ui64 ExecutionUnits = 0;
         // the supply: the memory of the arena task, 0 <=> TaskId == 0
         ui64 Size = 0;
         ui64 TaskId = 0;
         ui64 Charged = 0; // force-acquired from TotalMemoryResource, Max(Size, Used) after every reconcile
         // the last values published to the gauges
+        ui64 ShownUsed = 0;
         ui64 ShownSize = 0;
         ui64 ShownDeficit = 0;
         bool AdjustInProgress = false;
@@ -1108,6 +1145,8 @@ public:
 
         Become(&TKqpResourceManagerActor::WorkState);
 
+        Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
+
         AskSelfNodeInfo();
         SendWhiteboardRequest();
     }
@@ -1156,6 +1195,7 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
             hFunc(TEvKqpWarmupComplete, HandleWarmupComplete);
             cFunc(TEvPrivate::EvWarmupDeadline, HandleWarmupDeadline);
+            cFunc(TEvPrivate::EvAdjustArena, HandleAdjustArena);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -1173,6 +1213,13 @@ private:
 
     void HandleWork(TEvPrivate::TEvSchedulePublishResources::TPtr&) {
         PublishResourceUsage("alloc");
+    }
+
+    // A demand change the memory arena absorbed without the lock leaves it above the demand; this is what gives
+    // the surplus back, and retries a growth the resource broker refused.
+    void HandleAdjustArena() {
+        ResourceManager->AdjustArena();
+        Schedule(ArenaAdjustPeriod, new TEvPrivate::TEvAdjustArena());
     }
 
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
@@ -1324,12 +1371,15 @@ private:
                 str << "State storage key: " << WbState.Tenant << Endl;
                 with_lock (ResourceManager->Lock) {
                     const auto& arena = ResourceManager->Arena;
-                    const ui64 arenaUsed = ResourceManager->ArenaUsedLocked();
+                    const ui64 arenaExternal = ResourceManager->ArenaExternalMemory.load();
+                    const ui64 arenaUnits = ResourceManager->ArenaExecutionUnits.load();
+                    const ui64 unitMemory = ResourceManager->ExecutionUnitMemory.load();
+                    const ui64 arenaUsed = arenaExternal + arenaUnits * unitMemory;
                     str << "ScanQuery memory resource: " << ResourceManager->TotalMemoryResource->ToString() << Endl;
                     str << "Memory arena: size " << arena.Size
                         << ", used " << arenaUsed
-                        << " (external " << arena.ExternalMemory
-                        << ", execution units " << arena.ExecutionUnits << " x " << ResourceManager->ExecutionUnitMemory.load() << ")"
+                        << " (external " << arenaExternal
+                        << ", execution units " << arenaUnits << " x " << unitMemory << ")"
                         << ", charged " << arena.Charged
                         << ", deficit " << ResourceManager->ArenaDeficitLocked(arenaUsed)
                         << ", broker task " << arena.TaskId
@@ -1514,6 +1564,8 @@ private:
     }
 
 private:
+    static constexpr TDuration ArenaAdjustPeriod = TDuration::Seconds(1);
+
     const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 

@@ -309,9 +309,8 @@ struct TDroppedDiscoveryTest : public TOutboundTest {
 
 // Undelivered data with an unknown actor means the peer session actor is gone: a major reconciliation.
 // The receiver session is freed under a warm channel here; the next push of its producer bounces, the
-// generation moves on and the producer is aborted for it. Its consumer, bound to the session which is
-// gone, is never told: it holds the old session and nothing reaches it any more (a decision point for
-// the refactoring, pinned as it is). A new channel takes the fresh session and completes.
+// generation moves on and the producer is aborted for it. Its consumer is aborted with the session it
+// is bound to, which nothing would reach any more. A new channel takes the fresh session and completes.
 //
 // With the reason Disconnected (an interconnect session drop) the reconciliation is a minor one: the
 // queue is resent under the same generation and every channel goes on.
@@ -326,10 +325,10 @@ struct TUndeliveredTest : public TOutboundTest {
         // B: warm, its producer pausing so that it pushes again only after the reconciliation
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 1000, .MaxMessageSize = 1000,
             .PauseMessageIndex = 5, .PauseDelayMs = 2000, .ExpectAbort = Major };
-        // its consumer stalls: for good in the major case, where it is never told, long enough for the
-        // reconciliation in the minor one, where the channel completes
+        // its consumer stalls: for good in the major case, where its session goes under it, long enough
+        // for the reconciliation in the minor one, where the channel completes
         ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 1000, .MaxMessageSize = 1000,
-            .PauseMessageIndex = 1, .PauseDelayMs = Major ? 30000 : 3000 };
+            .PauseMessageIndex = 1, .PauseDelayMs = Major ? 30000 : 3000, .ExpectAbort = Major };
         StartChannel(1, true);
         UNIT_ASSERT_C(WaitFor([&]() {
             auto descriptors = GetOutputDescriptors(Debug0);
@@ -342,6 +341,9 @@ struct TUndeliveredTest : public TOutboundTest {
         if (Major) {
             Debug1->Terminating.store(true);
             Service1->FreeNodeSession(senderNodeId, Debug1->NodeActorId);
+            auto consumerB = WaitFinished(Control1, NodeIndex1, "the consumer of B");
+            UNIT_ASSERT_C(consumerB.Aborted && consumerB.Reason.Contains("UNAVAILABLE"), consumerB.Reason);
+            UNIT_ASSERT_C(consumerB.Reason.Contains("Node session freed with the channel still open"), consumerB.Reason);
 
             // the producer of B resumes into the void: the bounce is what starts the reconciliation
             UNIT_ASSERT_C(WaitFor([&]() { return GetGenMajor(Debug0) == genMajor + 1; }, TDuration::Seconds(10)),
@@ -393,24 +395,12 @@ struct TUndeliveredTest : public TOutboundTest {
         UNIT_ASSERT(producerA && consumerA);
         UNIT_ASSERT_C(!producerA->Aborted && !consumerA->Aborted, "A was aborted");
 
-        if (Major) {
-            // the consumer of B is bound to the session which is gone and nobody tells it
-            auto old = Runtime->SetDispatchTimeout(TDuration::MilliSeconds(500));
-            try {
-                auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control1);
-                UNIT_ASSERT_C(false, TStringBuilder() << "the consumer of B finished: " << msg->Get()->Reason);
-            } catch (NActors::TEmptyEventQueueException&) {
-            }
-            Runtime->SetDispatchTimeout(old);
-            // its buffer holds the old session and its input descriptor, no sensor check
-            Destroy();
-            CheckQuota();
-            return;
+        if (!Major) {
+            auto producerB = FindFinished(1, TEvTestPrivate::ERole::Producer);
+            auto consumerB = FindFinished(1, TEvTestPrivate::ERole::Consumer);
+            UNIT_ASSERT(producerB && consumerB);
+            UNIT_ASSERT_C(!producerB->Aborted && !consumerB->Aborted, "B was aborted by a minor reconciliation");
         }
-        auto producerB = FindFinished(1, TEvTestPrivate::ERole::Producer);
-        auto consumerB = FindFinished(1, TEvTestPrivate::ERole::Consumer);
-        UNIT_ASSERT(producerB && consumerB);
-        UNIT_ASSERT_C(!producerB->Aborted && !consumerB->Aborted, "B was aborted by a minor reconciliation");
         CheckSensors();
         Destroy();
         CheckQuota();

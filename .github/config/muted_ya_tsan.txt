@@ -1,6 +1,3 @@
-ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.ManyVChunksPerTablet_Uring
-ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.WriteAndRead_4KiB_Uring
-ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.WriteAndRead_8KiB_Uring
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadActiveOneDeadInactiveMirror3dcMemoryLimit10_KB
@@ -42,8 +39,6 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery20
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery21
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
-ydb/core/kqp/ut/batch_operations KqpBatchUpdate.ManyPartitions_3
-ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexUpdatePkClusterChangeReturning-Covered-Overlap
 ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk
@@ -74,18 +69,14 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublic
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
-ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationRecoversAfterDataShardReboot
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
-ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpSinkTx.UncommittedWriteSeqNumAnsweredTwice
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
-ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
-ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/mind/hive/ut THiveTest.TestCheckSubHiveMigrationWithReboots
 ydb/core/mind/hive/ut THiveTest.TestCreateSubHiveCreateManyTabletsWithReboots
 ydb/core/mind/hive/ut THiveTestWithTenants.TestShrinkStoragePool
@@ -133,7 +124,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
-ydb/core/transfer/ut/functional Transfer.CustomFlushInterval
 ydb/core/transfer/ut/functional Transfer.DropTransfer
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional Transfer.PausedAfterError
@@ -176,7 +166,6 @@ ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes KqpExtTest.SecondaryIndexSelectUsingScripting
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
-ydb/tests/functional/kqp/kqp_query_svc unittest.sole chunk
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed

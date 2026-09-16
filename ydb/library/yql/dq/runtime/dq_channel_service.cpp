@@ -473,11 +473,17 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     }
 
     auto finished = data.Finished;
-    const bool earlyFinish = finished && EarlyFinished.load();
-    // a gate only, decided again under FlowControlMutex below
-    const bool replacesSpilledFinish = earlyFinish && Storage && SpilledBytes.load() > 0;
+    if (finished && EarlyFinished.load() && Storage) {
+        // The peer reads no more: the data in the storage is never wanted and must not hold back the
+        // control chunks behind it - the checkpoints, and the finish the peer waits for to let the
+        // channel go, this one or the one of the producer already in the storage.
+        std::lock_guard lock(FlowControlMutex);
+        DropSpilledData();
+        DrainLoadingQueue(nodeState, self);
+        ReloadSpilled(nodeState, self);
+    }
 
-    if (FinishPushed.load() && !data.ConfirmFinish && !replacesSpilledFinish &&
+    if (FinishPushed.load() && !data.ConfirmFinish &&
         !data.Checkpoint // Checkpoint traffic should be handled after finish
     ) {
         return;
@@ -493,27 +499,21 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         auto maxInflightBytes = GetMaxInflightBytes();
 
         if (Storage) {
-            if (earlyFinish) {
-                // The peer reads no more: what is spilled is never wanted, and it must not hold back the
-                // finish the peer waits for to let the channel go. A finish of the producer already in the
-                // storage goes with the rest and this one takes its place.
-                if (SpilledBytes.load() > 0 || !LoadingQueue.empty()) {
-                    DiscardSpilled();
-                } else if (FinishPushed.load()) {
-                    return; // the finish is on its way already
-                }
-                PushBytes += data.Bytes;
-            } else if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
-                if (SpilledChunkBytes.empty()) {
+            if ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes)) {
+                if (SpilledChunks.empty()) {
                     LOG_D("START SPILLING, ChannelId=" << Info.ChannelId << ", PushBytes=" << PushBytes.load()
                         << ", PopBytes=" << RemotePopBytes.load() << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
                     );
                 }
-                SpilledChunkBytes.push(data.Bytes);
+                SpilledChunks.push_back({static_cast<ui32>(data.Bytes), finished || data.Checkpoint.Defined()});
                 SpilledBytes += data.Bytes;
                 Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
                 spilled = true;
                 fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+                if (EarlyFinished.load()) {
+                    // nothing opens the window any more, see ReloadSpilled
+                    ReloadSpilled(nodeState, self);
+                }
             } else {
                 PushBytes += data.Bytes;
             }
@@ -545,22 +545,65 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     }
 }
 
-void TOutputDescriptor::DiscardSpilled() {
-    if (SpilledChunkBytes.empty() && LoadingQueue.empty()) {
-        return;
+void TOutputDescriptor::DropSpilledData() {
+    ui64 dropped = 0;
+    for (auto& chunk : SpilledChunks) {
+        if (!chunk.Control && !chunk.Dropped) {
+            chunk.Dropped = true;
+            SpilledBytes -= chunk.Bytes;
+            dropped += chunk.Bytes;
+        }
     }
-    LOG_D("DISCARD SPILLED, ChannelId=" << Info.ChannelId << ", SpilledBytes=" << SpilledBytes.load()
-        << ", SpilledChunks=" << SpilledChunkBytes.size() << ", Loading=" << LoadingQueue.size());
-    while (!SpilledChunkBytes.empty()) {
-        SpilledChunkBytes.pop();
+    if (dropped) {
+        LOG_D("DROP SPILLED, ChannelId=" << Info.ChannelId << ", DroppedBytes=" << dropped << ", SpilledBytes=" << SpilledBytes.load()
+            << ", SpilledChunks=" << SpilledChunks.size() << ", Loading=" << LoadingQueue.size());
     }
-    // a loading chunk is already counted as pushed, see UpdatePopBytes
+}
+
+void TOutputDescriptor::DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
     while (!LoadingQueue.empty()) {
-        PushBytes -= LoadingQueue.front().Bytes;
+        auto& info = LoadingQueue.front();
+
+        if (!info.Loaded) {
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        }
+        if (!info.Loaded) {
+            break;
+        }
+
+        TDataChunk data;
+        BufferToData(data, std::move(info.Buffer));
+        nodeState->PushDataChunk(std::move(data), self);
+        SpilledBytes -= info.Bytes;
+
         LoadingQueue.pop();
     }
-    SpilledBytes.store(0);
-    TailBlobId = HeadBlobId;
+}
+
+// The storage is read as far as the window allows - or all the way after an early finish: the peer does
+// not open the window any more and what is left to read is the control chunks
+void TOutputDescriptor::ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    while (!SpilledChunks.empty() && (EarlyFinished.load() || PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes())) {
+        auto chunk = SpilledChunks.front();
+        SpilledChunks.pop_front();
+        Y_ENSURE(TailBlobId < HeadBlobId);
+        ++TailBlobId;
+        if (chunk.Dropped) {
+            continue;
+        }
+
+        PushBytes += chunk.Bytes;
+        TLoadingInfo info(TailBlobId, chunk.Bytes);
+        info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+        if (LoadingQueue.empty() && info.Loaded) {
+            TDataChunk data;
+            BufferToData(data, std::move(info.Buffer));
+            nodeState->PushDataChunk(std::move(data), self);
+            SpilledBytes -= chunk.Bytes;
+        } else {
+            LoadingQueue.emplace(std::move(info));
+        }
+    }
 }
 
 void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
@@ -611,22 +654,8 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         }
         RemotePopBytes.store(bytes);
 
-        while (PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes() && !SpilledChunkBytes.empty()) {
-            auto bytes = SpilledChunkBytes.front();
-            SpilledChunkBytes.pop();
-            Y_ENSURE(TailBlobId < HeadBlobId);
-
-            PushBytes += bytes;
-            TLoadingInfo info(++TailBlobId, bytes);
-            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
-            if (LoadingQueue.empty() && info.Loaded) {
-                TDataChunk data;
-                BufferToData(data, std::move(info.Buffer));
-                nodeState->PushDataChunk(std::move(data), self);
-                SpilledBytes -= bytes;
-            } else {
-                LoadingQueue.emplace(std::move(info));
-            }
+        if (Storage) {
+            ReloadSpilled(nodeState, self);
         }
 
         if (!RecalcFillLevel() && PushBytes.load() > RemotePopBytes.load()) {
@@ -790,22 +819,9 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
         }
     }
 
-    while (!LoadingQueue.empty()) {
-        auto& info = LoadingQueue.front();
-
-        if (!info.Loaded) {
-            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
-        }
-        if (!info.Loaded) {
-            break;
-        }
-
-        TDataChunk data;
-        BufferToData(data, std::move(info.Buffer));
-        nodeState->PushDataChunk(std::move(data), self);
-        SpilledBytes -= info.Bytes;
-
-        LoadingQueue.pop();
+    DrainLoadingQueue(nodeState, self);
+    if (EarlyFinished.load()) {
+        ReloadSpilled(nodeState, self);
     }
 }
 

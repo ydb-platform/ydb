@@ -27,7 +27,7 @@ SELECT count(*) cnt, l_orderkey, sum(l_quantity)
 
 [Стадии](../../concepts/glossary.md#processing-stage) бывают двух типов:
 
-1. Стадии чтения (scan), которые выполняются в хранилище ([колоночные таблицы](../../concepts/glossary.md#column-oriented-table) или [шарды](../../concepts/glossary.md#data-shard)) имеют тёмный фон.
+1. Стадии чтения (scan), которые выполняются в хранилище ([колоночные таблицы](../../concepts/glossary.md#column-oriented-table) или [строковые таблицы](../../concepts/glossary.md#row-oriented-table)) имеют тёмный фон.
 2. Вычислительные стадии (compute) отображаются на светлом фоне и нумеруются последовательно, начиная с `0`.
 
 {% note info %}

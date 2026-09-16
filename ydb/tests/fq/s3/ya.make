@@ -34,6 +34,7 @@ TEST_SRCS(
     test_inflight.py
     test_insert.py
     test_public_metrics.py
+    test_parquet_pushdown.py
     test_push_down.py
     test_s3_0.py
     test_s3_1.py

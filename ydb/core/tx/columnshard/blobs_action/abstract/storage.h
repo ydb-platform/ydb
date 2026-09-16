@@ -118,6 +118,11 @@ public:
         return SharedBlobs && SharedBlobs->HasBlobsForGroups(groups);
     }
 
+    // Only the native BS operator runs GC rounds against BlobStorage; elsewhere there is no barrier to wait for.
+    virtual bool HasCollectedBeforeCurrentGeneration() const {
+        return true;
+    }
+
     virtual ~IBlobsStorageOperator() = default;
 
     TString DebugString() const {

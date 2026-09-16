@@ -113,6 +113,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByFirstGCRoundCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
@@ -250,6 +251,10 @@ public:
 
     void OnMoveDataGateBlockedByGC() const {
         MoveDataGateBlockedByGCCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByFirstGCRound() const {
+        MoveDataGateBlockedByFirstGCRoundCount->Add(1);
     }
 
     void OnMoveDataFinished() const {

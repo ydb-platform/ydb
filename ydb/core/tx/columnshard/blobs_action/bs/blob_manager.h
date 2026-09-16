@@ -184,6 +184,11 @@ public:
     // Scans the pending keep/delete queues, not live portions.
     bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
 
+    // True once the first GC round of this incarnation committed a barrier covering every earlier generation.
+    bool HasCollectedBeforeCurrentGeneration() const {
+        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
+    }
+
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
     }

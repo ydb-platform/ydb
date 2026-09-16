@@ -139,6 +139,37 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");
     }
 
+    // Empty queues are not barrier coverage: until the first GC round of this incarnation commits, nothing proves the old generations are collected.
+    Y_UNIT_TEST(FirstGCRoundIsRequiredBeforeTheGateOpens) {
+        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 45;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 NewGroup = 200;
+        static constexpr ui32 ReassignGen = 5;
+        static constexpr ui32 TabletGen = 7;
+
+        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
+        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+
+        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the queues start empty");
+        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "empty queues alone must not answer for barrier coverage");
+
+        UNIT_ASSERT_C(
+            mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters), "the first GC must set a barrier");
+        const NOlap::TGenStep barrier(TabletGen, 0);
+        mgr->OnGCStartOnComplete(barrier);
+        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "a barrier that BlobStorage has not acknowledged proves nothing");
+
+        mgr->OnGCFinishedOnComplete(barrier);
+        UNIT_ASSERT_C(mgr->HasCollectedBeforeCurrentGeneration(), "the committed first round covers every earlier generation");
+    }
+
     // After submission InitialPortionIds is preserved, so a failed change can re-enter Pending.
     Y_UNIT_TEST(TestMoveDataF1Invariant) {
         static constexpr ui64 PortionId = 7;

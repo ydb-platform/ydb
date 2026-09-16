@@ -763,6 +763,12 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         LOG_S_INFO("TColumnShard::CheckMoveDataGate: portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
         return;
     }
+    if (!GetStoragesManager()->GetDefaultOperator()->HasCollectedBeforeCurrentGeneration()) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByFirstGCRound();
+        LOG_S_INFO(
+            "TColumnShard::CheckMoveDataGate: the first GC round of this incarnation has not committed a barrier yet at tablet " << TabletID());
+        return;
+    }
     if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
         LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());

@@ -1,6 +1,7 @@
 #include "tablet_info_helper.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -51,6 +52,13 @@ std::vector<TLogoBlobID> LivePortionBlobs(const NFake::TProxyDS& proxy, const ui
         }
     }
     return result;
+}
+
+// TCSCounters registers under module_id=CS, and GetDeriviative prefixes the name with "Deriviative/".
+i64 GateBlockedByFirstGCRound(TTestBasicRuntime& runtime) {
+    const auto subgroup =
+        GetServiceCounters(runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id", "CS");
+    return subgroup->GetCounter("Deriviative/MoveData/GateBlocked/FirstGCRound/Count", true)->Val();
 }
 
 // Private event ids repeat across components, so the type id alone does not identify TEvWriteIndex.
@@ -521,6 +529,46 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             f.Runtime.Send(ev.Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1101);
+    }
+
+    // Drained queues are not barrier coverage: a fresh incarnation has collected nothing yet, and its empty queues say nothing about the old generations.
+    Y_UNIT_TEST(SuccessWaitsForTheFirstGCRoundOfTheIncarnation) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "the first move never drained OldGroup");
+        f.AssertDrainedSuccess(response);
+
+        // The queues come back empty from local DB, but LastCollectedGenStep predates this generation.
+        f.Controller->DisableBackground(EBackground::GC);
+        f.Restart();
+        const i64 blockedBefore = GateBlockedByFirstGCRound(f.Runtime);
+        f.StartMove();
+        // The writes let cleanup drain, so nothing but the missing barrier can hold the gate.
+        UNIT_ASSERT_C(!f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(3, 2000, 2001);
+            }
+        }), "answered Success before this incarnation committed a GC barrier");
+        UNIT_ASSERT_C(GateBlockedByFirstGCRound(f.Runtime) > blockedBefore, "the gate was held by something other than the missing GC round");
+
+        f.Controller->EnableBackground(EBackground::GC);
+        response = f.DriveGate(200, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(4, 3000, 3001);
+            }
+        });
+        UNIT_ASSERT_C(response, "no Success after the first GC round of the incarnation committed");
+        f.AssertDrainedSuccess(response);
     }
 
     // MoveData must rewrite index blobs (InheritPortionStorage=false) left in BlobStorage by a tiered portion.

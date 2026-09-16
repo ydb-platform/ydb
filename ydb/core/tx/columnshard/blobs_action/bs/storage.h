@@ -42,6 +42,10 @@ public:
         return Manager->HasBlobsForGroups(groups) || TBase::HasBlobsForGroups(groups);
     }
 
+    virtual bool HasCollectedBeforeCurrentGeneration() const override {
+        return Manager->HasCollectedBeforeCurrentGeneration();
+    }
+
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         return Manager->GetBlobsToDeleteAll();
     }

@@ -44,6 +44,7 @@ TCSCounters::TCSCounters()
     MoveDataPortionsRejectedCount = TBase::GetDeriviative("MoveData/Portions/Rejected/Count");
     MoveDataGateBlockedByCleanupCount = TBase::GetDeriviative("MoveData/GateBlocked/Cleanup/Count");
     MoveDataGateBlockedByGCCount = TBase::GetDeriviative("MoveData/GateBlocked/GC/Count");
+    MoveDataGateBlockedByFirstGCRoundCount = TBase::GetDeriviative("MoveData/GateBlocked/FirstGCRound/Count");
 
     OverloadMetadataBytes = TBase::GetDeriviative("Overload/Metadata/Bytes");
     OverloadMetadataCount = TBase::GetDeriviative("Overload/Metadata/Count");

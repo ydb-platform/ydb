@@ -874,8 +874,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
         }
 
-        // Acknowledgements are tied to replica identities, not configuration positions.
-        // Dropping a group or making it write-only may complete a pending publication.
         for (auto updateIt = UpdateAcks.begin(); updateIt != UpdateAcks.end(); ) {
             auto& update = updateIt->second;
             for (auto pathIt = update.PathAcks.begin(); pathIt != update.PathAcks.end(); ) {

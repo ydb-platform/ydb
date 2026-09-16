@@ -1,3 +1,5 @@
+* Added `Float16` and `BFloat16` vector index types.
+
 ## v3.23.0
 
 * Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.

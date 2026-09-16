@@ -200,7 +200,7 @@ bool IsVectorIndexMetricCompatible(const TIndexDescription& indexDesc, TStringBu
             break;
     }
 
-    return false;
+    return mismatch("a valid vector metric in the index definition");
 }
 
 bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
@@ -1957,6 +1957,19 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
     }
 }
 
+bool IsStructParameterMember(const TExprBase& value) {
+    const auto member = value.Maybe<TCoMember>();
+    if (!member) {
+        return false;
+    }
+    const auto parameter = member.Cast().Struct().Maybe<TCoParameter>();
+    if (!parameter) {
+        return false;
+    }
+    const auto parameterType = parameter.Cast().Ref().GetTypeAnn();
+    return parameterType && parameterType->GetKind() == ETypeAnnotationKind::Struct;
+}
+
 // Extract an equality binding for a prefix column from an `==` node: one side must be
 // Member(row, prefixCol), the other a parameter, a member of a struct parameter, or a literal.
 void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet,
@@ -1985,16 +1998,7 @@ void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TStr
         }
 
         auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-        const auto valueMember = inner.Maybe<TCoMember>();
-
-        const bool isStructParameterMember = expectedRow && valueMember && [&] {
-            const auto parameter = valueMember.Cast().Struct().Maybe<TCoParameter>();
-            if (!parameter) {
-                return false;
-            }
-            const auto parameterType = parameter.Cast().Ref().GetTypeAnn();
-            return parameterType && parameterType->GetKind() == ETypeAnnotationKind::Struct;
-        }();
+        const bool isStructParameterMember = expectedRow && IsStructParameterMember(inner);
 
         if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>() && !isStructParameterMember) {
             return false;
@@ -2011,14 +2015,14 @@ void TryExtractPrefixValuesImpl(const TExprNode::TPtr& expr, const THashSet<TStr
 }
 
 void TryExtractPrefixValues(const TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet,
-    TVector<std::pair<TString, TExprNode::TPtr>>& prefixValues)
+    TVector<std::pair<TString, TExprNode::TPtr>>& prefixValues, const TExprNode* expectedRow)
 {
-    TryExtractPrefixValuesImpl(expr, prefixColumnsSet, prefixValues, /* expectedRow */ nullptr);
+    TryExtractPrefixValuesImpl(expr, prefixColumnsSet, prefixValues, expectedRow);
 }
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
     const THashSet<TString>& indexedColumns = {}, const TVector<TString>& prefixColumns = {},
-    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {})
+    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {}, const TExprNode* expectedRow = nullptr)
 {
     TFullTextApplyParseResult result;
     result.PrefixColumns = seedPrefixColumns;
@@ -2047,7 +2051,7 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
             isGreenNode = false;
         }
 
-        TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns);
+        TryExtractPrefixValues(expr, prefixColumnsSet, result.PrefixColumns, expectedRow);
 
         if (auto match = TFulltextQuery::Match(expr, ctx, indexedColumns) ; match.IsValid()) {
             if (match.IsScoreQuery()) {
@@ -2227,7 +2231,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
             for (size_t i = 0; i < prefixColumns.size(); ++i) {
                 auto value = from.Arg(i);
                 auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
-                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
+                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>() || IsStructParameterMember(inner)) {
                     seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
                 }
             }
@@ -2277,7 +2281,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     }
 
     auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
-    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns, prefixColumns, seedPrefixColumns);
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns,
+        prefixColumns, seedPrefixColumns, flatMap.Lambda().Args().Arg(0).Raw());
     if (result.HasErrors) {
         return {};
     }
@@ -2396,7 +2401,8 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
         }
 
         expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx,
-            jsonIndexedColumns, prefixColumns, {}, EJsonIndexSelectionMode::Automatic);
+            jsonIndexedColumns, prefixColumns, {}, EJsonIndexSelectionMode::Automatic,
+            flatMap.Lambda().Args().Arg(0).Raw());
 
         if (expectedSettings.has_value()) {
             selectedIndex = indexInfo.Name;
@@ -2471,7 +2477,9 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(
     }
 
     auto seedPrefixColumns = ExtractSeedPrefix(read, prefixColumns);
-    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns, prefixColumns, seedPrefixColumns);
+    auto expectedSettings = CollectJsonIndexPredicate(flatMap.Lambda().Body(), node, ctx, jsonIndexedColumns,
+        prefixColumns, seedPrefixColumns, EJsonIndexSelectionMode::Explicit,
+        flatMap.Lambda().Args().Arg(0).Raw());
     if (!expectedSettings.has_value()) {
         ctx.AddError(expectedSettings.error());
         return {};
@@ -2888,7 +2896,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return extracted;
     };
 
-    auto extractPrefixColumns = [&](const TIndexDescription& index, bool allowLeadingSubPrefix) -> TMaybe<TPrefixColumns> {
+    auto extractPrefixColumns = [&](const TIndexDescription& index) -> TMaybe<TPrefixColumns> {
         if (index.KeyColumns.size() <= 1) {
             return TPrefixColumns{};
         }
@@ -2902,26 +2910,15 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         TPrefixColumns ordered;
         ordered.reserve(index.KeyColumns.size() - 1);
 
-        bool missingPrefixColumn = false;
         for (size_t i = 0; i + 1 < index.KeyColumns.size(); ++i) {
             const auto& prefixColumn = index.KeyColumns[i];
             auto value = FindIf(extracted, [&](const auto& item) {
                 return item.first == prefixColumn;
             });
             if (value == extracted.end()) {
-                if (!allowLeadingSubPrefix) {
-                    return Nothing();
-                }
-                missingPrefixColumn = true;
-                continue;
-            }
-            if (missingPrefixColumn) {
                 return Nothing();
             }
             ordered.emplace_back(prefixColumn, value->second);
-        }
-        if (allowLeadingSubPrefix && ordered.empty()) {
-            return Nothing();
         }
         return ordered;
     };
@@ -2972,7 +2969,8 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // ---- Fulltext relevance branch ----
             if (arg != ftScore) {
                 return addError(TStringBuilder() << branchId << " must be a bare FullTextScore expression; "
-                    "wrapping it would change scoring semantics that HybridRank cannot preserve");
+                    "wrapping it would change scoring semantics that HybridRank cannot preserve; "
+                    "use Weights or ScoreLambda instead");
             }
             b.Kind = EBranchKind::Fulltext;
             b.IsSimilarity = true;
@@ -3046,7 +3044,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     return addError(TStringBuilder() << "fulltext index '" << *indexOverride
                         << "' is not built on the FullTextScore column '" << b.ScoredColumn << "'");
                 }
-                auto prefixColumns = extractPrefixColumns(*idx, false);
+                auto prefixColumns = extractPrefixColumns(*idx);
                 if (!prefixColumns) {
                     return addError(TStringBuilder() << "prefixed fulltext index '" << *indexOverride
                         << "' requires equality predicates on every prefix column in WHERE");
@@ -3055,13 +3053,17 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 b.PrefixColumns = std::move(*prefixColumns);
             } else {
                 ui32 matches = 0;
+                const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
                         && isFulltextRelevanceIndex(idx)
                         && !idx.KeyColumns.empty() && idx.KeyColumns.back() == b.ScoredColumn)
                     {
-                        auto prefixColumns = extractPrefixColumns(idx, false);
+                        auto prefixColumns = extractPrefixColumns(idx);
                         if (!prefixColumns) {
+                            if (!unboundPrefixedIndex) {
+                                unboundPrefixedIndex = &idx;
+                            }
                             continue;
                         }
                         b.IndexName = idx.Name;
@@ -3070,6 +3072,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     }
                 }
                 if (matches == 0) {
+                    if (unboundPrefixedIndex) {
+                        return addError(TStringBuilder() << "prefixed fulltext index '" << unboundPrefixedIndex->Name
+                            << "' requires equality predicates on every prefix column in WHERE");
+                    }
                     return addError(TStringBuilder() << "no ready fulltext relevance index found on column '" << b.ScoredColumn << "'");
                 }
                 if (matches > 1) {
@@ -3136,31 +3142,44 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     return addError(TStringBuilder() << "vector index '" << *indexOverride
                         << "' has an incompatible metric; expected " << expectedUsage);
                 }
-                auto prefixColumns = extractPrefixColumns(*idx, true);
+                auto prefixColumns = extractPrefixColumns(*idx);
                 if (!prefixColumns) {
                     return addError(TStringBuilder() << "prefixed vector index '" << *indexOverride
-                        << "' requires equality predicates on a contiguous leading prefix in WHERE");
+                        << "' requires equality predicates on every prefix column in WHERE");
                 }
                 b.IndexName = *indexOverride;
                 b.PrefixColumns = std::move(*prefixColumns);
             } else {
                 ui32 matches = 0;
+                const TIndexDescription* unboundPrefixedIndex = nullptr;
                 for (const auto& idx : tableDesc.Metadata->Indexes) {
                     if (idx.State == TIndexDescription::EIndexState::Ready
                         && idx.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
                         && idx.KeyColumns.back() == b.ScoredColumn
                         && IsVectorIndexMetricCompatible(idx, knnMethodName, !b.IsSimilarity))
                     {
-                        auto prefixColumns = extractPrefixColumns(idx, true);
+                        auto prefixColumns = extractPrefixColumns(idx);
                         if (!prefixColumns) {
+                            if (!unboundPrefixedIndex) {
+                                unboundPrefixedIndex = &idx;
+                            }
                             continue;
                         }
-                        b.IndexName = idx.Name;
-                        b.PrefixColumns = std::move(*prefixColumns);
-                        ++matches;
+                        // Prefer the longest fully bound prefix; equally specific indexes remain ambiguous.
+                        if (matches == 0 || prefixColumns->size() > b.PrefixColumns.size()) {
+                            b.IndexName = idx.Name;
+                            b.PrefixColumns = std::move(*prefixColumns);
+                            matches = 1;
+                        } else if (prefixColumns->size() == b.PrefixColumns.size()) {
+                            ++matches;
+                        }
                     }
                 }
                 if (matches == 0) {
+                    if (unboundPrefixedIndex) {
+                        return addError(TStringBuilder() << "prefixed vector index '" << unboundPrefixedIndex->Name
+                            << "' requires equality predicates on every prefix column in WHERE");
+                    }
                     return addError(TStringBuilder() << "no ready vector (kmeans-tree) index found on column '" << b.ScoredColumn << "'");
                 }
                 if (matches > 1) {

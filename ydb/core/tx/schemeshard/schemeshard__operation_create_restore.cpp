@@ -1,11 +1,13 @@
 #include "schemeshard__operation_backup_restore_common.h"
 #include "schemeshard_billing_helpers.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
 struct TRestore {
-    static constexpr TStringBuf Name() {
+    static constexpr const char* Name() {
         return "TRestore";
     }
 
@@ -43,12 +45,12 @@ struct TRestore {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose restore"
-                            << ", shard: " << shardId
-                            << ", opId: " <<  opId
-                            << ", at schemeshard: " << context.SS->TabletID());
-        
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose restore",
+                {"shard", shardId},
+                {"operationId", opId},
+                {"schemeshard", context.SS->TabletID()},
+            );
+
             auto fillRestoreTask = [&](auto& restore) {
                 restore.CopyFrom(restoreSettings);
                 restore.SetTableId(pathId.LocalPathId);
@@ -131,7 +133,7 @@ struct TRestore {
     }
 
     template <typename TTableInfo>
-    static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {        
+    static void PersistTableTask(const TTableInfo& table, const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         const auto& restore = tx.GetRestore();
         table->RestoreSettings = restore;
 
@@ -168,3 +170,5 @@ ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state) {
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

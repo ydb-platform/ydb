@@ -10,10 +10,4 @@ enum class ESpecialTaskCategory {
     Deduplication = 4 /* "deduplication" */
 };
 
-// Actor-system executor that hosts a composite conveyor instance (ConvCmpUser / ConvCmpBatch).
-enum class EActorSystemPool {
-    User /* "User" */,
-    Batch /* "Batch" */
-};
-
 }   // namespace NKikimr::NConveyorComposite

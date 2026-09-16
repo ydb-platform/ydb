@@ -2,6 +2,8 @@
 
 #include "kqp_trace_settings.h"
 
+#include <ydb/core/kqp/common/simple/kqp_operation_classifier.h>
+
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/protos/actors.pb.h>
@@ -30,26 +32,26 @@ enum class EOperation : ui32 {
     Write = 1 << 6,
 };
 constexpr std::array OPERATION_NAMES = {
-    std::pair{EOperation::Read, "Read"}, std::pair{EOperation::Lookup, "Lookup"}, std::pair{EOperation::Join, "Join"},
-    std::pair{EOperation::Filter, "Filter"}, std::pair{EOperation::Aggregate, "Aggregate"},
-    std::pair{EOperation::Sort, "Sort"}, std::pair{EOperation::Write, "Write"},
+    std::pair{EOperation::Read, "Read"}, std::pair{EOperation::Lookup, "Lookup"},
+    std::pair{EOperation::Join, KqpOperationName(EKqpOperationKind::Join)},
+    std::pair{EOperation::Filter, KqpOperationName(EKqpOperationKind::Filter)},
+    std::pair{EOperation::Aggregate, KqpOperationName(EKqpOperationKind::Aggregate)},
+    std::pair{EOperation::Sort, KqpOperationName(EKqpOperationKind::Sort)},
+    std::pair{EOperation::Write, "Write"},
 };
 
 EOperation CallableOperation(TStringBuf name) {
-    if (name.Contains("Join")) {
-        return EOperation::Join;
-    }
-    if (name.Contains("Combine") || name.Contains("Aggregate") || name == "Condense1"
-            || name == "BlockMergeFinalizeHashed" || name == "BlockMergeManyFinalizeHashed") {
-        return EOperation::Aggregate;
-    }
-    if (name.Contains("Filter")) {
-        return EOperation::Filter;
-    }
-    if (name == "Sort" || name == "Top" || name == "TopSort"
-            || name.StartsWith("WideSort") || name.StartsWith("WideTop")
-            || name.StartsWith("BlockSort") || name.StartsWith("BlockTop")) {
-        return EOperation::Sort;
+    switch (ClassifyKqpOperation(name)) {
+        case EKqpOperationKind::Join:
+            return EOperation::Join;
+        case EKqpOperationKind::Filter:
+            return EOperation::Filter;
+        case EKqpOperationKind::Aggregate:
+            return EOperation::Aggregate;
+        case EKqpOperationKind::Sort:
+            return EOperation::Sort;
+        case EKqpOperationKind::Unknown:
+            return EOperation::None;
     }
     return EOperation::None;
 }

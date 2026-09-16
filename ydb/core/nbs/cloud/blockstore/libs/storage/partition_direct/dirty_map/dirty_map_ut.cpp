@@ -196,6 +196,52 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintDDiskState());
     }
 
+    Y_UNIT_TEST(ShouldIgnoreWatermarksUntilDDiskTouched)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        vchunkConfig.SetWatermark(0, 30 * DefaultBlockSize);
+        vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
+
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, 40 * DefaultBlockSize);
+        dirtyMap->UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+
+        const auto range = TBlockRange16::MakeOneBlock(0);
+        dirtyMap->RegisterInflightWrite(MakeKey(1), range);
+        dirtyMap->WriteFinished(
+            MakeKey(1),
+            range,
+            MakePrimaryHosts(),
+            MakePrimaryHosts());
+
+        vchunkConfig.PromoteHost(4);
+        vchunkConfig.SetWatermark(4, 50 * DefaultBlockSize);
+        dirtyMap->UpdateConfig(vchunkConfig);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3*{Operational,32768};"
+            "H4*{Fresh+,50};",
+            dirtyMap->DebugPrintDDiskState());
+    }
+
     Y_UNIT_TEST(ShouldRespectWatermarksForAddedDDisks)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

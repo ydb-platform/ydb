@@ -38,16 +38,16 @@ TBlocksDirtyMap::TBlocksDirtyMap(
         DDiskStates.emplace_back(ArenaAllocator, blockCount);
     }
 
+    if (state.GetDDiskTouched()) {
+        DDiskTouchedGeneration = PersistedStateGeneration;
+    }
+
     UpdateConfig(vChunkConfig);
 
     size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
     for (const auto& ddiskState: state.GetDDiskStates()) {
         DDiskStates[ddisk].Load(ddiskState);
         ++ddisk;
-    }
-
-    if (state.GetDDiskTouched()) {
-        DDiskTouchedGeneration = PersistedStateGeneration;
     }
 }
 
@@ -75,7 +75,8 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     // When a new disk appears, it doesn't have all the data. Need to set its
     // watermark level.
     for (auto indx: added) {
-        const auto watermark = vChunkConfig.GetWatermark(indx);
+        const auto watermark =
+            IsDDiskTouched() ? vChunkConfig.GetWatermark(indx) : std::nullopt;
         DDiskStates[indx].Init(
             this,
             BlockCount,

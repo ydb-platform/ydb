@@ -766,6 +766,17 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         return true;
     }
 
+    void AckUpdate(TActorId recipient, ui64 cookie, const TPathId& pathId, ui64 version) {
+        YDB_LOG_NOTICE("Ack update",
+            {"selfId", SelfId()},
+            {"to", recipient},
+            {"cookie", cookie},
+            {"pathId", pathId},
+            {"version", version});
+        auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, version);
+        Send(recipient, std::move(ack), 0, cookie);
+    }
+
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
@@ -802,15 +813,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.second <= version) {
             pathIt->second.insert(ev->Sender);
             if (CheckQuorum(pathIt->second)) {
-                YDB_LOG_NOTICE("Ack update",
-                    {"selfId", SelfId()},
-                    {"to", it->second.AckTo},
-                    {"cookie", ev->Cookie},
-                    {"pathId", pathId},
-                    {"version", pathIt->first.second});
-
-                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
-                Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
+                AckUpdate(it->second.AckTo, ev->Cookie, pathId, pathIt->first.second);
 
                 auto eraseIt = pathIt;
                 ++pathIt;
@@ -869,6 +872,33 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
                 ReplicaToReplicaPopulatorBackMap.erase(it->second);
                 ReplicaToReplicaPopulator.erase(it++);
+            }
+        }
+
+        // Discard acknowledgements from replicas no longer in use and complete pending
+        // publications whose remaining acknowledgements satisfy the new configuration's quorum.
+        for (auto updateIt = UpdateAcks.begin(); updateIt != UpdateAcks.end(); ) {
+            auto& update = updateIt->second;
+            for (auto pathIt = update.PathAcks.begin(); pathIt != update.PathAcks.end(); ) {
+                auto& ackedPopulators = pathIt->second;
+                for (auto replicaIt = ackedPopulators.begin(); replicaIt != ackedPopulators.end(); ) {
+                    if (!ReplicaToReplicaPopulatorBackMap.contains(*replicaIt)) {
+                        ackedPopulators.erase(replicaIt++);
+                    } else {
+                        ++replicaIt;
+                    }
+                }
+                if (CheckQuorum(ackedPopulators)) {
+                    AckUpdate(update.AckTo, updateIt->first, pathIt->first.first, pathIt->first.second);
+                    update.PathAcks.erase(pathIt++);
+                } else {
+                    ++pathIt;
+                }
+            }
+            if (update.PathAcks.empty()) {
+                UpdateAcks.erase(updateIt++);
+            } else {
+                ++updateIt;
             }
         }
 

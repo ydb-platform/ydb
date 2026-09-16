@@ -555,6 +555,21 @@ public:
         return rs;
     }
 
+    TMaybe<NYdb::TResultSet> TryRunYqlDataQuery(TString query) {
+        auto tableClient = NYdb::NTable::TTableClient(*Driver);
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        if (!sessionResult.IsSuccess()) {
+            return Nothing();
+        }
+        auto qr = sessionResult.GetSession().ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        if (!qr.IsSuccess() || qr.GetResultSets().empty()) {
+            return Nothing();
+        }
+        return qr.GetResultSet(0);
+    }
+
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         NYdb::TParamsBuilder builder;
         return RunYqlDataQueryWithParams(query, builder.Build());

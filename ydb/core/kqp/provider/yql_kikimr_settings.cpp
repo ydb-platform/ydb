@@ -110,6 +110,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockHashJoinForCross);
     REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
+    REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -399,6 +400,10 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
+}
+
+bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {
+    return EnableBlockHashJoinEqualNulls.Get().GetOrElse(TTableServiceConfig::GetEnableBlockHashJoinEqualNulls());
 }
 
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {

@@ -45,7 +45,7 @@ private:
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
     bool NeedFinalNarrowing();
     NYql::TExprNode::TPtr BuildFinalNarrowStage(const NYql::TExprNode::TPtr& stage) const;
-    TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(const TVector<NYql::TExprNode::TPtr>& physicalStages);
+    TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(const NYql::TExprNode::TPtr& rootStage);
     NYql::TExprNode::TPtr BuildMaterialize(NYql::TExprNode::TPtr ranges);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 

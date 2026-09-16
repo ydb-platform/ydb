@@ -391,4 +391,8 @@ message TFeatureFlags {
     // it holds has been compacted, rather than by the color it is in while the
     // write is still cheap.
     optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
+    // Creates the per-tenant WasmCompileController tablet for new and migrated
+    // databases. Without it nothing compiles WASM modules to native code:
+    // dinodes only ever compile what this tablet assigns them.
+    optional bool EnableWasmCompileController = 332 [default = false];
 }

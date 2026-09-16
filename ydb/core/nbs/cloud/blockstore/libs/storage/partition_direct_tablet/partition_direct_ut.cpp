@@ -1,13 +1,19 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
@@ -30,13 +36,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[nodiscard]] constexpr ui64 BlocksPerRegion(ui32 blockSize = DefaultBlockSize)
-{
-    return RegionSize / blockSize;
-}
-
 constexpr ui64 DefaultStripeSize = 512_KB;
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
@@ -726,7 +727,7 @@ void ShouldWriteAndReadBlocksInDifferentRegions(
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blocksPerRegion = BlocksPerRegion(blockSize);
+    const ui64 blocksPerRegion = GetRegionBlockCount(blockSize, MaxVChunkSize);
     const ui64 blockCount = 3 * blocksPerRegion;
     auto partition = CreatePartitionTablet(env, blockCount, blockSize);
 
@@ -802,7 +803,8 @@ void RandomWrites(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blockCount = 3 * BlocksPerRegion();
+    const ui64 blockCount =
+        3 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize);
     auto partition = CreatePartitionTablet(env, blockCount);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
@@ -940,6 +942,53 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldPublishAndRevokeFrontendMetadata)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        scopedService.reset();
+        auto config = CreateNbsConfig(EWriteMode::DirectWrite);
+        config.MutableNbsFrontendConfig()->SetEnabled(true);
+        scopedService = std::make_unique<TScopedNbsService>(config);
+        auto blockStore = GetNbsService()->Frontend->GetBlockStore();
+        auto mount = [&]
+        {
+            auto request = std::make_shared<
+                NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
+            request->SetDiskId("test-volume");
+            request->MutableHeaders()->SetClientId("frontend-test");
+            return blockStore
+                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
+                .GetValueSync();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+
+        WaitForTabletBoot(env);
+        auto volumeConfig = CreateVolumeConfig(32768);
+        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
+        const auto update = SendUpdateVolumeConfig(env, volumeConfig, 1);
+        UNIT_ASSERT(update.GetStatus() == NKikimrBlockStore::OK);
+        env.Sim(TDuration::Seconds(10));
+        const auto response = mount();
+        UNIT_ASSERT(!HasError(response));
+        UNIT_ASSERT(!response.GetSessionId().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetVolume().GetDiskId(),
+            "test-volume");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlockSize(), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlocksCount(), 32768);
+
+        const auto edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+    }
+
     Y_UNIT_TEST(MultipleInit)
     {
         {
@@ -1004,8 +1053,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const ui64 partition = CreatePartitionTablet(
             env,
-            4 * BlocksPerRegion() + 1   // blockCount
-        );
+            4 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize) + 1);
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2653,7 +2701,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
         UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Region count");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Regions");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)
@@ -3231,7 +3279,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, deallocateRequestCount);
         UNIT_ASSERT(!deallocateBeforeWipeDone);
         UNIT_ASSERT(!deleteChunksBeforeWipeDone);
-        UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupsCount, deallocateOpSize);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkPerRegionCount, deallocateOpSize);
         UNIT_ASSERT(!deallocateOpMalformed);
 
         UNIT_ASSERT(!TryGetLoadActorAdapterActorId(env, partition, edge));

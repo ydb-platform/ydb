@@ -8,6 +8,7 @@ TEST_SRCS(
     test_ydb_bench.py
     test_ydb_telemetry.py
     test_hosts.py
+    test_run_index.py
     test_cluster_templates.py
     test_distributed_sessions.py
     test_distributed_plan.py

@@ -1,4 +1,4 @@
-#include "helpers/aggregation.h"
+#include "helpers/test_case.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/cs_helper.h>
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
         lHelper.SendDataViaActorSystem(testTable, batch);
     }
 
-    void TestClickBenchBase(const std::vector<TAggregationTestCase>& cases, const bool genericQuery) {
+    void TestClickBenchBase(const std::vector<TOlapTestCase>& cases, const bool genericQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
         }
     }
 
-    void TestClickBenchInternal(const std::vector<TAggregationTestCase>& cases) {
+    void TestClickBenchInternal(const std::vector<TOlapTestCase>& cases) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                                                          iterationPackSize);
         }
 
-        TAggregationTestCase currentTest;
+        TOlapTestCase currentTest;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpComputeEvents::EvScanData:
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
         }
     }
 
-    void TestClickBench(const std::vector<TAggregationTestCase>& cases, const bool genericQuery = false) {
+    void TestClickBench(const std::vector<TOlapTestCase>& cases, const bool genericQuery = false) {
         TestClickBenchBase(cases, genericQuery);
         if (!genericQuery) {
             TestClickBenchInternal(cases);
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
     }
 
     Y_UNIT_TEST(ClickBenchSmoke) {
-        TAggregationTestCase q7;
+        TOlapTestCase q7;
         q7.SetQuery(R"(
                 SELECT
                     AdvEngineID, COUNT(*) as c
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("TableFullScan");
         q7.FillExpectedAggregationGroupByPlanOptions();
 
-        TAggregationTestCase q9;
+        TOlapTestCase q9;
         q9.SetQuery(R"(
                 SELECT
                     RegionID, SUM(AdvEngineID), COUNT(*) AS c, avg(ResolutionWidth), COUNT(DISTINCT UserID)
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("Aggregate-TableFullScan");
         q9.FillExpectedAggregationGroupByPlanOptions();
 
-        TAggregationTestCase q12;
+        TOlapTestCase q12;
         q12.SetQuery(R"(
                 SELECT
                     SearchPhrase, count(*) AS c
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("TableFullScan");
         q12.FillExpectedAggregationGroupByPlanOptions();
 
-        TAggregationTestCase q14;
+        TOlapTestCase q14;
         q14.SetQuery(R"(
                 SELECT
                     SearchEngineID, SearchPhrase, count(*) AS c
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("TableFullScan");
         q14.FillExpectedAggregationGroupByPlanOptions();
 
-        TAggregationTestCase q22;
+        TOlapTestCase q22;
         q22.SetQuery(R"(
                 SELECT
                     SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID)
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("TableFullScan");
         q22.FillExpectedAggregationGroupByPlanOptions();
 
-        TAggregationTestCase q39;
+        TOlapTestCase q39;
         q39.SetQuery(R"(
                 SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, COUNT(*) AS PageViews
                 FROM `/Root/benchTable`
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
             // .SetExpectedReadNodeType("Aggregate-Filter-TableFullScan");
         q39.FillExpectedAggregationGroupByPlanOptions();
 
-        std::vector<TAggregationTestCase> cases = {q7, q9, q12, q14, q22, q39};
+        std::vector<TOlapTestCase> cases = {q7, q9, q12, q14, q22, q39};
         for (auto&& c : cases) {
             c.SetUseLlvm(NSan::PlainOrUnderSanitizer(true, false));
         }

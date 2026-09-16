@@ -24,6 +24,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/backup/proto/proto.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -242,7 +243,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (auto permissions = NDataShard::GenYdbPermissions(describeResult.GetPathDescription())) {
-            google::protobuf::TextFormat::PrintToString(permissions.GetRef(), &Permissions);
+            Y_ENSURE(NYdb::NBackup::PrintProto(permissions.GetRef(), Permissions));
         } else {
             return Finish(false, TStringBuilder() << this->GetObjectKey("permissions.pb", IV.Defined()) << ": cannot infer permissions");
         }

@@ -9,8 +9,11 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/algorithm.h>
+#include <util/random/random.h>
+#include <util/random/shuffle.h>
 #include <util/string/vector.h>
 #include <algorithm>
+#include <cmath>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
@@ -34,6 +37,18 @@ std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColum
 }
 
 } // anonymous namespace
+
+TVector<ui64> SelectAnalyzeSample(TVector<ui64> tablets, double rate, ui64 seed) {
+    // Avoid rounding an exact integer sample size up by one.
+    const double expected = std::nextafter(rate * tablets.size(), 0.0);
+    const size_t count = std::min(tablets.size(),
+        std::max<size_t>(1, static_cast<size_t>(std::ceil(expected))));
+    if (count < tablets.size()) {
+        PartialShuffle(tablets.begin(), tablets.end(), count, TFastRng64(seed));
+        tablets.resize(count);
+    }
+    return tablets;
+}
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
@@ -142,6 +157,7 @@ void TAnalyzeActor::Bootstrap() {
     entry.TableId = PathId;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = TNavigate::OpTable;
+    entry.SyncVersion = SamplingRequested();
 
     auto request = std::make_unique<TNavigate>();
     request->DatabaseName = DatabaseName;
@@ -203,6 +219,25 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             : TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             NYql::TIssue(TStringBuilder() << "Navigate request failed with " << entry.Status));
         return;
+    }
+
+    if (SamplingRequested() && entry.ColumnTableInfo) {
+        const auto& sharding = entry.ColumnTableInfo->Description.GetSharding();
+        TVector<ui64> tablets;
+        if (sharding.ShardsInfoSize()) {
+            for (const auto& shard : sharding.GetShardsInfo()) {
+                if (shard.GetIsOpenForRead()) {
+                    tablets.push_back(shard.GetTabletId());
+                }
+            }
+        } else {
+            tablets.assign(sharding.GetColumnShards().begin(), sharding.GetColumnShards().end());
+        }
+        SortUnique(tablets);
+        EligibleUnits = tablets.size();
+        for (auto tablet : SelectAnalyzeSample(std::move(tablets), Config.SampleRate, RandomNumber<ui64>())) {
+            TabletIdsToLocate.insert(tablet);
+        }
     }
 
     HiveId = entry.DomainInfo->ExtractHive();
@@ -281,6 +316,12 @@ void TAnalyzeActor::HandleResolveDatabase(const NSchemeCache::TSchemeCacheNaviga
 }
 
 void TAnalyzeActor::HandleNavigateResult() {
+    if (SamplingRequested() && !IsColumnTable) {
+        FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("ANALYZE SAMPLE is supported only for column tables"));
+        return;
+    }
+
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     std::vector<std::pair<TString, ui32>> keyColumns;
     for (const auto& col : NavigateColumns) {
@@ -440,6 +481,7 @@ void TAnalyzeActor::HandleNavigateResult() {
 
     if (PendingTasks.empty()) {
         // All requested columns were already dropped. Send empty response right away.
+        SendProgressEvent(0, 0);
         auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
             std::vector<TStatisticsItem>{}, /*final=*/ true);
         Send(Parent, response.release());
@@ -451,7 +493,7 @@ void TAnalyzeActor::HandleNavigateResult() {
     const ui64 wholeTableScanMaxBytes = IsColumnTable
         ? Config.ColumnTableWholeTableScanMaxBytes
         : Config.RowTableWholeTableScanMaxBytes;
-    const bool shouldSplit = wholeTableScanMaxBytes == 0
+    const bool shouldSplit = SamplingRequested() || wholeTableScanMaxBytes == 0
         || !Config.TableBytesSize
         || *Config.TableBytesSize > wholeTableScanMaxBytes;
     if (shouldSplit) {
@@ -487,7 +529,15 @@ void TAnalyzeActor::HandleNavigateResult() {
         }
     }
 
-    if (IsPartitionedScan()) {
+    if (SamplingRequested()) {
+        if (TabletIdsToLocate.empty()) {
+            FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+                NYql::TIssue("ANALYZE found no table partitions to scan"));
+            return;
+        }
+        Send(SelfId(), new TEvPrivate::TEvRequestTableDistribution);
+        Become(&TThis::StateLocateTablets);
+    } else if (IsPartitionedScan()) {
         // Resolve shard ids (and PK range bounds for row tables).
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
@@ -894,11 +944,6 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         if (task.SimpleStatEval) {
             const auto& col = Columns.at(task.ColumnIdx);
             auto simpleStats = task.SimpleStatEval->Extract(RowCount.value(), result.AggColumns);
-            resultItems.emplace_back(
-                col.Tag,
-                task.SimpleStatEval->GetType(),
-                simpleStats.SerializeAsString());
-
             for (auto type : supportedStatTypes) {
                 auto statEval = IStage2ColumnStatisticEval::MaybeCreate(type, simpleStats, col.Type);
                 if (!statEval) {
@@ -918,6 +963,10 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                     .Stage2StatEval = std::move(statEval),
                 });
             }
+            if (SamplingRequested() && PartitionedScanCount() < EligibleUnits) {
+                simpleStats.ClearCountDistinct(); // Sample HLL is not population NDV.
+            }
+            resultItems.emplace_back(col.Tag, task.SimpleStatEval->GetType(), simpleStats.SerializeAsString());
         } else if (task.Stage2StatEval) {
             const auto& col = Columns.at(task.ColumnIdx);
             resultItems.emplace_back(
@@ -937,14 +986,27 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
     InProgressTasks.clear();
 
+    if (SamplingRequested()) {
+        NKikimrStat::TSamplingStatistics sampling;
+        sampling.SetRequestedRate(Config.SampleRate);
+        sampling.SetEligibleUnits(EligibleUnits);
+        sampling.SetSelectedUnits(PartitionedScanCount());
+        sampling.SetSampleRows(*RowCount);
+        for (auto& item : resultItems) {
+            item.Sampling = sampling;
+        }
+    }
+
     const bool isFinalResult = PendingTasks.empty();
+    if (isFinalResult) {
+        // Only emit 100% once, when all scan rounds are done.
+        SendProgressEvent(shardsTotal, shardsTotal);
+    }
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
         std::move(resultItems), isFinalResult);
     Send(Parent, response.release());
 
     if (isFinalResult) {
-        // Only emit 100% once, when all scan rounds are done.
-        SendProgressEvent(shardsTotal, shardsTotal);
         PassAway();
     } else {
         StartColumnStatEvalTasks();

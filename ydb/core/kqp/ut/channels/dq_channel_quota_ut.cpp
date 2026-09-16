@@ -36,7 +36,15 @@ struct TOutputQuotaTest : public TQuotaAbortTest {
         ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
 
         Debug0->PauseChannelAck();
-        StartChannel(1, true);
+        // the consumer binds first: aborted before its bind it would leave the descriptor the leading
+        // message creates to the unbound cleanup
+        auto producer = Runtime->Register(new TProducerActor(Service0, 1, ProducerSettings, OutputQuotaManager), NodeIndex0);
+        auto consumer = Runtime->Register(new TConsumerActor(Service1, 1, ConsumerSettings, InputQuotaManager), NodeIndex1);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetCounter(Service1, "InputBuffer/Count") == 1; }, TDuration::Seconds(10)), "the consumer did not bind");
+        Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
         CheckBothAborted();
         // the producer keeps pushing into the void until the window is full, every push rejected
         UNIT_ASSERT_C(OutputQuotaManager->Rejected.load() >= 1, OutputQuotaManager->Rejected.load());

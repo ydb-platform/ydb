@@ -37,6 +37,7 @@ public:
 private:
     enum class EQueryKind {
         None,
+        MigrateCreateCluster,
         MigrateAddFnx,
         MigrateCreateBalancer,
         MigrateBackfillFnx,
@@ -190,9 +191,9 @@ private:
         }
         QueryInFlight = true;
         if (!SchemaMigrated) {
-            CurrentQuery = EQueryKind::MigrateAddFnx;
-            YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: ALTER ADD COLUMN fnx");
-            SendDdl(MakeAlterAddFnxQuery(Cfg().GetClusterTablePath()));
+            CurrentQuery = EQueryKind::MigrateCreateCluster;
+            YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: CREATE TABLE Cluster");
+            SendDdl(MakeCreateClusterQuery(Cfg().GetClusterTablePath()));
         } else {
             CurrentQuery = EQueryKind::ListClusters;
             SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
@@ -229,13 +230,20 @@ private:
         QueryInFlight = false;
 
         switch (kind) {
-            case EQueryKind::MigrateAddFnx:
-                if (!success && IssuesLookLikeMissingTable(issues)) {
-                    YDB_LOG_ERROR_CTX(Ctx(), "Cluster table is missing, retry listing later",
+            case EQueryKind::MigrateCreateCluster:
+                if (!SchemaChangeOk(success, issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to CREATE TABLE Cluster",
                         {"record", record});
                     FailAndRetry();
                     return;
                 }
+                QueryInFlight = true;
+                CurrentQuery = EQueryKind::MigrateAddFnx;
+                YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: ALTER ADD COLUMN fnx");
+                SendDdl(MakeAlterAddFnxQuery(Cfg().GetClusterTablePath()));
+                return;
+
+            case EQueryKind::MigrateAddFnx:
                 if (!SchemaChangeOk(success, issues)) {
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to ALTER ADD COLUMN fnx",
                         {"record", record});

@@ -20,6 +20,7 @@ TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath);
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath);
 TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionTablePath);
+TString MakeCreateClusterQuery(TStringBuf clusterTablePath);
 TString MakeAlterAddFnxQuery(TStringBuf clusterTablePath);
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath);
 TString MakeBackfillFnxQuery(TStringBuf clusterTablePath);

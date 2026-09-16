@@ -124,6 +124,22 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
             )", TString(balancerTablePath).c_str(), TString(versionTablePath).c_str());
 }
 
+TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
+    return Sprintf(
+        R"(
+               --!syntax_v1
+               CREATE TABLE IF NOT EXISTS `%s` (
+                   name Utf8,
+                   balancer Utf8,
+                   local Bool,
+                   enabled Bool,
+                   weight Uint64,
+                   fnx Bool,
+                   PRIMARY KEY (name)
+               );
+            )", TString(clusterTablePath).c_str());
+}
+
 TString MakeAlterAddFnxQuery(TStringBuf clusterTablePath) {
     return Sprintf(
         R"(

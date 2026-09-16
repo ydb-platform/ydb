@@ -820,6 +820,36 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         return false;
     }
 
+    Y_UNIT_TEST(TestTrackerCreatesMissingClusterTable) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().MkDir("/Root/PQ", "Config");
+        server.PQClient().MkDir("/Root/PQ/Config", "V2");
+
+        for (size_t i = 0; i < 40; ++i) {
+            auto clusterTable = server.PQClient().TryRunYqlDataQuery(
+                "SELECT name, balancer, local, enabled, weight, fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+            if (clusterTable.Defined()) {
+                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+
+                server.PQClient().InitDCs();
+                server.WaitUntilHealthy();
+
+                TFancyGRpcWrapper wrapper(server.GrpcPort());
+                wrapper.WaitForExactClustersDataVersion(1);
+                DiscoverClustersResult result;
+                UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Cluster table was not created");
+    }
+
     Y_UNIT_TEST(TestTrackerMigratesOldClusterSchema) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");
@@ -1124,7 +1154,17 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.WaitUntilHealthy();
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Cluster`;");
-        UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+
+        for (size_t i = 0; i < 40; ++i) {
+            auto clusterTable = server.PQClient().TryRunYqlDataQuery(
+                "SELECT name, balancer, local, enabled, weight, fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+            if (clusterTable.Defined()) {
+                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Cluster table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestAllFnxClustersHiddenWithoutBalancer) {

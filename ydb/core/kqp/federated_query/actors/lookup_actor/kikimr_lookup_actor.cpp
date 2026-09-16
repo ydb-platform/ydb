@@ -228,7 +228,7 @@ namespace {
                 TRANSLATE(None, NONE);
                 TRANSLATE(Basic, NONE);
                 TRANSLATE(Full, BASIC);
-                TRANSLATE(Profile, FULL);
+                TRANSLATE(Profile, FULL); // TRACE logging will remap to `STATS_MODE_PROFILE` (see below)
 #undef TRANSLATE
             }
             if (auto token = LookupSource.GetToken(); !token.empty()) {

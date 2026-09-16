@@ -8,8 +8,9 @@
 namespace NKikimr::NSchemeShard {
 
 TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
-    if (const auto* uid = FindOperationByUid(operationParams.labels(), "uid")) {
-        return *uid;
+    const auto it = operationParams.labels().find("uid");
+    if (it != operationParams.labels().end()) {
+        return it->second;
     }
     return {};
 }

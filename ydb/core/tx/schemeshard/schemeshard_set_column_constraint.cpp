@@ -2,6 +2,7 @@
 #include "schemeshard_set_column_constraint.h"
 #include <util/string/split.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -285,7 +286,7 @@ void TSchemeShard::ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColu
 
     SetColumnConstraintOperationsByTime.erase(byTimeKey);
     if (info.Uid) {
-        SetColumnConstraintOperationsByUid.erase(info.Uid);
+        OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::SET_NOT_NULL, info.Uid});
     }
 
     TxIdToSetColumnConstraintOperations.erase(info.LockTxId);

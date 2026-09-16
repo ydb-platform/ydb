@@ -6086,7 +6086,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 state.OriginalOperationId = operationId;
                 state.AwaitingInitialRestore = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::AwaitingInitialRestore>();
                 if (state.Uid) {
-                    Self->SchemeOperationsByUid[{Ydb::TOperationId::RESTORE, state.Uid}] = operationId;
+                    Self->OperationsByUid[TOperationUidKey{Ydb::TOperationId::RESTORE, state.Uid}] = operationId;
                 }
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
@@ -6369,7 +6369,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     backupInfo->Uid = rowset.GetValueOrDefault<Schema::IncrementalBackups::Uid>();
                     backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::IncrementalBackups::OriginalDdl>();
                     if (backupInfo->Uid) {
-                        Self->SchemeOperationsByUid[{Ydb::TOperationId::INCREMENTAL_BACKUP, backupInfo->Uid}] = id;
+                        Self->OperationsByUid[TOperationUidKey{Ydb::TOperationId::INCREMENTAL_BACKUP, backupInfo->Uid}] = id;
                     }
 
                     Self->IncrementalBackups[id] = backupInfo;
@@ -6446,7 +6446,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     backupInfo->Uid = rowset.GetValueOrDefault<Schema::FullBackups::Uid>();
                     backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::FullBackups::OriginalDdl>();
                     if (backupInfo->Uid) {
-                        Self->SchemeOperationsByUid[{Ydb::TOperationId::FULL_BACKUP, backupInfo->Uid}] = id;
+                        Self->OperationsByUid[TOperationUidKey{Ydb::TOperationId::FULL_BACKUP, backupInfo->Uid}] = id;
                     }
 
                     Self->FullBackups[id] = backupInfo;

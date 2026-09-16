@@ -51,12 +51,7 @@ public:
         const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
         auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
             TOperationUidAdmission::EDuplicatePolicy::Reject,
-            [&](const auto& key) -> TMaybe<TOperationUidRecord> {
-                if (const auto* existing = FindOperationByUid(Self->SetColumnConstraintOperationsByUid, key.second)) {
-                    return TOperationUidRecord{ui64((*existing)->Id), {}, {}, {}};
-                }
-                return Nothing();
-            });
+            [&](const auto& key) { return Self->FindOperationByUid(key); });
         if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "SetColumnConstraint operation with uid '" << uid << "' already exists");

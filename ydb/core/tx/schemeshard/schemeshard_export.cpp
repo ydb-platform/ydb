@@ -5,6 +5,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/xrange.h>
 
@@ -186,13 +187,13 @@ void TSchemeShard::AddExport(const TExportInfo::TPtr& exportInfo) {
     Exports[exportInfo->Id] = exportInfo;
     ExportsByTime.emplace(exportInfo->StartTime, exportInfo->Id);
     if (exportInfo->Uid) {
-        ExportsByUid[exportInfo->Uid] = exportInfo;
+        OperationsByUid[TOperationUidKey{Ydb::TOperationId::EXPORT, exportInfo->Uid}] = exportInfo->Id;
     }
 }
 
 void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {
     if (exportInfo.Uid) {
-        ExportsByUid.erase(exportInfo.Uid);
+        OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::EXPORT, exportInfo.Uid});
     }
     ExportsByTime.erase(std::make_pair(exportInfo.StartTime, exportInfo.Id));
     Exports.erase(exportInfo.Id);

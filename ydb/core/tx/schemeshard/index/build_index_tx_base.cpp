@@ -8,6 +8,7 @@
 
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
@@ -409,8 +410,8 @@ void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildIn
     IndexBuildsByTime.emplace(buildInfo->StartTime, buildInfo->Id);
 
     if (buildInfo->Uid) {
-        Y_ASSERT(!IndexBuildsByUid.contains(buildInfo->Uid));
-        IndexBuildsByUid[buildInfo->Uid] = buildInfo;
+        Y_ASSERT(!OperationsByUid.contains({Ydb::TOperationId::BUILD_INDEX, buildInfo->Uid}));
+        OperationsByUid[TOperationUidKey{Ydb::TOperationId::BUILD_INDEX, buildInfo->Uid}] = ui64(buildInfo->Id);
     }
 }
 
@@ -420,8 +421,8 @@ void TSchemeShard::AddSetColumnConstraintOperation(const std::shared_ptr<TSetCol
     SetColumnConstraintOperationsByTime.emplace(operationInfo->StartTime, operationInfo->Id);
 
     if (operationInfo->Uid) {
-        Y_ASSERT(!SetColumnConstraintOperationsByUid.contains(operationInfo->Uid));
-        SetColumnConstraintOperationsByUid[operationInfo->Uid] = operationInfo;
+        Y_ASSERT(!OperationsByUid.contains({Ydb::TOperationId::SET_NOT_NULL, operationInfo->Uid}));
+        OperationsByUid[TOperationUidKey{Ydb::TOperationId::SET_NOT_NULL, operationInfo->Uid}] = ui64(operationInfo->Id);
     }
 }
 
@@ -434,7 +435,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.CreateBuildSequenceTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
-    Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
+    Self->OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::BUILD_INDEX, indexBuildInfo.Uid});
     Self->IndexBuildsByTime.erase(std::make_pair(indexBuildInfo.StartTime, indexBuildInfo.Id));
     Self->IndexBuilds.erase(indexBuildInfo.Id);
 }

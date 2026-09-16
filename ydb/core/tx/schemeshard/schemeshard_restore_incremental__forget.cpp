@@ -120,7 +120,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (incrementalRestore.Uid) {
-            Self->SchemeOperationsByUid.erase({Ydb::TOperationId::RESTORE, incrementalRestore.Uid});
+            Self->OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::RESTORE, incrementalRestore.Uid});
         }
         Self->CleanupIncrementalRestoreItems(restoreId, db,
             Self->IncrementalRestoreStates.FindPtr(restoreId));

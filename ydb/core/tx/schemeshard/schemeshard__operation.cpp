@@ -441,7 +441,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             key = TOperationUidKey{*kind, identity.GetUid()};
             admission = TOperationUidAdmission::Prepare(*key,
                 TOperationUidAdmission::EDuplicatePolicy::Replay,
-                [&](const auto& uid) { return Self->FindSchemeOperationByUid(uid); },
+                [&](const auto& uid) { return Self->FindOperationByUid(uid); },
                 [&](const auto& receipt) {
                     // Check ownership before comparing or exposing the request.
                     return CompareOperationUid(

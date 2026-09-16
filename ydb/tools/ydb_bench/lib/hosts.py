@@ -5,7 +5,9 @@ import json
 import secrets
 import socket
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -16,6 +18,10 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_bytes, a
 PROTOCOL = 1
 MAX_RESPONSE = 32 * 1024 * 1024
 MAX_HOSTS = 16
+
+
+class PeerUnavailable(BenchmarkError):
+    pass
 
 
 def cluster_request(record, operation, members=None):
@@ -120,7 +126,10 @@ def validate_endpoint(value):
 def allowed_post_path(path):
     parts = path.split('/')
     return path in ('/api/editor-config', '/api/validate', '/api/plan', '/api/drafts', '/api/runs') or (
-        len(parts) == 5 and parts[:3] == ['', 'api', 'runs'] and bool(parts[3]) and parts[4] == 'cancel'
+        len(parts) == 5
+        and parts[:3] == ['', 'api', 'runs']
+        and bool(parts[3])
+        and parts[4] in ('cancel', 'metrics-export')
     )
 
 
@@ -141,7 +150,7 @@ def open_peer(record, path, options=None):
     except HTTPError as error:
         response = error
     except (OSError, URLError) as error:
-        raise BenchmarkError(
+        raise PeerUnavailable(
             "host is unreachable"
             if options is None
             else "Host request failed; its outcome may be unknown. Check Runs on the selected host before retrying."
@@ -174,6 +183,79 @@ class HostDirectory:
         self.id = identity.read_text().strip()
         self.token = token.read_text().strip()
         self.records = json.loads(self.path.read_text()) if self.path.exists() else []
+        self.availability = {}
+        self.health_stop = threading.Event()
+        self.health_thread = None
+
+    def start(self):
+        if self.health_thread is None:
+            self.health_thread = threading.Thread(target=self._watch_health, daemon=True)
+            self.health_thread.start()
+
+    def close(self):
+        self.health_stop.set()
+        if self.health_thread:
+            self.health_thread.join(timeout=6)
+
+    @staticmethod
+    def _health_key(record):
+        return record['id'], record['endpoint'], record['token']
+
+    def _set_health(self, record, state, started):
+        with self.lock:
+            if not any(self._health_key(r) == self._health_key(record) for r in self.records):
+                return
+            previous = self.availability.get(self._health_key(record))
+            if previous is None or previous[1] <= started:
+                self.availability[self._health_key(record)] = state, started
+
+    def check_available(self, record):
+        with self.lock:
+            state = self.availability.get(self._health_key(record), ('checking', 0))[0]
+        if state == 'unavailable':
+            raise PeerUnavailable('host is unavailable; background checks will retry')
+
+    def open(self, host_id, path, options=None):
+        record = self.get(host_id)
+        self.check_available(record)
+        try:
+            return open_peer(record, path, options)
+        except PeerUnavailable:
+            self._set_health(record, 'unavailable', time.monotonic())
+            raise
+
+    def request(self, host_id, path, options=None):
+        record = self.get(host_id)
+        with self.open(host_id, path, options) as response:
+            try:
+                body = response.read(MAX_RESPONSE + 1)
+            except OSError as error:
+                self._set_health(record, 'unavailable', time.monotonic())
+                raise PeerUnavailable('host is unreachable') from error
+            if len(body) > MAX_RESPONSE:
+                raise BenchmarkError('peer metadata exceeds 32 MiB')
+            return response.status, response.headers.get('Content-Type', 'application/octet-stream'), body
+
+    def probe(self, record):
+        started = time.monotonic()
+        try:
+            status, _, body = request_peer(record, '/api/host-info')
+            identity = json.loads(body)
+            valid = status == 200 and identity.get('id') == record['id'] and identity.get('protocol') == PROTOCOL
+        except (BenchmarkError, OSError, ValueError, AttributeError):
+            valid = False
+        self._set_health(record, 'available' if valid else 'unavailable', started)
+
+    def _watch_health(self):
+        while not self.health_stop.is_set():
+            with self.lock:
+                records = [dict(r) for r in self.records]
+                keys = {self._health_key(r) for r in records}
+                self.availability = {k: v for k, v in self.availability.items() if k in keys}
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(self.probe, records))
+            if self.health_stop.wait(10):
+                break
 
     def authorized(self, header):
         return bool(not header or header.isascii()) and hmac.compare_digest(header or "", "Bearer " + self.token)
@@ -301,4 +383,7 @@ class HostDirectory:
 
     def list(self):
         with self.lock:
-            return [self.public(r) for r in self.records]
+            return [
+                dict(self.public(r), availability=self.availability.get(self._health_key(r), ('checking', 0))[0])
+                for r in self.records
+            ]

@@ -106,6 +106,7 @@ public:
             args.TypeEnv,
             args.HolderFactory,
             args.InputDesc, vectorIndexLevelsCache))
+        , LookupTablePath(StreamLookupWorker ? TString(StreamLookupWorker->GetTablePath()) : TString())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
@@ -144,8 +145,8 @@ public:
     }
 
     void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats , bool last, const NYql::NDq::TDqMeteringStats* mstats) override {
+        AddReadTraceStats(LookupActorSpan, *stats, TotalRetryAttempts);
         if (last) {
-            AddReadTraceStats(LookupActorSpan, *stats, StreamLookupWorker->GetTablePath(), ReadRowsCount, TotalRetryAttempts);
             NYql::NDqProto::TDqTableStats* tableStats = nullptr;
             for (auto& table : *stats->MutableTables()) {
                 if (table.GetTablePath() == StreamLookupWorker->GetTablePath()) {
@@ -486,6 +487,7 @@ private:
 
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         if (LookupActorSpan) {
+            AddReadTraceAttributes(LookupActorSpan, LookupTablePath, ReadRowsCount, TotalRetryAttempts);
             LookupActorSpan.End();
         }
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
@@ -1437,6 +1439,7 @@ private:
 
         ShardReadTrace.Finish(LookupActorSpan);
         if (LookupActorSpan) {
+            AddReadTraceAttributes(LookupActorSpan, LookupTablePath, ReadRowsCount, TotalRetryAttempts);
             LookupActorSpan.EndError(issues.ToOneLineString());
         }
 
@@ -1482,6 +1485,7 @@ private:
     const TString Database;
     std::unique_ptr<TKqpStreamLockWorker> StreamLockWorker;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
+    const TString LookupTablePath;
 
     // stats
     ui64 ReadRowsCount = 0;

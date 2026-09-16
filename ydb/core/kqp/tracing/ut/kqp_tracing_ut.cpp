@@ -125,13 +125,14 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NKikimrKqp::TEvQueryResponse response;
         response.SetConsumedRu(1);
         response.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-        NKqp::AddWorkerQueryResultAttributes(query, {"SELECT", "SELECT"}, response, &stats);
+        NKqp::AddWorkerQueryResultAttributes(query, {"SELECT", "SELECT"}, response, &stats, true);
         query.EndOk();
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
         const auto* span = FindSpan(*uploader, "Query");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.cpu_us")->value().int_value(), 350);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.wait_us")->value().int_value(), 30);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.spilled_bytes")->value().int_value(), 3000);
+        UNIT_ASSERT(FindAttribute(*span, "ydb.spilled_bytes_available")->value().bool_value());
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.max_task_skew")->value().double_value(), 2.0);
         UNIT_ASSERT(FindAttribute(*span, "ydb.task_stats_incomplete")->value().bool_value());
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*span, "ydb.compile.cpu_us")->value().int_value(), 13);
@@ -156,7 +157,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         task.MutableExtra()->PackFrom(extra);
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Detailed,
             NWilson::TTraceId::NewTraceId(15, 4095), "Task: Compute", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-        NKqp::AddKqpTaskTraceAttributes(span, stats);
+        NKqp::AddKqpTaskTraceAttributes(span, stats, true);
         span.EndOk();
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* compute = FindSpan(*uploader, "Task: ");
@@ -173,7 +174,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         auto* uploader = RegisterUploader(runtime);
         for (const auto status : {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED}) {
             ClearUploader(*uploader);
-            NKqp::TExecutionTrace trace(15);
+            NKqp::TExecutionTrace trace(15, true);
             NKqpProto::TKqpPhyStage physical;
             physical.SetProgramAst("(Aggregate)");
             NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Basic,
@@ -235,7 +236,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
             ClearUploader(*uploader);
             NWilson::TSpan parent(TComponentTracingLevels::TQueryProcessor::Basic,
                 NWilson::TTraceId::NewTraceId(level, 4095), "Run tasks", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
-            NKqp::TExecutionTrace trace(level);
+            NKqp::TExecutionTrace trace(level, true);
             NKqpProto::TKqpPhyStage stage;
             const auto stageTraceId = trace.StartStage(parent, {0, 1}, stage, 1);
             UNIT_ASSERT_VALUES_EQUAL(bool(stageTraceId), level == 10);
@@ -275,7 +276,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NActors::TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
+        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed, true);
         NKqpProto::TKqpPhyStage stage;
         stage.SetProgramAst("(Aggregate)");
         NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
@@ -330,7 +331,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NKikimrKqp::TEvQueryResponse response;
         response.SetConsumedRu(1);
         response.SetYdbStatus(Ydb::StatusIds::ABORTED);
-        NKqp::AddWorkerQueryResultAttributes(query, {"SELECT", "SELECT"}, response, &queryStats);
+        NKqp::AddWorkerQueryResultAttributes(query, {"SELECT", "SELECT"}, response, &queryStats, true);
         query.EndError("task failed");
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* result = FindSpan(*uploader, "Query");
@@ -344,7 +345,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         auto* uploader = RegisterUploader(runtime);
         for (const ui8 level : {6, 10}) {
             ClearUploader(*uploader);
-            NKqp::TExecutionTrace diagnostics(level);
+            NKqp::TExecutionTrace diagnostics(level, true);
             NKqpProto::TKqpPhyStage stage;
             NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Basic,
                 NWilson::TTraceId::NewTraceId(level, 4095), "Execute plan", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
@@ -378,7 +379,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NActors::TTestActorRuntimeBase runtime;
         runtime.Initialize();
         auto* uploader = RegisterUploader(runtime);
-        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed);
+        NKqp::TExecutionTrace diagnostics(TComponentTracingLevels::TQueryProcessor::Detailed, true);
         NKqpProto::TKqpPhyStage stage;
         NYql::NDqProto::TDqTaskStats task;
         task.SetStageId(0);

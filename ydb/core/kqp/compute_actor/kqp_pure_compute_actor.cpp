@@ -243,7 +243,8 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
 
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
     if (last) {
-        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst);
+        AddKqpTaskTraceAttributes(ComputeActorSpan, *dst,
+            RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL);
     }
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);

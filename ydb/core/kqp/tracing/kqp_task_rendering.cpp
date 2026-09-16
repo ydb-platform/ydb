@@ -39,7 +39,8 @@ EOperation CallableOperation(TStringBuf name) {
     if (name.Contains("Join")) {
         return EOperation::Join;
     }
-    if (name.Contains("Combine") || name.Contains("Aggregate")) {
+    if (name.Contains("Combine") || name.Contains("Aggregate") || name == "Condense1"
+            || name == "BlockMergeFinalizeHashed" || name == "BlockMergeManyFinalizeHashed") {
         return EOperation::Aggregate;
     }
     if (name.Contains("Filter")) {
@@ -212,13 +213,7 @@ NWilson::TTraceId GetTaskTraceParent(const NYql::NDqProto::TDqTask& task, const 
     return stageTraceId;
 }
 
-void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
-        const TString& table, ui64 rows, ui64 retries) {
-    if (span) {
-        span.Attribute("db.collection.name", table);
-        span.Attribute("ydb.rows", static_cast<i64>(rows));
-        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
-    }
+void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats, ui64 retries) {
     if (span.GetTraceId() && retries) {
         NKqpProto::TKqpTaskExtraStats extra;
         stats.GetExtra().UnpackTo(&extra);
@@ -227,7 +222,16 @@ void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats
     }
 }
 
-void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats) {
+void AddReadTraceAttributes(NWilson::TSpan& span, const TString& table, ui64 rows, ui64 retries) {
+    if (span) {
+        span.Attribute("db.collection.name", table);
+        span.Attribute("ydb.rows", static_cast<i64>(rows));
+        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
+    }
+}
+
+void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats,
+        bool spilledBytesAvailable) {
     if (!span) {
         return;
     }
@@ -250,8 +254,10 @@ void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqCo
                 (task.GetFinishTimeMs() - task.GetStartTimeMs()) * 1000));
             span.Attribute("ydb.duration_measured", true);
         }
-        span.Attribute("ydb.spilled_bytes", static_cast<i64>(
-            task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes()));
+        span.Attribute("ydb.spilled_bytes_available", spilledBytesAvailable);
+        span.Attribute("ydb.spilled_bytes", static_cast<i64>(spilledBytesAvailable
+            ? task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes()
+            : 0));
         if (task.GetCreateTimeMs() && task.GetStartTimeMs() >= task.GetCreateTimeMs()) {
             span.Attribute("ydb.queue_delay_us", static_cast<i64>(
                 (task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000));

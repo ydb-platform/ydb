@@ -84,10 +84,12 @@ NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
 }
 
 void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
-        const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats) {
+        const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats,
+        bool spilledBytesAvailable) {
     if (span) {
         const auto& stats = workerStats ? *workerStats : response.GetResponse().GetQueryStats();
-        NPrivate::AddQueryExecutionAttributes(span, description, stats, response.GetConsumedRu(), response.GetYdbStatus());
+        NPrivate::AddQueryExecutionAttributes(span, description, stats, response.GetConsumedRu(), response.GetYdbStatus(),
+            spilledBytesAvailable);
         if (stats.HasCompilation()) {
             const auto& compilation = stats.GetCompilation();
             NPrivate::AddQueryCompilationAttributes(span, compilation.GetFromCache(), compilation.GetCpuTimeUs(), compilation.GetDurationUs());

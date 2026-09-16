@@ -52,8 +52,9 @@ void TBatchExecutionTrace::Export(NYql::NDqProto::TDqExecutionStats& stats) cons
     stats.MutableExtra()->PackFrom(extra);
 }
 
-TExecutionTrace::TExecutionTrace(ui8 verbosity)
-    : CollectDetails_(verbosity >= TComponentTracingLevels::TQueryProcessor::Detailed) {
+TExecutionTrace::TExecutionTrace(ui8 verbosity, bool spilledBytesAvailable)
+    : CollectDetails_(verbosity >= TComponentTracingLevels::TQueryProcessor::Detailed)
+    , SpilledBytesAvailable_(spilledBytesAvailable) {
 }
 
 NWilson::TTraceId TExecutionTrace::StartStage(const NWilson::TSpan& parent, std::pair<ui64, ui32> stageId,
@@ -160,7 +161,7 @@ void TExecutionTrace::AddTask(ui64 txIndex, ui64 taskCount,
     }
     RecordDetailedTask(summary, std::move(sample), status);
     if (summary.Reports == summary.TaskCount) {
-        FinishStage(summary, Ydb::StatusIds::SUCCESS);
+        FinishStage(summary, Ydb::StatusIds::SUCCESS, SpilledBytesAvailable_);
     }
 }
 
@@ -190,7 +191,7 @@ void TExecutionTrace::RecordDetailedTask(TStage& summary, TTask sample, Ydb::Sta
     }
 }
 
-void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status) {
+void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status, bool spilledBytesAvailable) {
     if (!stage.Span) {
         return;
     }
@@ -206,6 +207,7 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
             {"ydb.input_rows", static_cast<i64>(task.InputRows)},
             {"ydb.output_rows", static_cast<i64>(task.OutputRows)},
             {"ydb.wait_us", static_cast<i64>(task.WaitUs)},
+            {"ydb.spilled_bytes_available", spilledBytesAvailable},
             {"ydb.spilled_bytes", static_cast<i64>(task.SpilledBytes)},
             {"ydb.read_retries", static_cast<i64>(task.Retries)},
             {"ydb.failed", task.Failed},
@@ -227,6 +229,7 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
         {"ydb.input_rows", static_cast<i64>(stage.InputRows)},
         {"ydb.output_rows", static_cast<i64>(stage.OutputRows)},
         {"ydb.wait_us", static_cast<i64>(stage.WaitUs)},
+        {"ydb.spilled_bytes_available", spilledBytesAvailable},
         {"ydb.spilled_bytes", static_cast<i64>(stage.SpilledBytes)},
         {"ydb.task_duration_min_us", static_cast<i64>(stage.MinDurationUs)},
         {"ydb.task_duration_avg_us", static_cast<i64>(stage.Durations ? stage.SumDurationUs / stage.Durations : 0)},
@@ -258,12 +261,13 @@ void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionS
         maxSkew = std::max(maxSkew, skew);
         incomplete |= stage.Reports != stage.TaskCount || stage.FailedTasks;
         FinishStage(stage, status == Ydb::StatusIds::SUCCESS && stage.Reports != stage.TaskCount
-            ? Ydb::StatusIds::STATUS_CODE_UNSPECIFIED : status);
+            ? Ydb::StatusIds::STATUS_CODE_UNSPECIFIED : status, SpilledBytesAvailable_);
     }
     if (!span) {
         return;
     }
     span.Attribute("ydb.wait_us", static_cast<i64>(WaitUs_));
+    span.Attribute("ydb.spilled_bytes_available", SpilledBytesAvailable_);
     span.Attribute("ydb.spilled_bytes", static_cast<i64>(SpilledBytes_));
     span.Attribute("ydb.max_task_skew", maxSkew);
     span.Attribute("ydb.task_stats_incomplete", incomplete);

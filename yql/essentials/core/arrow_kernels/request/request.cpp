@@ -239,6 +239,13 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
     return Items_.size() - 1;
 }
 
+ui32 TKernelRequestBuilder::AddToString(const TTypeAnnotationNode* argType, const TTypeAnnotationNode* retType) {
+    const TGuard<TScopedAlloc> allocGuard(Alloc_);
+    const auto arg = MakeArg(argType);
+    Items_.emplace_back(Pb_.BlockFunc("ToString", MakeType(retType), {arg}));
+    return Items_.size() - 1;
+}
+
 TString TKernelRequestBuilder::Serialize() {
     const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto kernelTuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);

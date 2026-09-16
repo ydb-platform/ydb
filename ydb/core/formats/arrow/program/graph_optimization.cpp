@@ -424,6 +424,12 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         if (!proc->GetKernelLogic()) {
             return std::nullopt;
         }
+        if (const auto inputIdx = proc->GetKernelLogic()->GetOriginalAddressFromInput()) {
+            if (proc->GetInput().size() <= *inputIdx) {
+                return std::nullopt;
+            }
+            return GetOriginalAddress(GetProducerVerified(proc->GetInput()[*inputIdx].GetColumnId()));
+        }
         if (proc->GetKernelLogic()->GetClassName() == TGetJsonPath::GetClassNameStatic()) {
         } else if (proc->GetKernelLogic()->GetClassName() == TExistsJsonPath::GetClassNameStatic()) {
         } else {

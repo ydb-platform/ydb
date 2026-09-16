@@ -1216,7 +1216,7 @@ TStatus AnnotateOlapBinaryLogicOperator(const TExprNode::TPtr& node, TExprContex
 }
 
 bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* itemType, TExprContext& ctx) {
-    if (TKqpOlapApply::Match(node)) {
+    if (TKqpOlapApply::Match(node) || TKqpOlapUdf::Match(node)) {
         return true;
     } else if (TKqpOlapAnd::Match(node) || TKqpOlapOr::Match(node) || TKqpOlapXor::Match(node) || TKqpOlapNot::Match(node)) {
         bool res = true;
@@ -1482,6 +1482,24 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     node->SetTypeAnn(lambda->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOlapUdf(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpOlapUdf::idx_KernelName), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* outputType = node->Child(TKqpOlapUdf::idx_OutputType);
+    if (!EnsureType(*outputType, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(outputType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
     return TStatus::Ok;
 }
 
@@ -3453,6 +3471,7 @@ public:
         AddHandler({TKqpOlapFilter::CallableName()}, Hndl(&AnnotateOlapFilter));
         AddHandler({TKqpOlapApplyColumnArg::CallableName()}, Hndl(&AnnotateOlapApplyColumnArg));
         AddHandler({TKqpOlapApply::CallableName()}, Hndl(&AnnotateOlapApply));
+        AddHandler({TKqpOlapUdf::CallableName()}, Hndl(&AnnotateOlapUdf));
         AddHandler({TKqpOlapAgg::CallableName()}, Hndl(&AnnotateOlapAgg));
         AddHandler({TKqpOlapDistinct::CallableName()}, Hndl(&AnnotateOlapDistinct));
         AddHandler({TKqpOlapExtractMembers::CallableName()}, Hndl(&AnnotateOlapExtractMembers));

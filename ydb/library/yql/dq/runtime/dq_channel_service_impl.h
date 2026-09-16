@@ -789,6 +789,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
     ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
     const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
+    const TDuration MaxReconciliationTimeout = TDuration::Seconds(60);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;
     std::atomic<ui64> FailureReconciliation = 0;

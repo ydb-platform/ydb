@@ -2318,10 +2318,11 @@ TString TNodeState::GetReconciliationLog() {
 void TNodeState::DoReconciliation(char logSymbol) {
     AddReconciliationLog(logSymbol);
     if (ReconciliationCount >= Limits.ReconciliationCount) {
-        if (Queue.empty() && LastPeerActivity.load() > ReconSent.load()) {
-            // Nothing to deliver and the peer heard from since the last discovery: alive, only slow to
-            // answer. Giving up would fail its channels to this node for nothing, the probe goes on
-            // instead, its timeout doubling as before.
+        // nothing to deliver: a push during a reconciliation waits in its descriptor, not in the queue
+        if (Queue.empty() && WaitersQueueSize.load() == 0 && LastPeerActivity.load() > ReconSent.load()) {
+            // The peer heard from since the last discovery is alive, only slow to answer. Giving up
+            // would fail its channels to this node for nothing, the probe goes on instead, its timeout
+            // doubling as before up to MaxReconciliationTimeout.
             AddReconciliationLog('K');
             LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << " unanswered by a peer which is heard from, G="
                 << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
@@ -2339,7 +2340,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
     }
     ReconciliationCount++;
 
-    auto reconciliationTimeout = ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20));
+    auto reconciliationTimeout = std::min(ReconciliationTimeout * (1ULL << std::min<ui64>(ReconciliationCount - 1, 20)), MaxReconciliationTimeout);
     auto reconciliationLog = GetReconciliationLog();
     if (ReconciliationCount > 1) {
         LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << ", G=" << GenMajor << '.' << GenMinor

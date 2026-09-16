@@ -818,6 +818,7 @@ void THive::BuildLocalConfig() {
 }
 
 void THive::BuildCurrentConfig() {
+    const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     TabletLimit.clear();
@@ -885,6 +886,23 @@ void THive::BuildCurrentConfig() {
         ObjectDistributions.Disable();
     }
     BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
+
+    const bool lockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    if (previousLockedTabletsSendMetrics != lockedTabletsSendMetrics) {
+        for (auto& [_, node] : Nodes) {
+            for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                if (tablet->IsDeleting()) {
+                    continue;
+                }
+                // Change accounting without stopping external execution or changing the lock.
+                if (lockedTabletsSendMetrics) {
+                    tablet->BecomeUnknown(&node);
+                } else {
+                    tablet->BecomeStopped();
+                }
+            }
+        }
+    }
 }
 
 void THive::Cleanup() {
@@ -3050,6 +3068,16 @@ void THive::UpdateTotalResourceValues(
     TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(std::get<NMetrics::EResource::CPU>(TotalRawResourceValues));
     TabletCounters->Simple()[NHive::COUNTER_METRICS_MEMORY].Set(std::get<NMetrics::EResource::Memory>(TotalRawResourceValues));
     TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(std::get<NMetrics::EResource::Network>(TotalRawResourceValues));
+}
+
+void THive::ResetTotalResourceValues() {
+    TotalRawResourceValues = {};
+    TotalNormalizedResourceValues = {};
+
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_COUNTER].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_MEMORY].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(0);
 }
 
 void THive::RemoveSubActor(ISubActor* subActor) {

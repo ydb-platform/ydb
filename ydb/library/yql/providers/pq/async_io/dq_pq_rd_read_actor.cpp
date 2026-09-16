@@ -914,10 +914,10 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
         for (const auto& partitioningParams : readParams.GetPartitioningParams()) {
             ui32 partitionsCount = partitioningParams.GetTopicPartitionsCount();
             ui64 currentPartition = partitioningParams.GetEachTopicPartitionGroupId();
-            do {
+            while (currentPartition < partitionsCount) {
                 res.emplace_back(currentPartition); // 0-based in topic API
                 currentPartition += partitioningParams.GetDqPartitionsCount();
-            } while (currentPartition < partitionsCount);
+            }
         }
     }
     return res;
@@ -1610,6 +1610,11 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     sourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
     sourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
     TVector<NPq::NProto::TDqReadTaskParams> readParams = ReadParams;
+    for (auto& readParam : readParams) {
+        for (auto& partitionParam : *readParam.MutablePartitioningParams()) {
+            partitionParam.SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+        }
+    }
     auto actor = new TDqPqRdReadActor(
         InputIndex,
         IngressStats.Level,

@@ -97,6 +97,7 @@ struct TStageInfoMeta {
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
     std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
+    bool IsCsWriteAffinity = false;
     std::unordered_map<TString, TActorId> ControlPlaneActors;
 
     TVector<bool> SkipNullKeys;
@@ -201,6 +202,21 @@ struct TStageInfoMeta {
         return TableKind == ETableKind::Olap;
     }
 
+    bool IsCsWriteAffinitySink() const {
+        return IsCsWriteAffinity;
+    }
+
+    TVector<ui64> GetColumnShardIds() const {
+        YQL_ENSURE(ColumnTableInfoPtr != nullptr,
+            "GetColumnShardIds: ColumnTableInfoPtr is nullptr");
+        const auto& sharding = ColumnTableInfoPtr->Description.GetSharding();
+        TVector<ui64> shardIds;
+        shardIds.reserve(sharding.ColumnShardsSize());
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            shardIds.push_back(sharding.GetColumnShards(si));
+        }
+        return shardIds;
+    }
 };
 
 // things which are common for all tasks in the graph.
@@ -360,10 +376,10 @@ struct TTaskMeta {
         bool IsPrimary = false;
     };
 
-    struct TShardReadInfo {
+    struct TShardInfo {
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
-        ui64 ShardId = 0; // in case of persistent scans
+        ui64 ShardId = 0;
     };
 
     struct TKqpOlapProgram {
@@ -385,7 +401,8 @@ struct TTaskMeta {
     };
 
     TReadInfo ReadInfo;
-    TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
+    TMaybe<TVector<TShardInfo>> Reads; // if not set -> no reads
+    TMaybe<TVector<TShardInfo>> Writes; // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 

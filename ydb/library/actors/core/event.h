@@ -142,6 +142,7 @@ namespace NActors {
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
             FlagFailFastWhenDisconnected = 1 << 7,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC checksums
         };
         using TEventFlags = ui32;
 

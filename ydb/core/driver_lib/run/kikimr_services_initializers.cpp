@@ -108,7 +108,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
@@ -1019,7 +1019,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         appData->BatchPoolId));
     }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (Config.HasNbsConfig() && Config.GetNbsConfig().GetEnabled()) {
         auto ssProxy = NYdb::NBS::NStorage::CreateSSProxy(Config.GetNbsConfig().GetNbsStorageConfig());
 
@@ -1244,7 +1244,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #endif
@@ -3268,7 +3268,7 @@ void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup*
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 
 TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig)
      : IKikimrServicesInitializer(runConfig) {

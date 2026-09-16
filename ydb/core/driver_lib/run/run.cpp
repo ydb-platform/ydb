@@ -159,7 +159,7 @@
 #include <ydb/services/view/grpc_service.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
-#include <ydb/services/nbs/classic_grpc_service.h>
+#include <ydb/services/nbs/classic_grpc_service_factory.h>
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -1314,7 +1314,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
             if (auto blockStore = NYdb::NBS::NBlockStore::GetNbsFrontendBlockStore()) {
-                server.AddService(new NGRpcService::TClassicNbsGrpcService(
+                server.AddService(NGRpcService::CreateClassicNbsGrpcService(
                     std::move(blockStore)));
             }
 #endif

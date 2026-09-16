@@ -154,7 +154,7 @@ namespace NYql {
                 return false;
             }
 
-            const auto toBytesExpr = TExprBase(toBytes.Ref().Child(0));
+            const auto toBytesExpr = TExprBase(toBytes.Ref().ChildPtr(0));
             auto typeAnnotation = toBytesExpr.Ref().GetTypeAnn();
             if (!typeAnnotation) {
                 ctx.Err << "expected non empty type annotation for ToBytes";
@@ -221,7 +221,7 @@ namespace NYql {
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
         auto expr = maybeExpr.Cast();                                                               \
         auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
-        const auto child = expression.Ptr()->Child(0);                                              \
+        const auto child = expression.Ptr()->ChildPtr(0);                                              \
         if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
             return false;                                                                           \
         }                                                                                           \
@@ -460,8 +460,8 @@ namespace NYql {
             }
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
             proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
-            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), ctx, depth + 1)
-                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), ctx, depth + 1);
+            return SerializeExpression(TExprBase(predicate.Ref().ChildPtr(0)), proto->mutable_left_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(predicate.Ref().ChildPtr(1)), proto->mutable_right_value(), ctx, depth + 1);
         }
 
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {

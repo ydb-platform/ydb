@@ -1851,11 +1851,16 @@ public:
     // Returns the cached HNSW index for the given local table id, or nullptr.
     // A missing index is reconstructed asynchronously by the read path.
     std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
-            const Ydb::Table::VectorIndexSettings& settings) const {
+            const Ydb::Table::VectorIndexSettings& settings, bool useCachedHnswParameters) const {
         auto it = HnswIndexCache.find(localTid);
         if (it != HnswIndexCache.end() && it->second.Index
                 && it->second.VectorColumnTag == vectorColumnTag
-                && NDataShard::AreHnswIndexSettingsCompatible(it->second.Settings, settings)) {
+                && (NDataShard::AreHnswIndexSettingsCompatible(it->second.Settings, settings)
+                    // Full-table auto-detect queries omit HNSW tuning; use the graph's settings.
+                    || (useCachedHnswParameters
+                        && it->second.Settings.metric() == settings.metric()
+                        && it->second.Settings.vector_type() == settings.vector_type()
+                        && it->second.Settings.vector_dimension() == settings.vector_dimension()))) {
             return it->second.Index;
         }
         return nullptr;

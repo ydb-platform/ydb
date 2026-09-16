@@ -256,6 +256,7 @@ struct TShortTableInfo {
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
         KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
+        ShardRange = tableInfo->Range;
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -306,12 +307,30 @@ struct TShortTableInfo {
         return result;
     }
 
+    bool CoversFullShard(const TTableRange& range) const {
+        if (range.Point) {
+            return false;
+        }
+        if (range.IsFullRange(KeyColumnCount)) {
+            return true;
+        }
+        if (!ShardRange) {
+            return false;
+        }
+        const auto shardRange = ShardRange->ToTableRange();
+        return CompareBorders<false, false>(range.From, shardRange.From,
+                   range.InclusiveFrom, shardRange.InclusiveFrom, KeyColumnTypes) <= 0
+            && CompareBorders<true, true>(range.To, shardRange.To,
+                   range.InclusiveTo, shardRange.InclusiveTo, KeyColumnTypes) >= 0;
+    }
+
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
+    std::optional<TSerializedTableRange> ShardRange;
 };
 
 // Scans the full local table partition for (primary key, vector column) pairs.
@@ -1348,9 +1367,10 @@ private:
     {
         // NMSLIB bounds graph traversal by efSearch even when k is the full
         // index size, so post-filtering candidates cannot correctly serve a
-        // restricted prefix/range. Use the ordinary range iterator instead.
+        // restricted prefix/range. A range covering the entire local shard is
+        // safe: a distributed full scan is clipped to each shard's key bounds.
         if (State.IsHeadRead && State.VectorTopK && State.VectorTopK->HnswIndex
-                && tableRange.IsFullRange(TableInfo.KeyColumnTypes.size())) {
+                && TableInfo.CoversFullShard(tableRange)) {
             auto results = SearchHnswDistinct(tableRange);
             return MaterializeHnswResults(results, txc);
         }
@@ -2654,12 +2674,20 @@ public:
             // construct it asynchronously; this read continues by brute force.
             const ui32 localTid = TableInfo.LocalTid;
             const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
+            const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0
+                && !topK.GetSettings().has_hnsw_connectivity()
+                && !topK.GetSettings().has_hnsw_construction_candidates()
+                && !topK.GetSettings().has_hnsw_search_candidates();
+            auto hnswSettings = topK.GetSettings();
+            if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
+                NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());
+            }
             // A head-built graph cannot provide candidates that existed only
             // at an older MVCC version. Snapshot reads therefore stay on the
             // exact table iterator path.
             if (state.IsHeadRead) {
                 if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
-                        topK.GetSettings())) {
+                        hnswSettings, useCachedHnswParameters)) {
                     Self->RegisterHnswCacheLookup(localTid, true);
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                         Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
@@ -2672,9 +2700,9 @@ public:
             if (!topState->HnswIndex
                     && state.IsHeadRead
                     && Self->GetHnswCacheMemoryLimit() != 0
-                    && topK.GetSettings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
-                        topK.GetSettings())) {
+                        hnswSettings)) {
                 // Compatibility/restart path: eager construction only runs at
                 // index finalization, so an index created before deployment or
                 // lost on tablet restart must be reconstructed on demand.
@@ -2682,20 +2710,20 @@ public:
                 ui64 reservedBytes = 0;
                 std::shared_ptr<void> memoryReservation;
                 auto vectors = ScanVectorColumnForHnsw(
-                    txc, TableInfo, vectorColumnTag, topK.GetSettings(),
+                    txc, TableInfo, vectorColumnTag, hnswSettings,
                     *Self, memoryReservation, reservedBytes, pageFault);
                 if (pageFault) {
                     Self->RegisterHnswScanPageFault(localTid);
                 } else if (!memoryReservation) {
                     Self->DisableHnswIndexBuild(localTid);
                 } else if (vectors.empty()
-                        || vectors.size() < GetHnswMinRows(topK.GetSettings())) {
+                        || vectors.size() < GetHnswMinRows(hnswSettings)) {
                     Self->DisableHnswIndexBuild(localTid);
                 } else {
                     const ui64 rowCount = vectors.size();
                     auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
                         vectorColumnTag, rowCount,
-                        topK.GetSettings(), std::move(vectors),
+                        hnswSettings, std::move(vectors),
                         std::move(memoryReservation), reservedBytes);
                     const TActorId actorId = ctx.Register(
                         actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);

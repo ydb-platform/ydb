@@ -2612,15 +2612,22 @@ void TDqChannelService::FreeNodeSession(ui32 nodeId, NActors::TActorId sender) {
 }
 
 // A buffer bound to the session keeps it alive after this, but nothing reaches it any more: the peer
-// talks to the session which takes its place. Whatever is still bound is failed.
+// talks to the session which takes its place. Whatever is still bound is failed, see HandlePoison.
 void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr<TNodeState>>::iterator it, const TString& reason) {
     auto& nodeState = it->second;
     {
         std::lock_guard lock(nodeState->Mutex);
-        nodeState->FailDescriptors(reason);
+        nodeState->DropReason = reason;
     }
     ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
     NodeStates.erase(it);
+}
+
+// The receiving half of the session is the actor's alone, HandleChannelData writes it without Mutex: the
+// descriptors are failed by the actor itself, behind whatever its mailbox still holds
+void TNodeState::HandlePoison() {
+    std::lock_guard lock(Mutex);
+    FailDescriptors(DropReason ? DropReason : "Node session poisoned with the channel still open");
 }
 
 // unbinded stubs
@@ -3138,11 +3145,13 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
 
 void TNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
     LOGA_D(NodeState->LogPrefix << "PASS AWAY");
+    NodeState->HandlePoison();
     PassAway();
 }
 
 void TDebugNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
     LOGA_D(NodeState->LogPrefix << "PASS AWAY/DEBUG");
+    NodeState->HandlePoison();
     PassAway();
 }
 

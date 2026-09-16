@@ -709,6 +709,7 @@ public:
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void HandlePoison();
     void HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev);
     void HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev);
@@ -804,6 +805,7 @@ public:
     std::atomic<TInstant> LastPeerActivity;
     TInstant LastCleanup;
     std::atomic<bool> Terminating = false;
+    TString DropReason; // set by the service which drops the session, for the descriptors it still has
     std::atomic<bool> ResendAsked = false;
     std::deque<char> ReconciliationLog;
     TChannelInfo LastLostInfo = TChannelInfo(0,  NActors::TActorId{}, NActors::TActorId{});

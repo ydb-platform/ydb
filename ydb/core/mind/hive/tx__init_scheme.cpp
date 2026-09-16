@@ -90,9 +90,29 @@ public:
                 }
                 break;
             }
+            case 19: {
+                // In schema versions before 20 we did not persist confirmed storage versions
+                // So we treat them as unset, which by default means everything is confirmed
+                // This is important for version changes 19 -> 20 -> 19 -> 20,
+                // so that we do not treat updates made during downgrade as unconfirmed
+                NIceDb::TNiceDb db(txc.DB);
+                auto tabletRowset = db.Table<Schema::Tablet>().Range().Select<Schema::Tablet::ID, Schema::Tablet::ConfirmedStorageVersion>();
+                if (!tabletRowset.IsReady()) {
+                    return false;
+                }
+                while (!tabletRowset.EndOfSet()) {
+                    if (tabletRowset.HaveValue<Schema::Tablet::ConfirmedStorageVersion>()) {
+                        db.Table<Schema::Tablet>().Key(tabletRowset.GetKey()).UpdateToNull<Schema::Tablet::ConfirmedStorageVersion>();
+                    }
+                    if (!tabletRowset.Next()) {
+                        return false;
+                    }
+                }
+
+            }
             }
         }
-        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(19));
+        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(20));
         return true;
     }
 

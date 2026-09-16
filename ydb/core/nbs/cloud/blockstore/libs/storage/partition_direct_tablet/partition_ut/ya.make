@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    bsc_proxy_ut.cpp
     part_database_ut.cpp
     partition_direct_ut.cpp
 )

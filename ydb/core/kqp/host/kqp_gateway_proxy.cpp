@@ -3589,6 +3589,7 @@ public:
 
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            analyzeTx.SetSampleRate(settings.SampleRate);
             for (const auto& column: settings.Columns) {
                 *analyzeTx.AddColumns() = column;
             }

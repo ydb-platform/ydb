@@ -207,6 +207,7 @@ class RemoteWorkloadLifecycle:
                 telemetry[host]["artifacts"],
                 "telemetry/" + sample_id,
                 destination,
+                telemetry=True,
             )
             hosts[host] = json.loads((destination / "cpu-samples.json").read_text())
             artifacts[host] = destination.relative_to(directory).as_posix()

@@ -3761,10 +3761,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
+    void TestImportTable(bool enableDataShardDirectPartImport, const TString& extraSchemeFields = "",
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
         TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData(R"(
+        auto data = GenerateTestData(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -3775,6 +3776,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             primary_key: "key"
         )", {{"a", 1}});
+        data.Scheme = TStringBuilder() << data.Scheme.Data << extraSchemeFields;
 
         Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
@@ -3785,10 +3787,38 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 destination_path: "/MyRoot/Table"
               }
             }
-        )", EnableDataShardDirectPartImport);
+        )", enableDataShardDirectPartImport, expectedStatus);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.Data[0].YsonStr, content);
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+            NKqp::CompareYson(data.Data[0].YsonStr, content);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(TableWithUnknownFields, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport, R"(
+            future_table_setting: 100
+            future_settings {
+                enabled: true
+            }
+            partitioning_settings {
+                min_partitions_count: 1
+                future_partitioning_setting: true
+            }
+            999: 100
+        )");
+    }
+
+    Y_UNIT_TEST_FLAG(TableWithInvalidKnownField, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport, R"(
+            partitioning_settings {
+                min_partitions_count: "invalid"
+            }
+        )", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {
@@ -6597,13 +6627,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
-        const TTableWithChangefeeds& table)
+        const TTableWithChangefeeds& table,
+        const TString& extraTopicFields)
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
         checkers.reserve(table.ChangefeedCount);
         bool isPartitioningAvailable = table.PkType == "UINT32" || table.PkType == "UINT64";
         for (ui64 i = 1; i <= table.ChangefeedCount; ++i) {
-            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
+            auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
+            auto& topic = genChangefeed.Changefeed.second.Changefeed.Topic;
+            topic = TStringBuilder() << topic.Data << extraTopicFields;
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }
@@ -6675,7 +6708,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport) {
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
+            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -6691,7 +6725,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             allCheckers.push_back(checkerTable);
 
             if (table.ChangefeedCount > 0) {
-                auto checkersChangefeeds = GenChangefeeds(bucketContent, table);
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table, extraTopicFields);
                 allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
             }
         }
@@ -6714,10 +6748,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 }
             )", port, table.TableName.c_str(), table.TableName.c_str()));
             env.TestWaitNotification(runtime, txId);
+            TestGetImport(runtime, txId, "/MyRoot", expectedStatus);
         }
 
-        for (const auto& checker : allCheckers) {
-            checker(runtime);
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            for (const auto& checker : allCheckers) {
+                checker(runtime);
+            }
         }
     }
 
@@ -6734,6 +6771,26 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     // of the source table is Uint32 or Uint64
     Y_UNIT_TEST_FLAG(ChangefeedWithPartitioning, EnableDataShardDirectPartImport) {
         TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme, "UINT32");
+    }
+
+    Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
+            future_write_limit: 1048576
+            future_settings {
+                enabled: true
+            }
+            consumers {
+                name: "future_consumer"
+                future_consumer_setting: true
+            }
+            999: 100
+        )");
+    }
+
+    Y_UNIT_TEST_FLAG(ChangefeedTopicWithInvalidKnownField, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
+            partition_write_speed_messages_per_second: "invalid"
+        )", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedsWithPartitioning, EnableDataShardDirectPartImport) {

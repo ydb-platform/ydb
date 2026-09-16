@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
-#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
+#include <ydb/core/kqp/ut/olap/helpers/test_case.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -11499,8 +11499,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    bool HasFallbackIssue(const NYdb::NIssue::TIssues& issues) {
+        for (const auto& issue : issues) {
+            if (issue.GetSeverity() == NYdb::NIssue::ESeverity::Info &&
+                issue.GetMessage().find("Compilation with the new RBO failed") != std::string::npos)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void TestFallbackToYql(bool fallbackToYqlEnabled, const std::vector<std::string>& queries,
-                           const std::vector<std::pair<ui32, ui32>>& expectedCompileCounters, const std::vector<bool>& expectedResult) {
+                           const std::vector<std::pair<ui32, ui32>>& expectedCompileCounters, const std::vector<bool>& expectedResult,
+                           NQuery::EExecMode execMode) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackToYqlEnabled);
@@ -11514,9 +11526,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result =
-                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(execMode))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), expectedResult[i], result.GetIssues().ToString());
+
+            const bool expectedFallbackIssue = fallbackToYqlEnabled && expectedCompileCounters[i].second == 1;
+            UNIT_ASSERT_VALUES_EQUAL_C(HasFallbackIssue(result.GetIssues()), expectedFallbackIssue,
+                                       result.GetIssues().ToString());
+
             intermediateResult.first += expectedCompileCounters[i].first;
             intermediateResult.second += expectedCompileCounters[i].second;
             UNIT_ASSERT_VALUES_EQUAL(GetNewRBOCompileCounters(kikimr), intermediateResult);
@@ -11558,14 +11575,28 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // All queries should succeded because fallback to yql is enabled.
         const std::vector<bool> expectedResult{true, true, true};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
-                          expectedResult);
+                          expectedResult, NQuery::EExecMode::Explain);
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabled) {
         // First 2 queries should fail because fallback to yql is disabled.
         const std::vector<bool> expectedResult{false, true, false};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
-                          expectedResult);
+                          expectedResult, NQuery::EExecMode::Explain);
+    }
+
+    Y_UNIT_TEST(FallbackToYqlEnabledExecute) {
+        // All queries should succeded because fallback to yql is enabled.
+        const std::vector<bool> expectedResult{true, true, true};
+        TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
+                          expectedResult, NQuery::EExecMode::Execute);
+    }
+
+    Y_UNIT_TEST(FallbackToYqlDisabledExecute) {
+        // First 2 queries should fail because fallback to yql is disabled.
+        const std::vector<bool> expectedResult{false, true, false};
+        TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
+                          expectedResult, NQuery::EExecMode::Execute);
     }
 
 

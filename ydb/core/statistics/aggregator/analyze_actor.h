@@ -15,6 +15,8 @@
 
 namespace NKikimr::NStat {
 
+TVector<ui64> SelectAnalyzeSample(TVector<ui64> tablets, double rate, ui64 seed);
+
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
     static constexpr ui64 MaxStatisticSize = 8ull << 20;
@@ -29,6 +31,7 @@ public:
         bool CollectPrimaryKeyHistogram = false;
         ui32 HistogramOversampleFactor = 8;
         ui64 HistogramMaxStateBytes = 4u << 20;
+        double SampleRate = 1.0;
     };
 
 private:
@@ -148,6 +151,9 @@ private:
         TSerializedTableRange Range;
     };
     TVector<TScanWorkItem> RangeWorkItems;
+
+    bool SamplingRequested() const { return Config.SampleRate < 1.0; }
+    ui64 EligibleUnits = 0;
 
     ui32 PartitionedScanCount() const {
         return ScanMode == EScanMode::PerRange

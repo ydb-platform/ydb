@@ -33,8 +33,7 @@ TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::T
 
 TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildAffectedIndexTables(
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, const THashSet<TStringBuf>* filter,
-    const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,
+    const THashSet<TStringBuf>* filter, const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,
         NYql::TPositionHandle, NYql::TExprContext&)>& tableBuilder);
 
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);

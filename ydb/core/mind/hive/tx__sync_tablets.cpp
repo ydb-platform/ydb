@@ -46,13 +46,13 @@ public:
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo& node = Self->GetNode(Local.NodeId());
-        THashSet<std::pair<TTabletId, TFollowerId>> tabletsToStop;
+        THashSet<std::pair<TTabletId, TFollowerId>> tabletsToRestart;
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToBoot;
         const bool isLockedTabletsSendMetrics = Self->CurrentConfig.GetLockedTabletsSendMetrics();
         for (const auto& t : node.Tablets) {
             for (TTabletInfo* tablet : t.second) {
                 if (!(isLockedTabletsSendMetrics && tablet->IsLeader() && tablet->AsLeader().IsLockedToActor())) {
-                    tabletsToStop.insert(tablet->GetFullTabletId());
+                    tabletsToRestart.insert(tablet->GetFullTabletId());
                 }
             }
         }
@@ -64,7 +64,7 @@ public:
                     {"nodeId", Local.NodeId()},
                     {"state", state},
                     {"tabletId", tabletId});
-                tabletsToStop.erase(tabletId);
+                tabletsToRestart.erase(tabletId);
             } else {
                 YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet not allowed on this node",
                     {"logPrefix", GetLogPrefix()},
@@ -78,10 +78,22 @@ public:
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
                         .Update<Schema::Tablet::LeaderNode>(0);
+                    tablet->AsLeader().RestoreLockedTabletMetrics();
                 } else {
-                    db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId())
+                    db.Table<Schema::TabletFollowerTablet>().Key(tabletId)
                         .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                 }
+            }
+        };
+        // Local may still report an old instance after the tablet has been locked.
+        // Stop that instance at the reporting Local without changing the lock or
+        // the external owner's metrics accounting.
+        const auto stopTabletIfNeeded = [this](TTabletInfo* tablet, NKikimrLocal::EBootMode bootMode) {
+            if (tablet->IsLeader()
+                    && tablet->AsLeader().IsLockedToActor()
+                    && bootMode == NKikimrLocal::BOOT_MODE_LEADER)
+            {
+                tablet->SendStopTablet(Local, SideEffects);
             }
         };
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetInbootTablets()) {
@@ -96,13 +108,14 @@ public:
                     foundTablet(tablet, "starting");
                     continue;
                 }
+                stopTabletIfNeeded(tablet, ti.GetBootMode());
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
                 YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown starting tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Local.NodeId()},
                     {"tabletId", tabletId});
-                tabletsToStop.erase(tabletId);
+                tabletsToRestart.erase(tabletId);
             }
         }
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetOnlineTablets()) {
@@ -126,26 +139,28 @@ public:
                     }
                     foundTablet(tablet, "running");
                     continue;
-                } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
+                }
+                if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId)); // the tablet is running somewhere else
                     YDB_LOG_TRACE("THive::TTxSyncTablets::Execute stopped running tablet on wrong node",
                         {"logPrefix", GetLogPrefix()},
                         {"nodeId", Local.NodeId()},
                         {"tabletId", tabletId});
                     tabletsToBoot.insert(tabletId);
-                    tabletsToStop.erase(tabletId);
+                    tabletsToRestart.erase(tabletId);
                     continue;
                 }
+                stopTabletIfNeeded(tablet, ti.GetBootMode());
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
                 YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown running tablet",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Local.NodeId()},
                     {"tabletId", tabletId});
-                tabletsToStop.erase(tabletId);
+                tabletsToRestart.erase(tabletId);
             }
         }
-        for (std::pair<TTabletId, TFollowerId> tabletId : tabletsToStop) {
+        for (std::pair<TTabletId, TFollowerId> tabletId : tabletsToRestart) {
             Self->Execute(Self->CreateRestartTablet(tabletId), ctx);
         }
         for (std::pair<TTabletId, TFollowerId> tabletId : tabletsToBoot) {

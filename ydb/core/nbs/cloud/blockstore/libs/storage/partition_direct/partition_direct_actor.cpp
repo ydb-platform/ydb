@@ -1,7 +1,11 @@
 #include "partition_direct_actor.h"
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
 #include "direct_block_group_impl.h"
 #include "fast_path_service.h"
+=======
+#include "bsc_proxy.h"
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
@@ -29,6 +33,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/system/fs.h>
@@ -124,19 +129,9 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         CleanupActor = {};
     }
 
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
-    if (AddHostInFlight) {
-        NTabletPipe::CloseAndForgetClient(
-            SelfId(),
-            AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
-    if (RemoveHostInFlight) {
-        NTabletPipe::CloseAndForgetClient(
-            SelfId(),
-            RemoveHostInFlight->BSPipeClient);
-        RemoveHostInFlight.reset();
-    }
+    StopBscProxy(ctx);
+    AddHostInFlight.reset();
+    RemoveHostInFlight.reset();
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -348,15 +343,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void TPartitionActor::CreateBSControllerPipeClient(
-    const NActors::TActorContext& ctx)
-{
-    BSControllerPipeClient = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-}
-
 void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
     CreateBSControllerPipeClient(ctx);
 
     auto request = std::make_unique<
@@ -367,6 +356,9 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
     // TODO: fill with tablet id
     request->Record.SetTabletId(TabletID());
+=======
+    auto request = MakeAllocateDDiskBlockGroupRequest();
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 
     const ui64 regionsCount = GetRegionCount(
         VolumeConfig.GetPartitions(0).GetBlockCount(),
@@ -382,7 +374,7 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+    SendToBsc(ctx, THolder<IEventBase>(request.release()));
 }
 
 void TPartitionActor::Start(
@@ -634,6 +626,7 @@ void TPartitionActor::HandleInitialAllocationResult(
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
     }
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
 
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
 }
@@ -714,6 +707,8 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumPersistentBuffers(numDDisks);
 
     NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+=======
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -801,6 +796,66 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 
 ///////////////////////////////////////////////////////////////////////////////
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
+=======
+void TPartitionActor::SendToBsc(
+    const TActorContext& ctx,
+    THolder<IEventBase> request,
+    ui64 cookie)
+{
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
+    if (!BscProxy) {
+        BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
+    }
+    ctx.Send(BscProxy, new TBscProxy::TEvSend(std::move(request)), 0, cookie);
+}
+
+void TPartitionActor::StopBscProxy(const TActorContext& ctx)
+{
+    if (!BscProxy) {
+        return;
+    }
+    ctx.Send(BscProxy, new TEvents::TEvPoisonPill());
+    BscProxy = {};
+}
+
+void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
+{
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
+        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
+        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+        HFunc(
+            TEvService::TEvGetLoadActorAdapterActorIdRequest,
+            HandleGetLoadActorAdapterActorId);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
+        default:
+            if (!HandleDefaultEvents(ev, SelfId())) {
+                LOG_ERROR(
+                    TActivationContext::AsActorContext(),
+                    NKikimrServices::NBS_PARTITION,
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
+            }
+            break;
+    }
+}
+
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 STFUNC(TPartitionActor::StateWork)
 {
     LOG_DEBUG(

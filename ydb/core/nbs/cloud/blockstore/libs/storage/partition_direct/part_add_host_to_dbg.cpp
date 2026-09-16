@@ -354,7 +354,6 @@ void TPartitionActor::HandleAddHostAllocationResult(
     // the new host takes the position after the last entry.
     const auto newHostIndex =
         static_cast<THostIndex>(dbgConnections.ConnectionsSize());
-    NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
     if (auto error = AddConnection(
@@ -534,6 +533,7 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
     const TActorContext& ctx,
     size_t dbgId)
 {
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     // The request always carries a DBG's own index (QueryAddHost ->
     // RequestAddHost), so an out-of-range dbgId is a bug, not a bad request.
     const auto dbgCount = static_cast<size_t>(
@@ -543,6 +543,19 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         "AddHost for out-of-range dbgId=%lu (have %lu DBGs)",
         dbgId,
         dbgCount);
+=======
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip AddHost BSC send during delete dbgId=%lu",
+            LogTitle.GetWithTime().c_str(),
+            dbgId);
+        return;
+    }
+
+    Y_ABORT_UNLESS(AddHostInFlight.has_value());
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
 <<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     if (AddHostInFlight.has_value()) {
@@ -559,6 +572,7 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         DefaultVolumeDirectBlockGroupCount);
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     // Authoritative AddHost gate: reads the persisted connection count under
     // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
     // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
@@ -580,6 +594,8 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         return false;
     }
 =======
+=======
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
     // NumDDisks is the desired final state in live hosts (dead slots have no
     // resources in BSC), so a re-sent request is idempotent.
     const ui32 numDDisks = static_cast<ui32>(
@@ -600,8 +616,12 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
     define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_add_host_to_dbg.cpp
     NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
+=======
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_add_host_to_dbg.cpp
 }
 
 ////////////////////////////////////////////////////////////////////////////////

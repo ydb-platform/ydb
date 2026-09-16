@@ -24,6 +24,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/ptr.h>
+
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -50,7 +52,8 @@ private:
     TLogTitle LogTitle;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-    NActors::TActorId BSControllerPipeClient;
+
+    NActors::TActorId BscProxy;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
@@ -66,8 +69,11 @@ private:
 =======
         ui32 LiveHostCount = 0;
         ui32 DBGConnectionsConfigGeneration = 0;
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
 >>>>>>> ed0d0ddf015 (NBS-6784: Remove host from dbg (#46061)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
         NActors::TActorId BSPipeClient;
+=======
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
     };
 
     // At most one add-host runs at a time across the whole partition.
@@ -81,7 +87,6 @@ private:
         NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
         NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one remove-host runs at a time; mutually exclusive with
@@ -116,9 +121,32 @@ private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h
     void HandleHttpInfo(
         NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
         const NActors::TActorContext& ctx);
+=======
+    // SendData via the BSC proxy actor (created on first use).
+    void SendToBsc(
+        const NActors::TActorContext& ctx,
+        THolder<NActors::IEventBase> request,
+        ui64 cookie = 0);
+
+    // Poison the BSC proxy and drop the id. No-op if it was never created.
+    void StopBscProxy(const NActors::TActorContext& ctx);
+
+    // Common handlers in different states
+    void HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev);
+
+    void PassAway() override;
+
+    // The tablet's own monitoring page, reached via the standard tablet page's
+    // "App" link. The base class passes a null event to ask whether that link
+    // should appear - it always should.
+    bool OnRenderAppHtmlPage(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr ev,
+        const NActors::TActorContext& ctx) override;
+>>>>>>> e44405fda45 ([NBS-7661] Add BSC proxy actor (#53116)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(
@@ -140,8 +168,6 @@ private:
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const NActors::TActorContext& ctx);
-
-    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 

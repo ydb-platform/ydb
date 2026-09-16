@@ -221,7 +221,7 @@ namespace NYql {
     if (auto maybeExpr = expression.Maybe<Y_CAT(TCo, OpType)>()) {                                  \
         auto expr = maybeExpr.Cast();                                                               \
         auto* exprProto = proto->Y_CAT(mutable_, op_name)();                                        \
-        const auto child = expression.Ptr()->ChildPtr(0);                                              \
+        const auto child = expression.Ptr()->ChildPtr(0);                                           \
         if (!SerializeExpression(TExprBase(child), exprProto->mutable_operand(), ctx, depth + 1)) { \
             return false;                                                                           \
         }                                                                                           \

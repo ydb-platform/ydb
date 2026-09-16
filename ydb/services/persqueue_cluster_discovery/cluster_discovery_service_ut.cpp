@@ -33,8 +33,11 @@ struct TFancyGRpcWrapper {
         Stub_ = Ydb::PersQueue::V1::ClusterDiscoveryService::NewStub(Channel_);
     }
 
-    auto PerformRpc(const DiscoverClustersRequest& request, DiscoverClustersResult& result) {
+    auto PerformRpc(const DiscoverClustersRequest& request, DiscoverClustersResult& result, const TString& authority = {}) {
         grpc::ClientContext context;
+        if (!authority.empty()) {
+            context.set_authority(authority.c_str());
+        }
         DiscoverClustersResponse response;
 
         const auto status = Stub_->DiscoverClusters(&context, request, &response);
@@ -451,6 +454,100 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             UNIT_ASSERT(*event->ClustersListUpdateTimestamp > TInstant::Zero());
 
             UNIT_ASSERT_STRINGS_EQUAL(event->ClustersList->Clusters.front().Name, "dc1");
+        }
+    }
+
+
+    Y_UNIT_TEST(TestBaselineReturnsAllClusters) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tfancy_datacenter");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        {
+            auto& actorSystem = server.ActorSystem();
+            const TActorId sender = actorSystem.AllocateEdgeActor();
+            actorSystem.Send(new IEventHandle(
+                NPQ::NClusterTracker::MakeClusterTrackerID(),
+                sender,
+                new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe()));
+            TAutoPtr<IEventHandle> handle;
+            const auto event = actorSystem.GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>(handle);
+            UNIT_ASSERT(event->ClustersList);
+            UNIT_ASSERT_VALUES_EQUAL(event->ClustersList->Clusters.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(event->ClustersList->Version, 1);
+
+            const auto& dc1 = event->ClustersList->Clusters[0];
+            UNIT_ASSERT_STRINGS_EQUAL(dc1.Name, "dc1");
+            UNIT_ASSERT_STRINGS_EQUAL(dc1.Datacenter, "dc1");
+            UNIT_ASSERT_STRINGS_EQUAL(dc1.Balancer, "localhost");
+            UNIT_ASSERT(dc1.IsEnabled);
+            UNIT_ASSERT(dc1.IsLocal);
+            UNIT_ASSERT_VALUES_EQUAL(dc1.Weight, 1000);
+
+            const auto& dc2 = event->ClustersList->Clusters[1];
+            UNIT_ASSERT_STRINGS_EQUAL(dc2.Name, "dc2");
+            UNIT_ASSERT_STRINGS_EQUAL(dc2.Datacenter, "dc2");
+            UNIT_ASSERT_STRINGS_EQUAL(dc2.Balancer, "dc2.logbroker.yandex.net");
+            UNIT_ASSERT(dc2.IsEnabled);
+            UNIT_ASSERT(!dc2.IsLocal);
+            UNIT_ASSERT_VALUES_EQUAL(dc2.Weight, 1000);
+        }
+
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        wrapper.WaitForExactClustersDataVersion(1);
+
+        ClusterInfo c1Info;
+        c1Info.set_name("dc1");
+        c1Info.set_endpoint("localhost");
+        c1Info.set_available(true);
+
+        ClusterInfo c2Info;
+        c2Info.set_name("dc2");
+        c2Info.set_endpoint("dc2.logbroker.yandex.net");
+        c2Info.set_available(true);
+
+        CheckReadDiscoveryHandlers(wrapper, c1Info, c2Info, 1);
+        CheckWriteDiscoveryHandlers(wrapper, c1Info, c2Info, 1);
+
+        {
+            DiscoverClustersRequest request;
+            request.add_read_sessions()->mutable_all_original();
+            DiscoverClustersResult defaultResult;
+            DiscoverClustersResult localhostResult;
+            DiscoverClustersResult unknownResult;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, defaultResult), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, localhostResult, "localhost"), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, unknownResult, "sas.logbroker.yandex.net"), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(defaultResult.read_sessions_clusters(0).clusters_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(localhostResult.read_sessions_clusters(0).clusters_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(unknownResult.read_sessions_clusters(0).clusters_size(), 2);
+        }
+
+        server.PQClient().UpdateDC("dc1", true, false);
+        wrapper.WaitForExactClustersDataVersion(2);
+
+        {
+            DiscoverClustersRequest request;
+            request.add_read_sessions()->mutable_all_original();
+            auto* writeSessionParams = request.add_write_sessions();
+            writeSessionParams->set_topic("topic12");
+            writeSessionParams->set_source_id("topic1.log");
+            writeSessionParams->set_partition_group(42);
+
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.write_sessions_clusters_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.read_sessions_clusters_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.write_sessions_clusters(0).clusters_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(result.read_sessions_clusters(0).clusters_size(), 2);
+            UNIT_ASSERT(!result.write_sessions_clusters(0).clusters(0).available() ||
+                        !result.write_sessions_clusters(0).clusters(1).available());
+            UNIT_ASSERT(result.read_sessions_clusters(0).clusters(0).available());
+            UNIT_ASSERT(result.read_sessions_clusters(0).clusters(1).available());
         }
     }
 

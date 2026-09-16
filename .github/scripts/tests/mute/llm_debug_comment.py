@@ -4,7 +4,7 @@ After a mute issue is created we post one markdown comment listing the latest
 failing/muted CI run for every test in the issue (job run URL, history
 dashboard, stderr / stdout / log / logsdir) and attach an AI review label so
 a downstream LLM workflow can pick the issue up. Compact LLM instructions are
-inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v4 -->``).
+inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v5 -->``).
 Allowed ``area/*`` labels come from ``.github/config/areas.json``.
 
 Best-effort: any YDB / GitHub failure is logged but never raised — issue
@@ -32,7 +32,7 @@ AI_REVIEW_LABEL = 'need_ai_review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
 _COMMENT_MARKER = '<!-- mute-llm-debug-links:v1 -->'
-MUTE_LLM_PROMPT_VERSION = 'v4'
+MUTE_LLM_PROMPT_VERSION = 'v5'
 _PROMPT_MARKER = f'<!-- mute-llm-prompt:{MUTE_LLM_PROMPT_VERSION} -->'
 _AREAS_JSON = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'areas.json')
@@ -54,8 +54,8 @@ def _llm_instructions_text(areas: dict | None = None) -> str:
 Classify: TEST_ISSUE | YDB_ISSUE | TEST_INFRA_ISSUE
 - YDB_ISSUE: product bug under ydb/core, ydb/library, ydb/services, etc.
 - TEST_ISSUE: test logic, stale refs in helpers/workloads, missing waits. A fixture PR
-  that only exposed a latent bug in an older test → TEST_ISSUE; Responsible = that
-  test's real owner (product path or introducing-test author), not the fixture author.
+  that only exposed a latent bug in an older test → TEST_ISSUE (the older test, not
+  the fixture author).
 - TEST_INFRA_ISSUE: shared harness/runner/CI broken for many unrelated tests. One
   directory / one test pattern → usually TEST_ISSUE, not TEST_INFRA_ISSUE.
 
@@ -79,30 +79,26 @@ Forbidden: area/topic, TEAM:@ydb-platform/..., area/@ydb-platform/..., any label
 Pick first match:
   1) A human comment already named the cause (CI CPU/RAM, OOM, …) → follow it.
      Host/CI resources with no product bug → area/engineering.
-  2) YDB_ISSUE: find the product file that actually failed (stack / VERIFY path),
+  2) YDB_ISSUE: product file that actually failed (VERIFY / SIGSEGV stack),
      not the test file. Responsible = CODEOWNERS of that file (longest prefix),
      then owner_area_mapping.json + areas.json aliases.
-     Example: test lives in tests/stress/topic_balancing, crash is
-     ydb/core/persqueue/pqrb/read_balancer__balancing.cpp → area/topics,
-     not engineering.
-     Do not take ydb/core/kqp (compile actor / timeout / "query compilation")
-     as the failed file when the test is index / fulltext / vector and there
-     is no KQP crash or wrong-plan VERIFY. Use CODEOWNERS of the feature
-     (ydb/core/tx/datashard, ydb/core/tx/schemeshard/index). A real KQP
-     SIGSEGV / VERIFY still uses the KQP file.
+     Example: test in tests/stress/topic_balancing, crash in
+     ydb/core/persqueue/pqrb/read_balancer__balancing.cpp → area/topics.
+     Timeout / OOM / "query compilation" in a shared compile actor is not the
+     failed file unless VERIFY or SIGSEGV is in that file. Timeout-only: use
+     CODEOWNERS of the feature the test exercises.
   3) The introducing PR added this test/helper and it was wrong from day one
      (forgot a sibling test, immediately too heavy, flakes on /proc, …)
      → PR author's GitHub org team, then areas.json / gh_teams.
-  4) TEST_ISSUE in a shared harness used by many unrelated suites
-     → TESTOWNERS of that harness file, then areas.json.
+  4) TEST_ISSUE → TESTOWNERS of the broken test or helper (longest prefix),
+     then areas.json. Do not use these prefixes alone:
+       /ydb/tests/compatibility
+       /ydb/tests/stress
+     A more specific child wins (topic/, topic_kafka/, oltp_workload, …).
+     If the test sits only under a catch-all, use (2) or (3).
   5) Else area/engineering.
 
-TESTOWNERS is for mute Owner and for (4) only. Do not use these TESTOWNERS
-prefixes as Responsible by themselves:
-  /ydb/tests/compatibility
-  /ydb/tests/stress
-A more specific child wins (topic/, topic_kafka/, oltp_workload, …).
-If the test sits only under a catch-all, use (2) or (3).
+TESTOWNERS mute Owner in the issue body is not Responsible.
 
 Reply exactly:
 ## Analysis

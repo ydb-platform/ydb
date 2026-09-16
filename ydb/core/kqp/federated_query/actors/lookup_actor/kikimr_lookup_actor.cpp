@@ -193,33 +193,23 @@ namespace {
 
     public:
         TDqSourceKikimrLookupActor(
-            NActors::TActorId&& parentId,
-            ::NMonitoring::TDynamicCounterPtr taskCounters,
-            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
             NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-            const NKikimr::NMiniKQL::TStructType* keyType,
-            const NKikimr::NMiniKQL::TStructType* payloadType,
-            const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest,
-            bool isMultiMatches,
-            TCollectStatsLevel statsLevel)
-            : ParentId(std::move(parentId))
-            , Alloc(alloc)
-            , KeyTypeHelper(keyTypeHelper)
+            IDqAsyncIoFactory::TLookupSourceArguments&& args)
+            : ParentId(std::move(args.ParentId))
+            , Alloc(std::move(args.Alloc))
+            , KeyTypeHelper(std::move(args.KeyTypeHelper))
             , LookupSource(std::move(lookupSource))
-            , KeyType(keyType)
-            , PayloadType(payloadType)
-            , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
-            , HolderFactory(holderFactory)
+            , KeyType(args.KeyType)
+            , PayloadType(args.PayloadType)
+            , SelectResultType(MergeStructTypes(args.TypeEnv, args.KeyType, args.PayloadType))
+            , HolderFactory(args.HolderFactory)
             , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(maxKeysInRequest)
-            , IsMultiMatches(isMultiMatches)
+            , MaxKeysInRequest(args.MaxKeysInRequest)
+            , IsMultiMatches(args.IsMultiMatches)
             , SelectBody(MakeSelect())
             , SelectWithKeys(MakeSelectWithKeys())
         {
-            switch(statsLevel) {
+            switch(args.StatsLevel) {
                 // Shift priorities by one level (minimum level is Basic)
 #define TRANSLATE(DQ, PROTO) \
                 case TCollectStatsLevel::DQ: \
@@ -234,9 +224,9 @@ namespace {
             if (auto token = LookupSource.GetToken(); !token.empty()) {
                 Token.emplace(token);
             }
-            InitMonCounters(taskCounters);
+            InitMonCounters(args.TaskCounters);
             auto guard = Guard(*Alloc);
-            Pickle.emplace(/*stable=*/false, MakePickleType(typeEnv, keyType));
+            Pickle.emplace(/*stable=*/false, MakePickleType(args.TypeEnv, KeyType));
         }
 
         ~TDqSourceKikimrLookupActor() {
@@ -1041,35 +1031,11 @@ namespace {
     } // namespace
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
-        NActors::TActorId parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-        const NKikimr::NMiniKQL::TStructType* keyType,
-        const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const bool isMultiMatches,
-        TCollectStatsLevel statsLevel
-    )
+        IDqAsyncIoFactory::TLookupSourceArguments&& args)
     {
-        auto guard = Guard(*alloc);
-        const auto actor = new TDqSourceKikimrLookupActor(
-            std::move(parentId),
-            taskCounters,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSource),
-            keyType,
-            payloadType,
-            typeEnv,
-            holderFactory,
-            maxKeysInRequest,
-            isMultiMatches,
-            statsLevel
-        );
+        auto guard = Guard(*args.Alloc);
+        const auto actor = new TDqSourceKikimrLookupActor(std::move(lookupSource), std::move(args));
         return {actor, actor};
     }
 

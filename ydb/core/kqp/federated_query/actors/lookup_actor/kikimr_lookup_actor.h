@@ -7,18 +7,8 @@
 namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
-        NActors::TActorId parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-        const NKikimr::NMiniKQL::TStructType* keyType,
-        const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const bool isMultiMatches,
-        TCollectStatsLevel statsLevel
+        IDqAsyncIoFactory::TLookupSourceArguments&& args
     );
 
 } // namespace NYql::NDq

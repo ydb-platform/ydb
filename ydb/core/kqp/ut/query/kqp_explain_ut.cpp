@@ -7,6 +7,8 @@
 
 #include <util/folder/dirut.h>
 
+#include <functional>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -1179,6 +1181,93 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], updatesCount);
         UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 0);
         UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
+    }
+
+    Y_UNIT_TEST(UpsertWithReturningPlan) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `/Root/ReturningDst` (Key Uint64, Value String, PRIMARY KEY (Key));
+            CREATE TABLE `/Root/ReturningSrc` (Key Uint64, Value String, PRIMARY KEY (Key));
+        )").GetValueSync());
+
+        auto explain = [&](const TString& query) {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            Cerr << plan << Endl;
+            return plan;
+        };
+
+        auto plainPlan = explain(R"(
+            UPSERT INTO `/Root/ReturningDst` SELECT * FROM `/Root/ReturningSrc`;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "Sink"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "ReturningSink"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "ResultSet"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Name", "Upsert"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(plainPlan, "Node Type", "TableFullScan"), 1);
+
+        const auto& plainSimplified = plainPlan.GetMapSafe().at("SimplifiedPlan");
+        auto plainSimplifiedUpsert = FindPlanNodeByKv(plainSimplified, "Node Type", "Upsert");
+        UNIT_ASSERT(plainSimplifiedUpsert.IsDefined());
+        UNIT_ASSERT(plainSimplifiedUpsert.GetMapSafe().contains("Plans"));
+
+        auto returningPlanJson = explain(R"(
+            UPSERT INTO `/Root/ReturningDst` SELECT * FROM `/Root/ReturningSrc` RETURNING *;
+        )");
+
+        const auto& returningPlan = returningPlanJson.GetMapSafe().at("Plan");
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "Sink"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "ReturningSink"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Name", "Upsert"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(returningPlanJson, "Node Type", "TableFullScan"), 1);
+
+        // The plan must end with a clean ResultSet node whose direct child is the sink stage
+        // (instead of a combined "ResultSet-Sink" node and a stray empty CTE reference).
+        auto resultSet = FindPlanNodeByKv(returningPlan, "Node Type", "ResultSet");
+        UNIT_ASSERT(resultSet.IsDefined());
+        const auto& resultSetPlans = resultSet.GetMapSafe().at("Plans").GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(resultSetPlans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSetPlans[0].GetMapSafe().at("Node Type").GetStringSafe(), "ReturningSink");
+
+        bool hasEmptyNodeType = false;
+        bool hasCteName = false;
+        std::function<void(const NJson::TJsonValue&)> scan = [&](const NJson::TJsonValue& node) {
+            const auto& map = node.GetMapSafe();
+            if (map.contains("Node Type") && map.at("Node Type").GetStringSafe().empty()) {
+                hasEmptyNodeType = true;
+            }
+            if (map.contains("CTE Name")) {
+                hasCteName = true;
+            }
+            if (map.contains("Plans")) {
+                for (const auto& subplan : map.at("Plans").GetArraySafe()) {
+                    scan(subplan);
+                }
+            }
+        };
+        scan(returningPlan);
+        UNIT_ASSERT(!hasEmptyNodeType);
+        UNIT_ASSERT(!hasCteName);
+
+        // The simplified plan (operator tree) must keep the reads connected under the sink.
+        const auto& simplified = returningPlanJson.GetMapSafe().at("SimplifiedPlan");
+        auto simplifiedUpsert = FindPlanNodeByKv(simplified, "Node Type", "Upsert");
+        UNIT_ASSERT(simplifiedUpsert.IsDefined());
+        UNIT_ASSERT(simplifiedUpsert.GetMapSafe().contains("Plans"));
+
+        session.Close();
     }
 
     Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseStreamIndex) {

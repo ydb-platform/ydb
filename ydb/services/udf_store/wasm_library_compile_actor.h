@@ -44,6 +44,7 @@ private:
     TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
     size_t NextChunkWriteIndex_ = 0;
     TString ErrorMessage_;
+    TVector<TString> SourceChunks_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
     void ReplyError(const TString& message);

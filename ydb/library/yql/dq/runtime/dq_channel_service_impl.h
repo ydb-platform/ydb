@@ -315,8 +315,10 @@ public:
     void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
-    // drops everything spilled and loading, the blobs stay in the storage; must be called under FlowControlMutex
-    void DiscardSpilled();
+    // all under FlowControlMutex
+    void DropSpilledData();
+    void DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
     // a descriptor auto-created by an early finish from the peer. It is assigned only once (nullptr to a
@@ -376,7 +378,13 @@ public:
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
 
-    std::queue<ui32> SpilledChunkBytes;
+    // a chunk in the storage and not loading yet, by blob id from TailBlobId + 1
+    struct TSpilledChunk {
+        ui32 Bytes;
+        bool Control; // a checkpoint or a finish, wanted by the peer after an early finish as well
+        bool Dropped = false; // skipped by the reload, the blob stays in the storage
+    };
+    std::deque<TSpilledChunk> SpilledChunks;
     ui64 HeadBlobId = 0;
     ui64 TailBlobId = 0;
     std::queue<TLoadingInfo> LoadingQueue;

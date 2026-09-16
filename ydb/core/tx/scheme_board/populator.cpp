@@ -747,7 +747,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    bool CheckQuorum(const THashSet<TActorId>& ackedReplicas) const {
+    bool CheckQuorum(const THashSet<TActorId>& ackedPopulators) const {
         for (const auto& ringGroup : GroupInfo->RingGroups) {
             if (ShouldIgnoreInQuorum(ringGroup)) {
                 continue;
@@ -755,7 +755,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             ui32 acks = 0;
             for (const auto& ring : ringGroup.Rings) {
                 for (const auto& replica : ring.Replicas) {
-                    acks += ackedReplicas.contains(replica);
+                    const auto* populator = ReplicaToReplicaPopulator.FindPtr(replica);
+                    acks += populator && ackedPopulators.contains(*populator);
                 }
             }
             if (!IsMajorityReached(ringGroup, acks)) {
@@ -763,17 +764,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
         }
         return true;
-    }
-
-    void AckUpdate(TActorId recipient, ui64 cookie, const TPathId& pathId, ui64 version) {
-        YDB_LOG_NOTICE("Ack update",
-            {"selfId", SelfId()},
-            {"to", recipient},
-            {"cookie", cookie},
-            {"pathId", pathId},
-            {"version", version});
-        auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, version);
-        Send(recipient, std::move(ack), 0, cookie);
     }
 
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
@@ -810,9 +800,17 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            pathIt->second.insert(*ackedReplica);
+            pathIt->second.insert(ev->Sender);
             if (CheckQuorum(pathIt->second)) {
-                AckUpdate(it->second.AckTo, ev->Cookie, pathId, pathIt->first.second);
+                YDB_LOG_NOTICE("Ack update",
+                    {"selfId", SelfId()},
+                    {"to", it->second.AckTo},
+                    {"cookie", ev->Cookie},
+                    {"pathId", pathId},
+                    {"version", pathIt->first.second});
+
+                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
+                Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
                 auto eraseIt = pathIt;
                 ++pathIt;
@@ -871,33 +869,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
                 ReplicaToReplicaPopulatorBackMap.erase(it->second);
                 ReplicaToReplicaPopulator.erase(it++);
-            }
-        }
-
-        // Discard acknowledgements from replicas no longer in use and complete pending
-        // publications whose remaining acknowledgements satisfy the new configuration's quorum.
-        for (auto updateIt = UpdateAcks.begin(); updateIt != UpdateAcks.end(); ) {
-            auto& update = updateIt->second;
-            for (auto pathIt = update.PathAcks.begin(); pathIt != update.PathAcks.end(); ) {
-                auto& ackedReplicas = pathIt->second;
-                for (auto replicaIt = ackedReplicas.begin(); replicaIt != ackedReplicas.end(); ) {
-                    if (!neededReplicas.contains(*replicaIt)) {
-                        ackedReplicas.erase(replicaIt++);
-                    } else {
-                        ++replicaIt;
-                    }
-                }
-                if (CheckQuorum(ackedReplicas)) {
-                    AckUpdate(update.AckTo, updateIt->first, pathIt->first.first, pathIt->first.second);
-                    update.PathAcks.erase(pathIt++);
-                } else {
-                    ++pathIt;
-                }
-            }
-            if (update.PathAcks.empty()) {
-                UpdateAcks.erase(updateIt++);
-            } else {
-                ++updateIt;
             }
         }
 
@@ -1078,6 +1049,7 @@ private:
 
     struct TUpdateAckInfo {
         TActorId AckTo;
+        // ReplicaPopulator actor IDs identify the replica incarnations that acknowledged each publication.
         TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
     };
 

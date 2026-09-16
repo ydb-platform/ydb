@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/sys_view/show_create/formatters/create_table_formatter.h>
 
@@ -12,7 +13,9 @@ namespace {
 NSysView::TFormatResult FormatCreateTable(const NKikimrSchemeOp::TBackupTask& task) {
     const auto& pathDescription = task.GetTable();
     const auto& tableName = pathDescription.GetSelf().GetName();
-    const auto& fullPath = task.GetS3Settings().GetSourceTablePath();
+    const auto& fullPath = task.HasS3Settings()
+        ? task.GetS3Settings().GetSourceTablePath()
+        : task.GetFSSettings().GetSourceTablePath();
     Y_ENSURE(tableName && fullPath, "Missing original table path for SQL backup");
 
     NSysView::TCreateTableFormatter formatter;

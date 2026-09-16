@@ -281,6 +281,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
+    task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql && item.ParentIdx == Max<ui32>());
 
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
@@ -315,10 +316,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
-
-            if (exportInfo.EnableTableBackupAsSql && item.ParentIdx == Max<ui32>()) {
-                backupSettings.SetSourceTablePath(item.SourcePathName);
-            }
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
@@ -357,7 +354,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
-            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql);
+            if (task.GetEnableTableBackupAsSql()) {
+                backupSettings.SetSourceTablePath(item.SourcePathName);
+            }
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }
@@ -371,7 +370,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
-            
+
             // TODO: Parquet format support for FS will be added after public API approval
 
             if (const auto compression = exportSettings.compression()) {
@@ -380,7 +379,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
-            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql);
+            if (task.GetEnableTableBackupAsSql()) {
+                backupSettings.SetSourceTablePath(item.SourcePathName);
+            }
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }

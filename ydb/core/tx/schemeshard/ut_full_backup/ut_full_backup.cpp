@@ -723,8 +723,9 @@ Y_UNIT_TEST_SUITE(TBackupIdempotency) {
         limit->SetInFlightLimit(1);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         const ui64 originalId = ++txId;
-        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId](const auto& event) {
-            return event->Get()->TxId == originalId;
+        const auto schemeShard = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId, schemeShard](const auto& event) {
+            return event->GetRecipientRewrite() == schemeShard && event->Get()->TxId == originalId;
         });
         const auto admitted = Submit(runtime, originalId, "backup:capacity");
         UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
@@ -757,8 +758,9 @@ Y_UNIT_TEST_SUITE(TBackupIdempotency) {
         const auto collection = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
         const ui64 collectionPathId = collection.GetPathDescription().GetSelf().GetPathId();
         const ui64 originalId = ++txId;
-        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId](const auto& event) {
-            return event->Get()->TxId == originalId;
+        const auto schemeShard = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId, schemeShard](const auto& event) {
+            return event->GetRecipientRewrite() == schemeShard && event->Get()->TxId == originalId;
         });
         const auto admitted = Submit(runtime, originalId, "backup:failed");
         UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());

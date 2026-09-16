@@ -594,7 +594,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, kqpResult.Issues(), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
+                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
             Reply();
             return;
         }
@@ -603,6 +603,10 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
             // Disable compilation with new RBO.
             EnableNewRBO = false;
+            FallbackToYqlOptimizerIssue = NYql::TIssue(TStringBuilder()
+                                                       << "Compilation with the new RBO failed: "
+                                                       << kqpResult.Issues().ToOneLineString());
+            FallbackToYqlOptimizerIssue->SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
             RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
             return;
@@ -625,7 +629,7 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -681,6 +685,17 @@ private:
     }
 
 private:
+    NYql::TIssues CollectIssues(const NYql::TIssues& issues) const {
+        if (!FallbackToYqlOptimizerIssue) {
+            return issues;
+        }
+
+        NYql::TIssues result;
+        result.AddIssue(*FallbackToYqlOptimizerIssue);
+        result.AddIssues(issues);
+        return result;
+    }
+
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
         YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
@@ -751,6 +766,7 @@ private:
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
     bool EnableNewRBO;
+    TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;
 };

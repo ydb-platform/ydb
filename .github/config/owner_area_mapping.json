@@ -1,18 +1,14 @@
 {
-  "yql": "area/queryprocessor",
-  "postgres-compatibility": "area/queryprocessor",
   "qp": "area/queryprocessor",
   "topics": "area/topics",
   "cs": "area/cs",
   "datashard": "area/datashard",
   "docs": "area/docs",
-  "system-infra": "area/core",
   "core": "area/core",
   "fq": "area/fq",
   "blobstorage": "area/blobstorage",
   "appteam": "area/sdk",
   "ui-backend": "area/ui",
-  "duty": "area/engineering",
   "engineering": "area/engineering",
   "security": "area/security",
   "nbs": "area/nbs"

@@ -2308,6 +2308,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
                     TAutoPtr<NTable::TChange> change, THPTimer &bookkeepingTimer) {
     const bool isReadOnly = !(change->HasAny() || env.HasChanges());
     const TTxType txType = seat->TxType;
+    const bool isKeyedOperation = seat->Self->IsKeyedOperation();
 
     // Note: previously counted count (not size), but it requires an additional counter
     size_t touchedBlocks = env.GetStats().NewlyPinnedBytes + seat->MemoryTouched;
@@ -2924,7 +2925,11 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
     }
 
     if (ResourceMetrics) {
-        ResourceMetrics->CPU.Increment(bookkeepingTimeuS + execTimeuS, Time->Now());
+        const ui64 cpuTimeuS = bookkeepingTimeuS + execTimeuS;
+        const TInstant now = Time->Now();
+        ResourceMetrics->CPU.Increment(cpuTimeuS, now);
+        ResourceMetrics->CPUWithKeys.Increment(isKeyedOperation ? cpuTimeuS : 0, now);
+        ResourceMetrics->CPUWithoutKeys.Increment(isKeyedOperation ? 0 : cpuTimeuS, now);
         ResourceMetrics->TryUpdate(SelfCtx());
     }
 
@@ -3704,7 +3709,10 @@ void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {
     auto *msg = ev->Get();
 
     if (ResourceMetrics) {
-        ResourceMetrics->CPU.Increment(msg->ElapsedUs, Time->Now());
+        const TInstant now = Time->Now();
+        ResourceMetrics->CPU.Increment(msg->ElapsedUs, now);
+        ResourceMetrics->CPUWithKeys.Increment(0, now);
+        ResourceMetrics->CPUWithoutKeys.Increment(msg->ElapsedUs, now);
         ResourceMetrics->TryUpdate(ctx);
     }
 }

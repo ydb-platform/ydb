@@ -2898,6 +2898,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         switch (proto.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return EVectorType::Float16;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return EVectorType::BFloat16;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -2938,6 +2942,10 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
         switch (VectorType) {
         case EVectorType::Float:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        case EVectorType::Float16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        case EVectorType::BFloat16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
         case EVectorType::Uint8:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:

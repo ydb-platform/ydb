@@ -1505,7 +1505,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                             params.SourceShardCount = shardToTaskIdx.size();
                             params.SourceTableKeyColumnTypes = std::move(keyTypes);
                         } else if (enableShuffleElimination) {
-                            columnShardHashV1Params.SourceTableKeyColumnTypes = keyTypes;
                             inputStageInfo.Meta.HashParamsByOutput[outputIdx] = columnShardHashV1Params;
                         } else {
                             Y_ENSURE(false, "Unexpected ColumnShardHashV1 detected!");

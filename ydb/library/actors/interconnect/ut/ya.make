@@ -17,7 +17,6 @@ SRCS(
     interconnect_session_pool_mapping_ut.cpp
     interconnect_ut.cpp
     large.cpp
-    outgoing_stream_ut.cpp
     poller_actor_ut.cpp
     dynamic_proxy_ut.cpp
     sticking_ut.cpp
@@ -27,6 +26,14 @@ SRCS(
     v2_serialize_window_ut.cpp
     v2_session_ut.cpp
 )
+
+# RDMA tests use host libibverbs/libnl libraries that are not built with MSan,
+# so MSan cannot reliably track initialized memory across the library boundary.
+IF (SANITIZER_TYPE != "memory")
+    SRCS(
+        outgoing_stream_ut.cpp
+    )
+ENDIF()
 
 PEERDIR(
     ydb/library/actors/core

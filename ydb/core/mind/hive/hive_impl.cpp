@@ -558,7 +558,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     }
     sideEffects.Complete(DEPRECATED_CTX);
     if (!reassigns.empty()) {
-        StartReassignActor(std::move(reassigns));
+        ContinueInterruptedReassigns(std::move(reassigns));
     }
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");

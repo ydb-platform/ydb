@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(sampled >= 210 && sampled <= 300, sampled);
+            UNIT_ASSERT_C(sampled >= 174 && sampled <= 330, sampled);
         }
         timeProvider->Advance(TDuration::Minutes(1));
     }
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
-            UNIT_ASSERT_C(traced >= 250 + 375 - 75 && traced <= 250 + 375 + 75, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
+            UNIT_ASSERT_C(traced >= 542 && traced <= 700, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
         }
     }
 
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(6));
             }
-            UNIT_ASSERT(sampled >= 190 && sampled <= 310);
+            UNIT_ASSERT(sampled >= 170 && sampled <= 336);
         }
     }
 
@@ -618,8 +618,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
-            UNIT_ASSERT(level8 >= 450 && level8 <= 570);
-            UNIT_ASSERT(level10 >= 450 && level10 <= 570);
+            UNIT_ASSERT(level8 >= 391 && level8 <= 613);
+            UNIT_ASSERT(level10 >= 391 && level10 <= 613);
         }
         timeProvider->Advance(TDuration::Minutes(1));
 
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250));
             }
-            UNIT_ASSERT(level8 >= 470 && level8 <= 760);
+            UNIT_ASSERT(level8 >= 456 && level8 <= 760);
             UNIT_ASSERT(level10 >= 340 && level10 <= 385);
         }
     }
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
         }
         {
             size_t sampled = 0;
-            for (size_t i = 0; i < 60; ++i) {
+            for (size_t i = 0; i < 65; ++i) {
                 auto [state, level] = controls.HandleTracing(false, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {

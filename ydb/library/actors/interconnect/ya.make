@@ -62,6 +62,7 @@ SRCS(
     subscription_manager.h
     types.cpp
     types.h
+    v2_probes.cpp
     v2_event_serializer.cpp
     v2_event_serializer.h
     v2_io_buffers.h

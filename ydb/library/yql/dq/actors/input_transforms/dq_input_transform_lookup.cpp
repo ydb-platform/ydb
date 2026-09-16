@@ -227,7 +227,7 @@ private: //IDqComputeActorAsyncInput
             txId = taskParamsIt->second;
         }
 
-        switch(args.StatsLevel) {
+        switch (args.StatsLevel) {
             case TCollectStatsLevel::None:
             case TCollectStatsLevel::Basic:
                 TaskCounters = nullptr;
@@ -290,7 +290,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
-    TCollectStatsLevel StatsLevel;
+    const TCollectStatsLevel StatsLevel;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     ::NMonitoring::TDynamicCounterPtr TaskCountersRoot;
     std::optional<std::pair<TString, TString>> TaskCountersGroup;

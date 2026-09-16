@@ -93,7 +93,8 @@ namespace NMonitoring {
         SV1_00 = 0x0100,
         SV1_01 = 0x0101,
         SV1_02 = 0x0102,
-        SV1_03 = 0x0103
+        SV1_03 = 0x0103,
+        SV1_04 = 0x0104
     };
 
     IMetricEncoderPtr EncoderSpackV1(
@@ -112,6 +113,13 @@ namespace NMonitoring {
     );
 
     IMetricEncoderPtr EncoderSpackV13(
+        IOutputStream* out,
+        ETimePrecision timePrecision,
+        ECompression compression,
+        EMetricsMergingMode mergingMode = EMetricsMergingMode::DEFAULT
+    );
+
+    IMetricEncoderPtr EncoderSpackV14(
         IOutputStream* out,
         ETimePrecision timePrecision,
         ECompression compression,

@@ -1019,17 +1019,21 @@ message MetricsSettings {
      */
     enum MetricsLevel {
         /**
-         * The metrics level is not specified.
+         * The metrics level is not specified. Within an explicitly supplied
+         * MetricsSettings message, this means METRICS_LEVEL_DATABASE.
          */
         METRICS_LEVEL_UNSPECIFIED = 0;
 
         /**
-         * All metrics are disabled.
+         * All metrics are disabled. This level is not supported; use
+         * METRICS_LEVEL_DATABASE to disable detailed metrics only.
          */
         METRICS_LEVEL_DISABLED = 1;
 
         /**
          * Metrics are aggregated and reported for the entire database.
+         * Disables detailed metrics for the table even when they are enabled
+         * by the database-wide default.
          */
         METRICS_LEVEL_DATABASE = 2;
 
@@ -1048,6 +1052,9 @@ message MetricsSettings {
      * The level at which metrics are aggregated and reported.
      *
      * @note If this value is not set, METRICS_LEVEL_DATABASE is assumed.
+     * Omitting the entire MetricsSettings message on CreateTable inherits the
+     * database default. Omitting the metrics action on AlterTable leaves the
+     * setting unchanged; drop_metrics_settings restores inheritance.
      */
     MetricsLevel metrics_level = 1;
 }

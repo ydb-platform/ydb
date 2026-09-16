@@ -3,7 +3,9 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TTableDetailedMetricsSettings {
     enum EMetricsLevel {
+        // No table override: use the database default.
         MetricsLevelUnspecified = 0;
+        // Disable detailed metrics only; corresponds to public DATABASE.
         MetricsLevelDisabled = 1;
         MetricsLevelTable = 2;
         MetricsLevelPartition = 3;

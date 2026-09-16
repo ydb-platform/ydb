@@ -1225,6 +1225,11 @@
                 "ColumnId": 14,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "EnableTableBackupAsSql",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1244,7 +1249,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3339,6 +3345,11 @@
                 "ColumnId": 21,
                 "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "EnableTableBackupAsSql",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3365,7 +3376,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4827,6 +4839,11 @@
                 "ColumnId": 15,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "EnableTableBackupAsSql",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4847,7 +4864,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -278,7 +278,9 @@ protected:
 
 public:
     THnswIndexBuildUnit(TDataShard& self, TPipeline& pipeline)
-        : TBase(EExecutionUnitKind::BuildHnswIndex, self, pipeline)
+        // The posting-table scan can page fault. Let the pipeline commit the
+        // preceding AlterTable unit before entering this restartable unit.
+        : TBase(EExecutionUnitKind::BuildHnswIndex, self, pipeline, true)
     {
     }
 

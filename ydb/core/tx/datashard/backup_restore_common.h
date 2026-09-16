@@ -72,8 +72,9 @@ private:
     }
 
 public:
-    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(kind, false, self, pipeline)
+    TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline,
+            bool executionMightRestart = false)
+        : TExecutionUnit(kind, executionMightRestart, self, pipeline)
     {
     }
 

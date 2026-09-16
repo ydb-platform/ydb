@@ -11,6 +11,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1665,6 +1666,83 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[100]]");
     }
 
+    Y_UNIT_TEST(HnswBuildAfterAlterWithColdPages) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetUseRealThreads(false));
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto schemeQuery = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query,
+                    TExecSchemeQuerySettings().OperationTimeout(TDuration::Seconds(30))).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        schemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswColdPages` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        auto write = kikimr.RunCall([&] {
+            return ExecuteDataQuery(session, Q_(R"(
+                UPSERT INTO `/Root/HnswColdPages` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                    (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+            )"));
+        });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        WaitForCompaction(&kikimr.GetTestServer(), "/Root/HnswColdPages");
+        const auto sender = runtime->AllocateEdgeActor();
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/HnswColdPages");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        RebootTablet(*runtime, shards.front(), sender);
+
+        // Attach the same eager-build metadata as index finalization to an
+        // ALTER of a compacted, cold table. This deterministically exercises
+        // a page fault after AlterTable has forbidden transaction restarts.
+        ui64 buildTxId = 0;
+        ui64 pageRequests = 0;
+        ui64 buildResults = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable()) {
+                        auto* alter = tx.MutableAlterTable();
+                        alter->SetVectorIndexEmbeddingColumn("emb");
+                        alter->SetVectorIndexEmbeddingColumnId(2);
+                        auto* settings = alter->MutableVectorIndexKmeansTreeDescription()
+                            ->MutableSettings()->mutable_settings();
+                        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                        settings->set_vector_dimension(2);
+                        settings->set_hnsw_min_rows(1);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        buildTxId = record.GetTxId();
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == NSharedCache::TEvRequest::EventType && buildTxId) {
+                ++pageRequests;
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvAsyncJobComplete::EventType
+                    && buildTxId && ev->Cookie == buildTxId) {
+                ++buildResults;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        schemeQuery("ALTER TABLE `/Root/HnswColdPages` ADD COLUMN extra String;");
+        UNIT_ASSERT_C(buildTxId, "eager HNSW build was not requested");
+        UNIT_ASSERT_C(pageRequests > 0, "cold table did not require disk pages");
+        UNIT_ASSERT_VALUES_EQUAL(buildResults, 1u);
+    }
+
     Y_UNIT_TEST(HnswCacheLabeledCountersContainIndexPaths) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
@@ -1728,9 +1806,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 const auto& counters = *event->LabeledCounters;
                 TVector<TString> groupLabels;
                 StringSplitter(counters.GetGroup()).Split('/').Collect(&groupLabels);
-                if (groupLabels.size() == 4
-                        && groupLabels[1] == "%2FRoot%2FHnswCounters"
-                        && groupLabels[3] == "%2FRoot%2FHnswCounters%2Findex") {
+                if (groupLabels.size() == 2
+                        && groupLabels[0] == "%2FRoot%2FHnswCounters"
+                        && groupLabels[1] == "%2FRoot%2FHnswCounters%2Findex") {
                     ++counterEvents;
                     bool hasHits = false;
                     bool hasMisses = false;
@@ -1795,9 +1873,152 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         TVector<TString> labels;
         StringSplitter(counterGroup).Split('/').Collect(&labels);
-        UNIT_ASSERT_VALUES_EQUAL(labels.size(), 4u);
-        UNIT_ASSERT_C(labels[0].Contains(':'), "missing base-table path ID: " << counterGroup);
-        UNIT_ASSERT_C(labels[2].Contains(':'), "missing vector-index path ID: " << counterGroup);
+        UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(labels[0], "%2FRoot%2FHnswCounters");
+        UNIT_ASSERT_VALUES_EQUAL(labels[1], "%2FRoot%2FHnswCounters%2Findex");
+    }
+
+    Y_UNIT_TEST_TWIN(HnswFullRangeUsesCachedSettings, Parameterized) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswFullRange` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        const auto write = ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswFullRange`
+                ADD INDEX index GLOBAL USING vector_kmeans_tree ON (emb)
+                WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=50);
+        )"));
+
+        // Like the benchmark, search the posting table directly. Its query
+        // requests auto-detected dimensions and omits the graph's tuning.
+        const TString target = Parameterized
+            ? "DECLARE $q AS List<Float>; $target = Knn::ToBinaryStringFloat($q);"
+            : "$target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);";
+        const TString query = target + Q_(R"(
+            SELECT pk FROM `/Root/HnswFullRange/index/indexImplPostingTable`
+            ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;
+        )");
+        auto params = db.GetParamsBuilder();
+        if (Parameterized) {
+            params.AddParam("$q").BeginList()
+                .AddListItem().Float(1.0f)
+                .AddListItem().Float(0.0f)
+                .EndList().Build();
+        }
+        const auto values = params.Build();
+        const auto settings = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            const auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                values, settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3]]");
+            AssertTableReads(result, "/Root/HnswFullRange/index/indexImplPostingTable", 1);
+        }
+
+        // Hold a snapshot across a write so the current graph cannot answer it.
+        auto snapshot = session.ExecuteDataQuery(query,
+            TTxControl::BeginTx(TTxSettings::SnapshotRW()),
+            values, settings).ExtractValueSync();
+        UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
+        const auto tx = snapshot.GetTransaction();
+        UNIT_ASSERT(tx);
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        const auto update = ExecuteDataQuery(writer, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (3, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        snapshot = session.ExecuteDataQuery(query, TTxControl::Tx(*tx).CommitTx(),
+            values, settings).ExtractValueSync();
+        UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(snapshot.GetResultSet(0)), "[[3]]");
+        AssertTableReads(snapshot, "/Root/HnswFullRange/index/indexImplPostingTable", 3);
+    }
+
+    Y_UNIT_TEST(HnswFullRangeAcrossPartitions) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto create = session.ExecuteSchemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswPartitions` (
+                pk Uint64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            ) WITH (PARTITION_AT_KEYS = (10001));
+        )")).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        // Each partition exceeds the default threshold for lazy construction.
+        const auto write = ExecuteDataQuery(session, Q_(R"(
+            $rows = ListMap(ListFromRange(0ul, 20002ul), ($key) -> {
+                RETURN AsStruct($key AS pk,
+                    Untag(Knn::ToBinaryStringFloat([CAST($key AS Float), 1.0f]), "FloatVector") AS emb);
+            });
+            UPSERT INTO `/Root/HnswPartitions` SELECT * FROM AS_TABLE($rows);
+        )"));
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        WaitForCompaction(&kikimr.GetTestServer(), "/Root/HnswPartitions");
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(
+            NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_NOTICE);
+        auto read = [&](const TString& filter) {
+            const auto result = session.ExecuteDataQuery(
+                "$target = Knn::ToBinaryStringFloat([1.0f, 0.0f]); "
+                "SELECT pk FROM `/Root/HnswPartitions` " + filter
+                    + " ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;",
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        ui64 rowsRead = 0;
+        do {
+            const auto result = read("");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[20001u]]");
+            rowsRead = 0;
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    rowsRead += access.reads().rows();
+                }
+            }
+            if (rowsRead == 2) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        } while (TInstant::Now() < deadline);
+        UNIT_ASSERT_VALUES_EQUAL_C(rowsRead, 2, "full scan did not use both partition graphs");
+
+        // A genuinely restricted range must not lose the best in-range row
+        // merely because the graph's global top candidate lies outside it.
+        const auto filtered = read("WHERE pk < 5");
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(filtered.GetResultSet(0)), "[[4u]]");
+        AssertTableReads(filtered, "/Root/HnswPartitions", 5);
     }
 
     Y_UNIT_TEST(HnswCacheTracksLeaderWrites) {

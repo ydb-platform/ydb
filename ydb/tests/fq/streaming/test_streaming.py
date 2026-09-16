@@ -2002,6 +2002,7 @@ FROM `{table_name}`"""
                     )
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
+                  AND Unwrap(COALESCE(str1, ev)) IS DISTINCT FROM "DONE"
                 ;
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''

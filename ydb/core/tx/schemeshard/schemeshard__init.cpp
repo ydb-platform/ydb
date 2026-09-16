@@ -5604,6 +5604,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraint::OperationId>());
                     operationInfo->Id = operationId;
+                    operationInfo->Uid = rowset.GetValueOrDefault<Schema::SetColumnConstraint::Uid>();
 
                     operationInfo->TablePathId = TPathId(
                         rowset.GetValue<Schema::SetColumnConstraint::TableOwnerId>(),

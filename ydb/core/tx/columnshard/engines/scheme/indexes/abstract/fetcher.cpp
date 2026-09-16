@@ -116,8 +116,9 @@ TConclusionStatus TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetch
     return TConclusionStatus::Success();
 }
 
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::BuildDefaultFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-    const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const {
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::BuildDefaultFetchTask(
+    const THashSet<NRequest::TOriginalDataAddress>& dataAddresses, const std::shared_ptr<IIndexMeta>& selfPtr,
+    const std::shared_ptr<IStoragesManager>& storagesManager) const {
     return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 

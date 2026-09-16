@@ -31,4 +31,4 @@ struct TSettings {
     }
 };
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

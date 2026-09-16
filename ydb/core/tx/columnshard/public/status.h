@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/tx_columnshard.pb.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr {
@@ -41,4 +42,4 @@ inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResu
 }
 }   // namespace NColumnShard
 
-} // namespace NKikimr
+}   // namespace NKikimr

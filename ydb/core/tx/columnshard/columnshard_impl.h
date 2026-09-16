@@ -1,5 +1,4 @@
 #pragma once
-#include "public/settings.h"
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_private_events.h"
@@ -24,6 +23,7 @@
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "public/settings.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -160,8 +160,6 @@ extern bool gAllowLogBatchingDefaultValue;
 
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
-
-
 
 using ITransaction = NTabletFlatExecutor::ITransaction;
 

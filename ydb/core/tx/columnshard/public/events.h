@@ -171,4 +171,4 @@ inline TMessageSeqNo SeqNoFromProto(const NKikimrTxColumnShard::TSchemaSeqNo& pr
     return TMessageSeqNo(proto.GetGeneration(), proto.GetRound());
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

@@ -1,9 +1,9 @@
 #pragma once
 #include "abstract.h"
+#include "meta.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
-#include "meta.h"
 
 namespace NKikimr::NOlap::NIndexes {
 

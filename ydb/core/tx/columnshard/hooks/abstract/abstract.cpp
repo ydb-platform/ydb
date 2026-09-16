@@ -1,7 +1,7 @@
 #include "abstract.h"
 
-#include <ydb/core/tx/columnshard/public/settings.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/public/settings.h>
 
 namespace NKikimr::NYDBTest {
 

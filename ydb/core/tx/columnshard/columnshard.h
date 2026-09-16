@@ -1,9 +1,9 @@
 #pragma once
-#include "public/events.h"
 #include "blob.h"
 #include "defs.h"
 
 #include "common/snapshot.h"
+#include "public/events.h"
 
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -70,7 +70,7 @@ public:
                                 << ", Reverse: " << Reverse << ", ItemsLimit: " << ItemsLimit << ", ColumnIds: " << columns << " }";
     }
 };
-};
+};   // namespace TEvColumnShard
 
 IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info);
 

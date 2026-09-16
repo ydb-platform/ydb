@@ -38,9 +38,8 @@ const TMessage Message6 = {600, "value6"};
 
 class TFixture : public TPqIoTestFixture {
 public:
-    explicit TFixture(ui32 nodeCount = 1)
-        : TPqIoTestFixture(nodeCount)
-        , LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
+    TFixture()
+        : LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId1(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId2(CaSetup->Runtime->AllocateEdgeActor())
         , RowDispatcherId1(CaSetup->Runtime->AllocateEdgeActor())

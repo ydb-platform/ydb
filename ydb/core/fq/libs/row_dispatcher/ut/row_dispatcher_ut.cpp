@@ -211,9 +211,10 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
-    void ExpectStartSession(NActors::TActorId actorId) {
+    void ExpectStartSession(NActors::TActorId actorId, ui64 expectedGeneration = 1) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
     void ExpectPoisonPill(NActors::TActorId actorId) {
@@ -313,7 +314,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ExpectStartSessionAck(ReadActorId1, 2);
         const auto newSession = SharedSession ? oldSession : ExpectRegisterTopicSession();
         ExpectStopSession(oldSession);
-        ExpectStartSession(newSession);
+        ExpectStartSession(newSession, 2);
 
         ui64 notifications = 0;
         ui64 batches = 0;
@@ -354,7 +355,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1, 2);
         ExpectStartSessionAck(ReadActorId1, 2);
         ExpectStopSession(session);
-        ExpectStartSession(session);
+        ExpectStartSession(session, 2);
 
         TTopicSessionStatistic stat;
         stat.SessionKey = {Source1.GetReadGroup(), Source1.GetEndpoint(), Source1.GetDatabase(), Source1.GetTopicPath(), PartitionId0};
@@ -604,7 +605,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId3, generation);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId3, generation);
-        ExpectStartSession(topicSessionId);
+        ExpectStartSession(topicSessionId, generation);
         ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 2);
 
         MockNoSession(ReadActorId3, generation - 1); // Ignore NoSession with wrong generation.

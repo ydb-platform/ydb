@@ -1278,13 +1278,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
         {"sender", ev->Sender},
         {"readActorId", ev->Get()->ReadActorId},
         {"queryId", consumerInfoPtr->QueryId});
-    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == consumerInfoPtr->Partitions.end()
         || partitionIt->second.TopicSessionId != ev->Sender
         || consumerInfoPtr->Generation != ev->Cookie) {
         return;
     }
+    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     partitionIt->second.PendingGetNextBatch = false;
     consumerInfoPtr->Counters.MessageBatch++;
     consumerInfoPtr->EventsQueue.Send(ev->Release().Release(), it->second->Generation);

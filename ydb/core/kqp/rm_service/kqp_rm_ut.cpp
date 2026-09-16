@@ -242,6 +242,12 @@ public:
         return GetServiceCounters(Counters, "kqp")->GetCounter(name, true)->Val();
     }
 
+    // runs the periodic arena pass of the resource manager actor, which gives back a surplus the lock-free path
+    // left in place
+    void TickArenaAdjust() {
+        Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(2));
+    }
+
     // waits until the kqp queue of the resource broker holds the given memory
     void WaitForBrokerMemory(i64 memory) {
         auto q = Counters->GetSubgroup("queue", "queue_kqp_resource_manager");
@@ -435,6 +441,7 @@ public:
         UNIT_TEST(ArenaDoesNotChargePools);
         UNIT_TEST(ArenaGrowthCapLeavesRoomForRunningQueries);
         UNIT_TEST(ArenaMixesExternalMemoryAndUnits);
+        UNIT_TEST(ArenaAbsorbsChurn);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -494,6 +501,7 @@ public:
     void ArenaDoesNotChargePools();
     void ArenaGrowthCapLeavesRoomForRunningQueries();
     void ArenaMixesExternalMemoryAndUnits();
+    void ArenaAbsorbsChurn();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -1642,11 +1650,14 @@ void KqpRm::ArenaHysteresis() {
         AssertArenaSensors(300, 100, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
 
-        // free 100: in band, no resource broker call
+        // free 100: in band, so the demand goes in without the lock and the gauge waits for the periodic pass
         UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
         AssertResourceBrokerSensors(0, 300, 0, 0, 1);
         AssertResourceManagerStats(rm, 700, 100);
+        AssertArenaSensors(300, 100, 0);
+        TickArenaAdjust();
         AssertArenaSensors(300, 200, 0);
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
 
         // free 50 < 100: grown to 250 + 200
@@ -1656,18 +1667,23 @@ void KqpRm::ArenaHysteresis() {
         AssertArenaSensors(450, 250, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
 
-        // free 400 > 300: shrunk to 50 + 200
+        // the arena covers the freed demand, so the free costs no lock and no resource broker call; the surplus
+        // is given back by the periodic pass, never by the task that frees
         rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 200});
-        AssertResourceBrokerSensors(0, 250, 0, 1, 1);
-        AssertResourceManagerStats(rm, 750, 100);
-        AssertArenaSensors(250, 50, 0);
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
+        AssertResourceBrokerSensors(0, 450, 0, 1, 1);
+        AssertResourceManagerStats(rm, 550, 100);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+        // free 450 > 300: shrunk to 0 + 200, and the idle arena keeps that
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 200, 0, 1, 1);
+        AssertResourceManagerStats(rm, 800, 100);
+        AssertArenaSensors(200, 0, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
 
-        // free 250: in band, the idle arena keeps its task and stays charged
-        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExternalMemory = 50});
-        AssertResourceBrokerSensors(0, 250, 0, 1, 1);
-        AssertResourceManagerStats(rm, 750, 100);
-        AssertArenaSensors(250, 0, 0);
+        TickArenaAdjust();
+        AssertResourceBrokerSensors(0, 200, 0, 1, 1);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
     }
 
@@ -1825,8 +1841,12 @@ void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 2);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
 
-    // free 49'500 > 3'000: shrunk to the headroom
+    // the arena covers the freed demand: the surplus waits for the periodic pass, which shrinks it to the headroom
     rm->FreeResources(*tx2, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 47'500});
+    AssertResourceBrokerSensors(0, 49'500, 0, 1, 2);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+    TickArenaAdjust();
     AssertResourceBrokerSensors(0, 2'000, 0, 1, 2);
     AssertResourceManagerStats(rm, qml - 2'000, 99);
     AssertArenaSensors(2'000, 0, 0);
@@ -1994,12 +2014,15 @@ void KqpRm::ArenaDisabled() {
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
     auto tx = MakeTx(1, rm);
 
+    // with the arena off every change goes in without the lock, so the gauge follows on the periodic pass
     UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100}));
     AssertResourceManagerStats(rm, 1000, 99);
     AssertResourceBrokerSensors(0, 0, 0, 0, 0);
-    AssertArenaSensors(0, 100, 0);
     UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
     UNIT_ASSERT_VALUES_EQUAL(tx->GetMemoryAvailability(), 800);
+    TickArenaAdjust();
+    AssertArenaSensors(0, 100, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 0, 0);
 
     Reconfigure(MakeKqpResourceManagerConfig()); // enabled
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
@@ -2015,6 +2038,8 @@ void KqpRm::ArenaDisabled() {
     rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
     AssertResourceManagerStats(rm, 1000, 100);
+    UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+    TickArenaAdjust();
     AssertArenaSensors(0, 0, 0);
 }
 
@@ -2286,6 +2311,43 @@ void KqpRm::ArenaMixesExternalMemoryAndUnits() {
     AssertArenaSensors(0, 0, 0);
     AssertResourceManagerStats(rm, 1000, 100);
     UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 0);
+}
+
+// Churn inside the band never reaches the resource broker: the arena covers the demand, so a task that starts or
+// ends only moves the demand, and the arena stays above it the whole time
+void KqpRm::ArenaAbsorbsChurn() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto tx = MakeTx(1, rm);
+
+    UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+
+    for (ui32 i = 0; i < 100; ++i) {
+        UNIT_ASSERT(rm->AllocateResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 50}));
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 150);
+        rm->FreeResources(*tx, 2, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 50});
+        UNIT_ASSERT_VALUES_EQUAL(rm->GetLocalResources().ExternalMemory, 100);
+    }
+
+    // one growth at the start and nothing since: the node total carries the arena, which never dropped below the
+    // demand
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    AssertResourceManagerStats(rm, 700, 100);
+    AssertArenaSensors(300, 100, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+    // the free leaves the arena exactly at the top of the band, so even the periodic pass has nothing to give back
+    rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+    AssertArenaSensors(300, 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
 }
 
 // The arena charges the node total only: the pool of a tx sees the memory requests of the tx, not its prepay

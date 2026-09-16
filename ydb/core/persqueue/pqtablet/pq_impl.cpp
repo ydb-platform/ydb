@@ -3994,9 +3994,11 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         SendReadyPlanStepAcks(ctx);
     } else {
         // All-unknown PlanStep (including an empty Transactions list).
-        // Ack waits for a successful WRITE_TX fence: PlanStep / PlanTxId may be
-        // advanced in memory before _txinfo is persisted, and a stale leader
-        // could keep that inflated watermark after losing generation.
+        // Ack waits for a successful WRITE_TX leadership fence (same idea as
+        // DeferredReadSetAcks). All-unknown messages do not advance PlanStep /
+        // PlanTxId — this is not a watermark persist. The KV write of current
+        // _txinfo proves this generation can still persist; a stale leader that
+        // already lost generation fails the write instead of acking.
         // PendingAllUnknown moves to InFlightAllUnknown in BeginWriteTxs;
         // EndWriteTxs marks those entries Ready after the KV write succeeds.
 

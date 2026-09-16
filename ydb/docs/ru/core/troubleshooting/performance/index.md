@@ -14,8 +14,12 @@
 - [Трассировка](../../reference/observability/tracing/setup.md);
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md);
 - [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md);
+<<<<<<< HEAD
 - [Планы запросов](../../dev/query-execution-optimization/query-plans-optimization.md);
 - [Параметризованные запросы и повторная компиляция](../../dev/query-execution-optimization/parameterized-queries.md);
+=======
+- [План выполнения запроса](../../dev/optimization/index.md);
+>>>>>>> 5f55fede69f (SVG TIMELINE DOC  (#40931))
 - Сторонние инструменты мониторинга.
 
 ## Классификация проблем с производительностью {{ ydb-short-name }}

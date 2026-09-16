@@ -3670,6 +3670,96 @@ Y_UNIT_TEST_F(Deferred_PlanStepAck_For_Unknown_Waits_WriteTx, TPQTabletFixture)
     WaitPlanStepAccepted({.Step=100});
 }
 
+Y_UNIT_TEST_F(AllUnknown_PlanStepAck_Restart_Mid_Fence_Waits_New_WriteTx, TPQTabletFixture)
+{
+    // Fence is in flight (InFlightAllUnknown, not Ready). A failed WRITE_TX must
+    // PoisonPill without acking. After reboot the mediator retransmit is a fresh
+    // all-unknown and waits for a successful WRITE_TX of the new generation.
+    const ui64 unknownTxId = 424306;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    // Fail the in-flight fence: EndWriteTxs poisons the tablet and must not mark Ready.
+    // Do not forward the dropped TEvRequest — that persist belongs to the dying generation.
+    holdWriteTx = false;
+    {
+        auto failed = MakeHolder<TEvKeyValue::TEvResponse>();
+        failed->Record.SetCookie(WRITE_TX_COOKIE);
+        failed->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        Ctx->Runtime->Send(new IEventHandle(
+            heldRequests.front()->Recipient,
+            heldRequests.front()->Sender,
+            failed.Release()));
+    }
+    heldRequests.clear();
+
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    holdWriteTx = true;
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
 Y_UNIT_TEST_F(PlanStepAccepted_Known_Not_Acked_By_Later_Unknown_WriteTx, TPQTabletFixture)
 {
     // A later all-unknown WRITE_TX fence must not unlock an earlier known PlanStep

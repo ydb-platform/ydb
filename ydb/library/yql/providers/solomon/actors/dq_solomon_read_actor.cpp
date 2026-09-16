@@ -520,7 +520,7 @@ private:
     }
 
     void TryRequestMetrics() {
-        if (ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (UseMetricsQueue && ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }

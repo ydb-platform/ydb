@@ -1,5 +1,6 @@
 #include "analyze_actor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
@@ -147,7 +148,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
         auto navigate = std::make_unique<TNavigate>();
-        navigate->DatabaseName = Database;
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;

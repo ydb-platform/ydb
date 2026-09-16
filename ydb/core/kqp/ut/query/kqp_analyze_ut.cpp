@@ -85,6 +85,29 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     });
 }
 
+Y_UNIT_TEST_TWIN(AnalyzeServerlessTable, ColumnStore) {
+    TTestEnv env(1, 1, true);
+    CreateDatabase(env, "Shared", 1, true);
+    CreateServerlessDatabase(env, "Database", "/Root/Shared");
+    const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnStore);
+
+    // Use the serverless database context to exercise cross-domain SA resolution.
+    TDriver driver(TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDatabase("/Root/Database")
+        .SetDiscoveryMode(EDiscoveryMode::Off));
+    TTableClient client(driver);
+    auto sessionResult = client.CreateSession().GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.GetSession();
+
+    auto result = session.ExecuteSchemeQuery("ANALYZE `/Root/Database/Table`").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    ValidateStatistics(*env.GetServer().GetRuntime(), tableInfo.PathId);
+    driver.Stop(true);
+}
+
 Y_UNIT_TEST(AnalyzeError) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();

@@ -5313,9 +5313,15 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
     // commit time to sit below the table's mutable memtable (see AttachPart).
     cfg.Epoch = NTable::TEpoch::Zero() + 1;
     cfg.Layout.Final = false;
-    cfg.Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    cfg.Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    cfg.Writer.StickyFlatIndex = !cfg.Layout.WriteBTreeIndex;
+    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    cfg.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    cfg.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
+    // V2 b-tree index replaces the flat index
+    cfg.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    cfg.Writer.StickyFlatIndex = !(writeBTreeIndexV1 || writeBTreeIndexV2);
+    cfg.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
+    cfg.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
     for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
         cfg.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
     }

@@ -611,7 +611,7 @@ private:
                 std::pair<TString, TString> paths;
                 TString err;
                 if (!TrySplitPathByDb(tablePath, bcPath.GetDomainPathString(), paths, err)) {
-                    LOG_E("Failed to split backup table path: " << err);
+                    YDB_LOG_ERROR_CTX(ctx, "Failed to split backup table path: " << err);
                     continue;
                 }
                 relativeTablePaths.push_back(std::move(paths.second));

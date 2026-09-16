@@ -25,11 +25,6 @@ namespace NKikimr::NStorage {
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
-            const bool allNodesConnected = std::ranges::all_of(AllNodeIds, [&](const auto& node) {
-                return AllBoundNodes.contains(node.second);
-            });
-            NeedMoreNodes = !allNodesConnected
-                            && !HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, false);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
@@ -49,6 +44,10 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ReconcileNodeRole() {
         UpdateQuorums();
+        if (RootProbe && (HasStaticGroupConfig() || !AllNodeIds.contains(RootProbe->NodeId)
+                          || AllBoundNodes.contains(AllNodeIds.at(RootProbe->NodeId)))) {
+            AbortRootProbe();
+        }
         IssueNextBindRequest();
 
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
@@ -69,8 +68,6 @@ namespace NKikimr::NStorage {
         } else if (Scepter && !GlobalQuorum) {
             // if we have local pile quorum, then do not switch into error state, we'll start collecting configs locally
             SwitchToError("quorum lost");
-        } else if (Scepter && NeedMoreNodes && InvokeQ.empty()) {
-            Invoke(TCollectConfigsAndPropose{});
         }
     }
 
@@ -106,6 +103,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        AbortRootProbe();
         if (StateStorageSelfHealActor) {
             Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
             StateStorageSelfHealActor.reset();
@@ -118,24 +116,29 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC38"},
             {"rootState", RootState},
             {"reason", reason});
+        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
+        StopRootActivities(reason);
+        RootState = ERootState::ERROR_TIMEOUT;
+        ErrorReason = reason;
+        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
+        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TDistributedConfigKeeper::StopRootActivities(const TString& reason) {
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
             ++ScepterCounter;
         }
-        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-        RootState = ERootState::ERROR_TIMEOUT;
-        ErrorReason = reason;
+        RootState = ERootState::INITIAL;
         OpQueueOnError(reason);
         if (CurrentProposition) {
-           UndoCurrentPropositionNodeChange(*CurrentProposition);
-           CurrentProposition.reset();
+            UndoCurrentPropositionNodeChange(*CurrentProposition);
+            CurrentProposition.reset();
         }
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
-        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
-        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {

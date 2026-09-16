@@ -70,10 +70,9 @@ namespace NKikimr::NStorage {
         return res;
     }
 
-    static std::optional<bool> HasBootstrapNodeQuorum(
-        const NKikimrBlobStorage::TStorageConfig& config,
-        const THashSet<TNodeIdentifier>& successfulNodes,
-        TStringStream *out) {
+    static std::optional<bool> HasBootstrapNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+                                                      const THashSet<TNodeIdentifier>& successfulNodes,
+                                                      TStringStream *out) {
         if (config.GetGeneration() || !config.HasBlobStorageConfig() || config.GetBlobStorageConfig().HasServiceSet()) {
             return std::nullopt;
         }

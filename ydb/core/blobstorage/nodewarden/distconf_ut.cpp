@@ -20,6 +20,8 @@
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/distconf_quorum.h>
 
+#include <array>
+
 namespace NKikimr {
 namespace NBlobStorageNodeWardenTest{
 
@@ -80,7 +82,7 @@ namespace {
     }
 
     TIntrusivePtr<TNodeWardenConfig> MakeNodeWardenConfig(const NKikimrBlobStorage::TStorageConfig& storageConfig) {
-        auto config = MakeIntrusive<TNodeWardenConfig>(TIntrusivePtr<IPDiskServiceFactory>());
+        auto config = MakeIntrusive<TNodeWardenConfig>();
         config->NameserviceConfig = std::make_unique<NKikimrConfig::TStaticNameserviceConfig>();
         for (const auto& node : storageConfig.GetAllNodes()) {
             auto *nsNode = config->NameserviceConfig->AddNode();
@@ -293,24 +295,42 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
     bool SimUntil(TTestActorSystem& runtime, TCondition&& condition, TDuration timeout = TDuration::Seconds(30),
                   ui32 nodeId = 1) {
         const TInstant deadline = runtime.GetClock() + timeout;
-        runtime.Schedule(deadline, nullptr, new TFakeSchedulerCookie, nodeId);
+        runtime.Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, {}, {}, nullptr, 0), nullptr, nodeId);
         runtime.Sim([&] { return !condition() && runtime.GetClock() < deadline; });
         return condition();
     }
 
     void CheckStaysConverged(TTestActorSystem& runtime, const std::vector<TActorId>& keeperIds) {
-        UNIT_ASSERT_C(!SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, keeperIds); }),
+        UNIT_ASSERT_C(!SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, keeperIds); },
+                                TDuration::Seconds(30), keeperIds.front().NodeId()),
                       "binding tree lost convergence without new failures");
     }
 
-    void BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+    auto InvokeKeeper(TTestActorSystem& runtime, TActorId keeperId,
+                      std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
         const TActorId edge = runtime.AllocateEdgeActor(keeperId.NodeId());
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
         runtime.Send(new IEventHandle(keeperId, edge, request.release()), keeperId.NodeId());
         auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
         UNIT_ASSERT_C(response->Get()->Record.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
                       response->Get()->Record.DebugString());
+        return response;
+    }
+
+    void BootstrapCluster(TTestActorSystem& runtime, TActorId keeperId) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableBootstrapCluster()->SetSelfAssemblyUUID("partial-bootstrap-test");
+        InvokeKeeper(runtime, keeperId, std::move(request));
+    }
+
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult QueryKeeper(TTestActorSystem& runtime, TActorId keeperId,
+                                                                    bool workingRootOnly = false) {
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        if (workingRootOnly) {
+            request->Record.MutableQueryWorkingRoot();
+        } else {
+            request->Record.MutableQueryConfig();
+        }
+        return InvokeKeeper(runtime, keeperId, std::move(request))->Get()->Record;
     }
 
     ui32 RunUntilConverged(const NKikimrBlobStorage::TStorageConfig& config, TNodeWardenTestState& state,
@@ -352,6 +372,144 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(1 <= rootNodeId && rootNodeId <= 3);
     }
 
+    void CheckInitialConfigBindingCycle(TDuration unbindDelay) {
+        const auto config = MakeInitialStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        std::vector<std::unique_ptr<IEventHandle>> pending;
+        std::vector<std::unique_ptr<IEventHandle>> delayed;
+        std::array<bool, 4> initialDelivered{};
+        IEventHandle *released = nullptr;
+        bool hold = true;
+        bool delayUnbind = false;
+
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId > keepers.size() || ev->GetRecipientRewrite() != keepers[nodeId - 1]) {
+                return true;
+            }
+            if (delayUnbind && nodeId == 1 && ev->Sender.NodeId() == 2 && ev->InterconnectSession) {
+                delayed.push_back(std::move(ev));
+                return false;
+            }
+            if (!hold) {
+                return true;
+            }
+            if (ev.get() == released) {
+                released = nullptr;
+                return true;
+            }
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeConfigReversePush::EventType
+                || type == NStorage::TEvNodeConfigUnbind::EventType
+                || type == NStorage::TEvNodeConfigScatter::EventType
+                || (type == NStorage::TEvNodeConfigPush::EventType
+                    && (ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()
+                        || !initialDelivered[ev->Sender.NodeId()]))) {
+                pending.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return pending.size() == 3; }));
+        pending.clear(); // Discard undelivered attempts.
+
+        // Form 1 -> 3 -> 2 -> 1.
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            UNIT_ASSERT(runtime.WrapInActorContext(keepers[nodeId - 1], [&](IActor *actor) {
+                auto *keeper = dynamic_cast<NStorage::TDistributedConfigKeeper*>(actor);
+                UNIT_ASSERT(keeper);
+                keeper->AbortBinding("prepare binding cycle", false, false);
+                keeper->StartBinding(nodeId == 1 ? 3 : nodeId - 1);
+            }));
+        }
+
+        const auto deliver = [&](ui32 type, ui32 sender, ui32 recipient, ui32 root = 0) {
+            const auto matches = [&](const auto& ev) {
+                return ev->GetTypeRewrite() == type && ev->Sender.NodeId() == sender
+                       && ev->GetRecipientRewrite() == keepers[recipient - 1]
+                       && (!root || ev->template Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRootNodeId() == root);
+            };
+            UNIT_ASSERT_C(SimUntil(runtime, [&] { return std::ranges::any_of(pending, matches); },
+                                   TDuration::Seconds(1)),
+                          "missing cycle event " << type << " " << sender << "->" << recipient << " root=" << root);
+            const auto it = std::ranges::find_if(pending, matches);
+            if (root) {
+                UNIT_ASSERT(!(*it)->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRejected());
+            }
+            released = it->release();
+            pending.erase(it);
+            runtime.Send(released, recipient);
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !released; }, TDuration::Seconds(1)));
+        };
+        for (ui32 nodeId : {1, 3, 2}) {
+            deliver(NStorage::TEvNodeConfigPush::EventType, nodeId, nodeId == 1 ? 3 : nodeId - 1);
+            initialDelivered[nodeId] = true;
+            std::erase_if(pending, [&](auto& ev) {
+                if (ev->Sender.NodeId() != nodeId || ev->GetTypeRewrite() != NStorage::TEvNodeConfigPush::EventType) {
+                    return false;
+                }
+                const ui32 recipient = ev->GetRecipientRewrite().NodeId();
+                runtime.Send(ev.release(), recipient);
+                return true;
+            });
+        }
+        // Replay SPIN's root announcements, preserving each sender's order.
+        for (const auto& [sender, recipient, root] : std::initializer_list<std::tuple<ui32, ui32, ui32>>{
+                 {2, 3, 2}, {1, 2, 1}, {2, 3, 1}, {3, 1, 3}, {1, 2, 3}, {3, 1, 2},
+                 {2, 3, 3}, {1, 2, 2}, {3, 1, 1}}) {
+            deliver(NStorage::TEvNodeConfigReversePush::EventType, sender, recipient, root);
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return std::ranges::count_if(pending, [](const auto& ev) {
+                return ev->GetTypeRewrite() == NStorage::TEvNodeConfigUnbind::EventType;
+            }) == 3;
+        }, TDuration::Seconds(1)));
+        for (TActorId id : keepers) {
+            UNIT_ASSERT(runtime.WrapInActorContext(id, [&](IActor *actor) {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<NStorage::TDistributedConfigKeeper*>(actor)->GetRootNodeId(),
+                                         id.NodeId());
+            }));
+        }
+
+        hold = false;
+        delayUnbind = true;
+        for (auto& ev : pending) {
+            const ui32 nodeId = ev->GetRecipientRewrite().NodeId();
+            runtime.Send(ev.release(), nodeId);
+        }
+        // Keep Initial behind Unbind by delaying the entire 2 -> 1 stream.
+        SimUntil(runtime, [] { return false; }, unbindDelay);
+        if (unbindDelay) {
+            UNIT_ASSERT(!delayed.empty());
+            UNIT_ASSERT_VALUES_EQUAL(delayed.front()->GetTypeRewrite(), NStorage::TEvNodeConfigUnbind::EventType);
+        }
+        delayUnbind = false;
+        for (auto& ev : delayed) {
+            runtime.Send(ev.release(), 1);
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }),
+                      "initial-config binding ring did not recover; unbindDelay=" << unbindDelay);
+        CheckStaysConverged(runtime, keepers);
+        const auto root = *FindConvergedRoot(runtime, keepers);
+        const auto result = QueryKeeper(runtime, keepers[root - 1]);
+        UNIT_ASSERT(result.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetQueryConfig().GetConfig().GetFingerprint(), config.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(InitialConfigBindingCycleRecovers) {
+        CheckInitialConfigBindingCycle(TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(InitialConfigBindingCycleRecoversWithLateUnbind) {
+        CheckInitialConfigBindingCycle(TDuration::Seconds(5));
+    }
+
     Y_UNIT_TEST(StaticGroupQuorumOverridesNodeMajority) {
         const auto config = MakeStorageConfig(3, 0, {1});
         UNIT_ASSERT(HasQuorum(config, {1}));
@@ -370,6 +528,306 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const ui32 rootNodeId = RunUntilConverged(config, state);
         UNIT_ASSERT(state.SawCompleteMobileBinding);
         UNIT_ASSERT_VALUES_EQUAL(rootNodeId, 1u);
+    }
+
+    void ScheduleSubscriptionFailure(TTestActorSystem& runtime, ui32 nodeId, const IEventHandle& request,
+                                     ui32 peerNodeId, TDuration delay) {
+        auto response = std::make_unique<IEventHandle>(request.Sender, request.GetRecipientRewrite(),
+                                                       new TEvInterconnect::TEvNodeDisconnected(peerNodeId),
+                                                       0, request.Cookie);
+        runtime.Schedule(delay, response.release(), nullptr, nodeId);
+    }
+
+    void CheckRootAfterNodeLoss(bool loseStorageQuorum, bool connectionTimeout) {
+        const auto config = MakeStorageConfig(3, 1, {loseStorageQuorum ? 2u : 1u});
+        const auto initial = MakeStorageConfig(3, 0);
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, loseStorageQuorum && nodeId != 1 ? initial : config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        CheckStaysConverged(runtime, keepers);
+        const auto before = QueryKeeper(runtime, keepers.front());
+        UNIT_ASSERT(before.HasScepter());
+
+        THashMap<TActorId, ui32> peers;
+        runtime.WrapInActorContext(keepers.front(), [&](IActor*) {
+            for (ui32 nodeId : {2, 3}) {
+                peers.emplace(TActivationContext::InterconnectProxy(nodeId), nodeId);
+            }
+        });
+        THashSet<ui32> attemptedPeers;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe) {
+                if (const auto it = peers.find(ev->GetRecipientRewrite()); it != peers.end()) {
+                    attemptedPeers.insert(it->second);
+                    if (!connectionTimeout) {
+                        ScheduleSubscriptionFailure(runtime, nodeId, *ev, it->second, TDuration::MilliSeconds(10));
+                    }
+                    return false;
+                }
+            }
+            return true;
+        };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+
+        if (loseStorageQuorum) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return !FindConvergedRoot(runtime, {keepers.front()}); }));
+        } else {
+            CheckStaysConverged(runtime, {keepers.front()});
+            UNIT_ASSERT(attemptedPeers.empty());
+            const auto after = QueryKeeper(runtime, keepers.front());
+            UNIT_ASSERT(after.HasScepter());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), before.GetScepter().GetId());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetQueryConfig().GetConfig().GetFingerprint(), config.GetFingerprint());
+        }
+    }
+
+    Y_UNIT_TEST(ConfigQuorumLossKeepsEstablishedRoot) {
+        CheckRootAfterNodeLoss(false, false);
+    }
+
+    Y_UNIT_TEST(EstablishedRootDoesNotProbeUnavailablePeers) {
+        CheckRootAfterNodeLoss(false, true);
+    }
+
+    Y_UNIT_TEST(StorageQuorumLossStillReleasesRoot) {
+        CheckRootAfterNodeLoss(true, false);
+    }
+
+    Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
+        const auto config = MakeStorageConfig(3, 1, {3});
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(1);
+
+        const TActorId follower = RegisterKeeper(runtime, config, 2, state);
+        TActorId offlineProxy;
+        runtime.WrapInActorContext(follower, [&](IActor*) {
+            offlineProxy = TActivationContext::InterconnectProxy(1);
+        });
+        ui32 attempts = 0;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Subscribe && ev->GetRecipientRewrite() == offlineProxy) {
+                ++attempts;
+                return false; // neither Connected nor Disconnected: the binding deadline must fire
+            }
+            return true;
+        };
+        const TActorId root = RegisterKeeper(runtime, config, 3, state);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, {follower, root}) == 3; },
+                             TDuration::Seconds(30), 2));
+        UNIT_ASSERT(attempts);
+        CheckStaysConverged(runtime, {follower, root});
+    }
+
+    enum class EJoinFault {
+        None,
+        BusyOperation,
+        BusyWorkingRoot,
+        ExpiredProbe,
+        UnsupportedProbe,
+        LostBindingReply,
+        DisconnectBeforeBinding,
+        ObsoleteDisconnect,
+    };
+
+    void CheckJoinWorkingRoot(EJoinFault fault) {
+        const auto initial = MakeStorageConfig(3, 0);
+        const auto working = MakeStorageConfig(3, 1, {1});
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        bool partitioned = true;
+        bool allowOldOperation = false;
+        TActorId oldOperation;
+        std::vector<std::unique_ptr<IEventHandle>> oldOperationEvents;
+        bool blockBindingReplies = fault == EJoinFault::LostBindingReply;
+        std::unique_ptr<IEventHandle> oldBindingReply;
+        std::optional<ui64> expiredBindingCookie;
+        ui32 initialPushes = 0;
+        ui32 probesFromWorkingRoot = 0;
+        ui32 workingRootReplies = 0;
+        bool disconnected = false;
+        THashMap<TActorId, std::pair<TActorId, ui64>> workingRootSubscriptions;
+        bool blockProbeReplies = fault == EJoinFault::ExpiredProbe || fault == EJoinFault::UnsupportedProbe;
+        std::unique_ptr<IEventHandle> oldProbeReply;
+        std::optional<ui64> replayProbeCookie;
+
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NStorage::TEvNodeConfigInvokeOnRoot::EventType
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasQueryWorkingRoot()
+                && !keepers.empty() && ev->Sender == keepers.front()) {
+                ++probesFromWorkingRoot;
+            }
+            if (fault == EJoinFault::DisconnectBeforeBinding && type == TEvInterconnect::TEvNodeConnected::EventType
+                && ev->Get<TEvInterconnect::TEvNodeConnected>()->NodeId == 1) {
+                workingRootSubscriptions[ev->Recipient] = {ev->Sender, ev->Cookie};
+            }
+            if (ev->InterconnectSession && (ev->Sender.NodeId() == 1 || nodeId == 1) && partitioned) {
+                return false;
+            }
+            const bool holdOperation = (fault == EJoinFault::BusyOperation && nodeId != 1)
+                                       || (fault == EJoinFault::BusyWorkingRoot && nodeId == 1);
+            if (holdOperation && !allowOldOperation) {
+                if (!oldOperation && !ev->InterconnectSession && type == NStorage::TEvNodeConfigGather::EventType
+                    && ev->Sender.NodeId() == nodeId && ev->Recipient.NodeId() == nodeId
+                    && std::ranges::find(keepers, ev->Sender) != keepers.end()
+                    && std::ranges::find(keepers, ev->Recipient) == keepers.end()) {
+                    oldOperation = ev->Recipient;
+                }
+                if (oldOperation && ev->Recipient == oldOperation) {
+                    oldOperationEvents.push_back(std::move(ev));
+                    return false;
+                }
+            }
+            if (type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType
+                && std::ranges::find(keepers, ev->Recipient) != keepers.end()
+                && ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.HasScepter()) {
+                ++workingRootReplies;
+                if (blockProbeReplies) {
+                    if (fault == EJoinFault::UnsupportedProbe) {
+                        // Older binaries include their scepter even when the request is unknown.
+                        ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record.SetStatus(
+                            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                    } else if (replayProbeCookie == ev->Cookie) {
+                        replayProbeCookie.reset();
+                    } else {
+                        if (!oldProbeReply) {
+                            oldProbeReply = std::move(ev);
+                        }
+                        return false;
+                    }
+                }
+            }
+            if (type == NStorage::TEvNodeConfigPush::EventType && nodeId == 1
+                && ev->Get<NStorage::TEvNodeConfigPush>()->Record.GetInitial()) {
+                ++initialPushes;
+                if (fault == EJoinFault::DisconnectBeforeBinding && !disconnected) {
+                    disconnected = true;
+                    const auto& [sessionId, cookie] = workingRootSubscriptions.at(ev->Sender);
+                    // The mock cannot reconnect a poisoned session.
+                    runtime.Send(new IEventHandle(ev->Sender, sessionId, new TEvInterconnect::TEvNodeDisconnected(1),
+                                                  0, cookie), ev->Sender.NodeId());
+                    return false;
+                }
+                if (blockBindingReplies && expiredBindingCookie && ev->Cookie != *expiredBindingCookie) {
+                    blockBindingReplies = false;
+                }
+            }
+            if (blockBindingReplies && type == NStorage::TEvNodeConfigReversePush::EventType
+                && ev->Sender.NodeId() == 1) {
+                if (!oldBindingReply) {
+                    expiredBindingCookie = ev->Cookie;
+                    oldBindingReply = std::move(ev);
+                }
+                return false;
+            }
+            return true;
+        };
+        for (ui32 nodeId = 1; nodeId <= 3; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, nodeId == 1 ? working : initial, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return FindConvergedRoot(runtime, {keepers[0]}) == 1
+                   && FindConvergedRoot(runtime, {keepers[1], keepers[2]}).has_value()
+                   && ((fault != EJoinFault::BusyOperation && fault != EJoinFault::BusyWorkingRoot) || oldOperation);
+        }));
+        const auto before = QueryKeeper(runtime, keepers[0], true);
+        UNIT_ASSERT(before.HasScepter());
+        const auto otherRoot = *FindConvergedRoot(runtime, {keepers[1], keepers[2]});
+        UNIT_ASSERT(!QueryKeeper(runtime, keepers[otherRoot - 1], true).HasScepter());
+        partitioned = false;
+        if (blockProbeReplies) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return workingRootReplies != 0; }));
+            const auto beforeProbe = QueryKeeper(runtime, keepers[otherRoot - 1]);
+            CheckStaysConverged(runtime, {keepers[1], keepers[2]});
+            if (oldProbeReply) {
+                replayProbeCookie = oldProbeReply->Cookie;
+                runtime.Send(oldProbeReply.release(), otherRoot);
+                CheckStaysConverged(runtime, {keepers[1], keepers[2]});
+                UNIT_ASSERT(!replayProbeCookie);
+            }
+            const auto afterProbe = QueryKeeper(runtime, keepers[otherRoot - 1]);
+            UNIT_ASSERT(beforeProbe.HasScepter() && afterProbe.HasScepter());
+            UNIT_ASSERT_VALUES_EQUAL(afterProbe.GetScepter().GetId(), beforeProbe.GetScepter().GetId());
+            blockProbeReplies = false;
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+        UNIT_ASSERT(workingRootReplies);
+        UNIT_ASSERT_VALUES_EQUAL(probesFromWorkingRoot, 0u);
+        UNIT_ASSERT(initialPushes >= (fault == EJoinFault::LostBindingReply
+                                      || fault == EJoinFault::DisconnectBeforeBinding ? 2u : 1u));
+
+        // Deliver a retired reply before its queued abort.
+        if (fault == EJoinFault::BusyOperation) {
+            UNIT_ASSERT(SimUntil(runtime, [&] { return oldOperationEvents.size() >= 2; }));
+        }
+        allowOldOperation = true;
+        for (auto& ev : oldOperationEvents) {
+            runtime.Send(ev.release(), oldOperation.NodeId());
+        }
+        if (oldBindingReply) {
+            const ui32 recipientNodeId = oldBindingReply->Recipient.NodeId();
+            runtime.Send(oldBindingReply.release(), recipientNodeId);
+        }
+        if (fault == EJoinFault::ObsoleteDisconnect) {
+            const TActorId keeperId = keepers[otherRoot - 1];
+            runtime.WrapInActorContext(keeperId, [&](IActor*) {
+                // A failed subscription reports from the proxy, not the established session.
+                TActivationContext::Send(new IEventHandle(keeperId, TActivationContext::InterconnectProxy(1),
+                                                          new TEvInterconnect::TEvNodeDisconnected(1)));
+            });
+        }
+        CheckStaysConverged(runtime, keepers);
+        const auto after = QueryKeeper(runtime, keepers[0]);
+        UNIT_ASSERT(after.HasScepter());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetScepter().GetId(), before.GetScepter().GetId());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetQueryConfig().GetConfig().GetFingerprint(), working.GetFingerprint());
+    }
+
+    Y_UNIT_TEST(InitialConfigRootJoinsWorkingRoot) {
+        CheckJoinWorkingRoot(EJoinFault::None);
+    }
+
+    Y_UNIT_TEST(BusyRootJoinsAndIgnoresRetiredOperationReply) {
+        CheckJoinWorkingRoot(EJoinFault::BusyOperation);
+    }
+
+    Y_UNIT_TEST(WorkingRootAnswersDiscoveryWhileBusy) {
+        CheckJoinWorkingRoot(EJoinFault::BusyWorkingRoot);
+    }
+
+    Y_UNIT_TEST(ExpiredRootProbeReplyDoesNotReleaseRoot) {
+        CheckJoinWorkingRoot(EJoinFault::ExpiredProbe);
+    }
+
+    Y_UNIT_TEST(UnknownProbeResponseDoesNotReleaseRoot) {
+        CheckJoinWorkingRoot(EJoinFault::UnsupportedProbe);
+    }
+
+    Y_UNIT_TEST(LostBindingReplyIsRetriedAndLateReplyIsIgnored) {
+        CheckJoinWorkingRoot(EJoinFault::LostBindingReply);
+    }
+
+    Y_UNIT_TEST(WorkingRootDisconnectsBeforeBinding) {
+        CheckJoinWorkingRoot(EJoinFault::DisconnectBeforeBinding);
+    }
+
+    Y_UNIT_TEST(ExpiredSubscriptionFailureDoesNotBreakBinding) {
+        CheckJoinWorkingRoot(EJoinFault::ObsoleteDisconnect);
     }
 
     enum class ERestartOrder {
@@ -393,7 +851,6 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
                 NKikimrBlobStorage::EPDiskType::SSD);
         }
         if (unevenDrives) {
-            config.MutableBlobStorageConfig()->ClearServiceSet();
             for (auto& node : *config.MutableAllNodes()) {
                 node.MutableLocation()->SetDataCenter("dc-1");
             }
@@ -473,10 +930,7 @@ selector_config: []
                 const auto it = peerByProxy.find(ev->GetRecipientRewrite());
                 if (it != peerByProxy.end()
                     && (stoppedNodes.contains(it->second) || (partitioned && (nodeId == 1 || it->second == 1)))) {
-                    auto response = std::make_unique<IEventHandle>(ev->Sender, ev->GetRecipientRewrite(),
-                                                                   new TEvInterconnect::TEvNodeDisconnected(it->second),
-                                                                   0, ev->Cookie);
-                    runtime.Schedule(bindFailureDelay, response.release(), nullptr, nodeId);
+                    ScheduleSubscriptionFailure(runtime, nodeId, *ev, it->second, bindFailureDelay);
                     return false;
                 }
             }
@@ -525,7 +979,7 @@ selector_config: []
             state.RequiredRootNodeId = 3;
             runtime.WrapInActorContext(keeperIds.front(), [&](IActor*) {
                 TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
-                                                         TActivationContext::InterconnectProxy(2), {}, nullptr, 0));
+                                                          TActivationContext::InterconnectProxy(2), {}, nullptr, 0));
             });
             runtime.StartNode(3);
             registerNode(3);

@@ -29,7 +29,8 @@ public:
     }
 
     ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord&,
-            NKikimrReplication::TSchemaChange&, TString&) const override {
+            NKikimrReplication::TSchemaChange&, TString&) const override
+    {
         return ESchemaChangeResult::NotSchemaChange;
     }
 };

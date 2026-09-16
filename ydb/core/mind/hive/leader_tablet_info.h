@@ -326,6 +326,8 @@ public:
         return SetLockedToActor(TActorId(), TDuration());
     }
 
+    void RestoreLockedTabletMetrics();
+
     void ActualizeTabletStatistics(TInstant now);
 
     void ResetTabletGroupsRequests() {

@@ -901,6 +901,8 @@ public:
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
     void FreeNodeSession(ui32 nodeId, NActors::TActorId sender);
+    // under Mutex
+    void DropNodeSession(std::unordered_map<ui32, std::shared_ptr<TNodeState>>::iterator it, const TString& reason);
 
     // unbound stubs
     std::shared_ptr<IChannelBuffer> GetUnboundBuffer(const TChannelFullInfo& info);

@@ -475,41 +475,51 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
 
     // FIXME: Support paramenter binding and materialize for multiple statements
     TVector<TExprBase> phyTxs;
-    auto paramBindingsMainTx = CollectParamBindings(0, physicalStages[0]);
+    TVector<TKqpParamBinding> paramBindingsAllRoots;
 
     TVector<TExprBase> phyStagesForMaterialize;
     TVector<TExprBase> resultsForMaterialize;
     TVector<TExprBase> paramBindingsForMaterialize;
+
     // Prepare physical txs and bindings for materialize if needed.
-    const ui32 materializeSize = Materialize[0].size();
-    for (ui32 i = 0; i < materializeSize; ++i) {
-        auto param = TExprBase(Materialize[0][i].first).Cast<TCoParameter>();
-        auto materializeResult = TExprBase(Materialize[0][i].second).Cast<TDqCnValue>();
+    ui32 materializeSize = 0;
+    ui32 materializeIdx = 0;
 
-        // clang-format off
-        auto resultBinding = Build<TKqpTxResultBinding>(ctx, pos)
-            .Type(ExpandType(pos, *materializeResult.Ptr()->GetTypeAnn(), ctx))
-            .TxIndex().Build("0")
-            .ResultIndex().Build(ToString(i))
-        .Done();
-        // clang-format on
+    for (size_t i=0; i<Roots.size(); i++) {
+        auto paramBindingsCurr = CollectParamBindings(i, physicalStages[i]);
+        paramBindingsAllRoots.insert(paramBindingsAllRoots.end(), paramBindingsCurr.begin(), paramBindingsCurr.end());
 
-        // clang-format off
-        auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-            .Name(param.Name())
-            .Binding(resultBinding.Ptr())
-        .Done();
-        // clang-format on
-        // Binding from materialize to main tx.
-        paramBindingsMainTx.emplace_back(paramBinding);
+        materializeSize += Materialize[i].size();
 
-        auto materializeStage = materializeResult.Output().Stage();
-        const auto paramBindingsMaterialize = CollectParamBindings(0, {materializeStage.Ptr()});
-        // Bindings params in materialize.
-        paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
-        // Stages for phy tx.
-        phyStagesForMaterialize.emplace_back(materializeStage);
-        resultsForMaterialize.emplace_back(materializeResult);
+        for (ui32 j = 0; j < materializeSize; ++j) {
+            auto param = TExprBase(Materialize[i][j].first).Cast<TCoParameter>();
+            auto materializeResult = TExprBase(Materialize[i][j].second).Cast<TDqCnValue>();
+
+            // clang-format off
+            auto resultBinding = Build<TKqpTxResultBinding>(ctx, pos)
+                .Type(ExpandType(pos, *materializeResult.Ptr()->GetTypeAnn(), ctx))
+                .TxIndex().Build("0")
+                .ResultIndex().Build(ToString(materializeIdx++))
+            .Done();
+            // clang-format on
+
+            // clang-format off
+            auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                .Name(param.Name())
+                .Binding(resultBinding.Ptr())
+            .Done();
+            // clang-format on
+            // Binding from materialize to main tx.
+            paramBindingsAllRoots.emplace_back(paramBinding);
+
+            auto materializeStage = materializeResult.Output().Stage();
+            const auto paramBindingsMaterialize = CollectParamBindings(i, {materializeStage.Ptr()});
+            // Bindings params in materialize.
+            paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
+            // Stages for phy tx.
+            phyStagesForMaterialize.emplace_back(materializeStage);
+            resultsForMaterialize.emplace_back(materializeResult);
+        }
     }
 
     if (materializeSize) {
@@ -545,9 +555,9 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
         TVector<TCoAtom> columnAtomList;
 
         for (const auto& column : Roots[i]->ColumnOrder) {
-            columnAtomList.push_back(Build<TCoAtom>(ctx, Roots[0]->Pos).Value(column).Done());
+            columnAtomList.push_back(Build<TCoAtom>(ctx, Roots[i]->Pos).Value(column).Done());
         }
-        columnOrder = Build<TCoAtomList>(ctx, Roots[0]->Pos).Add(columnAtomList).Done().Ptr();
+        columnOrder = Build<TCoAtomList>(ctx, Roots[i]->Pos).Add(columnAtomList).Done().Ptr();
 
         // clang-format off
         // wrap in DqResult
@@ -584,7 +594,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     TExprNode::TPtr mainTx;
 
     auto phyTxSettings = GetPhysicalTxSettings();
-    if (Roots[0]->PlanProps.WithEffects && !Roots[0]->PlanProps.WithReturning) {
+    if (phyTxSettings.WithEffects) {
         // clang-format off
         // Build PhysicalTx
         mainTx = Build<TKqpPhysicalTx>(ctx, Roots[0]->Pos)
@@ -593,7 +603,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
                 .Build()
                 .Results().Build()
                 .ParamBindings()
-                    .Add(paramBindingsMainTx)
+                    .Add(paramBindingsAllRoots)
                 .Build()
                 .Settings(phyTxSettings.BuildNode(ctx, Roots[0]->Pos))
             .Done().Ptr();
@@ -610,7 +620,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
                     .Add(dqResults)
                 .Build()
                 .ParamBindings()
-                    .Add(paramBindingsMainTx)
+                    .Add(paramBindingsAllRoots)
                 .Build()
                 .Settings(phyTxSettings.BuildNode(ctx, Roots[0]->Pos))
             .Done().Ptr();
@@ -623,7 +633,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     TExprNode::TPtr phyQuery;
 
     // Build Physical query
-    if (Roots[0]->PlanProps.WithEffects && !Roots[0]->PlanProps.WithReturning) {
+    if (phyTxSettings.WithEffects) {
         // clang-format off
         phyQuery = Build<TKqpPhysicalQuery>(ctx, Roots[0]->Pos)
             .Transactions()
@@ -647,7 +657,14 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
         // clang-format on
     }
 
-    return ctx.NewList(Roots[0]->Pos, {ctx.NewList(Roots[0]->Pos, {phyQuery, columnOrder})});
+    TVector<TCoAtom> queryColumnAtomList;
+
+    for (const auto& column : Roots[Roots.size()-1]->QueryColumns) {
+        queryColumnAtomList.push_back(Build<TCoAtom>(ctx, Roots[Roots.size()-1]->Pos).Value(column).Done());
+    }
+    auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
+
+    return ctx.NewList(Roots[0]->Pos, {ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns})});
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {

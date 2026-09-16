@@ -157,16 +157,20 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
 
+            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
-                TVector<TExprNode::TPtr> roots;
+                TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> roots;
                 for (const auto& child : node->Children()) {
-                    if (!child->IsList()) {
+                    if (!child->IsList() || child->ChildrenSize()==0) {
                         return node;
                     }
-                    if (!TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
-                        return node;
+                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
+                        roots.push_back(std::make_pair(child->ChildPtr(0)->ChildPtr(0), child->ChildPtr(1)));
+                    }
+                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        roots.push_back(std::make_pair(child->ChildPtr(0), child->ChildPtr(1)));
                     } else {
-                        roots.push_back(child->ChildPtr(0));
+                        return node;
                     }
                 }
 
@@ -175,7 +179,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 }
 
                 for (const auto& root: roots) {
-                    auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root);
+                    auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root.first, root.second);
                     opRoot->ComputeParents();
                     Roots.push_back(opRoot);
                 }
@@ -362,16 +366,21 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+
+            // Match whole elements that are tuples (TKqpOpRoot, columns) or (Unordered(TKqpOpRoot), columns)
             if (node->IsList()) {
                 TVector<TExprNode::TPtr> roots;
                 for (const auto& child : node->Children()) {
-                    if (!child->IsList()) {
+                    if (!child->IsList() || child->ChildrenSize()==0) {
                         return node;
                     }
-                    if (!TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
-                        return node;
-                    } else {
+                    if (TCoUnordered::Match(child->ChildPtr(0).Get()) && TKqpOpRoot::Match(child->ChildPtr(0)->ChildPtr(0).Get())) {
                         roots.push_back(child->ChildPtr(0));
+                    }
+                    else if (TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
+                        roots.push_back(child->ChildPtr(0));
+                    } else {
+                        return node;
                     }
                 }
 

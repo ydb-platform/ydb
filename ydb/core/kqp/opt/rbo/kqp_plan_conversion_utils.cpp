@@ -260,16 +260,22 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     }
 }
 
-TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node) {
+TIntrusivePtr<TOpRoot> PlanConverter::ConvertRoot(TExprNode::TPtr node, TExprNode::TPtr queryColumnsList) {
     auto kqpOpRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(kqpOpRoot.Input().Ptr());
     TVector<TString> columnOrder;
+    TVector<TString> queryColumns;
+
 
     for (const auto& column : kqpOpRoot.ColumnOrder()) {
         columnOrder.push_back(column.StringValue());
     }
 
-    auto opRoot = MakeIntrusive<TOpRoot>(rootInput, node->Pos(), columnOrder);
+    for (const auto& column : queryColumnsList->Children()) {
+        queryColumns.push_back(TString(column->Content()));
+    }
+
+    auto opRoot = MakeIntrusive<TOpRoot>(rootInput, node->Pos(), columnOrder, queryColumns);
     opRoot->Node = node;
     opRoot->PlanProps = PlanProps;
  

@@ -3672,9 +3672,9 @@ Y_UNIT_TEST_F(Deferred_PlanStepAck_For_Unknown_Waits_WriteTx, TPQTabletFixture)
 
 Y_UNIT_TEST_F(AllUnknown_PlanStepAck_Restart_Mid_Fence_Waits_New_WriteTx, TPQTabletFixture)
 {
-    // Fence is in flight (InFlightAllUnknown, not Ready). A failed WRITE_TX must
-    // PoisonPill without acking. After reboot the mediator retransmit is a fresh
-    // all-unknown and waits for a successful WRITE_TX of the new generation.
+    // Fence is in flight (WaitWriteTx, WRITE_TX not completed). A failed WRITE_TX
+    // must PoisonPill without Ready. After reboot the mediator retransmit is a
+    // fresh WaitWriteTx and waits for a successful WRITE_TX of the new generation.
     const ui64 unknownTxId = 424306;
 
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
@@ -3830,7 +3830,7 @@ Y_UNIT_TEST_F(PlanStepAccepted_Known_Not_Acked_By_Later_Unknown_WriteTx, TPQTabl
     Ctx->Runtime->SetObserverFunc(prev);
 
     // After the all-unknown fence succeeds, step 200 is Ready but blocked behind
-    // not-Ready known step 100 — no Accepted may leave yet.
+    // WaitTxExecuted known step 100 — no Accepted may leave yet.
     {
         auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
             TDuration::Seconds(1));
@@ -3850,9 +3850,10 @@ Y_UNIT_TEST_F(PlanStepAccepted_Known_Not_Acked_By_Later_Unknown_WriteTx, TPQTabl
 
 Y_UNIT_TEST_F(Retransmit_AllUnknown_Behind_Known_Starts_Extra_WriteTx, TPQTabletFixture)
 {
-    // Current behavior (accepted trade-off): while a not-Ready known PlanStep blocks the
-    // queue, an all-unknown entry may already be Ready after its fence. A mediator
-    // retransmit of that all-unknown is appended again and schedules another WRITE_TX.
+    // Accepted trade-off: while WaitTxExecuted known blocks the queue, an all-unknown
+    // may already be Ready after its fence. A mediator retransmit of that all-unknown
+    // is a new WaitWriteTx and schedules another WRITE_TX (piggyback does not apply:
+    // the previous cycle already completed).
     const ui64 txId = 67890;
     const ui64 unknownTxId = 424305;
     const ui64 mockTabletId = 22222;
@@ -3931,8 +3932,8 @@ Y_UNIT_TEST_F(Retransmit_AllUnknown_Behind_Known_Starts_Extra_WriteTx, TPQTablet
 
 Y_UNIT_TEST_F(No_WriteTx_BusyLoop_While_Known_PlanStep_Pending, TPQTabletFixture)
 {
-    // A not-Ready known PlanStep in PlanStepAckQueue must not keep restarting WRITE_TX
-    // after an unrelated fence cycle (canProcess must not key off the whole queue).
+    // A WaitTxExecuted known PlanStep must not keep restarting WRITE_TX after an
+    // unrelated fence cycle (canProcess keys off WaitWriteTx, not the whole queue).
     const ui64 txId = 67890;
     const ui64 unknownTxId = 424304;
     const ui64 mockTabletId = 22222;
@@ -3996,7 +3997,7 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
 {
     // Mediator contract: PlanStepAccepted must arrive in ascending step order.
     // All-unknown step waits for a WRITE_TX fence; known EXECUTED retransmit is Ready
-    // immediately but must not overtake the not-yet-Ready lower step in the queue.
+    // immediately but must not overtake the WaitWriteTx lower step in the queue.
     const ui64 txId = 67890;
     const ui64 unknownTxId = 424302;
     const ui64 mockTabletId = 22222;

@@ -18,8 +18,6 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
-#include <util/generic/hash_multi_map.h>
-
 namespace NKikimr {
 namespace NPQ {
 
@@ -639,29 +637,51 @@ private:
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
 
-    // FIFO queue of pending TEvPlanStepAccepted. Acks are sent in arrival order,
-    // but only for a Ready prefix: known entries become Ready at EXECUTED of LastTxId;
-    // all-unknown entries become Ready after a successful WRITE_TX fence.
+    // FIFO of pending PlanStep acks. Mediator ignores non-head TEvPlanStepAccepted,
+    // so we send only a Ready prefix in arrival order. Duplicate Accepted is ok.
+    //
+    // EState is one phase per entry (not independent Ready/FenceInFlight flags):
+    //
+    //   WaitTxExecuted — known LastTxId, not yet EXECUTED.
+    //       CheckTxState(EXECUTED of LastTxId) → Ready.
+    //       Already EXECUTED at enqueue → Ready immediately.
+    //   WaitWriteTx — all-unknown (incl. empty Transactions). Does not advance
+    //       PlanStep/PlanTxId. Leadership fence: a WRITE_TX of current _txinfo
+    //       that *completes after* enqueue (piggyback / complete-after).
+    //       EndWriteTxs success → Ready. Fail → PoisonPill, never Ready.
+    //   Ready — send when this entry is the queue head.
+    //
+    // Known:   WaitTxExecuted → Ready
+    // Unknown: WaitWriteTx    → Ready
+    //
+    // WRITE_TX optimization: any successful WRITE_TX (started for a fence *or*
+    // for propose/delete/…) marks every WaitWriteTx Ready, including entries
+    // that arrived while the request was in flight. One KV cycle instead of
+    // start-after (Pending/InFlight), which would start a second write for late
+    // arrivals. A retransmit of an already Ready unknown is a new WaitWriteTx
+    // and does start another WRITE_TX (previous cycle already completed).
+    // canProcess keys off WaitWriteTx only, so a known WaitTxExecuted head
+    // cannot busy-loop WRITE_TX.
     struct TPlanStepAckEntry {
+        enum class EState {
+            WaitTxExecuted,
+            WaitWriteTx,
+            Ready,
+        };
+
         TActorId Sender;
         ui64 Step = 0;
         std::unique_ptr<TEvTxProcessing::TEvPlanStep> Event;
-        bool Ready = false;
-        // Last known TxId from this PlanStep; undefined for all-unknown entries.
+        EState State = EState::WaitWriteTx;
+        // Last known TxId from this PlanStep; undefined for all-unknown.
         TMaybe<ui64> LastTxId;
     };
-    using TPlanStepAckQueueIt = TDeque<TPlanStepAckEntry>::iterator;
     TDeque<TPlanStepAckEntry> PlanStepAckQueue;
-    // Known entries only: LastTxId -> queue iterator (several senders may share a TxId).
-    THashMultiMap<ui64, TPlanStepAckQueueIt> PlanStepAckByTxId;
-    // All-unknown entries waiting for a WRITE_TX leadership fence. Pending gathers new
-    // steps; BeginWriteTxs moves them to InFlight; EndWriteTxs marks Ready and clears.
-    TVector<TPlanStepAckQueueIt> PendingAllUnknown;
-    TVector<TPlanStepAckQueueIt> InFlightAllUnknown;
 
     void SendReadyPlanStepAcks(const TActorContext& ctx);
     void MarkPlanStepAcksReadyForTx(ui64 txId);
-    void ErasePlanStepAckByTxId(TPlanStepAckQueueIt it);
+    void MarkPlanStepAcksReadyAfterWriteTx();
+    bool HasWaitWriteTxPlanStepAck() const;
 };
 
 }// NPQ

@@ -249,12 +249,12 @@ message TFeatureFlags {
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
-    optional bool EnableCmsLocksPriority = 223 [default = false];
+    optional bool EnableCmsLocksPriority = 223 [default = true];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     reserved 225; // EnableTruncateTable
     optional bool EnableTopicsSqlIoOperations = 226 [default = true];
     optional bool EnableSysViewPermissionsExport = 227 [default = false];
-    optional bool EnableCmsSmartAvailabilityMode = 228 [default = false];
+    optional bool EnableCmsSmartAvailabilityMode = 228 [default = true];
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = true];

@@ -34,6 +34,7 @@ private:
     NMonitoring::TDynamicCounterPtr Counters;
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
+    THashMap<ui32, TTrafficInterrupter*> InterrupterByNode;
     NActors::TChannelsConfig ChannelsConfig;
     NInterconnectTest::IPortManager::TPtr PortManager;
     TIntrusivePtr<NLog::TSettings> LoggerSettings;
@@ -74,7 +75,9 @@ public:
                 specificNodePortMap[nodeId] = nodeToPortMap;
                 specificNodePortMap[nodeId].at(nodeId) = forwardPort;
                 interrupters.emplace_back(Address, listenPort, forwardPort, tiSettings->RejectingTrafficTimeout, tiSettings->BandWidth, tiSettings->Disconnect);
-                interrupters.back().Start();
+                TTrafficInterrupter& interrupter = interrupters.back();
+                InterrupterByNode.emplace(nodeId, &interrupter);
+                interrupter.Start();
             }
         }
 
@@ -90,6 +93,22 @@ public:
 
     TNode* GetNode(ui32 id) {
         return Nodes[id].Get();
+    }
+
+    void StartBlackhole(ui32 nodeId) {
+        auto it = InterrupterByNode.find(nodeId);
+        Y_ABORT_UNLESS(it != InterrupterByNode.end());
+        it->second->StartBlackhole();
+    }
+
+    void StopBlackhole(ui32 nodeId) {
+        auto it = InterrupterByNode.find(nodeId);
+        Y_ABORT_UNLESS(it != InterrupterByNode.end());
+        it->second->StopBlackhole();
+    }
+
+    void StopNode(ui32 nodeId) {
+        Nodes.at(nodeId)->Stop();
     }
 
     ~TTestICCluster() {

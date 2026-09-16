@@ -179,15 +179,6 @@ namespace NActors {
         EnqueueOutgoing(std::move(ev));
     }
 
-    void TInterconnectSessionTCPv2::ForwardWithSubscribe(STATEFN_SIG) {
-        Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
-        auto msg = ev->Release<TEvForwardSubscribeSession>();
-        Y_ABORT_UNLESS(msg->Event);
-        AddSubscriber(msg->Event->Sender, msg->Event->Cookie);
-        Send(msg->Event->Sender, MakeNodeConnectedEvent(), 0, msg->Event->Cookie);
-        EnqueueOutgoing(TAutoPtr<IEventHandle>(msg->Event.Release()));
-    }
-
     void TInterconnectSessionTCPv2::HandleSubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS96", "subscribe for session state for %s", ev->Sender.ToString().data());
         AddSubscriber(ev->Sender, ev->Cookie);

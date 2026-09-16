@@ -188,7 +188,7 @@ public:
     }
 
     ~TNode() {
-        ActorSystem->Stop();
+        Stop();
         unlink(CaPath.c_str());
     }
 

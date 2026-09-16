@@ -953,6 +953,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
             Metrics.RestartSessionByOffsets->Inc();
             ++RestartSessionByOffsets;
             info.RestartSessionByOffsetsByQuery->Inc();
+            RefreshParsers();
             StopReadSession();
         }
     }

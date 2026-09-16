@@ -217,6 +217,9 @@ public:
 
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, bcPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.Base()->PathId);
 
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);

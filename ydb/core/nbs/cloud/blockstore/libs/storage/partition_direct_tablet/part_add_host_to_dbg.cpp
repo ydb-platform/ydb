@@ -228,7 +228,6 @@ void TPartitionActor::HandleAddHostAllocationResult(
     // the new host takes the position after the last entry.
     const auto newHostIndex =
         static_cast<THostIndex>(dbgConnections.ConnectionsSize());
-    NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
 
     TDirectBlockGroupsConnections updated;
     if (auto error = AddConnection(
@@ -394,6 +393,16 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
     size_t dbgId)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip AddHost BSC send during delete dbgId=%lu",
+            LogTitle.GetWithTime().c_str(),
+            dbgId);
+        return;
+    }
+
     Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
     const ui64 regionCount = GetRegionCount(
@@ -403,10 +412,6 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
         regionCount,
         DefaultVolumeDirectBlockGroupCount);
-
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
 
     // NumDDisks is the desired final state in live hosts (dead slots have no
     // resources in BSC), so a re-sent request is idempotent.
@@ -424,7 +429,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     define->SetNumChunksPerDDisk(vChunkPerDbgCount);
     define->SetNumPersistentBuffers(numDDisks);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

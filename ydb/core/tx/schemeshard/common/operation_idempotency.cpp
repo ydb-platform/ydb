@@ -25,9 +25,6 @@ TOperationUidAdmission::EDecision CompareOperationUid(const TOperationUidIdentit
     if (requested.UserSID && stored.UserSID != requested.UserSID) {
         return EDecision::OwnerMismatch;
     }
-    if (requested.DomainPathId && stored.DomainPathId != requested.DomainPathId) {
-        return EDecision::DomainMismatch;
-    }
     if (requested.RequestBody && stored.RequestBody != requested.RequestBody) {
         return EDecision::RequestMismatch;
     }

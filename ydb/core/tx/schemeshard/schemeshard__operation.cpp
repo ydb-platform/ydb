@@ -445,8 +445,8 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                 [&](const auto& receipt) {
                     // Check ownership before comparing or exposing the request.
                     return CompareOperationUid(
-                        {{}, TStringBuf(receipt.UserSID), TStringBuf(receipt.RequestBody)},
-                        {{}, TStringBuf(UserSID), TStringBuf(identity.GetOriginalDdl())});
+                        {TStringBuf(receipt.UserSID), TStringBuf(receipt.RequestBody)},
+                        {TStringBuf(UserSID), TStringBuf(identity.GetOriginalDdl())});
                 });
             switch (admission.GetDecision()) {
                 case TOperationUidAdmission::EDecision::Proceed:

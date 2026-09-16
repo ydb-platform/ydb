@@ -146,10 +146,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             TOperationUidAdmission::EDuplicatePolicy::Replay,
             [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {
-                const auto domain = DomainPathId(request.GetDatabaseName());
-                // Preserve legacy requests without a database binding.
-                const auto expectedDomain = domain ? TMaybe<TPathId>(domain) : stored.DomainPathId;
-                return CompareOperationUid({stored.DomainPathId, {}, {}}, {expectedDomain, {}, {}});
+                return IsSameDomain(Self->Exports.at(stored.OperationId), request.GetDatabaseName())
+                    ? TOperationUidAdmission::EDecision::Replay : TOperationUidAdmission::EDecision::DomainMismatch;
             });
         if (admission.GetDecision() == TOperationUidAdmission::EDecision::Replay) {
             Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(),

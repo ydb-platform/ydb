@@ -11,23 +11,21 @@ TMaybe<TOperationUidRecord> TSchemeShard::FindOperationByUid(const TOperationUid
     }
     switch (key.first) {
         case Ydb::TOperationId::EXPORT:
-            return TOperationUidRecord{*id, Exports.at(*id)->DomainPathId, {}, {}};
         case Ydb::TOperationId::IMPORT:
-            return TOperationUidRecord{*id, Imports.at(*id)->DomainPathId, {}, {}};
         case Ydb::TOperationId::BUILD_INDEX:
         case Ydb::TOperationId::SET_NOT_NULL:
-            return TOperationUidRecord{*id, {}, {}, {}};
+            return TOperationUidRecord{*id, {}, {}};
         case Ydb::TOperationId::FULL_BACKUP: {
             const auto& info = *FullBackups.at(*id);
-            return TOperationUidRecord{*id, {}, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
+            return TOperationUidRecord{*id, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
         case Ydb::TOperationId::INCREMENTAL_BACKUP: {
             const auto& info = *IncrementalBackups.at(*id);
-            return TOperationUidRecord{*id, {}, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
+            return TOperationUidRecord{*id, info.UserSID.GetOrElse(TString()), info.OriginalDdl};
         }
         case Ydb::TOperationId::RESTORE: {
             const auto& info = IncrementalRestoreStates.at(*id);
-            return TOperationUidRecord{*id, {}, info.UserSID, info.OriginalDdl};
+            return TOperationUidRecord{*id, info.UserSID, info.OriginalDdl};
         }
         default:
             Y_ABORT("Unsupported operation UID storage kind");

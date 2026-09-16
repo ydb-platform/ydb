@@ -5419,6 +5419,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         TestGetImport(runtime, importId, "/MyRoot");
 
+        // Legacy retries allow an omitted or unresolved database, but reject
+        // a different resolved path before validating a new request.
+        for (const TString& database : {TString(), TString("/MissingDatabase")}) {
+            TestImport(runtime, ++txId, database, differentBody);
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        }
+        TestImport(runtime, ++txId, "/MyRoot/Table", differentBody, "", "", Ydb::StatusIds::ALREADY_EXISTS);
+
         TestForgetImport(runtime, ++txId, "/MyRoot", importId);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         TestImport(runtime, ++txId, "/MyRoot", differentBody);

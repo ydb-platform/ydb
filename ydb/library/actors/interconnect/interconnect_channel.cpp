@@ -165,21 +165,29 @@ namespace NActors {
                     RdmaCredPartPos = 0;
                     RdmaCredsPerByteAvg = 1.0 / RdmaCredsMinSizeSerialized;
                     if (event.Buffer) {
-                        State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
                         SerializationInfo = &event.Buffer->GetSerializationInfo();
                         SectionIndex = 0;
                         PartLenRemain = 0;
-                    } else if (event.Event) {
-                        State = EState::BODY;
-                        IEventBase *base = event.Event.Get();
-                        if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
+                        if (event.EventSerializedSize > MaxSerializedEventSize
+                                && Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
+                            throw TExSerializedEventTooLarge(event.Descr.Type);
                         }
+                        State = EState::BODY;
+                    } else if (event.Event) {
+                        IEventBase *base = event.Event.Get();
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
                         SectionIndex = 0;
                         PartLenRemain = 0;
+                        if (event.EventSerializedSize > MaxSerializedEventSize
+                                && Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
+                            throw TExSerializedEventTooLarge(event.Descr.Type);
+                        }
+                        State = EState::BODY;
+                        if (event.EventSerializedSize) {
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
+                        }
                     } else { // event without buffer and IEventBase instance
                         State = EState::DESCRIPTOR;
                         SerializationInfoContainer = {};

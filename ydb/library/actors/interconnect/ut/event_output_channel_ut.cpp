@@ -358,6 +358,38 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
         UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
     }
 
+    Y_UNIT_TEST(RejectsOversizedExternalEventBeforeSectionDeclaration) {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        constexpr ui32 maxSerializedEventSize = 1024;
+        TSessionParams params;
+        params.UseExternalDataChannel = true;
+        TEventOutputChannel channel(1, 1, maxSerializedEventSize, metrics, params, nullptr);
+
+        auto* ev = new TEvTestSerialization;
+        ev->AddPayload(TRope(TString(5 * maxSerializedEventSize, 'x')));
+        UNIT_ASSERT(ev->AllowExternalDataChannel());
+        auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+        channel.Push(*evHandle, pool, TInstant::Zero());
+
+        NInterconnect::TOutgoingStream mainStream;
+        NInterconnect::TOutgoingStream xdcStream;
+        TTcpPacketOutTask task(params, mainStream, xdcStream);
+        const size_t mainSizeBefore = mainStream.CalculateOutgoingSize();
+        const size_t xdcSizeBefore = xdcStream.CalculateOutgoingSize();
+
+        UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+        UNIT_ASSERT_VALUES_EQUAL(mainStream.CalculateOutgoingSize(), mainSizeBefore);
+        UNIT_ASSERT_VALUES_EQUAL(xdcStream.CalculateOutgoingSize(), xdcSizeBefore);
+    }
+
     Y_UNIT_TEST(AbortsActiveCoroutineSerializerOnUndelivered) {
         TTestActorRuntimeBase runtime;
         runtime.Initialize();

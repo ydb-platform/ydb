@@ -823,14 +823,29 @@ namespace NActors {
                     const ui64 size = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 tailroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 alignment = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
-                    if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>() || alignment == Max<ui64>()) {
+                    if (headroom == Max<ui64>() || size == Max<ui64>() || tailroom == Max<ui64>()
+                            || alignment == Max<ui64>() || headroom > EventMaxByteSize || size > EventMaxByteSize
+                            || tailroom > EventMaxByteSize || alignment > EventMaxByteSize
+                            || (alignment & (alignment - 1)) != 0) {
                         YDB_LOG_CRIT("XDC command format error",
-                            {"marker", "ICIS00"});
+                            {"marker", "ICIS00"},
+                            {"headroom", headroom},
+                            {"size", size},
+                            {"tailroom", tailroom},
+                            {"alignment", alignment});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     if (!IgnorePayload) { // process command if packet is being applied
                         auto& pendingEvent = context.PendingEvents.back();
+                        if (size > EventMaxByteSize - pendingEvent.DeclaredSize) {
+                            YDB_LOG_CRIT("XDC declared section sizes exceed the maximum event size",
+                                {"marker", "ICIS00"},
+                                {"declaredSize", pendingEvent.DeclaredSize},
+                                {"sectionSize", size});
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
+                        pendingEvent.DeclaredSize += size;
                         const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
                         const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,

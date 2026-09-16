@@ -158,6 +158,8 @@ namespace NActors {
 
                 // number of bytes remaining through XDC channel
                 size_t XdcSizeLeft = 0;
+                // Sum of section sizes declared for this event, bounded by EventMaxByteSize.
+                size_t DeclaredSize = 0;
 
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;

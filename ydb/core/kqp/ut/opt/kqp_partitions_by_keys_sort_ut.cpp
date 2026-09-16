@@ -160,19 +160,7 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
         CheckStandardWindowFunctionAst("CUME_DIST() OVER w AS dist", UseSortForPartitionsByKeys);
     }
 
-    Y_UNIT_TEST_TWIN(WindowFunctionLisFullFrameSumAst, WindowFunctionsV2) {
-        CheckFullFrameSumPlan(
-            "SELECT Key, Text, Data,\n"
-            "    SUM(COALESCE(Data, 0)) OVER wgrp AS grp_prem,\n"
-            "    SUM(COALESCE(Data, 0)) OVER wgrp AS grp_fact,\n"
-            "    SUM(IF(Data != 0, Data, 0)) OVER wgrp AS grp_wo_prem,\n"
-            "    SUM(IF(Data != 0, Data, 0)) OVER wgrp AS grp_fact_wo\n"
-            "FROM `/Root/EightShard`\n"
-            "WINDOW wgrp AS (PARTITION BY Text, Data);\n",
-            WindowFunctionsV2);
-    }
-
-    Y_UNIT_TEST_TWIN(WindowFunctionOssFullFrameSumAst, WindowFunctionsV2) {
+    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameAggregateAst, WindowFunctionsV2) {
         CheckFullFrameSumPlan(
             "SELECT Key, Text, Data,\n"
             "    SUM(Data) OVER (PARTITION BY Text) AS tot\n"

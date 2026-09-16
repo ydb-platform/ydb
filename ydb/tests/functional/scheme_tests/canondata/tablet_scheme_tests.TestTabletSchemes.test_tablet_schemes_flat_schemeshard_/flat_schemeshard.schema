@@ -9133,14 +9133,9 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 15,
-                "ColumnName": "BackupCollectionPathOwnerId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 16,
-                "ColumnName": "BackupCollectionPathId",
-                "ColumnType": "Uint64"
+                "ColumnId": 17,
+                "ColumnName": "AwaitingInitialRestore",
+                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 1,
@@ -9151,11 +9146,6 @@
                 "ColumnId": 2,
                 "ColumnName": "State",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "AwaitingInitialRestore",
-                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 3,
@@ -9216,17 +9206,25 @@
                 "ColumnId": 14,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "BackupCollectionPathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "BackupCollectionPathId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    15,
-                    16,
+                    17,
                     1,
                     2,
-                    17,
                     3,
                     4,
                     5,
@@ -9238,7 +9236,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

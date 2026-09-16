@@ -1,5 +1,4 @@
 {
-  "comment": "Source of truth: wiki page «Список area» (YDB) and kikimr/ci/workflows/ydb_team_dash/config/areas.json. `canonical` = the only area values allowed on mute issues and in team_dash / ST YDBBUGS. `aliases` = legacy labels → canonical. Anything else → unknown. Mute LLM prompt (.github/scripts/tests/mute/llm_debug_comment.py) reads this file. Keep in sync with the wiki when the list changes.",
   "canonical": [
     "area/blobstorage",
     "area/core",

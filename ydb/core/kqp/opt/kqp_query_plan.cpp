@@ -257,10 +257,22 @@ public:
 
             planNode.TypeName = typeName;
 
+            auto visitResultStage = [&](const TDqStageBase& resultStage) {
+                // Write with RETURNING produces the result straight from the sink stage.
+                // Keep the ResultSet node clean and attach the sink stage below it so the plan
+                // looks like a regular write with the ResultSet on top.
+                if (resultStage.Outputs()) {
+                    auto& sinkPlanNode = AddPlanNode(planNode);
+                    Visit(resultStage, sinkPlanNode);
+                } else {
+                    Visit(resultStage, planNode);
+                }
+            };
+
             if (res.Maybe<TDqCnResult>()) {
-                Visit(res.Cast<TDqCnResult>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnResult>().Output().Stage());
             } else if (res.Maybe<TDqCnValue>()) {
-                Visit(res.Cast<TDqCnValue>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnValue>().Output().Stage());
             } else {
                 Y_ENSURE(false, res.Ref().Content());
             }
@@ -269,6 +281,11 @@ public:
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
             if (stageBase.Outputs()) { // Sink
+                if (VisitedStages.contains(stage.Raw())) {
+                    // Already rendered as a result output stage (e.g. write with RETURNING).
+                    continue;
+                }
+
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -1033,7 +1050,7 @@ private:
     }
 
     template<typename TSinkLike>
-    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode, TString planNodeSuffix = "Sink") {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
@@ -1209,7 +1226,11 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        AddOperator(planNode, "Sink", op);
+        auto inputContext = CurrentArgContext.AddArg(sinkLike.Ptr().Get());
+        LambdaInputs[inputContext] = &stagePlanNode;
+        op.Inputs.push_back(inputContext);
+
+        AddOperator(planNode, planNodeSuffix, op);
     }
 
     void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
@@ -1235,7 +1256,7 @@ private:
             dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        VisitTableSink(transform, stage, planNode, stagePlanNode);
+        VisitTableSink(transform, stage, planNode, stagePlanNode, TString(transform.Type().Value()));
 
         if (dqIntegration) {
             dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);

@@ -50,7 +50,7 @@
 
 {% note info %}
 
-{% include [log_components](./_includes/log_components.md) %}
+{% include [log_components](../../contributor/_includes/log_components.md) %}
 
 При [записи сообщения в лог](../../contributor/logging.md#simple-logging) должен явно или неявно быть указан код компонента, от имени которого происходит запись этого сообщения. Впоследствии имя компонента выводится в лог и может быть использовано для поиска или фильтрации содержимого лога.
 

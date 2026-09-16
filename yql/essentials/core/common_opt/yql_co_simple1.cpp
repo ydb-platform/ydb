@@ -4323,6 +4323,76 @@ bool IsRewriteSwitchOverExtractMembersAllowed(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
+bool AllowPropagateSomeTraitsUnusedColumns(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "PropagateSomeTraitsUnusedColumns";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
+bool IsSomeMergeLambda(const TExprNode& lambda) {
+    if (!lambda.IsLambda() || lambda.Head().ChildrenSize() != 2) {
+        return false;
+    }
+    const auto& a = *lambda.Head().Child(0);
+    const auto& b = *lambda.Head().Child(1);
+    const auto& body = lambda.Tail();
+    return &body == &a || &body == &b;
+}
+
+TExprNode::TPtr NarrowTraitsLambdaOutputToFields(TCoLambda lambda, ui32 requiredArgsCount, const TSet<TString>& usedFields, TExprContext& ctx) {
+    const TTypeAnnotationNode* bodyType = lambda.Body().Ref().GetTypeAnn();
+    if (bodyType->GetKind() != ETypeAnnotationKind::Struct) {
+        return nullptr;
+    }
+
+    const auto& items = bodyType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> subsetItems;
+    for (const auto& item : items) {
+        if (usedFields.contains(item->GetName())) {
+            subsetItems.push_back(item);
+        }
+    }
+    if (subsetItems.size() == items.size()) {
+        return nullptr;
+    }
+    auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
+
+    const ui32 argCount = lambda.Args().Size();
+    if (argCount != requiredArgsCount) {
+        return nullptr;
+    }
+
+    const auto pos = lambda.Pos();
+    const auto& lambdaRef = lambda.Ref();
+    if (argCount == 1) {
+        return ctx.Builder(pos)
+            .Lambda()
+                .Param("state")
+                .Callable("CastStruct")
+                    .Apply(0, lambdaRef)
+                        .With(0, "state")
+                    .Seal()
+                    .Add(1, ExpandType(lambda.Body().Pos(), *subsetType, ctx))
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(pos)
+            .Lambda()
+                .Param("state")
+                .Param("item")
+                .Callable("CastStruct")
+                    .Apply(0, lambdaRef)
+                        .With(0, "state")
+                        .With(1, "item")
+                    .Seal()
+                    .Add(1, ExpandType(lambda.Body().Pos(), *subsetType, ctx))
+                .Seal()
+            .Seal()
+            .Build();
+    }
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -5961,6 +6031,39 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["Except"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << node->Content();
         return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except", ctx);
+    };
+
+    map["AggregationTraits"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (!AllowPropagateSomeTraitsUnusedColumns(optCtx) || !optCtx.ParentsMap) {
+            return node;
+        }
+        TCoAggregationTraits self(node);
+
+        if (!IsIdentityLambda(self.SaveHandler().Ref()) ||
+            !IsIdentityLambda(self.LoadHandler().Ref()) ||
+            !IsSomeMergeLambda(self.MergeHandler().Ref())) {
+            return node;
+        }
+
+        auto finish = self.FinishHandler();
+        TSet<TString> usedFields;
+        if (!HaveFieldsSubset(finish.Body().Ptr(), finish.Args().Arg(0).Ref(), usedFields, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        auto newInit = NarrowTraitsLambdaOutputToFields(self.InitHandler(), 1, usedFields, ctx);
+        auto newUpdate = NarrowTraitsLambdaOutputToFields(self.UpdateHandler(), 2, usedFields, ctx);
+        if (!newInit || !newUpdate) {
+            return node;
+        }
+
+        YQL_CLOG(DEBUG, Core) << "Pushdown finish subset fields over Some AggregationTraits";
+        return Build<TCoAggregationTraits>(ctx, node->Pos())
+            .InitFrom(self)
+            .InitHandler(newInit)
+            .UpdateHandler(newUpdate)
+            .Done()
+            .Ptr();
     };
 
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

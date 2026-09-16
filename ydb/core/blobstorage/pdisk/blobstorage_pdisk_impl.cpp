@@ -1474,7 +1474,8 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
 // Chunk reservation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason) {
+TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
+        bool forHousekeeping) {
     // chunkIdx = 0 is deprecated and will not be soon removed
     TGuard<TMutex> guard(StateMutex);
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
@@ -1482,7 +1483,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
     double occupancy;
-    auto color = Keeper.EstimateSpaceColor(req->Owner, count, &occupancy);
+    auto color = Keeper.EstimateAllocationColor(req->Owner, count, forHousekeeping, &occupancy);
 
     auto makeError = [&](TString info) {
         guard.Release();
@@ -1492,6 +1493,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             << " for ownerId# " << req->Owner
             << " sharedFree# " << sharedFree
             << " ownerFree# " << ownerFree
+            << " forHousekeeping# " << forHousekeeping
             << " estimatedColor after allocation# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color)
             << " occupancy after allocation# " << occupancy
             << " " << info
@@ -1545,7 +1547,8 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
 
     THolder<NPDisk::TEvChunkReserveResult> result;
     TString allocateError;
-    TVector<TChunkIdx> chunks = AllocateChunkForOwner(&evChunkReserve, evChunkReserve.SizeChunks, allocateError);
+    TVector<TChunkIdx> chunks = AllocateChunkForOwner(&evChunkReserve, evChunkReserve.SizeChunks, allocateError,
+        evChunkReserve.ForHousekeeping);
     errorReason << allocateError;
 
     if (chunks.empty()) {
@@ -1557,12 +1560,16 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
         result->ChunkIds = std::move(chunks);
         result->StatusFlags = GetStatusFlags(evChunkReserve.Owner, evChunkReserve.OwnerGroupType);
     }
+    // Reported after the allocation, so the owner learns what it has left rather
+    // than what it had before asking.
+    result->Headroom = Keeper.GetSpaceHeadroom(evChunkReserve.Owner);
 
     guard.Release();
     PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release(), 0, evChunkReserve.Cookie);
     Mon.ChunkReserve.CountResponse();
 
 }
+
 bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
     TGuard<TMutex> guard(StateMutex);
     if (chunkIdx >= ChunkState.size()) {
@@ -1585,7 +1592,11 @@ bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
             {"marker", "BPD90"});
         return false;
     }
-    if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+    // DATA_RESERVED is accepted as well: a reservation that was never committed has no
+    // persistent trace (WriteSysLogRestorePoint only stores owners of DATA_COMMITTED*
+    // chunks), so it can be handed back to the free pool right away, without a log record.
+    if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED
+            && ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
             && ChunkState[chunkIdx].CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS
             && ChunkState[chunkIdx].CommitState != TChunkState::DATA_DECOMMITTED) {
         outErrorReason << PCtx->PDiskLogPrefix
@@ -1616,11 +1627,26 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
             break;
         }
     }
+    bool isDirtyMarked = false;
     if (isOk) {
         for (ui32 chunkIdx : evChunkForget.ForgetChunks) {
             TChunkState& state = ChunkState[chunkIdx];
+            // The chunk goes back to the free pool, so from now on it must be treated as
+            // holding someone else's data. Decommitted chunks were already marked when the
+            // commit record that decommitted them was processed, DATA_RESERVED ones never were.
+            if (TPDisk::IS_SHRED_ENABLED && !state.IsDirty) {
+                state.IsDirty = true;
+                isDirtyMarked = true;
+            }
             if (state.HasAnyOperationsInProgress()) {
                 switch (state.CommitState) {
+                    case TChunkState::DATA_RESERVED:
+                        // Same handling as for DATA_DECOMMITTED below: quarantine releases it
+                        // through ForceDeleteChunk() once the writes in flight are over.
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+                        QuarantineChunks.push_back(chunkIdx);
+                        break;
                     case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
                         Mon.UncommitedDataChunks->Dec();
                         state.CommitState = TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
@@ -1643,6 +1669,24 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                 }
             } else {
                 switch (state.CommitState) {
+                    case TChunkState::DATA_RESERVED:
+                        Y_VERIFY_S(state.CommitsInProgress == 0, PCtx->PDiskLogPrefix
+                                << "chunkIdx# " << chunkIdx << " state# " << state.ToString());
+                        YDB_LOG_P_LOG(PRI_INFO, "Reserved chunk was forgotten",
+                            {"marker", "BPD01"},
+                            {"chunkIdx", chunkIdx},
+                            {"oldOwner", (ui32)state.OwnerId},
+                            {"newOwner", (ui32)OwnerUnallocated});
+                        Mon.UncommitedDataChunks->Dec();
+                        state.OwnerId = OwnerUnallocated;
+                        state.CommitState = TChunkState::FREE;
+                        // Drop the nonces along with the ownership: the next owner gets a
+                        // freshly allocated nonce range, so whatever this owner wrote into the
+                        // chunk stops validating and reads back as gaps.
+                        state.Nonce = 0;
+                        state.CurrentNonce = 0;
+                        Keeper.PushFreeOwnerChunk(evChunkForget.Owner, chunkIdx);
+                        break;
                     case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
                         Mon.UncommitedDataChunks->Dec();
                         state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
@@ -1675,6 +1719,11 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
         result = MakeHolder<NPDisk::TEvChunkForgetResult>(NKikimrProto::OK, 0);
         result->StatusFlags = GetStatusFlags(evChunkForget.Owner, evChunkForget.OwnerGroupType);
     }
+    if (isDirtyMarked) {
+        WriteSysLogRestorePoint(nullptr, TReqId(TReqId::MarkDirtySysLog, 0), {});
+    }
+    // Reported after the release, so the owner learns what it has now rather than before.
+    result->Headroom = Keeper.GetSpaceHeadroom(evChunkForget.Owner);
 
     guard.Release();
     PCtx->ActorSystem->Send(evChunkForget.Sender, result.Release());
@@ -2487,6 +2536,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
     result->VDiskSlotUsage = Keeper.GetVDiskSlotUsage(evCheckSpace.Owner);
     result->VDiskRawUsage = Keeper.GetVDiskRawUsage(evCheckSpace.Owner);
     result->PDiskUsage = Keeper.GetPDiskUsage();
+    result->Headroom = Keeper.GetSpaceHeadroom(evCheckSpace.Owner);
     PCtx->ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;
@@ -3041,7 +3091,7 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestYardInit: {
                 std::unique_ptr<TYardInit> init{static_cast<TYardInit*>(req.release())};
                 if (YardInitStart(*init)) {
-                    PendingYardInits.emplace(std::move(init));
+                    PendingYardInits.emplace_back(std::move(init));
                 }
                 break;
             }
@@ -3412,6 +3462,7 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
         GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str(),
         Keeper.GetLogChunkCount()));
+    logWrite->Result->Headroom = Keeper.GetSpaceHeadroom(logWrite->Owner);
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
 }
 
@@ -3641,6 +3692,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());
+            result->Headroom = Keeper.GetSpaceHeadroom(ev.Owner);
 
             ++state.OperationsInProgress;
             ++ownerData.InFlight->ChunkWrites;
@@ -4161,7 +4213,7 @@ void TPDisk::ProcessPausedQueue() {
     }
 }
 
-void TPDisk::ProcessYardInitSet() {
+void TPDisk::ProcessPendingYardInits() {
     for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
         TOwnerData &data = OwnerData[owner];
         if (data.LogReader) {
@@ -4174,7 +4226,7 @@ void TPDisk::ProcessYardInitSet() {
 
     if (!PendingYardInits.empty()) {
         TGuard<TMutex> guard(StateMutex);
-        // Process pending queue
+        // Finish ready owners in arrival order without blocking them on busy owners.
         for (auto it = PendingYardInits.begin(); it != PendingYardInits.end();) {
             if (!OwnerData[(*it)->Owner].HaveRequestsInFlight()) {
                 YardInitFinish(**it);
@@ -4487,7 +4539,7 @@ void TPDisk::Update() {
     ProcessChunkForgetQueue();
     LastTact = tact;
 
-    ProcessYardInitSet();
+    ProcessPendingYardInits();
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
     LWTRACK(PDiskStartWaiting, UpdateCycleOrbit, PCtx->PDiskId);

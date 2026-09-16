@@ -30,6 +30,12 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
+bool AllowPushdownStructSubsetFieldsOverAggregate(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "PushdownStructSubsetFieldsOverAggregate";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
@@ -2160,6 +2166,202 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     return TExprBase(ctx.NewCallable(node.Pos(), node.Ref().Content(), { newAgg, restLambda }));
 }
 
+TExprNode::TPtr PushdownStructSubsetFieldsOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.ParentsMap);
+    const auto maybeAgg = node.Input().Maybe<TCoAggregate>();
+    if (!maybeAgg) {
+        return nullptr;
+    }
+    const TCoAggregate agg = maybeAgg.Cast();
+    // Bail out on unknown Aggregate settings — only "compact" and "output_columns" are safe.
+    for (const auto& setting : agg.Settings()) {
+        const auto name = setting.Name().Ref().Content();
+        if (name != "compact" && name != "output_columns") {
+            return nullptr;
+        }
+    }
+    const auto arg = node.Lambda().Args().Arg(0).Raw();
+
+    const auto argType = arg->GetTypeAnn();
+    if (argType->GetKind() != ETypeAnnotationKind::Struct) {
+        return nullptr;
+    }
+    const auto outputStructType = argType->Cast<TStructExprType>();
+
+    // Map handler output column name -> (handler tuple, traits, index).
+    struct THandlerEntry {
+        TCoAggregateTuple Tuple;
+        TCoAggregationTraits Traits;
+        ui32 Index = 0;
+    };
+    THashMap<TStringBuf, THandlerEntry> handlersByCol;
+    const auto& handlersNode = *agg.Handlers().Ptr();
+    for (ui32 i = 0; i < handlersNode.ChildrenSize(); ++i) {
+        const auto handler = TCoAggregateTuple(handlersNode.Child(i));
+        auto maybeTraits = handler.Trait().Maybe<TCoAggregationTraits>();
+        if (!maybeTraits) {
+            continue;
+        }
+        if (!handler.ColumnName().Ref().IsAtom()) {
+            continue; // skip multi-column handlers
+        }
+        if (handler.Ref().ChildrenSize() == 3) {
+            continue; // skip distinct aggregations
+        }
+        handlersByCol.emplace(handler.ColumnName().Ref().Content(), THandlerEntry{.Tuple=handler, .Traits=maybeTraits.Cast(), .Index=i});
+    }
+
+    struct TColUsage {
+        TSet<TStringBuf> UsedMembers;
+        bool FullUse = false;
+    };
+    THashMap<TStringBuf, TColUsage> usedFieldsByCol;
+    if (const auto parents = optCtx.ParentsMap->find(arg); parents != optCtx.ParentsMap->cend()) {
+        for (const auto& parent : parents->second) {
+            if (!parent->IsCallable("Member")) {
+                if (IsDependsOnUsage(*parent, *optCtx.ParentsMap)) {
+                    continue;
+                }
+
+                return nullptr;
+            }
+            const auto colName = parent->Tail().Content();
+            if (!handlersByCol.contains(colName)) {
+                continue;
+            }
+            auto& usage = usedFieldsByCol[colName];
+            if (usage.FullUse) {
+                continue;
+            }
+            // 2nd-level ParentsMap: parents of Member(arg, col) -> Member(Member(arg, col), member).
+            if (const auto colParents = optCtx.ParentsMap->find(parent); colParents != optCtx.ParentsMap->cend()) {
+                for (const auto& colParent : colParents->second) {
+                    if (colParent->IsCallable("Member")) {
+                        usage.UsedMembers.insert(colParent->Tail().Content());
+                    } else {
+                        usage.FullUse = true;
+                        break;
+                    }
+                }
+            } else {
+                usage.FullUse = true;
+            }
+        }
+    }
+
+    if (usedFieldsByCol.empty()) {
+        return nullptr;
+    }
+
+    bool rebuildHandlers = false;
+    TExprNodeList newHandlerNodes;
+    newHandlerNodes.reserve(agg.Handlers().Size());
+    for (const auto& handler : agg.Handlers()) {
+        newHandlerNodes.push_back(handler.Ptr());
+    }
+
+    for (const auto& [colName, usage] : usedFieldsByCol) {
+        if (usage.FullUse) {
+            continue;
+        }
+        const auto& entry = handlersByCol.at(colName);
+
+        const auto colType = outputStructType->FindItemType(colName);
+        if (!colType) {
+            continue;
+        }
+        auto finishLambda = entry.Traits.FinishHandler();
+        const auto finishBodyType = finishLambda.Body().Ref().GetTypeAnn();
+        if (!finishBodyType) {
+            continue;
+        }
+        const bool isOptional = finishBodyType->GetKind() == ETypeAnnotationKind::Optional;
+        const auto innerType = isOptional ? finishBodyType->Cast<TOptionalExprType>()->GetItemType() : finishBodyType;
+        if (innerType->GetKind() != ETypeAnnotationKind::Struct) {
+            continue;
+        }
+        const auto handlerStructType = innerType->Cast<TStructExprType>();
+        if (usage.UsedMembers.size() == handlerStructType->GetSize()) {
+            continue;
+        }
+
+        rebuildHandlers = true;
+
+        TExprNode::TPtr newFinishLambda;
+        if (isOptional) {
+            TExprNode::TListType memberAtoms;
+            for (const auto& item : handlerStructType->GetItems()) {
+                if (usage.UsedMembers.contains(item->GetName())) {
+                    memberAtoms.push_back(ctx.NewAtom(finishLambda.Body().Pos(), item->GetName()));
+                }
+            }
+            newFinishLambda = ctx.Builder(finishLambda.Pos())
+                .Lambda()
+                    .Param("arg")
+                    .Callable("ExtractMembers")
+                        .Apply(0, finishLambda.Ref())
+                            .With(0, "arg")
+                        .Seal()
+                        .List(1)
+                            .Do([&](TExprNodeBuilder& b) -> TExprNodeBuilder& {
+                                for (size_t i = 0; i < memberAtoms.size(); ++i) {
+                                    b.Add(i, memberAtoms[i]);
+                                }
+                                return b;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            TVector<const TItemExprType*> subsetItems;
+            for (const auto& item : handlerStructType->GetItems()) {
+                if (usage.UsedMembers.contains(item->GetName())) {
+                    subsetItems.push_back(item);
+                }
+            }
+            auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
+            newFinishLambda = ctx.Builder(finishLambda.Pos())
+                .Lambda()
+                    .Param("arg")
+                    .Callable("CastStruct")
+                        .Apply(0, finishLambda.Ref())
+                            .With(0, "arg")
+                        .Seal()
+                        .Add(1, ExpandType(finishLambda.Body().Pos(), *subsetType, ctx))
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        auto newTraits = Build<TCoAggregationTraits>(ctx, entry.Traits.Pos())
+            .InitFrom(entry.Traits)
+            .FinishHandler(newFinishLambda)
+            .Done()
+            .Ptr();
+
+        auto newTuple = ctx.ChangeChild(entry.Tuple.Ref(), TCoAggregateTuple::idx_Trait, std::move(newTraits));
+        newHandlerNodes[entry.Index] = newTuple;
+    }
+
+    if (!rebuildHandlers) {
+        return nullptr;
+    }
+
+    auto newAgg = Build<TCoAggregate>(ctx, agg.Pos())
+        .InitFrom(agg)
+        .Handlers(ctx.NewList(agg.Pos(), std::move(newHandlerNodes)))
+        .Done();
+
+    YQL_CLOG(DEBUG, Core) << "Pushdown struct subset fields over Aggregate in " << node.Ref().Content();
+    return Build<TCoFlatMapBase>(ctx, node.Pos())
+        .CallableName(node.Ref().Content())
+        .Input(newAgg)
+        .Lambda(node.Lambda())
+        .Done()
+        .Ptr();
+}
+
 bool IsMemberOrJustMember(TExprNode::TPtr node, const TCoArgument& arg, bool& isJust, TStringBuf& memberName) {
     isJust = node->IsCallable("Just");
     if (isJust) {
@@ -2627,6 +2829,12 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
                 if (ret.Raw() != self.Raw()) {
                     return ret.Ptr();
+                }
+            }
+
+            if (AllowPushdownStructSubsetFieldsOverAggregate(optCtx)) {
+                if (auto pushed = PushdownStructSubsetFieldsOverAggregate(self, ctx, optCtx)) {
+                    return pushed;
                 }
             }
 

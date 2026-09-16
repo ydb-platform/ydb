@@ -899,6 +899,9 @@ def _make_cluster(
 ):
     configurator = KikimrConfigGenerator(
         additional_log_configs={"METADATA_PROVIDER": 7},
+        # WASM UDFs are only ever compiled by the per-database
+        # WasmCompileController tablet, which this flag creates.
+        extra_feature_flags=["enable_wasm_compile_controller"] if enable_wasm_udf else None,
     )
     if enable_udf_store:
         udf_store_config = {"enabled": True, "kv_storage_media": "hdd"}

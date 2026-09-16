@@ -1200,11 +1200,11 @@ TESTCASES = [
 
 
 class TestJoinYdbStreaming(StreamingTestBase):
+    # Use only testcase 16 for column-shard tables (since it exercises unusual types)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"])
-    @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
+    @pytest.mark.parametrize("column_tables, testcase", [*zip([False]*len(TESTCASES), range(len(TESTCASES))), (True, 16)])
     @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
-    @pytest.mark.parametrize("column_tables", [True, False], ids=["cs", "row"])
     def test_streamlookup(
         self,
         kikimr: Kikimr,

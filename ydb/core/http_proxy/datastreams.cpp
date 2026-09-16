@@ -10,7 +10,9 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -26,8 +28,6 @@
 
 #include <numeric>
 #include <optional>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
@@ -250,21 +250,23 @@ namespace NKikimr::NHttpProxy {
 
     private:
 
-        class THttpRequestActor : public NActors::TActorBootstrapped<THttpRequestActor> {
+        class THttpRequestActor : public NPQ::TBaseActor<THttpRequestActor>
+                                  , public NPQ::TConstantLogPrefix {
         public:
-            using TBase = NActors::TActorBootstrapped<THttpRequestActor>;
+            using TBase = NPQ::TBaseActor<THttpRequestActor>;
 
             THttpRequestActor(THttpRequestContext&& httpContext,
                               THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                               TProtoCall protoCall, const TString& method)
-                : HttpContext(std::move(httpContext))
+                : TBase(NKikimrServices::HTTP_PROXY)
+                , HttpContext(std::move(httpContext))
                 , Signature(std::move(signature))
                 , ProtoCall(protoCall)
                 , Method(method)
             {
             }
 
-            TStringBuilder LogPrefix() const {
+            NPQ::TStructuredMessage BuildLogPrefix() const override {
                 return HttpContext.LogPrefix();
             }
 
@@ -294,8 +296,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void CreateClient(const TActorContext& ctx) {
-                YDB_LOG_INFO_CTX(ctx, "Create client to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Create client to database: iam token",
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -323,8 +324,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Sending grpc request to database: iam token",
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -351,8 +351,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequest(const TActorContext& ctx) {
-                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Sending grpc request to database: iam token",
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -362,8 +361,7 @@ namespace NKikimr::NHttpProxy {
 
                 TProtoResponse response;
 
-                YDB_LOG_DEBUG_CTX(ctx, "Sending grpc request",
-                    {"logPrefix", LogPrefix()},
+                LOG_D("Sending grpc request",
                     {"request", Request.DebugString()});
 
                 Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(
@@ -616,8 +614,7 @@ namespace NKikimr::NHttpProxy {
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
-                        {"logPrefix", LogPrefix()},
+                    LOG_W("Got new request with incorrect json from database",
                         {"sourceAddress", HttpContext.SourceAddress},
                         {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
@@ -627,8 +624,7 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.DatabasePath = ExtractStreamName<TProtoRequest>(Request);
                 }
 
-                YDB_LOG_INFO_CTX(ctx, "Got new request from database stream",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Got new request from database stream",
                     {"sourceAddress", HttpContext.SourceAddress},
                     {"databasePath", HttpContext.DatabasePath},
                     {"request", ExtractStreamName<TProtoRequest>(Request)});

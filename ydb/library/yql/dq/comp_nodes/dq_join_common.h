@@ -977,6 +977,23 @@ struct TParsedHashJoinArgs {
     TDqUserRenames UserRenames;
 };
 
+inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
+    TBlockHashJoinSettings settings;
+    const auto* settingsTuple = AS_VALUE(TTupleLiteral, node);
+    if (settingsTuple->GetValuesCount() >= 1) {
+        settings.BuildSide =
+            static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
+    }
+    if (settingsTuple->GetValuesCount() >= 2) {
+        const auto* keys = AS_VALUE(TTupleLiteral, settingsTuple->GetValue(1));
+        settings.EqualNullsKeys.reserve(keys->GetValuesCount());
+        for (ui32 i = 0; i < keys->GetValuesCount(); ++i) {
+            settings.EqualNullsKeys.push_back(AS_VALUE(TDataLiteral, keys->GetValue(i))->AsValue().Get<ui32>());
+        }
+    }
+    return settings;
+}
+
 inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     TParsedHashJoinArgs res;
     res.Kind = GetJoinKind(AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<ui32>());

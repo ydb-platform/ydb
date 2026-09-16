@@ -161,8 +161,8 @@ protected:
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
-        if (hopSetting) {
+
+        if (const auto& hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping"); hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {
                 return node;
@@ -185,12 +185,19 @@ protected:
                 defaultLatePolicy
             );
         } else {
+            if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Ref().Pos()), "Aggregation of streaming input without windows is not supported"));
+                return nullptr;
+            }
+
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
         }
+
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
         }
+
         return output;
     }
 

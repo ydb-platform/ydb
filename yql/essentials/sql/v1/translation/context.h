@@ -426,6 +426,7 @@ public:
     bool DistinctOverKeys = false;
     bool GroupByExprAfterWhere = false;
     bool FailOnGroupByExprOverride = false;
+    bool RespectWarnPolicyForUnusedSqlHints = false;
     bool EmitUnionMerge = false;
     bool OptimizeSimpleIlike = false;
     EFlattenAndAggrExprsPersistence FlattenAndAggrExprsPersistence =

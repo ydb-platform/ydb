@@ -126,9 +126,8 @@ public:
     using TBase = TTypedDBLogColumn<ui64>;
 
     ui64 CurrentValue;
-    TDBLogMessageIdColumn() : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(Now().MilliSeconds()) {} // @todo Достаточно ли уникальности?
 
-    TDBLogMessageIdColumn(ui64 currentValue) : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(currentValue)  {}
+    TDBLogMessageIdColumn(ui64 currentValue=0) : TBase("id", TDatabaseSettings::PKShardingKey()), CurrentValue(currentValue)  {}
 
     bool Write(const NActors::NStructuredLog::TLogMessage& ) override {
         return AppendValue(CurrentValue++);
@@ -158,6 +157,19 @@ public:
 
     bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
         return AppendValue(static_cast<ui16>(message.Priority));
+    }
+};
+
+// Write message priority to column
+class TDBLogMessageNodeIdColumn : public TTypedDBLogColumn<ui16> {
+public:
+    using TBase = TTypedDBLogColumn<ui16>;
+
+    TDBLogMessageNodeIdColumn() : TBase("node_id", TDatabaseSettings{.IsPK = true, .IsNotNull = true}) {
+    }
+
+    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        return AppendValue(static_cast<ui16>(message.NodeId));
     }
 };
 

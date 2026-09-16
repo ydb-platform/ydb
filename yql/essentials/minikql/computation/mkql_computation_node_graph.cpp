@@ -488,21 +488,21 @@ private:
             PatternNodes_->ElementsCache_,
             std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1),
             RuntimeSettings_);
-        const auto computationNode = Factory_(node, ctx);
+        const IComputationNode::TPtr computationNode = Factory_(node, ctx);
         const auto& name = node.GetType()->GetName();
-        if (name == "KqpWideReadTable" ||
+        if (!computationNode) {
+            THROW yexception()
+                << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
+        }
+
+        if (!computationNode->IsSuitableForCache() ||
+            name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
             name == "KqpReadTable" ||
-            name == "MultiHoppingCore" ||
             name == "DqWatermarkGenerator") {
             PatternNodes_->SuitableForCache_ = false;
-        }
-
-        if (!computationNode) {
-            THROW yexception()
-                << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
         }
 
         AddNode(node, computationNode);

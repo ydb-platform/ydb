@@ -848,29 +848,72 @@ Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
 Y_UNIT_TEST_SUITE(TWriteLogSink) {
     class TTestLogSink : public NStructuredLog::ILogSink {
     public:
-        std::vector<TLogMessage>& Messages;
-
-        TTestLogSink(std::vector<TLogMessage>& messages): Messages(messages) {}
+        using TTestLogSinkCall = std::optional<TLogMessage>; // empty if flush called
+        std::vector<TTestLogSinkCall> Calls;
 
         void Write(const TLogMessage& message) override {
-            Messages.push_back(message);
+            Calls.push_back(message);
         }
 
         void Flush() override {
+            Calls.push_back({});
         }
     };
 
-    Y_UNIT_TEST(SimpleWrite) {
-        std::vector<TLogMessage> messages;
-        NStructuredLog::ILogSinkSPtr sink = std::make_shared<TTestLogSink>(messages);
+    Y_UNIT_TEST(WriteMessageAutoFlush) {
+        auto sink = std::make_shared<TTestLogSink>();
         TFixture env{NoBufferSettings(), sink};
         env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
 
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message with value", {"value", "text"});
 
-        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(messages[0].TextMessage, "Test message");
-        UNIT_ASSERT_VALUES_EQUAL(messages[1].TextMessage, "Test message with value");
+        auto& calls = sink->Calls;
+        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 4);
+
+        UNIT_ASSERT(calls[0].has_value());
+        UNIT_ASSERT_VALUES_EQUAL(calls[0]->TextMessage, "Test message");
+        UNIT_ASSERT(!calls[1].has_value());
+
+        UNIT_ASSERT(calls[2].has_value());
+        UNIT_ASSERT_VALUES_EQUAL(calls[2]->TextMessage, "Test message with value");
+        UNIT_ASSERT(!calls[3].has_value());
+    }
+
+    Y_UNIT_TEST(ManualFlush) {
+        auto sink = std::make_shared<TTestLogSink>();
+        TFixture env{NoBufferSettings(), sink};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
+        env.Runtime.Send(new IEventHandle{env.LoggerActor, {}, new TEvLogFlushSinks()});
+
+        auto& calls = sink->Calls;
+        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 1);
+        UNIT_ASSERT(!calls[0].has_value());
+    }
+
+    Y_UNIT_TEST(TimeoutedFlush) {
+        auto sink = std::make_shared<TTestLogSink>();
+        auto settings = NoBufferSettings();
+        settings->FlushSinksTimeout = 1000;
+        TFixture env{settings, sink};
+        env.StartAccumulateMessages(TSettings::ELogFormat::PLAIN_SHORT_FORMAT);
+
+        YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
+
+        auto& calls = sink->Calls;
+
+        // Timeout is not elapsed
+        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 1);
+        UNIT_ASSERT(calls[0].has_value());
+        UNIT_ASSERT_VALUES_EQUAL(calls[0]->TextMessage, "Test message");
+
+        // Wait timeout and check again
+        env.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(1100));
+        env.Runtime.DispatchEvents();
+
+        UNIT_ASSERT_VALUES_EQUAL(calls.size(), 2);
+        UNIT_ASSERT(calls[0].has_value());
+        UNIT_ASSERT_VALUES_EQUAL(calls[0]->TextMessage, "Test message");
+        UNIT_ASSERT(!calls[1].has_value());
     }
 }

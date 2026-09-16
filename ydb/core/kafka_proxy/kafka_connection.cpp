@@ -1107,12 +1107,17 @@ protected:
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
-                            Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            // KIP-511: an ApiVersions version the parser does not know is not a fatal error.
-                            // Skip the body (Kafka treats it as v0) and let the actor return UNSUPPORTED_VERSION.
-                            if (!(Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion))) {
-                                Request->Message->Read(readable, Request->ApiVersion);
+                            TKafkaVersion headerVersion = RequestHeaderVersion(Request->ApiKey, Request->ApiVersion);
+                            TKafkaVersion bodyVersion = Request->ApiVersion;
+                            if (Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion)) {
+                                // KIP-511: the client does not yet know broker versions, so an unknown
+                                // ApiVersions version is parsed as v0 instead of using the requested schema.
+                                headerVersion = ApiVersionsFallbackRequestHeaderVersion;
+                                bodyVersion = ApiVersionsFallbackRequestVersion;
                             }
+
+                            Request->Header.Read(readable, headerVersion);
+                            Request->Message->Read(readable, bodyVersion);
                         } catch(const yexception& e) {
                             YDB_LOG_ERROR("Error on processing message",
                                 {LogPrefix()},

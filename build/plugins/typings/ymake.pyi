@@ -72,12 +72,6 @@ class Unit:
         ...
 
     # User provided macro invocation type hints
-    def on_ts_configure(self):
-        """
-        Run base configuration for TS module
-        """
-        ...
-
     def on_node_modules_configure(self):
         """
         Calculates inputs and outputs of node_modules, fills `_NODE_MODULES_INOUTS` variable

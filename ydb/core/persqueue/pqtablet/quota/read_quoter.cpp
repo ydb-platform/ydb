@@ -35,9 +35,8 @@ IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
     return new TEvPQ::TEvApproveReadQuota(IEventHandle::Downcast<TEvPQ::TEvRead>(std::move(context.Request->Request)), context.TotalQuotaWaitTime);
 };
 
-TLogPrefix TReadQuoter::BuildLogPrefix() const {
+TStructuredMessage TReadQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "ReadQuoter"},
         {"partition", Partition.ToString()});
 }
 

@@ -173,13 +173,18 @@ void TPartitionActor::CompleteCommitRemoveHost(
 
 void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
 {
+    if (CurrentStateFunc() == &TThis::StateDelete) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip RemoveHost BSC send during delete",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     Y_ABORT_UNLESS(RemoveHostInFlight.has_value());
 
     const size_t dbgId = RemoveHostInFlight->DirectBlockGroupId;
-
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    RemoveHostInFlight->BSPipeClient = pipe;
 
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
@@ -192,7 +197,7 @@ void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
     op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(
         RemoveHostInFlight->PBufferId);
 
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
+    SendToBsc(ctx, THolder<IEventBase>(request.release()), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -214,8 +219,6 @@ void TPartitionActor::HandleRemoveHostAllocationResult(
             dbgId);
         return;
     }
-
-    NTabletPipe::CloseClient(ctx, RemoveHostInFlight->BSPipeClient);
 
     auto updated = DirectBlockGroupsConnections;
     const THostIndex removeIndex = MarkSlotRemoved(

@@ -21,6 +21,11 @@ struct TRawCTE {
     bool IsRecursive = false;
 };
 
+struct TTermLabel {
+    TString Content;
+    bool IsExplicit = false;
+};
+
 class TYqlSelect final: public TSqlTranslation {
 public:
     explicit TYqlSelect(const TSqlTranslation& that)
@@ -761,9 +766,10 @@ private:
             return std::unexpected(expr.error());
         }
 
-        if (auto result = Label(alt)) {
+        if (TSQLResult<TMaybe<TTermLabel>> result = Label(alt)) {
             if (*result) {
-                (*expr)->SetLabel(*(*result));
+                (*expr)->SetLabel((*result)->Content);
+                (*expr)->MarkImplicitLabel(!((*result)->IsExplicit));
             }
         } else {
             return std::unexpected(result.error());
@@ -1575,7 +1581,7 @@ private:
         return sqlExpr.Build(rule);
     }
 
-    TSQLResult<TMaybe<TString>> Label(const TRule_result_column::TAlt2& rule) {
+    TSQLResult<TMaybe<TTermLabel>> Label(const TRule_result_column::TAlt2& rule) {
         if (!rule.HasBlock2()) {
             return Nothing();
         }
@@ -1588,7 +1594,7 @@ private:
                     return std::unexpected(ESQLError::Basic);
                 }
 
-                return id;
+                return TTermLabel{.Content = std::move(id), .IsExplicit = true};
             }
             case TRule_result_column_TAlt2_TBlock2::kAlt2: {
                 if (!Ctx_.AnsiOptionalAs) {
@@ -1604,7 +1610,7 @@ private:
                     return std::unexpected(ESQLError::Basic);
                 }
 
-                return id;
+                return TTermLabel{.Content = std::move(id), .IsExplicit = false};
             }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
                 YQL_ENSURE(false, "Unreachable");

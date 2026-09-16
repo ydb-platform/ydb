@@ -35,10 +35,9 @@ namespace NPQ {
             Become(&TThis::StateFunc);
         }
 
-        const TLogPrefix& GetLogPrefix() const
+        const TStructuredMessage& GetLogPrefix() const
         {
-            static const TLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
-                {"actorClassName", "PQCacheProxy"});
+            static const TStructuredMessage LogPrefix;
             return LogPrefix;
         }
 

@@ -721,7 +721,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     }
     sideEffects.Complete(TActivationContext::AsActorContext(), Requests);
     if (!reassigns.empty()) {
-        StartReassignActor(std::move(reassigns));
+        ContinueInterruptedReassigns(std::move(reassigns));
     }
     if (AreWeRootHive()) {
         YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: root Hive is ready",
@@ -1182,6 +1182,7 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         break;
     case ETabletState::Deleting:
     case ETabletState::GroupAssignment:
+    case ETabletState::BlockStorage:
         // We need to subscribe until group assignment or deletion is finished
         tablet->StorageInfoSubscribers.emplace_back(ev->Sender);
         Send(ev->Sender, new TEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);

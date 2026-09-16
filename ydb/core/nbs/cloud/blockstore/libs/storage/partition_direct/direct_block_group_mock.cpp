@@ -1,5 +1,7 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 using namespace NThreading;
@@ -143,6 +145,7 @@ TString TOracleMock::Dump() const
 
 TDirectBlockGroupMock::TDirectBlockGroupMock()
 {
+    ArenaAllocatorPool = CreateArenaAllocatorPool();
     Executor = TExecutor::Create("NBS_TEST");
     Executor->Start();
 
@@ -222,6 +225,11 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     };
 }
 
+TArenaAllocatorPoolPtr TDirectBlockGroupMock::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
+}
+
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {
     VChunks.push_back(std::move(vChunk));
@@ -272,7 +280,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -289,7 +297,7 @@ TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -306,7 +314,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -323,7 +331,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -341,7 +349,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,

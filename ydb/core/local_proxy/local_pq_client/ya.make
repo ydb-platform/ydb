@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/persqueue_v1/actors
     ydb/services/persqueue_v1
 )

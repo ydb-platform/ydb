@@ -19,6 +19,7 @@
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 namespace NKikimr::NKqp {
 
@@ -705,6 +706,29 @@ public:
         WrittenCount++;
     }
 
+    TString FormatLogColumnValueYson(const NYdb::TValue& value) {
+        NYdb::TValueParser parser(value);
+        const bool optional = parser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
+        if (optional) {
+            parser.OpenOptional();
+            if (parser.IsNull()) {
+                return "#";
+            }
+        }
+
+        if (parser.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive
+            && parser.GetPrimitiveType() == NYdb::EPrimitiveType::Timestamp)
+        {
+            const TString timestamp = parser.GetTimestamp().ToString();
+            if (optional) {
+                return TStringBuilder() << "[\"" << timestamp << "\"]";
+            }
+            return TStringBuilder() << "\"" << timestamp << "\"";
+        }
+
+        return NYdb::FormatValueYson(value);
+    }
+
     using TQueryResult = std::vector<std::vector<std::string>>;
     TQueryResult FetchStreamData(NYdb::NTable::TScanQueryPartIterator& it) {
         TQueryResult rows;
@@ -724,7 +748,7 @@ public:
                     std::vector<std::string> row;
                     row.reserve(columns.size());
                     for (ui32 i = 0; i < columns.size(); ++i) {
-                        const TString value = NYdb::FormatValueYson(parser.GetValue(i));
+                        const TString value = FormatLogColumnValueYson(parser.GetValue(i));
                         row.emplace_back(value.data(), value.size());
                     }
                     rows.push_back(std::move(row));
@@ -792,17 +816,19 @@ public:
         // Fetch result
         auto result = FetchStreamData(it);
 
-        // Dump
-        Cerr << " " << Endl;
-        Cerr << "QUERY:" << Endl << query << Endl;
+        // Dump on error
+        if (true /*result != requiredResult*/) {
+            Cerr << " " << Endl;
+            Cerr << "QUERY:" << Endl << query << Endl;
 
-        Cerr << " " << Endl;
-        Cerr << "RESULT:" << Endl;
-        Dump(result);
+            Cerr << " " << Endl;
+            Cerr << "RESULT:" << Endl;
+            Dump(result);
 
-        Cerr << " " << Endl;
-        Cerr << "REQUIRED:" << Endl;
-        Dump(requiredResult);
+            Cerr << " " << Endl;
+            Cerr << "REQUIRED:" << Endl;
+            Dump(requiredResult);
+        }
 
         UNIT_ASSERT_EQUAL(result, requiredResult);
     }
@@ -865,23 +891,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test error message");
         });
 
-        // Write data
-        /* NActors::NStructuredLog::TLogMessage message;
-        message.Component = NActorsServices::TEST;
-
-        message.Time = TInstant::MicroSeconds(0);
-        message.Priority = NLog::EPrio::Alert;
-        message.TextMessage = "Alert message";
-        message.FileName = "filename1";
-        message.LineNumber = 1001;
-        writer->Write(message); */
-
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:860"])", R"(["3"])",  "[3u]"},
-            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:862"])", R"(["7"])",   "[7u]"},
-            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:864"])", R"(["ace"])", "#"},
-            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:865"])", R"(#)",       "#"}});
+            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:886"])", R"(["3"])",  "[3u]"},
+            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:888"])", R"(["7"])",   "[7u]"},
+            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:890"])", R"(["ace"])", "#"},
+            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:891"])", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -932,9 +947,35 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "1789233327128336u"},
-            {"2u", "1789233327128337u"},
-            {"3u", "1789233327128338u"}});
+            {"1u", R"("2026-09-12T17:15:27.128336Z")"},
+            {"2u", R"("2026-09-12T17:15:27.128337Z")"},
+            {"3u", R"("2026-09-12T17:15:27.128338Z")"}});
+    }
+
+    Y_UNIT_TEST(WriteMessageNodeId) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageNodeIdColumn>()
+        });
+
+        // Write data
+        NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+        message.NodeId = 1;
+        env.Writer->Write(message);
+        message.NodeId = 2;
+        env.Writer->Write(message);
+        message.NodeId = 3;
+        env.Writer->Write(message);
+
+        env.Writer->Flush();
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"},
+            {"3u", "3u"}});
     }
 }
 
@@ -997,6 +1038,10 @@ std::string FormatYdbValueToYson(const NYdb::TValue& value) {
 
 template <typename T>
 std::string ValueToYsonString(const T& value) {
+    if constexpr (std::is_same_v<T, TInstant>) {
+        const TString yson = TStringBuilder() << "\"" << value.ToString() << "\"";
+        return std::string(yson.data(), yson.size());
+    }
     NYdb::TValueBuilder builder;
     AppendYdbValue(builder, value);
     return FormatYdbValueToYson(builder.Build());
@@ -1007,7 +1052,7 @@ void TestType(const TValueType& value, const std::optional<TInvalidValueType>& i
     TEnvironment env({
         std::make_shared<TDBLogMessageIdColumn>(1),
         std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
-        std::make_shared<TDBLogMessageTypedValueColumn<TValueType>>("ui64_value", std::vector<TKeyName>{"value"})
+        std::make_shared<TDBLogMessageTypedValueColumn<TValueType>>("native_value", std::vector<TKeyName>{"value"})
     });
     env.WriteLog([&](){
         YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write valid value",
@@ -1037,6 +1082,10 @@ void TestType(const TValueType& value, const std::optional<TInvalidValueType>& i
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
+
+    /* Y_UNIT_TEST(Bool) {
+        TestType<bool, TString>(true, TString("s"));
+    } */
 
     Y_UNIT_TEST(Int8) {
         TestType<i8, TString>(i8(-8), TString("s"));

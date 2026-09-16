@@ -19,6 +19,39 @@ from ydb.tools.ydb_bench.lib.web import make_server
 
 
 class HostsTest(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('node'), 'node is required for activity UI checks')
+    def test_host_activity_local_and_peer(self):
+        helper = (
+            'async function refreshHostActivity'
+            + web._JS.split('async function refreshHostActivity', 1)[1].split('async function renderHosts', 1)[0]
+        )
+        script = helper + """
+const assert=require('assert'),enc=encodeURIComponent;
+let response={},failure=false,requests=[];
+const api=async path=>{requests.push(path);if(failure)throw Error('unavailable');return response};
+const row=host=>({dataset:host?{host}:{},isConnected:true,cells:{},
+  querySelector(key){return this.cells[key]??={textContent:'Checking…'}}});
+(async()=>{
+  for(const host of ['', 'peer/id']){
+    const target=row(host);response={active_run_id:null,queued:0};
+    await refreshHostActivity(target);
+    assert.equal(requests.at(-1),host?'/api/hosts/peer%2Fid/api/activity-status':'/api/activity-status');
+    assert.equal(target.cells['[data-activity]'].textContent,'Idle');
+    response={active_run_id:'owner:run-1',queued:2};await refreshHostActivity(target);
+    assert.equal(target.cells['[data-activity]'].textContent,'owner:run-1 · Queued: 2');
+    response={queued:1,recovery_run_ids:['old']};await refreshHostActivity(target);
+    assert.equal(target.cells['[data-activity]'].textContent,'Queued: 1 · Recovery required: 1');
+    failure=true;await refreshHostActivity(target);failure=false;
+    assert.equal(target.cells['[data-activity]'].textContent,'Unknown');
+    assert.equal(target.cells['[data-connection]'].textContent,'Unavailable');
+    target.isConnected=false;response={};await refreshHostActivity(target);
+    assert.equal(target.cells['[data-activity]'].textContent,'Unknown');
+  }
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+        self.assertIn('app.querySelectorAll(\'[data-host-activity]\').forEach(refreshHostActivity)', web._JS)
+        subprocess.run([shutil.which('node'), '-e', script], check=True, capture_output=True, timeout=10)
+
     @unittest.skipUnless(shutil.which('node'), 'node is required for editor routing checks')
     def test_editor_routes_to_selected_host(self):
         helpers = web._JS.split("let editorHost=", 1)[1].split('function runDisplay', 1)[0]
@@ -193,8 +226,11 @@ const assert=require('assert'),enc=encodeURIComponent,api=async path=>path;
                             return_value=[
                                 {
                                     'id': 'same-comparison',
-                                    'profiles': [['same-run', 'same-profile']],
-                                    'baseline': ['same-run', 'same-profile'],
+                                    'profiles': [
+                                        ['same-run', 'same-profile'],
+                                        ['same-run', 'same-profile', 'distributed-ydb'],
+                                    ],
+                                    'baseline': ['same-run', 'same-profile', 'distributed-ydb'],
                                 }
                             ],
                         )
@@ -208,6 +244,11 @@ const assert=require('assert'),enc=encodeURIComponent,api=async path=>path;
                 self.assertEqual(len({record['id'] for record in comparisons}), 3)
                 for record in comparisons:
                     self.assertEqual(record['profiles'][0][0], reference(record['host_id'], 'same-run'))
+                    self.assertEqual(
+                        record['profiles'][1],
+                        [reference(record['host_id'], 'same-run'), 'same-profile', 'distributed-ydb'],
+                    )
+                    self.assertEqual(record['baseline'], record['profiles'][1])
                 profiles = federation.profiles([reference(first.id, 'same-run'), reference(second.id, 'same-run')])
                 self.assertEqual(len({row['run'] for row in profiles['entries']}), 2)
                 self.assertEqual(profiles['errors'], [])

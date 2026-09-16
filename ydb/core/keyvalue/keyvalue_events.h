@@ -354,12 +354,21 @@ namespace TEvKeyValue {
         const TLogoBlobID BlobId;
         const TLogoBlobID NewBlobId;
         const ui64 RequestUid;
+        const TVector<ui32> YellowMoveChannels;
+        const TVector<ui32> YellowStopChannels;
 
-        TEvBlobCopied(EResult result, const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ui64 requestUid)
+        TEvBlobCopied(EResult result,
+                const TLogoBlobID& blobId,
+                const TLogoBlobID& newBlobId,
+                ui64 requestUid,
+                TVector<ui32>&& yellowMoveChannels,
+                TVector<ui32>&& yellowStopChannels)
             : Result(result)
             , BlobId(blobId)
             , NewBlobId(newBlobId)
             , RequestUid(requestUid)
+            , YellowMoveChannels(std::move(yellowMoveChannels))
+            , YellowStopChannels(std::move(yellowStopChannels))
         {}
     };
 

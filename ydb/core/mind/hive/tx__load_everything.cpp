@@ -539,6 +539,8 @@ public:
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
+                tablet.ConfirmedStorageVersion =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())

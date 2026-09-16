@@ -39,8 +39,8 @@ private:
     const TDiskDescription DiskDescription;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
-    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
+    const IArenaAllocatorPtr ArenaAllocator;
     // Chaos controllers are indexed by DirectBlockGroup index.
     const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
     const TVector<TRegionPtr> Regions;   // 4 GiB each
@@ -216,10 +216,6 @@ private:
         std::optional<TPBufferKey> safeBarrier);
     void FinishPBufferCleanup();
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 

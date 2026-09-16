@@ -176,12 +176,11 @@ bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& ou
 void THistoryCutterWrapper::PublishLevels(const std::optional<ui64> sweepCandidates) {
     const ui64 candidates = sweepCandidates.value_or(Published.SweepCandidates);
     const ui64 poisoned = PoisonedChannels.size();
-    const ui64 disproved = DisprovedAt.size();
-    Signals.OnLevelsDelta((i64)candidates - (i64)Published.SweepCandidates, (i64)poisoned - (i64)Published.ChannelsPoisoned,
-        (i64)disproved - (i64)Published.EntriesDisproved);
+    Signals.OnLevelsDelta(
+        (i64)candidates - (i64)Published.SweepCandidates, (i64)poisoned - (i64)Published.ChannelsPoisoned, -(i64)Published.EntriesDisproved);
     Published.SweepCandidates = candidates;
     Published.ChannelsPoisoned = poisoned;
-    Published.EntriesDisproved = disproved;
+    Published.EntriesDisproved = 0;
 }
 
 void THistoryCutterWrapper::PublishSeedLevels() {
@@ -197,15 +196,18 @@ void THistoryCutterWrapper::PublishSeedLevels() {
 
 void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
     ++Counters[key];
+    ++EntryVersions[key];
 }
 
 void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
+    ++EntryVersions[key];
     auto it = Counters.find(key);
     // Unreachable while PortionKeys fences OnPortionRemoved; poisoning guards a future divergence of the two maps.
     if (it == Counters.end() || it->second == 0) {
         if (PoisonedChannels.insert(key.Channel).second) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(
-                "from_generation", key.FromGeneration)("reason", "counter_underflow");
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "cut_history_channel_poisoned")("channel", key.Channel)("from_generation", key.FromGeneration)(
+                "reason", "counter_underflow");
             PublishLevels();
             Signals.OnUnderflow();
         }
@@ -278,14 +280,16 @@ void THistoryCutterWrapper::BeginSeeding() {
     CutState.clear();
     PoisonedChannels.clear();
     PortionKeys.clear();
-    DisprovedAt.clear();
+    EntryVersions.clear();
+    AuditCapturedVersions.clear();
+    AuditFoundNonEmpty.clear();
+    AuditEpoch = ReseedEpoch;
     LastNominateAt = TInstant::Zero();
     NominationPending = false;
     NominationTriggered = false;
     NextChannelToCheck = TGlobal::FirstDataChannel;
     SweepInFlight = false;
     SweepCandidates.reset();
-    SweepSurvivors.clear();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
     SeedingState = ESeedState::Seeding;
@@ -341,8 +345,8 @@ void THistoryCutterWrapper::FinishSeeding() {
 }
 
 void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_seeding_failed")("path_id", pathId)("portion_id", portionId)(
-        "reason", reason);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "cut_history_seeding_failed")("path_id", pathId)("portion_id", portionId)("reason", reason);
     SeedingState = ESeedState::Failed;
     PublishSeedLevels();
     Signals.OnSeedingFailed();
@@ -357,9 +361,6 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
 
 bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx, bool triggered) {
     if (!Enabled || SeedingState != ESeedState::Seeded) {
-        return false;
-    }
-    if (SweepInFlight) {
         return false;
     }
     // Triggered nominations bypass the full cadence but still respect a minimum interval to prevent spin.
@@ -400,10 +401,6 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx, bool triggered
             if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
                 continue;
             }
-            if (const auto* disproval = DisprovedAt.FindPtr(key);
-                disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts)) {
-                continue;
-            }
             if (!SeenGroupsCheckPasses(key)) {
                 continue;
             }
@@ -419,31 +416,50 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx, bool triggered
         }
     }
 
-    if (batch.empty()) {
-        return false;
-    }
-
-    ++SweepRound;
-    NominateEpoch = ReseedEpoch;
-    Signals.OnNomination();
-
-    if (!IsAccessorAuditEnabled()) {
+    const bool nominated = !batch.empty();
+    if (nominated) {
+        Signals.OnNomination();
+        // Cuts always happen inline; the audit is independent.
         PublishLevels(0);
         DecideAndCut(batch, ctx);
-        return true;
     }
 
-    for (const auto& key : batch) {
-        CutState[key] = ECutState::Verifying;
+    // The audit samples independently of nomination: entries with a nonzero counter are never nominated.
+    if (IsAccessorAuditEnabled() && !SweepInFlight) {
+        TVector<TEntryKey> auditCandidates;
+        for (ui32 ch = TGlobal::FirstDataChannel; ch < channelCount; ++ch) {
+            if (PoisonedChannels.contains(ch)) {
+                continue;
+            }
+            const auto& hist = TabletInfo->Channels[ch].History;
+            for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
+                const TEntryKey key{ ch, hist[i].FromGeneration };
+                if (const auto* state = CutState.FindPtr(key); state && *state == ECutState::Cut) {
+                    continue;
+                }
+                auditCandidates.push_back(key);
+            }
+        }
+        if (!auditCandidates.empty()) {
+            // SweepRound identifies the sweep, so it advances here and not with the nomination.
+            ++SweepRound;
+            AuditEpoch = ReseedEpoch;
+            AuditCapturedVersions.clear();
+            AuditFoundNonEmpty.clear();
+            for (const auto& key : auditCandidates) {
+                const auto* v = EntryVersions.FindPtr(key);
+                AuditCapturedVersions[key] = v ? *v : 0;
+            }
+            SweepInFlight = true;
+            SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(auditCandidates));
+            SweepPortionIds.clear();
+            SweepPortionOffset = 0;
+            PublishLevels(SweepCandidates->size());
+            ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
+        }
     }
-    SweepInFlight = true;
-    PublishLevels(batch.size());
-    SweepSurvivors = batch;
-    SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(batch));
-    SweepPortionIds.clear();
-    SweepPortionOffset = 0;
-    ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
-    return true;
+
+    return nominated;
 }
 
 void THistoryCutterWrapper::SetPortionSnapshot(TVector<std::pair<TInternalPathId, ui64>>&& ids) {
@@ -496,10 +512,6 @@ void THistoryCutterWrapper::DecideAndCut(const TVector<TEntryKey>& candidates, c
             CutState[key] = ECutState::None;
             continue;
         }
-        if (SeedingState != ESeedState::Seeded || ReseedEpoch != NominateEpoch) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
         Signals.OnEntryProven();
         if (IsMeasureOnly()) {
             // Nothing durable happens: reset to None so the next round re-measures the same entry.
@@ -511,7 +523,6 @@ void THistoryCutterWrapper::DecideAndCut(const TVector<TEntryKey>& candidates, c
             CutState[key] = ECutState::None;
             continue;
         }
-        DisprovedAt.erase(key);
         PublishLevels();
         CutState[key] = ECutState::Cut;
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
@@ -525,18 +536,11 @@ void THistoryCutterWrapper::DecideAndCut(const TVector<TEntryKey>& candidates, c
     }
 }
 
-void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx) {
+void THistoryCutterWrapper::OnBatchComplete(
+    const THashSet<TEntryKey>& disproved, bool exhausted, ui64 sweepRound, ui64 epochAtSweep, const TActorContext& ctx) {
+    // Accumulate per-batch findings: entries where this batch found blobs.
     for (const auto& key : disproved) {
-        auto& state = DisprovedAt[key];
-        state.At = ctx.Now();
-        ++state.Attempts;
-        CutState[key] = ECutState::None;
-    }
-    if (!disproved.empty()) {
-        PublishLevels();
-        EraseIf(SweepSurvivors, [&](const TEntryKey& key) {
-            return disproved.contains(key);
-        });
+        AuditFoundNonEmpty.insert(key);
     }
 
     if (!exhausted) {
@@ -547,19 +551,71 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     SweepInFlight = false;
     Signals.OnSweepCompleted();
     PublishLevels(0);
-    SweepCandidates.reset();
-    SweepPortionIds.clear();
-    SweepPortionOffset = 0;
 
-    DecideAndCut(SweepSurvivors, ctx);
-    SweepSurvivors.clear();
+    // Epoch or round mismatch means the sweep is stale; skip comparison entirely.
+    const bool epochValid = (epochAtSweep == ReseedEpoch) && (sweepRound == SweepRound);
 
-    // Safety net: candidates that never reached DecideAndCut would otherwise stay Verifying forever.
-    for (auto& [key, state] : CutState) {
-        if (state == ECutState::Verifying) {
-            state = ECutState::None;
+    if (epochValid && SweepCandidates) {
+        using EVerdict = NYDBTest::ICSController::ECutHistoryAuditVerdict;
+        for (const auto& key : *SweepCandidates) {
+            const ui64 capturedVersion = [&]() -> ui64 {
+                const auto* p = AuditCapturedVersions.FindPtr(key);
+                return p ? *p : 0;
+            }();
+            const ui64 currentVersion = [&]() -> ui64 {
+                const auto* p = EntryVersions.FindPtr(key);
+                return p ? *p : 0;
+            }();
+            if (currentVersion != capturedVersion) {
+                Signals.OnAuditChanged();
+                NYDBTest::TControllers::GetColumnShardController()->OnCutHistoryAuditVerdict(key.Channel, key.FromGeneration, EVerdict::Changed);
+                continue;
+            }
+            const bool foundNonEmpty = AuditFoundNonEmpty.contains(key);
+            const ui64 counter = [&]() -> ui64 {
+                const auto* p = Counters.FindPtr(key);
+                return p ? *p : 0;
+            }();
+            if (foundNonEmpty) {
+                Signals.OnAuditComparableNonzero();
+                if (counter == 0) {
+                    // Accessor found blobs but counter says empty: UNDERCOUNT — poison immediately.
+                    if (PoisonedChannels.insert(key.Channel).second) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+                        ("event", "cut_history_audit_undercount")("channel", key.Channel)("from_generation", key.FromGeneration);
+                        PublishLevels();
+                    }
+                    Signals.OnAuditUndercount();
+                    NYDBTest::TControllers::GetColumnShardController()->OnCutHistoryAuditVerdict(
+                        key.Channel, key.FromGeneration, EVerdict::Undercount);
+                } else {
+                    Signals.OnAuditAgreement();
+                    NYDBTest::TControllers::GetColumnShardController()->OnCutHistoryAuditVerdict(
+                        key.Channel, key.FromGeneration, EVerdict::Agreement);
+                }
+            } else {
+                Signals.OnAuditComparableZero();
+                if (counter > 0) {
+                    // Counter says non-empty but accessor found nothing: OVERCOUNT — log, do not poison.
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+                    ("event", "cut_history_audit_overcount")("channel", key.Channel)("from_generation", key.FromGeneration)("counter", counter);
+                    Signals.OnAuditOvercount();
+                    NYDBTest::TControllers::GetColumnShardController()->OnCutHistoryAuditVerdict(
+                        key.Channel, key.FromGeneration, EVerdict::Overcount);
+                } else {
+                    Signals.OnAuditAgreement();
+                    NYDBTest::TControllers::GetColumnShardController()->OnCutHistoryAuditVerdict(
+                        key.Channel, key.FromGeneration, EVerdict::Agreement);
+                }
+            }
         }
     }
+
+    SweepCandidates.reset();
+    AuditCapturedVersions.clear();
+    AuditFoundNonEmpty.clear();
+    SweepPortionIds.clear();
+    SweepPortionOffset = 0;
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

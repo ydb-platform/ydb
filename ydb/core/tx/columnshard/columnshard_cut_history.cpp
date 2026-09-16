@@ -45,12 +45,14 @@ private:
 class TCutHistorySweepCallback: public NOlap::NDataAccessorControl::IAccessorCallback {
 public:
     TCutHistorySweepCallback(const TActorId& tabletActorId, ui64 ourTabletId, const std::shared_ptr<const TVector<TEntryKey>>& candidates,
-        THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted)
+        THashMap<TEntryKey, ui32>&& nextGenMap, bool exhausted, ui64 sweepRound, ui64 epochAtSweep)
         : TabletActorId(tabletActorId)
         , OurTabletId(ourTabletId)
         , Candidates(candidates)
         , NextGenMap(std::move(nextGenMap))
         , Exhausted(exhausted)
+        , SweepRound(sweepRound)
+        , EpochAtSweep(epochAtSweep)
     {
     }
 
@@ -101,7 +103,7 @@ public:
         }
 
         NActors::TActivationContext::AsActorContext().Send(
-            TabletActorId, new TEvPrivate::TEvCutHistorySweepBatchDone(std::move(disproved), Exhausted));
+            TabletActorId, new TEvPrivate::TEvCutHistorySweepBatchDone(std::move(disproved), Exhausted, SweepRound, EpochAtSweep));
     }
 
 private:
@@ -110,6 +112,8 @@ private:
     std::shared_ptr<const TVector<TEntryKey>> Candidates;
     THashMap<TEntryKey, ui32> NextGenMap;
     bool Exhausted;
+    ui64 SweepRound;
+    ui64 EpochAtSweep;
 };
 
 }   // anonymous namespace
@@ -169,12 +173,12 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
     auto batch = CutHistoryCutter->GetNextBatch(/*batchSize=*/1000, isLast);
 
     if (batch.empty()) {
-        CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
+        CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, CutHistoryCutter->GetSweepRound(), CutHistoryCutter->GetAuditEpoch(), ctx);
         return;
     }
 
     if (!HasIndex()) {
-        CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
+        CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, CutHistoryCutter->GetSweepRound(), CutHistoryCutter->GetAuditEpoch(), ctx);
         return;
     }
     const auto& engine = GetIndexAs<NOlap::TColumnEngineForLogs>();
@@ -192,7 +196,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         portionsMap[pathId].UpsertConsumer(NOlap::NBlobOperations::EConsumer::SCAN).AddPortion(portionId);
     }
     if (portionsMap.empty()) {
-        CutHistoryCutter->OnBatchComplete({}, isLast, ctx);
+        CutHistoryCutter->OnBatchComplete({}, isLast, CutHistoryCutter->GetSweepRound(), CutHistoryCutter->GetAuditEpoch(), ctx);
         return;
     }
 
@@ -202,7 +206,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         nextGenMap.emplace(key, CutHistoryCutter->GetNextFromGeneration(key));
     }
 
-    auto callback = std::make_shared<TCutHistorySweepCallback>(SelfId(), TabletID(), candidates, std::move(nextGenMap), isLast);
+    auto callback = std::make_shared<TCutHistorySweepCallback>(
+        SelfId(), TabletID(), candidates, std::move(nextGenMap), isLast, CutHistoryCutter->GetSweepRound(), CutHistoryCutter->GetAuditEpoch());
 
     ctx.Send(SelfId(), new TEvPrivate::TEvAskTabletDataAccessors(std::move(portionsMap), callback));
 }
@@ -219,7 +224,7 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
         disproved.insert(TEntryKey{ ch, fromGen });
     }
 
-    CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
+    CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, msg->SweepRound, msg->EpochAtSweep, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvCutHistoryNominate::TPtr& /*ev*/, const TActorContext& ctx) {

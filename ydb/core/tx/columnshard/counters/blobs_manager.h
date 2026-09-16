@@ -59,6 +59,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PortionKeysCount;
     NMonitoring::TDynamicCounters::TCounterPtr Tombstones;
     NMonitoring::TDynamicCounters::TCounterPtr Underflows;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditComparableZero;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditComparableNonzero;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditAgreements;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditChanged;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditUndercounts;
+    NMonitoring::TDynamicCounters::TCounterPtr AuditOvercounts;
     NMonitoring::TDynamicCounters::TCounterPtr SeedingsStarted;
     NMonitoring::TDynamicCounters::TCounterPtr SeedingsCompleted;
     NMonitoring::TDynamicCounters::TCounterPtr SeedingsFailed;
@@ -108,6 +114,30 @@ public:
 
     void OnUnderflow() const {
         Underflows->Add(1);
+    }
+
+    void OnAuditComparableZero() const {
+        AuditComparableZero->Add(1);
+    }
+
+    void OnAuditComparableNonzero() const {
+        AuditComparableNonzero->Add(1);
+    }
+
+    void OnAuditAgreement() const {
+        AuditAgreements->Add(1);
+    }
+
+    void OnAuditChanged() const {
+        AuditChanged->Add(1);
+    }
+
+    void OnAuditUndercount() const {
+        AuditUndercounts->Add(1);
+    }
+
+    void OnAuditOvercount() const {
+        AuditOvercounts->Add(1);
     }
 
     void OnSeedingStarted() const {

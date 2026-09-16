@@ -92,18 +92,9 @@ public:
         return SweepCandidates ? SweepCandidates : empty;
     }
 
-    // Excludes entries disproved by earlier batches, so later ones neither re-examine nor re-disprove them.
+    // Returns all current audit candidates (all entries sampled by the running sweep).
     std::shared_ptr<const TVector<TEntryKey>> GetActiveSweepCandidates() const {
-        return std::make_shared<const TVector<TEntryKey>>(SweepSurvivors);
-    }
-
-    static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
-    static constexpr TDuration DisprovedRetryMaxCooldown = TDuration::Hours(6);
-
-    static TDuration GetDisprovedCooldown(const ui32 attempts) {
-        const ui64 shift = Min<ui32>(attempts, 12);
-        const TDuration cooldown = DisprovedRetryCooldown * (1ull << shift);
-        return Min(cooldown, DisprovedRetryMaxCooldown);
+        return SweepCandidates ? SweepCandidates : std::make_shared<const TVector<TEntryKey>>();
     }
 
     // Defaults for TColumnShardConfig.CutHistory*: they bound IsDrained() queue scans per tablet.
@@ -120,11 +111,14 @@ public:
 
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
+        ++SweepRound;
         SweepInFlight = true;
-        NominateEpoch = ReseedEpoch;
-        SweepSurvivors = candidates;
-        for (const auto& key : SweepSurvivors) {
-            CutState[key] = ECutState::Verifying;
+        AuditEpoch = ReseedEpoch;
+        AuditCapturedVersions.clear();
+        AuditFoundNonEmpty.clear();
+        for (const auto& key : candidates) {
+            const auto* v = EntryVersions.FindPtr(key);
+            AuditCapturedVersions[key] = v ? *v : 0;
         }
         SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(candidates));
     }
@@ -132,11 +126,6 @@ protected:
     ECutState GetCutStateForTest(const TEntryKey& key) const {
         const auto* state = CutState.FindPtr(key);
         return state ? *state : ECutState::None;
-    }
-
-    ui32 GetDisprovalAttemptsForTest(const TEntryKey& key) const {
-        const auto* state = DisprovedAt.FindPtr(key);
-        return state ? state->Attempts : 0;
     }
 
     bool IsChannelPoisonedForTest(const ui32 channel) const {
@@ -158,6 +147,19 @@ protected:
 
     ui64 GetReseedEpochForTest() const {
         return ReseedEpoch;
+    }
+
+    ui64 GetAuditEpochForTest() const {
+        return AuditEpoch;
+    }
+
+    ui64 GetEntryVersionForTest(const TEntryKey& key) const {
+        const auto* v = EntryVersions.FindPtr(key);
+        return v ? *v : 0;
+    }
+
+    bool IsAuditFoundNonEmptyForTest(const TEntryKey& key) const {
+        return AuditFoundNonEmpty.contains(key);
     }
 
     size_t GetTombstoneCountForTest() const {
@@ -185,10 +187,14 @@ public:
 
     TVector<std::pair<TInternalPathId, ui64>> GetNextBatch(size_t batchSize, bool& isLast);
 
-    void OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx);
+    void OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, ui64 sweepRound, ui64 epochAtSweep, const TActorContext& ctx);
 
     ui64 GetSweepRound() const {
         return SweepRound;
+    }
+
+    ui64 GetAuditEpoch() const {
+        return AuditEpoch;
     }
 
     ui64 GetSeedRun() const {
@@ -229,7 +235,7 @@ private:
 
     void IncrementCounter(const TEntryKey& key);
 
-    // Call after any change to PoisonedChannels or DisprovedAt; omitted sweepCandidates leaves it unchanged.
+    // Call after any change to PoisonedChannels; omitted sweepCandidates leaves it unchanged.
     void PublishLevels(std::optional<ui64> sweepCandidates = {});
     // Call after any change to SeedingState, PortionKeys, or SeedTombstones.
     void PublishSeedLevels();
@@ -265,8 +271,6 @@ private:
     ui64 ReseedEpoch = 0;
     ui64 SeedRun = 0;
     THashSet<ui64> SeedTombstones;
-    // ReseedEpoch captured at nomination time; cut is aborted if it changed by OnBatchComplete.
-    ui64 NominateEpoch = 0;
 
     // Tier-1 state (all ephemeral — reconstructed on restart).
     THashMap<TEntryKey, ui64> Counters;
@@ -275,18 +279,18 @@ private:
 
     THashMap<ui64, TStackVec<TEntryKey, 2>> PortionKeys;
 
+    // Per-entry mutation version: bumped by every counter-changing hook.
+    THashMap<TEntryKey, ui64> EntryVersions;
+
     bool SweepInFlight = false;
 
     // Shared with per-batch sweep callbacks — one allocation per sweep, not per batch.
     std::shared_ptr<const TVector<TEntryKey>> SweepCandidates;
 
-    // Sweep-disproved entries with exponential backoff, converging to one sweep per DisprovedRetryMaxCooldown.
-    struct TDisprovalState {
-        TInstant At;
-        ui32 Attempts = 0;
-    };
-
-    THashMap<TEntryKey, TDisprovalState> DisprovedAt;
+    // Audit state: independent of nomination; compared at sweep completion.
+    ui64 AuditEpoch = 0;
+    THashMap<TEntryKey, ui64> AuditCapturedVersions;
+    THashSet<TEntryKey> AuditFoundNonEmpty;
 
     // Deferred nomination: NominationPending prevents duplicate in-flight events.
     bool NominationPending = false;
@@ -294,7 +298,6 @@ private:
 
     TInstant LastNominateAt;
     ui32 NextChannelToCheck = TGlobal::FirstDataChannel;
-    TVector<TEntryKey> SweepSurvivors;
 
     TVector<std::pair<TInternalPathId, ui64>> SweepPortionIds;
     size_t SweepPortionOffset = 0;

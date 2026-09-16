@@ -468,6 +468,16 @@ public:
     virtual TDuration GetMinTriggeredNominateInterval(const TDuration defaultValue) const {
         return defaultValue;
     }
+
+    enum class ECutHistoryAuditVerdict {
+        Agreement,
+        Changed,
+        Undercount,
+        Overcount,
+    };
+
+    virtual void OnCutHistoryAuditVerdict(const ui32 /*channel*/, const ui32 /*fromGeneration*/, ECutHistoryAuditVerdict /*verdict*/) {
+    }
 };
 
 class IKqpController {

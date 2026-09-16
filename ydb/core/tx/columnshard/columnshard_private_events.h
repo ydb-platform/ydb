@@ -532,10 +532,14 @@ struct TEvPrivate {
     struct TEvCutHistorySweepBatchDone: public TEventLocal<TEvCutHistorySweepBatchDone, EvCutHistorySweepBatchDone> {
         TVector<std::pair<ui32, ui32>> Disproved;
         bool Exhausted;
+        ui64 SweepRound;
+        ui64 EpochAtSweep;
 
-        TEvCutHistorySweepBatchDone(TVector<std::pair<ui32, ui32>>&& disproved, bool exhausted)
+        TEvCutHistorySweepBatchDone(TVector<std::pair<ui32, ui32>>&& disproved, bool exhausted, ui64 sweepRound, ui64 epochAtSweep)
             : Disproved(std::move(disproved))
             , Exhausted(exhausted)
+            , SweepRound(sweepRound)
+            , EpochAtSweep(epochAtSweep)
         {
         }
     };

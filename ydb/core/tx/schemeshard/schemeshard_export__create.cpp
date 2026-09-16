@@ -17,7 +17,6 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
@@ -141,8 +140,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(Ydb::TOperationId::EXPORT, request.GetRequest().GetOperationParams());
-        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::EXPORT, uid},
+        const TString& uid = GetUid(EOperationUidKind::Export, request.GetRequest().GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::Export, uid},
             TOperationUidAdmission::EDuplicatePolicy::Replay,
             [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {

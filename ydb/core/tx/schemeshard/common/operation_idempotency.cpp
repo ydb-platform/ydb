@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/system/yassert.h>
 
@@ -15,7 +14,7 @@ TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
     return {};
 }
 
-TString GetUid(Ydb::TOperationId::EKind kind, const Ydb::Operations::OperationParams& operationParams) {
+TString GetUid(EOperationUidKind kind, const Ydb::Operations::OperationParams& operationParams) {
     Y_ABORT_UNLESS(SupportsOperationUid(kind), "UID support is not registered for operation kind %d", static_cast<int>(kind));
     return GetUid(operationParams);
 }

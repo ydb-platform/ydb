@@ -5,7 +5,6 @@
 #include "schemeshard_import_helpers.h"
 
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/xrange.h>
 
@@ -107,7 +106,7 @@ namespace {
         const ui32 partsTotal = GetTablePartsFromRequest(*item.Table);
 
         const auto buildUid = MakeIndexBuildUid(importInfo, itemIdx, indexIdx);
-        if (const auto* id = ss->OperationsByUid.FindPtr(TOperationUidKey{Ydb::TOperationId::BUILD_INDEX, buildUid})) {
+        if (const auto* id = ss->OperationsByUid.FindPtr(TOperationUidKey{EOperationUidKind::IndexBuild, buildUid})) {
             const auto& indexBuild = ss->IndexBuilds.at(TIndexBuildId(*id));
 
             ui32 partsCompleted = 0;
@@ -304,13 +303,13 @@ void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
     Imports[importInfo->Id] = importInfo;
     ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
     if (importInfo->Uid) {
-        OperationsByUid[TOperationUidKey{Ydb::TOperationId::IMPORT, importInfo->Uid}] = importInfo->Id;
+        OperationsByUid[TOperationUidKey{EOperationUidKind::Import, importInfo->Uid}] = importInfo->Id;
     }
 }
 
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
     if (importInfo.Uid) {
-        OperationsByUid.erase(TOperationUidKey{Ydb::TOperationId::IMPORT, importInfo.Uid});
+        OperationsByUid.erase(TOperationUidKey{EOperationUidKind::Import, importInfo.Uid});
     }
     ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
     Imports.erase(importInfo.Id);

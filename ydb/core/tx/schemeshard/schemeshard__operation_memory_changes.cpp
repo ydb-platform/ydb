@@ -2,8 +2,6 @@
 
 #include "schemeshard_impl.h"
 
-#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
-
 namespace NKikimr::NSchemeShard {
 
 template <typename I, typename C, typename H>
@@ -399,7 +397,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (SchemeOperationUidKeys) {
         const auto& key = SchemeOperationUidKeys.top();
-        if (key.first == Ydb::TOperationId::RESTORE) {
+        if (key.first == EOperationUidKind::Restore) {
             ss->IncrementalRestoreStates.erase(ss->OperationsByUid.at(key));
         }
         ss->OperationsByUid.erase(key);

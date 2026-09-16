@@ -12,7 +12,6 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/library/operation_id/protos
 )
 
 END()

@@ -229,7 +229,8 @@ struct TInflightLeakTest : public TSessionTest {
 // The give-up of a reconciliation fails the inbound channels too, so a session with nothing to deliver
 // would destroy healthy ones as soon as the peer is slow to answer a handshake. A peer which is heard
 // from - here it keeps streaming, replayed by the debug session while its channel service is locked -
-// is alive, and the probe goes on instead of giving up.
+// is alive, and the probe goes on instead of giving up. With something to deliver it gives up as
+// before: a push during the probe waits in its descriptor, not in the queue of the session.
 struct TSlowHandshakeTest : public TSessionTest {
 
     void Prepare() override {
@@ -264,6 +265,13 @@ struct TSlowHandshakeTest : public TSessionTest {
         std::unique_lock serviceLock(Service1->Mutex);
         Runtime->Send(Debug0->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(peerNodeId), NodeIndex0, true);
 
+        if (PushDuringProbe) {
+            ProducerSettings = TWorkerSettings{ .MessageCount = 3, .MinMessageSize = 10, .MaxMessageSize = 100, .ExpectAbort = true };
+            ConsumerSettings = ProducerSettings;
+            StartChannel(2, true);
+            UNIT_ASSERT_C(WaitFor([&]() { return GetWaitersQueueSize(Debug0) > 0; }, TDuration::Seconds(5)), "nothing waits");
+        }
+
         // well past the budget, a message of the peer every 200ms all along
         auto deadline = TInstant::Now() + TDuration::Seconds(7);
         while (TInstant::Now() < deadline && !Debug0->Terminating.load()) {
@@ -272,6 +280,19 @@ struct TSlowHandshakeTest : public TSessionTest {
         }
         auto details = TStringBuilder() << "reconciliation log: " << GetReconciliationLog(Debug0)
             << ", inbound traffic left: " << Debug0->PendingDataCount.load();
+
+        if (PushDuringProbe) {
+            UNIT_ASSERT_C(Debug0->Terminating.load(), TStringBuilder() << "the session did not give up with something to deliver, " << details);
+            UNIT_ASSERT_C(GetReconciliationLog(Debug0).EndsWith("X"), details);
+            // the give-up fails the descriptors of both halves
+            auto producer = WaitFinished(Control0, NodeIndex0, "the producer");
+            UNIT_ASSERT_C(producer.Aborted && producer.Reason.Contains("has not answered"), producer.Reason);
+            serviceLock.unlock();
+            Destroy();
+            CheckQuota();
+            return;
+        }
+
         UNIT_ASSERT_C(!Debug0->Terminating.load(), TStringBuilder() << "the session gave up on a peer which is heard from, " << details);
         UNIT_ASSERT_C(GetReconciliationLog(Debug0).Contains("K"), details);
         UNIT_ASSERT_VALUES_EQUAL_C(GetInputCount(Debug0), 1, TStringBuilder() << "the inbound channel is gone, " << details);
@@ -285,6 +306,8 @@ struct TSlowHandshakeTest : public TSessionTest {
         Destroy();
         CheckQuota();
     }
+
+    bool PushDuringProbe = false;
 };
 
 // Only a discovery, an ack and an update used to refresh LastPeerActivity, and a session whose channels
@@ -900,6 +923,15 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TSlowHandshakeTest test;
 
         test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(PushDuringSlowHandshakeGivesUp) {
+        TSlowHandshakeTest test;
+
+        test.Local = false;
+        test.PushDuringProbe = true;
 
         test.Run();
     }

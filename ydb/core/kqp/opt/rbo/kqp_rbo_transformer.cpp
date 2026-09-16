@@ -174,8 +174,11 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                     return node;
                 }
 
-                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(roots[0]);
-                OpRoot->ComputeParents();
+                for (const auto& root: roots) {
+                    auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root);
+                    opRoot->ComputeParents();
+                    Roots.push_back(opRoot);
+                }
                 return node;
             } else {
                 return node;
@@ -273,12 +276,13 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>&
 }
 
 void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
-    Y_ENSURE(OpRoot);
     TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-    OpRoot->ComputePlanMetadata(rboCtx);
-    for (const auto& it : *OpRoot) {
-        if (IsSuitableToCollectStatistics(it.Current)) {
-            CollectTablesAndColumnsNames(it.Current);
+    for (auto & root : Roots) {
+        root->ComputePlanMetadata(rboCtx);
+        for (const auto& it : *root) {
+            if (IsSuitableToCollectStatistics(it.Current)) {
+                CollectTablesAndColumnsNames(it.Current);
+            }
         }
     }
 }
@@ -352,7 +356,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
     settings.VisitTuples = true;
-    Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+    Y_ENSURE(Roots.size(), "NEW RBO OpRoot is not initialized.");
 
     // Apply optimizations.
     auto status = OptimizeExpr(
@@ -377,7 +381,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
 
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
                 TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(*OpRoot, rboCtx);
+                auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;

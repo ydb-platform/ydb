@@ -24,10 +24,10 @@ namespace {
 constexpr auto MinBackoff = TDuration::MilliSeconds(100);
 constexpr auto MaxBackoff = TDuration::Seconds(10);
 
-TBlockRange64 TrimRange(TBlockRange64 range, size_t maxBlockCount)
+TBlockRange16 TrimRange(TBlockRange16 range, ui16 maxBlockCount)
 {
     if (range.Size() > maxBlockCount) {
-        return TBlockRange64::WithLength(range.Start, maxBlockCount);
+        return TBlockRange16::WithLength(range.Start, maxBlockCount);
     }
     return range;
 }
@@ -39,14 +39,14 @@ TBlockRange64 TrimRange(TBlockRange64 range, size_t maxBlockCount)
 struct TDDiskDataCopier::TCopyRangeRequestState
 {
     ui64 SyncId;
-    TBlockRange64 Range;
+    TBlockRange16 Range;
     TRangeLock Lock;
     TString Data;
     NWilson::TSpan Span;
 
     TCopyRangeRequestState(
         ui64 syncId,
-        TBlockRange64 range,
+        TBlockRange16 range,
         ui32 blockSize,
         TRangeLock lock,
         NWilson::TSpan span)
@@ -141,17 +141,19 @@ ui64 TDDiskDataCopier::GetBytesCopied() const
     return BytesCopied;
 }
 
-std::optional<TBlockRange64> TDDiskDataCopier::GetFreshRange() const
+std::optional<TBlockRange16> TDDiskDataCopier::GetFreshRange() const
 {
     auto freshRange = Client->GetFreshRange(Destination);
     if (!freshRange) {
         return std::nullopt;
     }
 
-    return TrimRange(*freshRange, CopyRangeSize / VolumeConfig->BlockSize);
+    return TrimRange(
+        *freshRange,
+        IntegerCast<ui16>(CopyRangeSize / VolumeConfig->BlockSize));
 }
 
-NWilson::TSpan TDDiskDataCopier::CreateSpan(TBlockRange64 range) const
+NWilson::TSpan TDDiskDataCopier::CreateSpan(TBlockRange16 range) const
 {
     auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
@@ -213,7 +215,7 @@ void TDDiskDataCopier::StartCopyRange()
 void TDDiskDataCopier::CopyRange(
     TDuration timeWaitBeforeExecution,
     ui64 syncId,
-    TBlockRange64 range)
+    TBlockRange16 range)
 {
     if (timeWaitBeforeExecution) {
         LOG_DEBUG(
@@ -275,7 +277,7 @@ void TDDiskDataCopier::CopyRange(
         std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
             .VolumeConfig = VolumeConfig,
             .RequestId = requestId,
-            .Range = range,
+            .Range = TBlockRange64::WithLength(0, range.Size()),
             .Timestamp = TInstant::Now()});
     readRequest->Sglist = copyRangeState->GetSgList();
     auto callContext = MakeIntrusive<TCallContext>(requestId);

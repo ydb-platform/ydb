@@ -156,6 +156,7 @@ TDBGFixture::MakeDirectBlockGroup(
     ui32 dbgConnectionsConfigGeneration) const
 {
     return std::make_shared<TDirectBlockGroup>(
+        CreateArenaAllocator(),
         Runtime->GetActorSystem(0),
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,
@@ -164,6 +165,7 @@ TDBGFixture::MakeDirectBlockGroup(
         directBlockGroupIndex,
         ddisksIds,
         pbufferIds,
+        TVector(ddisksIds.size(), EHostHealth::Online),
         dbgConnectionsConfigGeneration,
         std::move(transport),
         nullptr);

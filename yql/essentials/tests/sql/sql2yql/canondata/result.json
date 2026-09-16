@@ -6859,6 +6859,34 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_optimizers-pull_just_logical_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_just]": [
+        {
+            "checksum": "cbd5ab4b16c59a74197e66bd2ce2e223",
+            "size": 2467,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_just_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_just_key]": [
+        {
+            "checksum": "6a5ccbd8d8ea562bcc15961bf2bd7291",
+            "size": 2502,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_just_key_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_some]": [
+        {
+            "checksum": "1317569fb198d3728c5711c26692362d",
+            "size": 2197,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-pushdown_struct_subset_some_key]": [
+        {
+            "checksum": "1d691f5be9d27ce5c5c50bbc7bced059",
+            "size": 2232,
+            "uri": "https://{canondata_backend}/1881367/eb037eec49f9aaa45047ea5682330fc9de947a66/resource.tar.gz#test_sql2yql.test_optimizers-pushdown_struct_subset_some_key_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-total_order]": [
         {
             "checksum": "e48707d4dbc8b31bb61d14997ce3319d",
@@ -9706,6 +9734,13 @@
             "checksum": "19c58044aa34742ef7db3ce4bcb8b92b",
             "size": 2268,
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-alias_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-ansi_alias_shadowing]": [
+        {
+            "checksum": "2e930405257044dd4cc775a0007f5ad2",
+            "size": 7351,
+            "uri": "https://{canondata_backend}/1903885/a6673486f5a20e67efb42fadbb43647055754f10/resource.tar.gz#test_sql2yql.test_select_yql-ansi_alias_shadowing_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [
@@ -18017,6 +18052,26 @@
             "uri": "file://test_sql_format.test_optimizers-pull_just_logical_/formatted.sql"
         }
     ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_just]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_just_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_just_key]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_just_key_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_some]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_some_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-pushdown_struct_subset_some_key]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-pushdown_struct_subset_some_key_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[optimizers-total_order]": [
         {
             "uri": "file://test_sql_format.test_optimizers-total_order_/formatted.sql"
@@ -18540,6 +18595,11 @@
     "test_sql_format.test[select_yql-alias]": [
         {
             "uri": "file://test_sql_format.test_select_yql-alias_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-ansi_alias_shadowing]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-ansi_alias_shadowing_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [

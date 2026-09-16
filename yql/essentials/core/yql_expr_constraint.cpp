@@ -873,51 +873,11 @@ private:
         }
 
         if constexpr (Adjacent) {
-            TSet<TStringBuf> except = {
-                TUniqueConstraintNode::Name(),
-                TDistinctConstraintNode::Name(),
-            };
-            CopyExcept(*input, *input->Child(0), except);
-
-            auto uniqueConstraint = input->Child(0)->GetConstraint<TUniqueConstraintNode>();
-            auto distinctConstraint = input->Child(0)->GetConstraint<TDistinctConstraintNode>();
-
-            TPartOfConstraintBase::TSetType keys = GetPathsToKeys<true>(input->Child(1)->Tail(), input->Child(1)->Head().Head());
-            if (!keys.empty()) {
-                TPartOfConstraintBase::TSetOfSetsType uniqueKeys;
-                for (const auto& elem : keys) {
-                    uniqueKeys.insert(TPartOfConstraintBase::TSetType{elem});
-                }
-
-                auto newUniqueConstraint = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{uniqueKeys});
-                if (uniqueConstraint) {
-                    uniqueConstraint = TUniqueConstraintNode::Merge(
-                        newUniqueConstraint,
-                        dynamic_cast<const TUniqueConstraintNode*>(uniqueConstraint),
-                        ctx);
-                } else {
-                    uniqueConstraint = newUniqueConstraint;
-                }
-
-                auto newDistinctConstraint = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{uniqueKeys});
-                if (distinctConstraint) {
-                    distinctConstraint = TDistinctConstraintNode::Merge(
-                        newDistinctConstraint,
-                        dynamic_cast<const TDistinctConstraintNode*>(distinctConstraint),
-                        ctx);
-                } else {
-                    distinctConstraint = newDistinctConstraint;
-                }
-            }
-
-            if (uniqueConstraint) {
-                input->AddConstraint(uniqueConstraint);
-            }
-            if (distinctConstraint) {
-                input->AddConstraint(distinctConstraint);
-            }
-
-            return TStatus::Ok;
+            // We could put up Unique and Distinct constraints here, but we won't.
+            // If the final Map operation with PruneAdjacentKeys does not fuse with anything else after optimizations,
+            // we expect that this will lead to more overhead on average than the speedup.
+            // So, we remove such operations at the end of optimization and any new constraints may block it.
+            return CopyAllFrom<0>(input, output, ctx);
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TStreamingConstraintNode>(input, output, ctx);

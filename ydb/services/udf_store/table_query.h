@@ -65,6 +65,23 @@ void SetSelectArtifactParams(
     const TString& uid);
 bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmArtifactRow& row);
 
+//! Identity of an artifact without any of its payload. The compile controller
+//! only needs to know which `(id, kind, uid)` are already covered on a
+//! platform, so it never reads object code.
+struct TArtifactKeyRow {
+    TString Id;
+    TString Kind;
+    TString Uid;
+};
+
+//! Lists every finished artifact of one platform in a single read. Rows whose
+//! object code is not written yet are skipped: a half-published artifact does
+//! not close a gap.
+TString BuildSelectArtifactKeysQuery(const TString& tablePath);
+bool ParseArtifactKeysResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TVector<TArtifactKeyRow>& rows);
+
 TString BuildSelectArtifactChunksQuery(const TString& tablePath);
 void SetSelectArtifactChunksParams(
     Ydb::Table::ExecuteDataQueryRequest& request,

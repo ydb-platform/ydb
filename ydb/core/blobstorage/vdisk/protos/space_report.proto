@@ -1,0 +1,77 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKikimrVDisk;
+option java_package = "ru.yandex.kikimr.proto";
+option java_outer_classname = "VDiskSpaceReportProtos";
+option java_multiple_files = true;
+
+message TGetVDiskSpaceReportRequest {
+}
+
+message TVDiskSpaceBreakdown {
+    uint64 UsefulBlobDataBytes = 1;
+    uint64 LiveMetadataBytes = 2;
+    uint64 LiveAuxiliaryDataBytes = 3;
+    uint64 GcDeadBlobDataBytes = 4;
+    uint64 GcDeadMetadataBytes = 5;
+    uint64 MergeRedundantBlobDataBytes = 6;
+    uint64 MergeRedundantMetadataBytes = 7;
+    uint64 WritePaddingBytes = 8;
+    uint64 SlotInternalFragmentationBytes = 9;
+    uint64 FreeSlotBytes = 10;
+    uint64 ChunkTailBytes = 11;
+    uint64 FreeChunkReserveBytes = 12;
+    uint64 LockedOrQuarantinedBytes = 13;
+    uint64 UnclassifiedBytes = 14;
+}
+
+message TVDiskSpaceComponent {
+    uint64 ChunkCount = 1;
+    uint64 AllocatedBytes = 2;
+    TVDiskSpaceBreakdown Breakdown = 3;
+}
+
+message TVDiskHugeSizeClass {
+    uint64 SlotSizeBytes = 1;
+    uint64 SlotsPerChunk = 2;
+    uint64 ChunkCount = 3;
+    uint64 LiveSlotCount = 4;
+    uint64 GcDeadSlotCount = 5;
+    uint64 MergeRedundantSlotCount = 6;
+    uint64 UnclassifiedSlotCount = 7;
+    TVDiskSpaceBreakdown Breakdown = 8;
+}
+
+message TVDiskHugeSpace {
+    TVDiskSpaceComponent Total = 1;
+    uint64 FreeReserveChunks = 2;
+    repeated TVDiskHugeSizeClass SizeClasses = 3;
+}
+
+message TVDiskChunkKeeperSpace {
+    uint32 SubsystemId = 1;
+    TVDiskSpaceComponent Total = 2;
+}
+
+message TVDiskSpaceReport {
+    uint64 ChunkSizeBytes = 1;
+    uint64 PDiskAllocatedChunks = 2;
+    uint64 PDiskAllocatedBytes = 3;
+    uint64 AccountedBytes = 4;
+    sint64 ReconciliationDeltaBytes = 5;
+    TVDiskSpaceBreakdown Total = 6;
+    TVDiskSpaceComponent LogoBlobs = 7;
+    TVDiskSpaceComponent Blocks = 8;
+    TVDiskSpaceComponent Barriers = 9;
+    TVDiskHugeSpace Huge = 10;
+    TVDiskSpaceComponent SyncLog = 11;
+    repeated TVDiskChunkKeeperSpace ChunkKeeper = 12;
+    TVDiskSpaceComponent Unattributed = 13;
+}
+
+message TGetVDiskSpaceReportResponse {
+    string Status = 1;
+    string ErrorReason = 2;
+    TVDiskSpaceReport Report = 3;
+}

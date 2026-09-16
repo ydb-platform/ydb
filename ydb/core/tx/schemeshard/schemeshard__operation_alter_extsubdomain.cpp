@@ -41,6 +41,7 @@ struct TParamsDelta {
     uint8_t AddExternalStatisticsAggregator = 0;
     uint8_t AddGraphShard = 0;
     uint8_t AddBackupController = 0;
+    uint8_t AddWasmCompileController = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
     bool ServerlessComputeResourcesModeChanged = false;
@@ -223,6 +224,23 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         }
     }
 
+    // WasmCompileController checks
+    uint8_t addWasmCompileController = 0;
+    // Keyed on presence, not on the value: an explicit `false` has to reach the
+    // rejection below instead of being skipped as if it had never been asked.
+    if (input.HasExternalWasmCompileController()) {
+        const bool prev = bool(current->GetTenantWasmCompileControllerID());
+        const bool next = input.GetExternalWasmCompileController();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("WasmCompileController could only be added, not removed");
+            }
+            addWasmCompileController = 1;
+        }
+    }
+
     // Second params check: combinations
 
     bool sharedTxSupportAdded = (coordinatorsAdded + mediatorsAdded) > 0;
@@ -334,6 +352,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
     delta->AddGraphShard = addGraphShard;
     delta->AddBackupController = addBackupController;
+    delta->AddWasmCompileController = addWasmCompileController;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
     delta->ServerlessComputeResourcesModeChanged = serverlessComputeResourcesModeChanged;
@@ -892,7 +911,8 @@ public:
         ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor
             + delta.AddExternalStatisticsAggregator
             + delta.AddGraphShard
-            + delta.AddBackupController;
+            + delta.AddBackupController
+            + delta.AddWasmCompileController;
         ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
 
         // Check path limits
@@ -983,7 +1003,8 @@ public:
                 delta.AddExternalHive ||
                 delta.AddExternalStatisticsAggregator ||
                 delta.AddGraphShard ||
-                delta.AddBackupController)
+                delta.AddBackupController ||
+                delta.AddWasmCompileController)
             {
                 if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
@@ -1018,6 +1039,9 @@ public:
             }
             if (delta.AddBackupController) {
                 AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::BackupController, channelsBinding, context.SS);
+            }
+            if (delta.AddWasmCompileController) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::WasmCompileController, channelsBinding, context.SS);
             }
             Y_ABORT_UNLESS(txState.Shards.size() == tabletsToCreateTotal);
         }

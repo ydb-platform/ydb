@@ -479,6 +479,7 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NDDisk::TEvConnectResult, HandlePeerConnect);
+            hFunc(NDDisk::TEvGetPersistentBufferRegistrationTokenResult, HandlePeerRegistrationToken);
             hFunc(NDDisk::TEvRegisterPersistentBufferResult, HandlePeerRegistration);
             hFunc(NDDisk::TEvListPersistentBufferResult, HandlePeerRegistrationProbe);
             hFunc(TEvents::TEvWakeup, HandlePeerRegistrationRetry);
@@ -524,6 +525,7 @@ private:
     void KickOffPeerConnect();
     void ConnectPeer(ui32 k, bool isPb);
     void HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev);
+    void HandlePeerRegistrationToken(NDDisk::TEvGetPersistentBufferRegistrationTokenResult::TPtr& ev);
     void HandlePeerRegistration(NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev);
     void HandlePeerRegistrationProbe(NDDisk::TEvListPersistentBufferResult::TPtr& ev);
     void HandlePeerRegistrationRetry(TEvents::TEvWakeup::TPtr& ev) {
@@ -1840,7 +1842,7 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
             auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
                 AllocConfig.GetTabletId(), Generation(), st.Guid, MyDbgIndex);
             creds.ConnectionToken = st.Token;
-            Send(ev->Sender, new NDDisk::TEvRegisterPersistentBuffer(creds, TActivationContext::Now()),
+            Send(ev->Sender, new NDDisk::TEvGetPersistentBufferRegistrationToken(creds),
                 0, ev->Cookie);
             return;
         }
@@ -1884,6 +1886,28 @@ void TNbsDbgLikeActor::PeerConnected(ui32 k, bool isPb) {
         PopulateDbgState();
     }
     ReportReadiness();
+}
+
+void TNbsDbgLikeActor::HandlePeerRegistrationToken(NDDisk::TEvGetPersistentBufferRegistrationTokenResult::TPtr& ev) {
+    ui32 k = 0;
+    bool isPb = false;
+    UnpackPeerCookie(ev->Cookie, k, isPb);
+    if (!isPb || k >= HostsPerDbg() || !PB[k].ConnectInFlight) {
+        return;
+    }
+    if (ev->Get()->Record.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        PB[k].ConnectInFlight = false;
+        if (RootCnt.ConnectErr) {
+            RootCnt.ConnectErr->Inc();
+        }
+        ReportReadiness();
+        return;
+    }
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+        AllocConfig.GetTabletId(), Generation(), PB[k].Guid, MyDbgIndex);
+    creds.ConnectionToken = PB[k].Token;
+    Send(ev->Sender, new NDDisk::TEvRegisterPersistentBuffer(creds, ev->Get()->Record.GetToken()),
+        0, ev->Cookie);
 }
 
 void TNbsDbgLikeActor::HandlePeerRegistration(NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev) {

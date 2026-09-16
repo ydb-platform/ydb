@@ -85,6 +85,7 @@ def allowed_path(path):
         "/api/system-topology",
         "/api/cpu-usage",
         "/api/runs",
+        "/api/run-page",
         "/api/settings",
         "/api/benchmarks",
         "/api/saved-comparisons",

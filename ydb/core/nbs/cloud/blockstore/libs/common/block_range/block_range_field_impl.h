@@ -2,6 +2,8 @@
 
 #include "block_range.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
+
 #include <util/generic/string.h>
 
 #include <functional>
@@ -41,8 +43,7 @@ public:
     GetFirstRange() const = 0;
 
     // Memory usage.
-    [[nodiscard]] virtual size_t GetAllocatedSize() const = 0;
-    [[nodiscard]] virtual size_t GetUsedSize() const = 0;
+    [[nodiscard]] virtual TArenaPoolStats GetMemoryStats() const = 0;
 
     // Proto serialization.
     [[nodiscard]] virtual TString Save() const = 0;

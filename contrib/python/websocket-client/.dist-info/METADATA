@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
 Name: websocket-client
-Version: 1.9.0
+Version: 1.9.1
 Summary: WebSocket client for Python with low level API options
-Home-page: https://github.com/websocket-client/websocket-client.git
+Home-page: https://github.com/websocket-client/websocket-client
 Download-URL: https://github.com/websocket-client/websocket-client/releases
 Author: liris
 Author-email: liris.pp@gmail.com
@@ -13,20 +13,19 @@ Project-URL: Documentation, https://websocket-client.readthedocs.io/
 Project-URL: Source, https://github.com/websocket-client/websocket-client/
 Keywords: websockets client
 Classifier: Development Status :: 4 - Beta
-Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: POSIX
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Topic :: Internet
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Intended Audience :: Developers
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Provides-Extra: test
@@ -85,7 +84,7 @@ Please see the [contribution guidelines](https://github.com/websocket-client/web
 ## Installation
 
 You can use `pip install websocket-client` to install, or `pip install -e .`
-to install from a local copy of the code. This module is tested on Python 3.9+.
+to install from a local copy of the code. This module is tested on Python 3.10+.
 
 There are several optional dependencies that can be installed to enable
 specific websocket-client features.

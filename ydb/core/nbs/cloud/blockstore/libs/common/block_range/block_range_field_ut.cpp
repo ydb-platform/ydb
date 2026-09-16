@@ -157,27 +157,27 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldTest)
             CreateArenaAllocator(),
             32768,
             TBlockRangeField::EBackend::FlatSet);
-        UNIT_ASSERT_VALUES_EQUAL(0, f.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(0, f.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, f.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(0, f.GetMemoryStats().UsedSize);
 
         UNIT_ASSERT(f.Add(R(10, 20)));
         f.Add(R(30, 40));
         UNIT_ASSERT_VALUES_EQUAL("[10..20][30..40]", f.Print());
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRangeFieldFlatSet::ChunkSize,
-            f.GetAllocatedSize());
+            f.GetMemoryStats().ReservedSize);
 
         UNIT_ASSERT(f.Remove(R(30, 40)));
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRangeFieldFlatSet::ChunkSize,
-            f.GetAllocatedSize());
+            f.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(
             sizeof(ui32) + sizeof(TBlockRange16),
-            f.GetUsedSize());
+            f.GetMemoryStats().UsedSize);
 
         f.Clear();
-        UNIT_ASSERT_VALUES_EQUAL(0, f.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(0, f.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, f.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(0, f.GetMemoryStats().UsedSize);
     }
 
     Y_UNIT_TEST(MemoryScalingWithRangeCount)

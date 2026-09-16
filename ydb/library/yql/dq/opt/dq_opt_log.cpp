@@ -159,11 +159,10 @@ TExprBase DqExpandWindowFunctions(
     TExprBase node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
-    bool enforceCompact,
-    bool expandNonCompactFullAggregates)
+    bool enforceCompact)
 {
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
-        if (enforceCompact && !expandNonCompactFullAggregates) {
+        if (enforceCompact) {
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);
             bool changed = false;
             for (auto& c : calcs) {

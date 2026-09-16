@@ -26,8 +26,7 @@ NNodes::TExprBase DqExpandWindowFunctions(
     NNodes::TExprBase node,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx,
-    bool enforceCompact,
-    bool expandNonCompactFullAggregates = false);
+    bool enforceCompact);
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx);
 

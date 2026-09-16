@@ -63,7 +63,32 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
 
     auto exec = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(exec.GetResultSet(0).RowsCount(), 24);
+    CompareYsonUnordered(R"([
+        [[101u];["Value1"];[1];[15]];
+        [[201u];["Value1"];[2];[15]];
+        [[301u];["Value1"];[3];[15]];
+        [[401u];["Value1"];[1];[15]];
+        [[501u];["Value1"];[2];[15]];
+        [[601u];["Value1"];[3];[15]];
+        [[701u];["Value1"];[1];[15]];
+        [[801u];["Value1"];[2];[15]];
+        [[102u];["Value2"];[3];[16]];
+        [[202u];["Value2"];[1];[16]];
+        [[302u];["Value2"];[2];[16]];
+        [[402u];["Value2"];[3];[16]];
+        [[502u];["Value2"];[1];[16]];
+        [[602u];["Value2"];[2];[16]];
+        [[702u];["Value2"];[3];[16]];
+        [[802u];["Value2"];[1];[16]];
+        [[103u];["Value3"];[2];[17]];
+        [[203u];["Value3"];[3];[17]];
+        [[303u];["Value3"];[1];[17]];
+        [[403u];["Value3"];[2];[17]];
+        [[503u];["Value3"];[3];[17]];
+        [[603u];["Value3"];[1];[17]];
+        [[703u];["Value3"];[2];[17]];
+        [[803u];["Value3"];[3];[17]]
+    ])", FormatResultSetYson(exec.GetResultSet(0)));
 }
 
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {

@@ -489,7 +489,11 @@ private:
         settings.DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
 
         settings.Owner = SelfId();
-        settings.TablePath = req->path();
+        if (!ResolveRootSchemaPath(*Request_, req->path(), settings.TablePath)) {
+            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issues;
+            issues.Add()->set_message("Invalid rewritten table path");
+            return ReplyFinishStream(StatusIds::BAD_REQUEST, issues, ctx);
+        }
         settings.Ordered = req->ordered();
         settings.RequireResultSet = true;
 

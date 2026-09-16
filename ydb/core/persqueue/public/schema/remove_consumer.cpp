@@ -72,6 +72,8 @@ NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TR
         .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TRemoveConsumerStrategy>(std::move(settings.Path), std::move(settings.ConsumerName)),
         .Cookie = settings.Cookie,
+        .PathContext = std::move(settings.PathContext),
+        .LogicalDatabase = std::move(settings.LogicalDatabase),
     });
 }
 

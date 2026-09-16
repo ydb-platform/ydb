@@ -36,6 +36,8 @@ struct TCreateTopicOperationSettings {
     bool PrepareOnly = false;
     std::unique_ptr<ICreateTopicStrategy> Strategy;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 IActor* CreateCreateTopicOperationActor(TActorId parentId, TCreateTopicOperationSettings&& settings);

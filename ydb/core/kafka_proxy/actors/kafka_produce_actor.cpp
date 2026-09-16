@@ -159,7 +159,7 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
     TString topic = "unknown";
 
-    auto it = Topics.find(NormalizePath(Context->DatabasePath, topicName));
+    auto it = Topics.find(topicName);
     if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
         topic = it->first;
     }
@@ -470,7 +470,7 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     for(const auto& e : Requests) {
         auto r = e->Get()->Request;
         for(const auto& topicData : r->TopicData) {
-            const auto& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
+            const auto& topicPath = r.GetTopicPath(Context->DatabasePath, *topicData.Name);
             if (!Topics.contains(topicPath)) {
                 requireInitialization = true;
                 TopicsForInitialization.insert(topicPath);
@@ -683,7 +683,6 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     size_t position = 0;
     bool ruPerRequest = Context->Config.GetMeteringV2Enabled();
     for(const auto& topicData : r->TopicData) {
-        const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             SendWriteRequest(partitionData, *topicData.Name, pendingRequest, position, ruPerRequest, ctx);
             ++position;
@@ -936,11 +935,11 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                     metricsErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;
 
-                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                    SendMetrics(request.GetTopicPath(Context->DatabasePath, *topicData.Name), recordsCount, "failed_messages", ctx);
                 } else if (expired) {
                     YDB_LOG_ERROR("Partition write expired",
                         {LogPrefix()});
-                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                    SendMetrics(request.GetTopicPath(Context->DatabasePath, *topicData.Name), recordsCount, "failed_messages", ctx);
                     partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
                     metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
                     partitionResponse.ErrorMessage = TStringBuilder() << "No answer from partition writer for " << REQUEST_EXPIRATION_INTERVAL << " seconds";
@@ -952,7 +951,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                         partitionResponse.ErrorCode = EKafkaErrors::NONE_ERROR;
                         auto& writeResults = msg->Record.GetPartitionResponse().GetCmdWriteResult();
                         if (!writeResults.empty()) {
-                            SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "successful_messages", ctx);
+                            SendMetrics(request.GetTopicPath(Context->DatabasePath, *topicData.Name), recordsCount, "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
@@ -963,7 +962,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             {"errorCode", static_cast<int>(Convert(msg->GetError().Code))},
                             {"errorMessage", msg->GetError().Reason},
                             {"fromWriter", static_cast<int>(msg->Record.GetErrorCode())});
-                        SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                        SendMetrics(request.GetTopicPath(Context->DatabasePath, *topicData.Name), recordsCount, "failed_messages", ctx);
 
                         if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH) {
                             partitionResponse.ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
@@ -1048,11 +1047,11 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
             }
             if (requestCookieInfo.TopicPath == cookieInfo.TopicPath && requestCookieInfo.PartitionId == cookieInfo.PartitionId) {
                 for (const auto& topicData : requestCookieInfo.Request->Request->Get()->Request->TopicData) {
-                    TString topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
+                    TString topicPath = requestCookieInfo.Request->Request->Get()->Request.GetTopicPath(Context->DatabasePath, *topicData.Name);
                     if (topicPath == requestCookieInfo.TopicPath) {
                         for(const auto& partitionData : topicData.PartitionData) {
                             if (partitionData.Index == static_cast<int>(requestCookieInfo.PartitionId)) {
-                                SendWriteRequest(partitionData, topicPath, requestCookieInfo.Request, requestCookieInfo.Position, requestCookieInfo.RuPerRequest, ctx);
+                                SendWriteRequest(partitionData, *topicData.Name, requestCookieInfo.Request, requestCookieInfo.Position, requestCookieInfo.RuPerRequest, ctx);
                                 requestCookieInfo.Request->WaitResultCookies.erase(requestCookie);
                                 requestCookieInfo.Request->WaitAcceptingCookies.erase(requestCookie);
                                 cookiesToDelete.push_back(requestCookie);
@@ -1077,7 +1076,7 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
                                             const TActorContext& ctx
                                         ) {
     auto r = pendingRequest->Request->Get()->Request;
-    const TString& topicPath = NormalizePath(Context->DatabasePath, topicName);
+    const TString& topicPath = r.GetTopicPath(Context->DatabasePath, topicName);
     const auto partitionId = partitionData.Index;
     const bool batchingEnabled = NPQ::IsTopicMessagesBatchingEnabled(ctx);
 

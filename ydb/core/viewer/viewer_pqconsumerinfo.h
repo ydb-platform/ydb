@@ -62,7 +62,8 @@ public:
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
                 ctx.SelfID,
                 request,
-                NMsgBusProxy::CreatePersQueueMetaCacheV2Id()
+                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
+                true // fresh logical HTTP topic/DC operand
             ));
             ++Requests;
         }
@@ -73,7 +74,8 @@ public:
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
                 ctx.SelfID,
                 request,
-                NMsgBusProxy::CreatePersQueueMetaCacheV2Id()
+                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
+                true // fresh logical HTTP topic/DC operand
             ));
             ++Requests;
         }

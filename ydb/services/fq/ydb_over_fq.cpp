@@ -7,6 +7,30 @@
 #include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
+namespace {
+
+template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType>
+class TGrpcYdbOverFqRequestCall : public TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType> {
+public:
+    using TBase = TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType>;
+
+    template <typename TCallback>
+    TGrpcYdbOverFqRequestCall(NYdbGrpc::IRequestContextBase* context, TCallback&& callback,
+        TRequestAuxSettings settings)
+        : TBase(context, std::forward<TCallback>(callback), std::move(settings))
+    {
+        // The database header identifies an FQ folder, not a YDB schema path.
+        this->SetPathRewriteSettings({});
+    }
+};
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType>
+using TYdbOverFqTGrpcRequestOperationCall = TGrpcYdbOverFqRequestCall<TReq, TResp, true, RuntimeEventType>;
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType>
+using TYdbOverFqTGrpcRequestNoOperationCall = TGrpcYdbOverFqRequestCall<TReq, TResp, false, RuntimeEventType>;
+
+} // namespace
 
 TGRpcYdbOverFqService::TGRpcYdbOverFqService(NActors::TActorSystem *system,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
@@ -34,7 +58,7 @@ void TGRpcYdbOverFqService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
         auditMode,                                                  \
         EEmptyDatabaseMode::EmptyDatabaseForbidden,                 \
         COMMON,                                                     \
-        operationCallClass,                                         \
+        TYdbOverFq##operationCallClass,                              \
         GRpcRequestProxyId_,                                        \
         CQ_,                                                        \
         nullptr,                                                    \

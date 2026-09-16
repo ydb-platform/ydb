@@ -114,7 +114,11 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-        for (const TString& path : proto->path()) {
+        for (const TString& logicalPath : proto->path()) {
+            TString path;
+            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
@@ -250,7 +254,11 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
-        for (const TString& path : proto->path()) {
+        for (const TString& logicalPath : proto->path()) {
+            TString path;
+            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
@@ -391,7 +399,11 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
-        for (const TString& path : proto->path()) {
+        for (const TString& logicalPath : proto->path()) {
+            TString path;
+            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+            }
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }

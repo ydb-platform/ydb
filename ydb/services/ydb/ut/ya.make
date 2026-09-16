@@ -25,6 +25,7 @@ SRCS(
     ydb_unary_retry_ut.cpp
     ydb_stats_ut.cpp
     ydb_logstore_ut.cpp
+    ydb_path_aliasing_raw_ut.cpp
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
@@ -45,6 +46,10 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/tx/datashard/ut_common
     ydb/core/grpc_services/base
+    ydb/core/grpc_services
+    ydb/core/grpc_services/local_rpc
+    ydb/core/protos
+    ydb/core/tx/tx_proxy
     ydb/core/testlib
     ydb/core/security
     ydb/core/security/ldap_auth_provider/test_utils
@@ -68,6 +73,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
+    ydb/services/keyvalue
+    ydb/services/deprecated/persqueue_v0
 )
 
 YQL_LAST_ABI_VERSION()

@@ -43,6 +43,9 @@ public:
         TBase::Bootstrap(ctx);
 
         const auto* req = GetProtoRequest();
+        if (!ResolveRootSchemaPath(*Request_, req->path(), ResolvedTablePath)) {
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
         if (req->operation_params().has_forget_after() && req->operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return Reply(StatusIds::UNSUPPORTED, "forget_after is not supported for this type of operation", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
         }
@@ -81,13 +84,14 @@ public:
                 return;
             }
 
+            IndexBuildSettings.set_source_path(ResolvedTablePath);
             PrepareAlterTableWithTxId();
             break;
 
         case EOp::Attribute:
         case EOp::AddChangefeed:
         case EOp::DropChangefeed:
-            Navigate(GetProtoRequest()->path());;
+            Navigate(ResolvedTablePath);
             break;
 
         case EOp::DropIndex:
@@ -100,6 +104,7 @@ public:
                 return;
             }
 
+            ForcedCompactionSettings.set_source_path(ResolvedTablePath);
             PrepareAlterTableWithTxId();
             break;
         case EOp::SetColumnConstraint:
@@ -108,6 +113,7 @@ public:
                 return;
             }
 
+            SetColumnConstraintSettings.SetTablePath(ResolvedTablePath);
             PrepareAlterTableWithTxId();
             break;
         }
@@ -186,7 +192,7 @@ private:
         TxId = msg->TxId;
         LogPrefix = TStringBuilder() << "[AlterTable" << OpType << ' ' << SelfId() << " TxId# " << TxId << "] ";
 
-        Navigate(GetProtoRequest()->path());
+        Navigate(ResolvedTablePath);
     }
 
     void Navigate(const TString& path) {
@@ -294,7 +300,7 @@ private:
                 }
 
                 const auto& child = list->Children.at(0);
-                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
+                AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(ResolvedTablePath), child.Name)));
             } else {
                 Navigate(entry.TableId);
             }
@@ -491,17 +497,53 @@ private:
         modifyScheme->SetAllowAccessToPrivatePaths(overridePath.Defined());
         Ydb::StatusIds::StatusCode code;
         TString error;
-        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(req->path()), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
+        if (!BuildAlterTableModifyScheme(overridePath.GetOrElse(ResolvedTablePath), req, modifyScheme, Profiles, ResolvedPathId, code, error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
         }
 
+        if (Request_->HasActivePathRewriting() && modifyScheme->HasAlterTable()) {
+            auto* description = modifyScheme->MutableAlterTable();
+            auto logicalParts = NKikimr::SplitPath(req->path());
+            if (!logicalParts.empty()) {
+                logicalParts.pop_back();
+            }
+            const auto logicalParent = CanonizePath(logicalParts);
+            size_t columnIndex = 0;
+            const auto resolveColumns = [&](const auto& columns) {
+                for (const auto& column : columns) {
+                    auto* targetColumn = description->MutableColumns(columnIndex++);
+                    if (!column.has_from_sequence()) {
+                        continue;
+                    }
+                    TString candidate = column.from_sequence().name();
+                    if (!candidate.StartsWith('/')) {
+                        candidate = JoinPath({logicalParent, candidate});
+                    }
+                    auto resolved = Request_->NormalizePath(CanonizePath(candidate));
+                    if (resolved.IsFail()) {
+                        Request_->RaiseIssue(NYql::TIssue(resolved.GetErrorMessage()));
+                        return false;
+                    }
+                    targetColumn->SetDefaultFromSequence(resolved.GetResult().Path);
+                }
+                return true;
+            };
+            if (!resolveColumns(req->add_columns()) || !resolveColumns(req->alter_columns())) {
+                return Reply(StatusIds::BAD_REQUEST, ctx);
+            }
+            if (description->HasTTLSettings() && description->GetTTLSettings().HasEnabled()
+                && !ResolveTtlSchemaPaths(*Request_, *description->MutableTTLSettings()->MutableEnabled())) {
+                return Reply(StatusIds::BAD_REQUEST, ctx);
+            }
+        }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
     ui64 TxId = 0;
     const TString DatabaseName;
+    TString ResolvedTablePath;
     TString LogPrefix;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;

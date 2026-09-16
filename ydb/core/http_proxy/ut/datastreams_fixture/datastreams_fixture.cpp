@@ -500,6 +500,9 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
 void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
+    if (initParameters.PathRewriteConfig.RulesSize()) {
+        appConfig.MutablePathRewriteConfig()->CopyFrom(initParameters.PathRewriteConfig);
+    }
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(initParameters.TopicsAreFirstClassCitizen);
     appConfig.MutablePQConfig()->SetEnabled(true);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);

@@ -83,6 +83,9 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!ResolveQueueUrlPath(FullTopicPath_, QueueUrl_->Database)) {
+                return;
+            }
             if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
                     "SetQueueAttributes is not supported"));
@@ -129,7 +132,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const Ydb::Ymq::V1::SetQueueAttributesRequest& request = Request();
             const TString& queueName = QueueUrl_->TopicPath;
-            if (auto cc = ParseQueueAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAttributeUsageTarget::Alter); !cc.has_value()) {
+            if (auto cc = ParseQueueAttributes(request.attributes(), queueName, QueueUrl_->Consumer, this->Database, EConsumerAttributeUsageTarget::Alter, Request_.get()); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
                 NewQueueAttributes = std::move(cc).value();
@@ -159,7 +162,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void SendAlterTopicRequest() {
             Ydb::Topic::AlterTopicRequest topicRequest;
-            topicRequest.set_path(TopicPath);
+            topicRequest.set_path(Request_->HasActivePathRewriting() ? TBase::GetTopicPath() : TopicPath);
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
                 topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);

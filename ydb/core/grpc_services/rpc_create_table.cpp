@@ -350,7 +350,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -379,6 +379,11 @@ private:
             StatusIds::StatusCode code = StatusIds::SUCCESS;
             NYql::TIssues issues;
             if (MakeCreateColumnTable(*req, name, *modifyScheme, code, issues)) {
+                auto* description = modifyScheme->MutableCreateColumnTable();
+                if (description->HasTtlSettings() && description->GetTtlSettings().HasEnabled()
+                    && !ResolveTtlSchemaPaths(*Request_, *description->MutableTtlSettings()->MutableEnabled())) {
+                    return Reply(StatusIds::BAD_REQUEST, ctx);
+                }
                 ctx.Send(MakeTxProxyID(), proposeRequest.release());
             } else {
                 Reply(code, issues, ctx);
@@ -500,6 +505,10 @@ private:
             );
         }
 
+        if (tableDesc->HasTTLSettings() && tableDesc->GetTTLSettings().HasEnabled()
+            && !ResolveTtlSchemaPaths(*Request_, *tableDesc->MutableTTLSettings()->MutableEnabled())) {
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 

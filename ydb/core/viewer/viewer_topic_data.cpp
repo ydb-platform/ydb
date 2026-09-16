@@ -380,6 +380,9 @@ void TTopicData::Bootstrap() {
     }
 
     TopicPath = params.Get("path");
+    if (!ResolveUserSchemaPath(TopicPath, TopicPath)) {
+        return;
+    }
     if (!TopicPath.empty()) {
         NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::DescribeSchema, 1);
     } else {

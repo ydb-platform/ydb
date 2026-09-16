@@ -5201,6 +5201,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
                     importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
+                    importInfo->LogicalDatabase = rowset.GetValueOrDefault<Schema::Imports::LogicalDatabase>();
+                    importInfo->PathRewriteFingerprint = rowset.GetValueOrDefault<Schema::Imports::PathRewriteFingerprint>();
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);

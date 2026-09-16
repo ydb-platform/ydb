@@ -138,7 +138,8 @@ public:
             TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
-            TString databaseName)
+            TString databaseName,
+            TString responseTopicPath = {})
         : TBase(new U(
             userToken,
             topicPath,
@@ -148,6 +149,7 @@ public:
             })
         )
         , TopicPath(topicPath)
+        , ResponseTopicPath(responseTopicPath.empty() ? topicPath : std::move(responseTopicPath))
         , Requester(requester)
     {
     };
@@ -157,7 +159,7 @@ public:
     void SendResult(const EKafkaErrors status, const TString& message) {
         THolder<TEvKafka::TEvTopicModificationResponse> response(new TEvKafka::TEvTopicModificationResponse());
         response->Status = status;
-        response->TopicPath = TopicPath;
+        response->TopicPath = ResponseTopicPath;
         response->Message = message;
         TBase::Send(Requester, response.Release());
         TBase::Send(TBase::SelfId(), new TEvents::TEvPoison());
@@ -171,6 +173,7 @@ public:
 
 protected:
     const TString TopicPath;
+    const TString ResponseTopicPath;
 
 private:
     const TActorId Requester;
@@ -191,6 +194,7 @@ public:
         , DatabaseName(databaseName)
         , SendResultCallback(sendResultCallback)
     {
+        SetPathRewriteSettings(NKikimr::NGRpcService::TPathRewriteSettings::Internal());
     };
 
     const TString path() const {

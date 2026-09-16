@@ -1,5 +1,6 @@
 #pragma once
 #include "json_handlers.h"
+#include "path_aliasing.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
 #include <ydb/core/base/tablet.h>
@@ -59,7 +60,17 @@ public:
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
-            record->SetPath(params.Get("path"));
+            TString path = params.Get("path");
+            auto resolvedPath = ResolveViewerSchemaPath(*AppData(ctx), path);
+            if (resolvedPath.IsFail()) {
+                ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()),
+                    0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                Die(ctx);
+                return;
+            }
+            path = resolvedPath.DetachResult();
+            record->SetPath(path);
 
             TActorId txproxy = MakeTxProxyID();
             ctx.Send(txproxy, request.Release());

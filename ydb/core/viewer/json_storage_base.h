@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "path_aliasing.h"
 #include "viewer.h"
 #include "viewer_bsgroupinfo.h"
 #include "viewer_vdiskinfo.h"
@@ -140,6 +141,15 @@ protected:
 
 public:
     void Bootstrap() override {
+        auto resolvedPath = ResolveViewerSchemaPath(*AppData(), FilterTenant);
+        if (resolvedPath.IsFail()) {
+            Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            TBase::PassAway();
+            return;
+        }
+        FilterTenant = resolvedPath.DetachResult();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
 
         if (FilterTenant.empty()) {

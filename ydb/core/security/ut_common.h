@@ -9,6 +9,7 @@ namespace NKikimr {
 
 struct TTestEnvSettings {
     NKikimrProto::TAuthConfig AuthConfig = {};
+    NKikimrConfig::TPathRewriteConfig PathRewriteConfig;
     bool EnableLDAP = false;
     LdapMock::TLdapMockResponses LDAPResponses = {};
 };

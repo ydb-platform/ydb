@@ -111,7 +111,7 @@ namespace NKikimr::NHttpProxy {
                         HttpContext.SerializedUserToken,
                         Nothing(),
                         ctx.ActorSystem(),
-                        peerMetadata
+                        peerMetadata, false, {}, HttpContext.PathRewrite
                 );
                 RpcFuture.Subscribe(
                     [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
@@ -359,6 +359,11 @@ namespace NKikimr::NHttpProxy {
                         e.what(),
                         static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT)
                     );
+                }
+
+                if (const TString error = HttpContext.InitializePathRewriting(*AppData(ctx)); !error.empty()) {
+                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, error,
+                        static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
                 LOG_I("Got new request",

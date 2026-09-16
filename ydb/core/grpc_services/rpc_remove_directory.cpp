@@ -34,7 +34,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);
@@ -70,4 +70,3 @@ IActor* TEvRemoveDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IReques
 
 } // namespace NGRpcService
 } // namespace NKikimr
-

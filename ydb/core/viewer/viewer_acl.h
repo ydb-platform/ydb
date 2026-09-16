@@ -236,7 +236,11 @@ public:
         if (FromStringWithDefault<bool>(Params.Get("list_permissions"))) {
             return ReplyWithListAndPassAway();
         } else if (Params.Has("path")) {
-            CacheResult = MakeRequestSchemeCacheNavigate(Params.Get("path"));
+            TString path;
+            if (!ResolveUserSchemaPath(Params.Get("path"), path)) {
+                return;
+            }
+            CacheResult = MakeRequestSchemeCacheNavigate(path);
         } else {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Parameter 'path' is required"));
         }

@@ -3,6 +3,8 @@
 #include "msgbus_server_proxy.h"
 #include "msgbus_securereq.h"
 
+#include <ydb/core/path_aliasing/context/path_context.h>
+
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -81,8 +83,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        SendRequest(ctx);
         TBase::Become(&TMessageBusServerFlatDescribeRequest::StateWork);
+        SendRequest(ctx);
     }
 
     void SendRequest(const TActorContext& ctx) {
@@ -90,7 +92,23 @@ public:
         NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
 
         if (Request->Record.HasPath()) {
-            record->SetPath(Request->Record.GetPath());
+            TString path = Request->Record.GetPath();
+            if (const auto& normalizer = AppData(ctx)->PathNormalizer; normalizer && !normalizer->Empty()) {
+                const NPathAliasing::TPathContext context(*normalizer, path);
+                if (!context.GetError().empty()) {
+                    TAutoPtr<ResponseType> response(new ResponseType());
+                    response->Record.SetStatus(MSTATUS_ERROR);
+                    response->Record.SetSchemeStatus(NKikimrScheme::StatusInvalidParameter);
+                    response->Record.SetStatusCode(NKikimrIssues::TStatusIds::ERROR);
+                    response->Record.SetErrorReason(context.GetError());
+                    TBase::SendReplyAutoPtr(response);
+                    Request.Destroy();
+                    this->Die(ctx);
+                    return;
+                }
+                path = context.GetDatabase().GetOrElse(TString{});
+            }
+            record->SetPath(path);
         } else {
             record->SetSchemeshardId(Request->Record.GetSchemeshardId());
             record->SetPathId(Request->Record.GetPathId());

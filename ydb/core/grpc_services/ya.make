@@ -12,6 +12,7 @@ SRCS(
     grpc_request_proxy.cpp
     grpc_request_proxy_simple.cpp
     query/rpc_execute_script.cpp
+    rpc_common/path_aliasing.cpp
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp

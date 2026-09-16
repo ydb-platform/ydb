@@ -34,7 +34,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitPath(req->destination_path());
+            destinationPathPair = SplitRootSchemaPath(*Request_, req->destination_path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -42,6 +42,10 @@ private:
 
         const auto& workingDir = destinationPathPair.first;
         const auto& name = destinationPathPair.second;
+        TString sourcePath;
+        if (!ResolveRootSchemaPath(*Request_, req->source_path(), sourcePath)) {
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
@@ -50,7 +54,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         auto create = modifyScheme->MutableCreateTable();
         create->SetName(name);
-        create->SetCopyFromTable(req->source_path());
+        create->SetCopyFromTable(sourcePath);
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 };

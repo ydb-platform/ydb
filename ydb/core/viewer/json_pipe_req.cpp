@@ -1,4 +1,5 @@
 #include "json_pipe_req.h"
+#include "path_aliasing.h"
 #include "log.h"
 #include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
@@ -1413,6 +1414,22 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
 }
 
 bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
+    if (PathRewrite.Context && !PathRewrite.Context->GetError().empty()) {
+        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", PathRewrite.Context->GetError()), "Invalid database path");
+        return true;
+    }
+    if (!PathRewriteInitialized) {
+        PathRewriteInitialized = true;
+        if (const auto& normalizer = AppData()->PathNormalizer; normalizer && !normalizer->Empty()) {
+            PathRewrite.Context = std::make_shared<NPathAliasing::TPathContext>(*normalizer, Database);
+            if (!PathRewrite.Context->GetError().empty()) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", PathRewrite.Context->GetError()), "Invalid database path");
+                return true;
+            }
+            Database = PathRewrite.Context->GetDatabase().GetOrElse(TString{});
+        }
+        PathRewrite.Database = NGRpcService::EPathInputOrigin::Resolved;
+    }
     if (HttpEvent) {
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
     }
@@ -1432,6 +1449,18 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
         }
     }
     return false;
+}
+
+bool TViewerPipeClient::ResolveUserSchemaPath(const TString& logicalPath, TString& path) {
+    auto result = PathRewrite.Context
+        ? ResolveViewerSchemaPath(PathRewrite.Context.get(), logicalPath)
+        : ResolveViewerSchemaPath(*AppData(), logicalPath);
+    if (result.IsFail()) {
+        ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", result.GetErrorMessage()), "Invalid schema path");
+        return false;
+    }
+    path = result.DetachResult();
+    return true;
 }
 
 void TViewerPipeClient::PassAway() {

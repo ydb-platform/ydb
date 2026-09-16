@@ -28,6 +28,8 @@ public:
         void (*cb)(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider& f),
         const std::function<TVector<NPerms::TPermission>(const TReq&)>& permissions)
         : TGrpcRequestOperationCall<TReq, TResp>(ctx, cb, {}), Permissions(permissions) {
+        // FQ scopes and binding names are not paths in this YDB namespace.
+        this->SetPathRewriteSettings({});
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {

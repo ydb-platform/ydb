@@ -589,7 +589,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -641,7 +641,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -671,6 +671,15 @@ public:
 template <typename TDerived>
 class TBaseKeyValueRequest {
 protected:
+    bool ResolveResourcePath(const TString& logicalPath, TString& physicalPath) {
+        auto self = static_cast<TDerived*>(this);
+        if constexpr (requires { self->Request_; }) {
+            return ResolveRootSchemaPath(*self->Request_, logicalPath, physicalPath);
+        } else {
+            return ResolveRootSchemaPath(*self->Request, logicalPath, physicalPath);
+        }
+    }
+
     void OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -685,9 +694,13 @@ protected:
     void SendNavigateRequest() {
         auto self = static_cast<TDerived*>(this);
         auto &rec = *self->GetProtoRequest();
+        TString path;
+        if (!ResolveResourcePath(rec.path(), path)) {
+            return self->Reply(StatusIds::BAD_REQUEST, "Invalid rewritten volume path", NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+        }
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = req->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(rec.path());
+        entry.Path = ::NKikimr::SplitPath(path);
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.SyncVersion = false;
@@ -857,7 +870,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

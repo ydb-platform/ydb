@@ -43,6 +43,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/client/server/path_aliasing
+    ydb/core/path_aliasing/context
     ydb/library/actors/helpers
     library/cpp/json
     library/cpp/messagebus
@@ -87,5 +89,6 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    path_aliasing/ut
     ut
 )

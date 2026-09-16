@@ -98,6 +98,10 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         ev->Record.SetPeerName(this->Request->GetPeerName());
 
         auto& createImport = *ev->Record.MutableRequest();
+        if (this->Request->HasActivePathRewriting()) {
+            createImport.SetPathRewriteFingerprint(this->Request->GetPathRewriteFingerprint());
+            createImport.SetLogicalDatabase(this->Request->GetLogicalDatabaseName().GetOrElse(""));
+        }
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());

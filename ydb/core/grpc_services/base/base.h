@@ -899,6 +899,7 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
+        this->SetPathRewriteSettings(TPathRewriteSettings::UserInput());
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -944,7 +945,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        return this->GetPathResolvedDatabase(ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)));
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -1281,6 +1282,7 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
+        this->SetPathRewriteSettings(TPathRewriteSettings::UserInput());
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -1295,7 +1297,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+        return this->GetPathResolvedDatabase(ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)));
     }
 
     TString GetRpcMethodName() const override {
@@ -1955,7 +1957,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(TString{}),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts()
@@ -2055,7 +2057,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        return Database ? TMaybe<TString>(Database) : Nothing();
+        return this->GetPathResolvedDatabase(Database ? TMaybe<TString>(Database) : Nothing());
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {

@@ -76,7 +76,8 @@ public:
             TActorId requester,
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
-            TString databaseName);
+            TString databaseName,
+            TString responseTopicPath = {});
 
     ~TKafkaDescribeTopicActor() = default;
 
@@ -89,6 +90,7 @@ public:
 
 protected:
     const TString TopicPath;
+    const TString ResponseTopicPath;
 
 private:
     const TActorId Requester;

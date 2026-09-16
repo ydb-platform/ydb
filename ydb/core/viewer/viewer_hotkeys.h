@@ -43,7 +43,11 @@ public:
         ReturnActualData = FromStringWithDefault(Params.Get("actual_data"), ReturnActualData);
         THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         if (Params.Has("path")) {
-            request->Record.MutableDescribePath()->SetPath(Params.Get("path"));
+            TString path;
+            if (!ResolveUserSchemaPath(Params.Get("path"), path)) {
+                return;
+            }
+            request->Record.MutableDescribePath()->SetPath(path);
         } else {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "path is required"));
         }

@@ -49,6 +49,7 @@ public:
 
         TRequestHeaderData Header;
         TApiMessage::TPtr Message;
+        std::shared_ptr<const TResolvedKafkaTopics> ResolvedTopics;
 
         TInstant StartTime;
         TString Method;
@@ -131,6 +132,11 @@ public:
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
+            Context->LogicalDatabasePath = Context->DatabasePath;
+            if (const auto& normalizer = NKikimr::AppData()->PathNormalizer; normalizer && !normalizer->Empty()) {
+                // TenantName is configured physical identity, not a client database operand.
+                Context->PathContext = std::make_shared<NKikimr::NPathAliasing::TPathContext>(*normalizer, Nothing());
+            }
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
             Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
         }
@@ -426,7 +432,7 @@ protected:
 
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
-        return TMessagePtr<T>(request->Buffer, request->Message);
+        return TMessagePtr<T>(request->Buffer, request->Message, request->ResolvedTopics);
     }
 
     bool ProcessRequest(const TActorContext& ctx) {
@@ -484,6 +490,16 @@ protected:
                 {LogPrefix()});
             PassAway();
             return false;
+        }
+
+        if (const TString error = ResolveKafkaRequestPaths(*Request->Message, *Context, Request->ResolvedTopics);
+                !error.empty()) {
+            auto response = BuildErrorResponse(*Request->Message, EKafkaErrors::INVALID_REQUEST);
+            Reply(Request->Header.CorrelationId, response, EKafkaErrors::INVALID_REQUEST, ctx);
+            Request->Message.reset();
+            Request->Buffer.reset();
+            Request.reset();
+            return true;
         }
 
         switch (Request->Header.RequestApiKey) {
@@ -662,6 +678,8 @@ protected:
         Context->Token.PeerName = event->PeerName;
         Context->Token.Status = ETokenCheckStatus::Ok;
         Context->DatabasePath = event->DatabasePath;
+        Context->LogicalDatabasePath = event->LogicalDatabasePath;
+        Context->PathContext = event->PathContext;
         Context->AuthenticationStep = authStep;
         Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
         Context->DatabaseId = event->DatabaseId;

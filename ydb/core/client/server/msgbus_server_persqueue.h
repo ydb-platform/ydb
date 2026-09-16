@@ -35,7 +35,8 @@ IActor* CreateMessageBusServerPersQueue(
 IActor* CreateActorServerPersQueue(
     const TActorId& parentId,
     const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache
+    const TActorId& schemeCache,
+    bool logicalPaths = false
 );
 
 
@@ -102,6 +103,8 @@ public:
     static const TDuration TIMEOUT;
 
     TInstant StartTimestamp = TInstant::Zero();
+    // Server-owned boundary provenance, never read from a client message.
+    bool LogicalPaths = false;
     bool NeedChildrenCreation = false;
 
     ui32 ChildrenCreated = 0;

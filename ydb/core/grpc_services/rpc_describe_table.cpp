@@ -26,6 +26,7 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
     TString OverrideName;
+    TString ResolvedPath;
     NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
     TActorId ShardsResolverId;
     bool NeedResolveShards = false;
@@ -53,7 +54,10 @@ public:
         TBase::Bootstrap(ctx);
 
         const auto request = GetProtoRequest();
-        const auto& path = request->path();
+        if (!ResolveRootSchemaPath(*Request_, request->path(), ResolvedPath)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
+        }
+        const auto& path = ResolvedPath;
         const auto paths = NKikimr::SplitPath(path);
         if (paths.empty()) {
             Request_->RaiseIssue(NYql::TIssue("Invalid path"));
@@ -110,7 +114,7 @@ private:
             OverrideName = entry.Path.back();
             SendProposeRequest(CanonizePath(ChildPath(entry.Path, list->Children.at(0).Name)), ctx);
         } else {
-            SendProposeRequest(GetProtoRequest()->path(), ctx);
+            SendProposeRequest(ResolvedPath, ctx);
         }
     }
 

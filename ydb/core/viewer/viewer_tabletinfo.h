@@ -119,7 +119,11 @@ public:
             options.SetReturnBoundaries(true);
             options.SetReturnIndexTableBoundaries(true);
             options.SetShowPrivateTable(true);
-            RequestTxProxyDescribe(Params.Get("path"), options);
+            TString path;
+            if (!ResolveUserSchemaPath(Params.Get("path"), path)) {
+                return;
+            }
+            RequestTxProxyDescribe(path, options);
             Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
         } else {
             TBase::Bootstrap();

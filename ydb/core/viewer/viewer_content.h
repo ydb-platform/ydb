@@ -1,5 +1,6 @@
 #include "browse.h"
 #include "json_handlers.h"
+#include "path_aliasing.h"
 #include "viewer.h"
 
 namespace NKikimr::NViewer {
@@ -42,6 +43,12 @@ public:
             ContentRequestContext.UserToken = Event->Get()->UserToken;
         }
         ContentRequestContext.Path = Strip(ContentRequestContext.Path);
+        auto resolvedPath = ResolveViewerSchemaPath(*AppData(ctx), ContentRequestContext.Path);
+        if (resolvedPath.IsFail()) {
+            return SendErrorReplyAndDie(
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()), ctx);
+        }
+        ContentRequestContext.Path = resolvedPath.DetachResult();
         if (ContentRequestContext.Path.empty()) {
             ctx.Send(
                 Initiator,

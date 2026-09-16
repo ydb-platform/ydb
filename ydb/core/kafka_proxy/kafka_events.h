@@ -199,6 +199,8 @@ struct TEvKafka {
         EAuthSteps AuthStep;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString DatabasePath;
+        TString LogicalDatabasePath;
+        std::shared_ptr<const NKikimr::NPathAliasing::TPathContext> PathContext;
         TString CloudId;
         TString FolderId;
         TString ServiceAccountId;

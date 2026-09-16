@@ -1,5 +1,6 @@
 #include "msgbus_server_request.h"
 #include "msgbus_securereq.h"
+#include "path_aliasing/path_aliasing.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -47,6 +48,15 @@ public:
             return;
         }
 
+        if (const auto& normalizer = AppData(ctx)->PathNormalizer;
+            normalizer && !normalizer->Empty()) {
+            const NPathAliasing::TPathContext context(*normalizer, Nothing());
+            const auto status = NormalizeMessageBusMaintenancePaths(Request, context);
+            if (status.IsFail()) {
+                ReplyWithErrorAndDie(status.GetErrorMessage(), ctx);
+                return;
+            }
+        }
         SendRequest(ctx);
         Become(&TCmsRequestActor::MainState);
     }

@@ -3,6 +3,7 @@
 #include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/path_aliasing/context/path_context.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
@@ -16,6 +17,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/hash.h>
 #include <util/system/backtrace.h>
 #include <util/system/type_name.h>
 #include <optional>
@@ -118,6 +120,8 @@ struct TContext {
         , SaslMechanism(other.SaslMechanism)
         , GroupId(other.GroupId)
         , DatabasePath(other.DatabasePath)
+        , LogicalDatabasePath(other.LogicalDatabasePath)
+        , PathContext(other.PathContext)
         , FolderId(other.FolderId)
         , CloudId(other.CloudId)
         , DatabaseId(other.DatabaseId)
@@ -142,6 +146,8 @@ struct TContext {
 
     TString GroupId;
     TString DatabasePath;
+    TString LogicalDatabasePath;
+    std::shared_ptr<const NKikimr::NPathAliasing::TPathContext> PathContext;
     TString FolderId;
     TString CloudId;
     TString DatabaseId;
@@ -200,15 +206,42 @@ struct TContext {
 template<std::derived_from<TApiMessage> T>
 class TMessagePtr {
 public:
-    TMessagePtr(const std::shared_ptr<TBuffer>& buffer, const std::shared_ptr<TApiMessage>& message)
+    using TResolvedTopics = THashMap<TString, TString>;
+
+    TMessagePtr(const std::shared_ptr<TBuffer>& buffer, const std::shared_ptr<TApiMessage>& message,
+            std::shared_ptr<const TResolvedTopics> resolvedTopics = {})
         : Buffer(buffer)
         , Message(message)
+        , ResolvedTopics(std::move(resolvedTopics))
         , Ptr(dynamic_cast<T*>(message.get())) {
     }
 
     template<std::derived_from<TApiMessage> O>
     TMessagePtr<O> Cast() {
-        return TMessagePtr<O>(Buffer, Message);
+        return TMessagePtr<O>(Buffer, Message, ResolvedTopics);
+    }
+
+    const std::shared_ptr<const TResolvedTopics>& GetResolvedTopics() const {
+        return ResolvedTopics;
+    }
+
+    TString GetTopicPath(const TString& database, const TString& topic) const {
+        if (ResolvedTopics) {
+            if (auto it = ResolvedTopics->find(topic); it != ResolvedTopics->end()) {
+                return it->second;
+            }
+        }
+        // Absent entries are server-enumerated physical names, not user operands.
+        return NKikimr::NormalizePath(database, topic);
+    }
+
+    TString GetTopicPathOrOriginal(const TString& topic) const {
+        if (ResolvedTopics) {
+            if (auto it = ResolvedTopics->find(topic); it != ResolvedTopics->end()) {
+                return it->second;
+            }
+        }
+        return topic;
     }
 
     T* operator->() const {
@@ -226,8 +259,13 @@ public:
 private:
     const std::shared_ptr<TBuffer> Buffer;
     const std::shared_ptr<TApiMessage> Message;
+    const std::shared_ptr<const TResolvedTopics> ResolvedTopics;
     T* Ptr;
 };
+
+using TResolvedKafkaTopics = THashMap<TString, TString>;
+TString ResolveKafkaRequestPaths(const TApiMessage& request, const TContext& context,
+    std::shared_ptr<const TResolvedKafkaTopics>& resolvedTopics);
 
 inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
     switch (status) {

@@ -3,9 +3,7 @@
 `TPathNormalizer` is the shared matcher for logical YDB schema paths. It does not
 replace lexical path canonicalization or resource validation.
 
-This is the matcher and configuration-schema foundation only. Request routing,
-discovery, and SQL integration are not implemented yet; adding the configuration
-below does not currently redirect server requests.
+Configure aliases in the startup `ydbd` YAML configuration:
 
 ```yaml
 path_rewrite_config:
@@ -25,8 +23,10 @@ Use YAML single quotes to preserve replacement backslashes. `\0` references the
 whole match and `\1` through `\9` reference capture groups. Omitting the section
 or supplying no rules disables rewriting. There is no fixed rule-count limit.
 
-Server integration must create the immutable matcher before actors start and
-share it across requests. The configuration is intended to be restart-only.
+The server creates the immutable matcher before actors start and shares it across
+requests. Configuration changes require a restart; changing a live console
+configuration does not replace an existing node's matcher. Invalid expressions
+or replacement references prevent startup.
 Its fingerprint identifies the ordered rules and their semantics; an empty rule
 set has an empty fingerprint.
 
@@ -39,6 +39,46 @@ to a resolved path is incorrect even if common prefix rules appear idempotent.
 Only local YDB schema paths are eligible. Remote database references, URLs,
 filesystem paths, SQL values, and service-local resource identifiers are not
 schema paths and must not be passed to this matcher.
+
+## Request semantics
+
+Discovery's database operand and request database headers are resolved before
+routing and authorization. Each resource-owning handler resolves its complete
+logical operand once. SQL text and paths inside SQL are not rewritten. Queries
+continue to use their existing path-resolution rules under the effective
+database; absolute SQL paths must name the physical resource. Object names local
+to a service (such as consumers and semaphores), remote references, and Federated
+Query cloud-folder IDs and binding names remain unchanged.
+
+Aliases preserve each API's existing path grammar. For example, Topic APIs
+accept database-relative paths, while native table-creation APIs still
+require their usual root-relative spelling. Backup collections retain their
+special `.backups/collections` namespace. A complete logical candidate is matched
+before target database containment, scheme validation, and ACL checks. Rewrites
+do not grant permissions or bypass tenant boundaries.
+
+A changed target must be an absolute, nonempty schema path without NUL bytes or
+`.`/`..` components. Repeated separators are canonicalized by the owning adapter.
+Missing and empty request operands retain their existing validation behavior,
+even when a rule matches an empty string. Identity matches stop rule processing.
+
+Internal forwarding retains server-owned provenance: resolved paths are not
+matched again. Continuation tokens keep the physical identity of the operation
+that created them; every continuation still performs its existing authorization
+checks. Protocol correlation names remain logical when clients must reuse them
+in later messages.
+
+## Restart and persisted work
+
+Upgrade all participating nodes, including SchemeShard nodes, before enabling
+rules, and deploy identical rules throughout the cluster. SQL compilation,
+query caches, scripts, views, and streaming-query definitions are unchanged.
+
+Imports resolve complete manifest destinations atomically before entering their
+execution phase. Rules must remain unchanged until that resolution finishes.
+Once destinations are persisted as physical paths, a resumed import uses those
+paths without applying new rules. Export URLs and import filesystem paths are
+never rewritten.
 
 ## Performance
 

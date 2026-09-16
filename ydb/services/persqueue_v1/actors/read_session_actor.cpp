@@ -1,4 +1,5 @@
 #include "read_session_actor.h"
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include "helpers.h"
 #include "read_init_auth_actor.h"
@@ -851,6 +852,13 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         }
     };
     auto database = Request->GetDatabaseName().GetOrElse(TString());
+    const bool federation = !TopicsHandler.GetConverterFactory()->GetNoDCMode();
+    if (federation && Request->HasActivePathRewriting()) {
+        database = Request->GetLogicalDatabaseName().GetOrElse(TString());
+    }
+    const bool resolveLocalPaths = Request->HasActivePathRewriting() && !federation;
+    THashMap<TString, TString> resolvedTopics;
+    THashSet<TString> rewrittenTopics;
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = getTopicPath(topic);
@@ -863,7 +871,19 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "start_from_written_at_ms must be nonnegative number", ctx);
         }
 
-        TopicsToResolve.insert(path);
+        if (resolveLocalPaths) {
+            auto resolved = NGRpcService::ResolveFstClassTopicSchemaPath(*Request, path);
+            if (resolved.IsFail()) {
+                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, resolved.GetErrorMessage(), ctx);
+            }
+            TopicsToResolve.insert(resolved->Path);
+            if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
+                rewrittenTopics.insert(path);
+            }
+            resolvedTopics.emplace(path, resolved.DetachResult().Path);
+        } else {
+            TopicsToResolve.insert(path);
+        }
     }
 
     if (Request->GetSerializedToken().empty()) {
@@ -884,7 +904,8 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
     }
 
     for (const auto& topic : init.topics_read_settings()) {
-        auto it = TopicsList.ClientTopics.find(getTopicPath(topic));
+        const auto path = getTopicPath(topic);
+        auto it = TopicsList.ClientTopics.find(resolveLocalPaths ? resolvedTopics.at(path) : path);
         if (it == TopicsList.ClientTopics.end()) {
             return CloseSession(PersQueue::ErrorCode::ACCESS_DENIED,
                 TStringBuilder() << "unknown topic " << getTopicPath(topic), ctx);
@@ -892,6 +913,11 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
 
         for (const auto& converter : it->second) {
             const auto internalName = converter->GetOriginalPath();
+            if (Request->HasActivePathRewriting() && federation) {
+                PendingLogicalTopicNames.emplace(internalName, path);
+            } else if (rewrittenTopics.contains(path)) {
+                LogicalTopicNames.emplace(internalName, getTopicPath(topic));
+            }
             if constexpr (Protocol == EProtocol::PQv1) {
                 for (const i64 pg : topic.partition_group_ids()) {
                     if (pg <= 0) {
@@ -1081,6 +1107,17 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, 
             }
         }
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) { // TODO: return something from Init and Auth Actor (Full Path - ?)
+            if (t.PathRewritten) {
+                if (const auto it = PendingLogicalTopicNames.find(name); it != PendingLogicalTopicNames.end()) {
+                    LogicalTopicNames.emplace(name, it->second);
+                }
+            }
+            if (Request->HasActivePathRewriting()) {
+                if (const auto it = LogicalTopicNames.find(name); it != LogicalTopicNames.end()) {
+                    const TString logicalName = it->second;
+                    LogicalTopicNames.emplace(t.TopicNameConverter->GetOriginalPath(), logicalName);
+                }
+            }
             auto internalName = t.TopicNameConverter->GetInternalName();
             {
                 auto it = TopicGroups.find(name);
@@ -1390,6 +1427,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
 
         if constexpr (Protocol == EProtocol::PQv1) {
             result.mutable_assigned()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
+            if (const auto logical = LogicalTopicNames.find(it->second.Topic->GetOriginalPath()); logical != LogicalTopicNames.end()) {
+                result.mutable_assigned()->mutable_topic()->set_path(logical->second);
+            }
             result.mutable_assigned()->set_cluster(it->second.Topic->GetCluster());
             result.mutable_assigned()->set_partition(ev->Get()->Partition.Partition);
             result.mutable_assigned()->set_assign_id(it->first);
@@ -1402,6 +1442,11 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
+            }
+            // This field is echoed by the SDK in later offset-commit RPCs.
+            // It is protocol correlation, not canonical schema metadata.
+            if (const auto logical = LogicalTopicNames.find(it->second.Topic->GetOriginalPath()); logical != LogicalTopicNames.end()) {
+                result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(logical->second);
             }
 
             result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_id(ev->Get()->Partition.Partition);
@@ -1430,6 +1475,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
 
         if constexpr (Protocol == EProtocol::PQv1) {
             result.mutable_partition_status()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
+            if (const auto logical = LogicalTopicNames.find(it->second.Topic->GetOriginalPath()); logical != LogicalTopicNames.end()) {
+                result.mutable_partition_status()->mutable_topic()->set_path(logical->second);
+            }
             result.mutable_partition_status()->set_cluster(it->second.Topic->GetCluster());
             result.mutable_partition_status()->set_partition(ev->Get()->Partition.Partition);
             result.mutable_partition_status()->set_assign_id(it->first);
@@ -1521,6 +1569,9 @@ void TReadSessionActor<Protocol>::SendReleaseSignal(TPartitionActorInfo& partiti
 
     if constexpr (Protocol == EProtocol::PQv1) {
         result.mutable_release()->mutable_topic()->set_path(partition.Topic->GetFederationPath());
+        if (const auto logical = LogicalTopicNames.find(partition.Topic->GetOriginalPath()); logical != LogicalTopicNames.end()) {
+            result.mutable_release()->mutable_topic()->set_path(logical->second);
+        }
         result.mutable_release()->set_cluster(partition.Topic->GetCluster());
         result.mutable_release()->set_partition(partition.Partition.Partition);
         result.mutable_release()->set_assign_id(partition.Partition.AssignId);
@@ -2427,7 +2478,9 @@ void TReadSessionActor<Protocol>::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
+        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer,
+        Request->HasActivePathRewriting() && !TopicsHandler.GetConverterFactory()->GetNoDCMode()
+            ? Request->GetPathRewriteSettings().Context : nullptr));
 }
 
 template <EProtocol Protocol>

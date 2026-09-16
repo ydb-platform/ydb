@@ -102,7 +102,7 @@ TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequ
             {"fetchOffset", partKafkaRequest.FetchOffset},
             {"partitionMaxBytes", partKafkaRequest.PartitionMaxBytes});
         auto& partPQRequest = partPQRequests[partIndex];
-        partPQRequest.Topic = NormalizePath(Context->DatabasePath, topicKafkaRequest.Topic.value()); // FIXME(savnik): handle empty topic
+        partPQRequest.Topic = FetchRequestData.GetTopicPath(Context->DatabasePath, topicKafkaRequest.Topic.value()); // FIXME(savnik): handle empty topic
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
@@ -184,7 +184,9 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         partKafkaResponse.LastStableOffset = partPQResponse.GetReadResult().GetMaxOffset();
         Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs()));
         if (partPQResponse.GetReadResult().GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::OK && topicResponse.Topic.has_value()) {
-            Context->RememberTopicAclOk(TString(topicResponse.Topic.value()));
+            Context->RememberTopicAclOk(FetchRequestData.GetResolvedTopics()
+                ? FetchRequestData.GetTopicPath(Context->DatabasePath, topicResponse.Topic.value())
+                : TString(topicResponse.Topic.value()));
         }
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
             // Keep zero-length records set in PrepareFetchRequestData; do not

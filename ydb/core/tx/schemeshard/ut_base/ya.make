@@ -19,6 +19,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_import_path_aliasing.cpp
     ut_base.cpp
     ut_operation_registry.cpp
     ut_counters.cpp

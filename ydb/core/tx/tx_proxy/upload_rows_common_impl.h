@@ -232,7 +232,9 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
-        OnBeforeStart(ctx);
+        if (!OnBeforeStart(ctx)) {
+            return;
+        }
         ResolveTable(GetTable(), ctx);
     }
 
@@ -284,8 +286,8 @@ protected:
     }
 
 private:
-    virtual void OnBeforeStart(const TActorContext&) {
-        // nothing by default
+    virtual bool OnBeforeStart(const TActorContext&) {
+        return true;
     }
 
     virtual void OnBeforePoison(const TActorContext&) {

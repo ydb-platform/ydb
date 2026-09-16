@@ -1,5 +1,6 @@
 #include "browse.h"
 #include "json_handlers.h"
+#include "path_aliasing.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
 
@@ -36,6 +37,15 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Counters = FromStringWithDefault(params.Get("counters"), false);
         TString path = params.Get("path");
+        auto resolvedPath = ResolveViewerSchemaPath(*AppData(ctx), path);
+        if (resolvedPath.IsFail()) {
+            ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            Die(ctx);
+            return;
+        }
+        path = resolvedPath.DetachResult();
         BrowseActorID = ctx.RegisterWithSameMailbox(new TBrowse(Viewer, ctx.SelfID, path, Event->Get()->UserToken));
         Become(&TThis::StateWait, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }

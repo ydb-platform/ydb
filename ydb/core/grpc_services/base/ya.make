@@ -1,11 +1,13 @@
 LIBRARY()
 
 SRCS(
+    path_aliasing.cpp
     base_service.h
     base.h
 )
 
 PEERDIR(
+    ydb/core/path_aliasing/context
     ydb/library/grpc/server
     library/cpp/string_utils/quote
     ydb/core/base

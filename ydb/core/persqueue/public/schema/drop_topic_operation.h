@@ -13,6 +13,8 @@ struct TDropTopicOperationSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateDropTopicOperationActor(NActors::TActorId parentId, TDropTopicOperationSettings&& settings);

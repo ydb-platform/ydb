@@ -191,6 +191,10 @@ private:
         bool SyncVersion;
         bool ShowPrivate;
         NWilson::TSpan Span;
+        std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+        THashSet<ui64> MatchedPrimaryPaths;
+        THashSet<TString> ResolvedTopics;
+        THashSet<TString> RewrittenTopics;
 
         TWaiter(const TActorId& waiterId, const TString& dbRoot, bool syncVersion, bool showPrivate,
                 const TVector<NPersQueue::TDiscoveryConverterPtr>& topics, NWilson::TSpan span = {})
@@ -221,7 +225,14 @@ private:
             ui64 index = 0;
             Result = std::move(result);
             for (const auto& entry : Result->ResultSet) {
+                if (MatchedPrimaryPaths.contains(index)) {
+                    ++index;
+                    continue;
+                }
                 if (DbRoot.empty()) {
+                    if (PathContext) {
+                        ++index;
+                    }
                     continue;
                 }
                 if (entry.Status == TSchemeCacheNavigate::EStatus::PathErrorUnknown ||
@@ -229,10 +240,16 @@ private:
                 ) {
                     auto account = Topics[index]->GetAccount_();
                     if (!account.Defined() || account->empty()) {
+                        if (PathContext) {
+                            ++index;
+                        }
                         continue;
                     }
                     Topics[index]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
                     if (!Topics[index]->GetSecondaryPath("").Defined()) {
+                        if (PathContext) {
+                            ++index;
+                        }
                         continue;
                     }
                     SecondTryTopics.push_back(index);
@@ -289,9 +306,11 @@ private:
         for (auto& t : ev->Get()->Topics) {
             Y_ABORT_UNLESS(t != nullptr);
         }
-        SendSchemeCacheRequest(
-                std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,
-                                          NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.SchemeCacheRequest", NWilson::EFlags::AUTO_END)));
+        auto waiter = std::make_shared<TWaiter>(ev->Sender, DbRoot, msg.SyncVersion, msg.ShowPrivate, ev->Get()->Topics,
+            NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.SchemeCacheRequest", NWilson::EFlags::AUTO_END));
+        waiter->PathContext = msg.PathContext;
+        waiter->ResolvedTopics = msg.ResolvedTopics;
+        SendSchemeCacheRequest(std::move(waiter));
     }
 
     void HandleDescribeTopicsByName(TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
@@ -310,15 +329,15 @@ private:
         for (auto& t : ev->Get()->Topics) {
             topics.emplace_back(ConverterFactory->MakeDiscoveryConverter(t, {}));
         }
-        SendSchemeCacheRequest(
-            std::make_shared<TWaiter>(
+        auto waiter = std::make_shared<TWaiter>(
                 ev->Sender, DbRoot, ev->Get()->SyncVersion, false, topics,
                 NWilson::TSpan(
                     TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.SchemeCacheRequest",
                     NWilson::EFlags::AUTO_END
                 )
-            )
-        );
+            );
+        waiter->PathContext = ev->Get()->PathContext;
+        SendSchemeCacheRequest(std::move(waiter));
     }
 
     void HandleGetNodesMapping(TEvPqNewMetaCache::TEvGetNodesMappingRequest::TPtr& ev, const TActorContext& ctx) {
@@ -334,12 +353,57 @@ private:
         auto reqId = ++RequestId;
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(reqId);
 
-        auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
-        Y_ABORT_UNLESS(inserted);
-
         TMaybe<TString> db = {};
 
-        for (const auto& [path, database] : waiter->GetTopics()) {
+        if (waiter->PathContext) {
+            for (const auto& topic : waiter->Topics) {
+                if (!topic->IsValid()) {
+                    TString error = topic->GetReason();
+                    auto response = MakeHolder<TEvPqNewMetaCache::TEvDescribeTopicsResponse>(
+                        std::move(waiter->Topics), std::make_shared<TSchemeCacheNavigate>());
+                    response->PathRewriteError = std::move(error);
+                    ctx.Send(waiter->WaiterId, response.Release());
+                    return;
+                }
+            }
+        }
+        auto topics = waiter->GetTopics();
+        for (size_t index = 0; index < topics.size(); ++index) {
+            auto& [path, database] = topics[index];
+            if (waiter->PathContext) {
+                auto candidate = CanonizePath(path);
+                if (candidate.empty() && !path.empty()) {
+                    candidate = "/";
+                }
+                const size_t originalIndex = waiter->FirstRequestDone ? waiter->SecondTryTopics[index] : index;
+                const bool alreadyResolved = waiter->ResolvedTopics.contains(waiter->Topics[originalIndex]->GetOriginalPath());
+                auto resolved = alreadyResolved
+                    ? TConclusion<NPathAliasing::TResolvedSchemaPath>(NPathAliasing::TResolvedSchemaPath{
+                        path, NPathAliasing::EPathRewriteOutcome::NoMatch})
+                    : waiter->PathContext->NormalizePath(candidate);
+                auto databaseCandidate = CanonizePath(database);
+                if (databaseCandidate.empty() && !database.empty()) {
+                    databaseCandidate = "/";
+                }
+                auto resolvedDatabase = waiter->PathContext->NormalizePath(databaseCandidate);
+                if (resolved.IsFail() || resolvedDatabase.IsFail()) {
+                    auto response = MakeHolder<TEvPqNewMetaCache::TEvDescribeTopicsResponse>(
+                        std::move(waiter->Topics), std::make_shared<TSchemeCacheNavigate>());
+                    response->PathRewriteError = resolved.IsFail()
+                        ? resolved.GetErrorMessage() : resolvedDatabase.GetErrorMessage();
+                    ctx.Send(waiter->WaiterId, response.Release());
+                    return;
+                }
+                if (!waiter->FirstRequestDone
+                    && (alreadyResolved || resolved->Outcome != NPathAliasing::EPathRewriteOutcome::NoMatch)) {
+                    waiter->MatchedPrimaryPaths.insert(index);
+                }
+                if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
+                    waiter->RewrittenTopics.insert(waiter->Topics[originalIndex]->GetOriginalPath());
+                }
+                path = resolved.DetachResult().Path;
+                database = resolvedDatabase.DetachResult().Path;
+            }
             if (!db) db = database;
             if (*db != database) db = "";
             auto split = NKikimr::SplitPath(path);
@@ -355,8 +419,10 @@ private:
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
         if (db) schemeCacheRequest->DatabaseName = *db;
+        const auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
+        Y_ABORT_UNLESS(inserted);
         YDB_LOG_DEBUG_CTX(ctx, "Send request for topics, got requests infly",
-            {"topics", waiter->GetTopics().size()},
+            {"topics", topics.size()},
             {"waiters", DescribeTopicsWaiters.size()},
             {"db", db});
 
@@ -412,6 +478,7 @@ private:
             auto* response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
             };
+            response->RewrittenTopics = std::move(waiter->RewrittenTopics);
             YDB_LOG_DEBUG_CTX(ctx, "Got describe topics SC response");
             ctx.Send(waiter->WaiterId, response);
         }

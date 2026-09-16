@@ -1,6 +1,7 @@
 #pragma once
 
 #include "events.h"
+#include <ydb/core/grpc_services/base/iface.h>
 
 #include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
@@ -71,6 +72,8 @@ struct THttpRequestContext : public NPQ::TLogPrefix {
     TString RequestId;
     TString DiscoveryEndpoint;
     TString DatabasePath;
+    NGRpcService::TPathRewriteSettings PathRewrite = NGRpcService::TPathRewriteSettings::UserInput();
+    bool PathRewriteInitialized = false;
     TString DatabaseId; // not in context
     TString FolderId;   // not in context
     TString CloudId;    // not in context
@@ -94,6 +97,7 @@ struct THttpRequestContext : public NPQ::TLogPrefix {
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void ParseHeaders(TStringBuf headers);
+    TString InitializePathRewriting(const TAppData& appData);
 
     void DoReply(THttpResponseData&& data);
 };

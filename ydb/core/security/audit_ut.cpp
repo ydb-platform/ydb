@@ -4,6 +4,7 @@
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -44,13 +45,16 @@ void EatWholeString(NHttp::THttpIncomingRequestPtr request, const TString& data)
     request->Advance(size);
 }
 
-NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TString& password) {
-    TString payload = [](const auto& user, const auto& password) {
+NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TString& password, const TString& database = {}) {
+    TString payload = [](const auto& user, const auto& password, const auto& database) {
         NJson::TJsonValue value;
         value["user"] = user;
         value["password"] = password;
+        if (!database.empty()) {
+            value["database"] = database;
+        }
         return NJson::WriteJson(value, false);
-    }(user, password);
+    }(user, password, database);
     TStringBuilder text;
     text << "POST /login HTTP/1.1\r\n"
         << "Host: test.ydb\r\n"
@@ -137,6 +141,49 @@ void ChangeUserIsEnabled(TTestEnv& env, const TString& user, bool isEnabled) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(WebLoginService) {
+    Y_UNIT_TEST_TWIN(PathAliasResolvesLoginDatabaseBeforeDispatch, ValidTarget) {
+        TTestEnvSettings settings;
+        settings.AuthConfig.SetDomainLoginOnly(false);
+        auto* rule = settings.PathRewriteConfig.AddRules();
+        rule->SetPattern("^/login-alias$");
+        rule->SetReplacement(ValidTarget ? "/Root" : "relative-invalid-target");
+        TTestEnv env(settings);
+        CreateUser(env, "aliasuser", "password1");
+        auto* runtime = env.GetServer().GetRuntime();
+        const auto edge = runtime->AllocateEdgeActor();
+        auto request = MakeLoginRequest("aliasuser", "password1", "/login-alias");
+        const TString body = TString(request->Body);
+        runtime->Send(new IEventHandle(env.GetWebLoginService(), edge,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+        TAutoPtr<IEventHandle> handle;
+        auto* response = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, ValidTarget ? "200" : "403");
+        NHttp::THeaders headers(response->Response->Headers);
+        NHttp::TCookies cookies(headers["Set-Cookie"]);
+        UNIT_ASSERT_VALUES_EQUAL(!cookies["ydb_session_id"].empty(), ValidTarget);
+        UNIT_ASSERT_VALUES_EQUAL(TString(request->Body), body);
+    }
+
+    Y_UNIT_TEST(PathAliasPreservesLoginAuthenticationFailure) {
+        TTestEnvSettings settings;
+        settings.AuthConfig.SetDomainLoginOnly(false);
+        auto* rule = settings.PathRewriteConfig.AddRules();
+        rule->SetPattern("^/login-alias$");
+        rule->SetReplacement("/Root");
+        TTestEnv env(settings);
+        CreateUser(env, "aliasuser", "password1");
+        auto* runtime = env.GetServer().GetRuntime();
+        const auto edge = runtime->AllocateEdgeActor();
+        for (const TString& database : {TString("/Root"), TString("/login-alias")}) {
+            runtime->Send(new IEventHandle(env.GetWebLoginService(), edge,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(MakeLoginRequest("aliasuser", "wrongpassword", database))));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "403");
+            NHttp::THeaders headers(response->Response->Headers);
+            UNIT_ASSERT(headers["Set-Cookie"].empty());
+        }
+    }
 
     Y_UNIT_TEST(PropagatesOrGeneratesRequestIdForLogout) {
         TTestEnv env;

@@ -132,7 +132,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         );
 
         Ydb::Topic::CreateTopicRequest request;
-        request.set_path(topic.Name.value());
+        request.set_path(Message.GetTopicPathOrOriginal(topic.Name.value()));
         request.mutable_partitioning_settings()->set_min_active_partitions(
             topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions
         );
@@ -152,12 +152,13 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             request.mutable_attributes()->insert({"_timestamp_type", messageTimestampType.value()});
         }
 
-        ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
+        const auto child = ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
             .Database = Context->DatabasePath,
             .Request = std::move(request),
             .UserToken = Context->Token.UserToken,
             .IfNotExists = false,
         }));
+        CreationActorTopics.emplace(child, topic.Name.value());
 
         InflyTopics++;
     }
@@ -171,6 +172,10 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
     auto eventPtr = ev->Release();
+    if (auto it = CreationActorTopics.find(ev->Sender); it != CreationActorTopics.end()) {
+        eventPtr->Path = std::move(it->second);
+        CreationActorTopics.erase(it);
+    }
 
     YDB_LOG_DEBUG("Create topics actor. Topic's response received",
         {LogPrefix()},

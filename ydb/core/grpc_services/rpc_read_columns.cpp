@@ -37,6 +37,7 @@ private:
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
     std::unique_ptr<IRequestOpCtx> Request;
+    TString ResolvedTable;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -109,7 +110,10 @@ public:
             }
         }
 
-        ResolveTable(proto->Gettable(), ctx);
+        if (!ResolveRootSchemaPath(*Request, proto->Gettable(), ResolvedTable)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path", ctx);
+        }
+        ResolveTable(ResolvedTable, ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -200,8 +204,7 @@ private:
         ResolveNamesResult = new NSchemeCache::TSchemeCacheNavigate();
         auto &record = ev->Get()->Record;
 
-        const TString& table = GetProtoRequest()->table();
-        auto path = ::NKikimr::SplitPath(table);
+        auto path = ::NKikimr::SplitPath(ResolvedTable);
         FillLocalDbTableSchema(*ResolveNamesResult, record.GetFullScheme(), path.back());
         ResolveNamesResult->ResultSet.back().Path = path;
 

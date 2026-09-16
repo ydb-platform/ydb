@@ -86,7 +86,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrlFromRequest<TProtoRequest>(request))
-            , TBase(request, GetTopicPath().value_or(""))
+            , TBase(request, TQueueUrlHolder::GetTopicPath().value_or(""))
         {
         }
 
@@ -101,6 +101,9 @@ namespace NKikimr::NSqsTopic::V1 {
             }
             if (!QueueUrl_.has_value()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
+            }
+            if (!this->ResolveQueueUrlPath(FullTopicPath_, QueueUrl_->Database)) {
+                return;
             }
 
             PrepareWrite();

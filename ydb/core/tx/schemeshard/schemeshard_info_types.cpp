@@ -7,6 +7,7 @@
 
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/path_aliasing/context/path_context.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/table_index.h>
@@ -3375,8 +3376,46 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     return timestamp;
 }
 
+bool TImportInfo::ValidatePathRewriteContext(TString& error) const {
+    if (PathRewriteFingerprint.empty()) {
+        return true;
+    }
+    const auto& normalizer = AppData()->PathNormalizer;
+    if (!normalizer || normalizer->GetFingerprint() != PathRewriteFingerprint) {
+        error = "Path rewrite configuration changed before import destinations were resolved";
+        return false;
+    }
+    return true;
+}
+
+bool TImportInfo::NormalizeDestinationPath(TString& completePath, TString& error) const {
+    if (PathRewriteFingerprint.empty() || completePath.empty()) {
+        return true;
+    }
+    if (!ValidatePathRewriteContext(error)) {
+        return false;
+    }
+    auto candidate = CanonizePath(completePath);
+    if (candidate.empty()) {
+        candidate = "/";
+    }
+    NPathAliasing::TPathContext context(*AppData()->PathNormalizer, Nothing());
+    auto resolved = context.NormalizePath(candidate);
+    if (resolved.IsFail()) {
+        error = resolved.GetErrorMessage();
+        return false;
+    }
+    completePath = resolved.DetachResult().Path;
+    return true;
+}
+
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
+
+    if (TString error; !ValidatePathRewriteContext(error)) {
+        result.AddError(error);
+        return result;
+    }
 
     if (TString err; !CompileExcludeRegexps(err)) {
         result.AddError(err);
@@ -3385,7 +3424,8 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
 
     TString dstRoot;
     if (GetDestinationPath().empty()) {
-        dstRoot = CanonizePath(ss->RootPathElements);
+        dstRoot = PathRewriteFingerprint.empty() || LogicalDatabase.empty()
+            ? CanonizePath(ss->RootPathElements) : CanonizePath(LogicalDatabase);
     } else {
         dstRoot = CanonizePath(GetDestinationPath());
     }
@@ -3419,7 +3459,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
 
             TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
             TString explain;
-            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+            if (!NormalizeDestinationPath(dstPath, explain) || !ValidateImportDstPath(dstPath, ss, explain)) {
                 result.AddError(explain);
                 continue;
             }
@@ -3469,25 +3509,26 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                         continue;
                     }
 
-                    TStringBuilder dstPath;
+                    TStringBuilder logicalDestination;
                     if (item.DstPathName) {
                         if (isDstPathAbsolute) {
-                            dstPath << item.DstPathName;
+                            logicalDestination << item.DstPathName;
                         } else {
-                            dstPath << combineDstPath(item.DstPathName, dstRoot);
+                            logicalDestination << combineDstPath(item.DstPathName, dstRoot);
                         }
                         if (suffix) { // Exact filter matching
-                            if (dstPath.back() != '/') {
-                                dstPath << '/';
+                            if (logicalDestination.back() != '/') {
+                                logicalDestination << '/';
                             }
-                            dstPath << suffix;
+                            logicalDestination << suffix;
                         }
                     } else {
-                        dstPath << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+                        logicalDestination << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
                     }
 
+                    TString dstPath = logicalDestination;
                     TString explain;
-                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                    if (!NormalizeDestinationPath(dstPath, explain) || !ValidateImportDstPath(dstPath, ss, explain)) {
                         result.AddError(explain);
                         continue;
                     }
@@ -3512,6 +3553,14 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
+    if (!PathRewriteFingerprint.empty()) {
+        THashSet<TString> destinations;
+        for (const auto& item : items) {
+            if (!destinations.insert(item.DstPathName).second) {
+                result.AddError(TStringBuilder() << "Duplicate resolved import destination: " << item.DstPathName);
+            }
+        }
+    }
     if (result.Success) {
         Items.swap(items);
     }

@@ -1,4 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -151,6 +153,54 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TImportFromFsTests) {
+    Y_UNIT_TEST(WaitingImportResumesPersistedPhysicalDestinationAfterRulesChange) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        NKikimrConfig::TPathRewriteConfig aliases;
+        aliases.AddRules()->SetPattern("^/alias/Restored$");
+        aliases.MutableRules(0)->SetReplacement("/MyRoot/Restored");
+        auto initial = std::make_shared<NPathAliasing::TPathNormalizer>(aliases);
+        runtime.GetAppData().PathNormalizer = initial;
+        TTempBackupFiles backup;
+        backup.CreateTableBackup("backup/Table", "Table");
+        constexpr ui64 importId = 101;
+        bool waitingScheme = false;
+        bool block = true;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (block && event->GetTypeRewrite() == NSchemeShard::TEvPrivate::TEvImportSchemeReady::EventType
+                && event->Get<NSchemeShard::TEvPrivate::TEvImportSchemeReady>()->ImportId == importId)
+            {
+                waitingScheme = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            LogicalDatabase: "/alias"
+            PathRewriteFingerprint: "%s"
+            ImportFromFsSettings {
+                base_path: "%s"
+                items { source_path: "backup/Table" destination_path: "/alias/Restored" }
+            }
+        )", initial->GetFingerprint().c_str(), backup.GetBasePath().c_str()));
+        runtime.WaitFor("import is waiting for item scheme", [&] { return waitingScheme; });
+        // Item destinations are already committed in Waiting. A new alias
+        // configuration must not reinterpret them or cancel this import.
+        NKikimrConfig::TPathRewriteConfig changed;
+        changed.AddRules()->SetPattern("^/MyRoot/Restored$");
+        changed.MutableRules(0)->SetReplacement("/MyRoot/Decoy");
+        runtime.GetAppData().PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(changed);
+        block = false;
+        runtime.SetObserverFunc(observer);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, importId);
+        const auto response = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored"), {NLs::PathExist, NLs::IsTable});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Decoy"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(ShouldSucceedCreateImportFromFs) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

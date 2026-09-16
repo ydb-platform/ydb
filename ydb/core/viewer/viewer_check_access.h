@@ -33,7 +33,11 @@ public:
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'permissions' is required"));
         }
         if (params.Has("path")) {
-            RequestSchemeCacheNavigate(params.Get("path"));
+            TString path;
+            if (!ResolveUserSchemaPath(params.Get("path"), path)) {
+                return;
+            }
+            RequestSchemeCacheNavigate(path);
         } else {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'path' is required"));
         }

@@ -67,12 +67,14 @@ public:
         LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
-                .Path = GetProtoRequest()->path(),
+                .Path = GetTopicPath(),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
                 .AccessRights = {NACLib::EAccessRights::DescribeSchema, NACLib::EAccessRights::UpdateRow},
                 .IncludeStats = GetProtoRequest()->include_stats(),
                 .IncludeLocation = GetProtoRequest()->include_location(),
+                .PathContext = GetFederatedPathContext(),
+                .LogicalDatabase = GetLogicalDatabase(),
             },
             std::make_unique<TDescribePartitionStrategy>(GetProtoRequest()->partition_id())));
     }

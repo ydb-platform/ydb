@@ -30,6 +30,7 @@ private:
     const TMessagePtr<TCreateTopicsRequestData> Message;
     std::unordered_set<TString> DuplicateTopicNames;
     ui32 InflyTopics = 0;
+    THashMap<TActorId, TString> CreationActorTopics;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvTopicModificationResponse>> TopicNamesToResponses;
     std::unordered_map<TString, std::pair<std::optional<ui64>, std::optional<ui64>>> TopicNamesToRetentions;
 

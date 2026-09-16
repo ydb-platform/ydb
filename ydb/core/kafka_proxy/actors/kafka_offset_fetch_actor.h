@@ -66,6 +66,7 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
+    TString GetTopicKey(const TString& group, const TString& topic) const;
 
     NActors::TActorId GetKafkaConnectionId() const {
         return Context ? Context->ConnectionId : NActors::TActorId{};
@@ -121,6 +122,7 @@ private:
     const ui64 CorrelationId;
     const TMessagePtr<TOffsetFetchRequestData> Message;
     std::unordered_map<TString, TTopicEntities> TopicToEntities;
+    THashSet<TString> UserTopicGroups;
     std::unordered_map<TString, TAutoPtr<TEvKafka::TEvCommitedOffsetsResponse>> TopicsToResponses;
     std::unordered_map<TString, ui32> GroupIdToIndex;
     std::unordered_map<ui32, TString> CookieToGroupId;

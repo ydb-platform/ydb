@@ -140,6 +140,11 @@ private:
         LogRequest(event);
 
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        if (const TString error = requestBaseCtx->InitializePathRewriteContext(*AppData(ctx)); !error.empty()) {
+            requestBaseCtx->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, error));
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            return;
+        }
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);

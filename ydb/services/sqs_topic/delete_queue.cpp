@@ -79,6 +79,9 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!ResolveQueueUrlPath(FullTopicPath_, QueueUrl_->Database)) {
+                return;
+            }
             if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
                     "DeleteQueue is not supported"));

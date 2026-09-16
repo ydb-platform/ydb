@@ -53,13 +53,24 @@ public:
         UsedSyncVersion = Settings.ForceSyncVersion;
 
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            auto resolved = NNameResolver::ResolveName(
+                Settings.PathContext ? Settings.LogicalDatabase : DatabasePath, topic);
             if (!resolved) {
                 LOG_D("Name resolve failed",
                     {"topic", topic},
                     {"reason", resolved.error()});
                 SetErrorResult(topic, EStatus::BadRequest);
                 continue;
+            }
+            if (Settings.PathContext) {
+                auto path = Settings.PathContext->NormalizePath(resolved->Path);
+                auto database = Settings.PathContext->NormalizePath(resolved->NavigateDatabase);
+                if (path.IsFail() || database.IsFail()) {
+                    SetErrorResult(topic, EStatus::BadRequest);
+                    continue;
+                }
+                resolved->Path = path.DetachResult().Path;
+                resolved->NavigateDatabase = database.DetachResult().Path;
             }
             LOG_D("Name resolved",
                 {"topic", topic},

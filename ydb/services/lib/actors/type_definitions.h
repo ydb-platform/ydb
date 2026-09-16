@@ -29,6 +29,7 @@ struct TTopicInitInfo {
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     THashMap<ui32, TPartitionInfo> Partitions;
     std::shared_ptr<const NPQ::TPartitionGraph> PartitionGraph;
+    bool PathRewritten = false;
 };
 
 using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;

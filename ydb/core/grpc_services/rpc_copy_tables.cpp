@@ -39,9 +39,15 @@ private:
 
         const auto req = GetProtoRequest();
         for (const auto& item: req->tables()) {
+            TString sourcePath;
+            TString destinationPath;
+            if (!ResolveRootSchemaPath(*Request_, item.source_path(), sourcePath)
+                || !ResolveRootSchemaPath(*Request_, item.destination_path(), destinationPath)) {
+                return Reply(StatusIds::BAD_REQUEST, ctx);
+            }
             auto description = copy->AddCopyTableDescriptions();
-            description->SetSrcPath(item.source_path());
-            description->SetDstPath(item.destination_path());
+            description->SetSrcPath(sourcePath);
+            description->SetDstPath(destinationPath);
             description->SetOmitIndexes(item.omit_indexes());
         }
 

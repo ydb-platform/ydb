@@ -1,4 +1,5 @@
 #include "grpc_pq_actor.h"
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
@@ -116,6 +117,9 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
     Database = CanonizePath(NKikimr::NPQ::GetDatabaseFromConfig(pqConfig));
+    if (AppData(ctx)->PathNormalizer && !AppData(ctx)->PathNormalizer->Empty()) {
+        PathContext = std::make_shared<NPathAliasing::TPathContext>(*AppData(ctx)->PathNormalizer, Nothing());
+    }
     ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(
             pqConfig, LocalDC
     );
@@ -215,6 +219,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     //2. No database. Try parse and resolve account to database. If possible, try search this path.
     //3. Fallback from 2 - legacy mode.
 
+    // PQv0 historically forms topic names using the configured database before
+    // applying the request's database header to the session. Keep that grammar.
     DiscoveryConverter = ConverterFactory->MakeDiscoveryConverter(init.GetTopic(), true, LocalDC, Database);
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
@@ -227,8 +233,36 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
     PeerName = event->PeerName;
     RequestId = event->RequestId;
+    if (PathContext) {
+        LogicalTopic = init.GetTopic();
+        if (ConverterFactory->GetNoDCMode()) {
+            auto resolved = NGRpcService::ResolveConvertedTopicSchemaPath(
+                *PathContext, LogicalTopic, DiscoveryConverter->GetPrimaryPath());
+            if (resolved.IsFail()) {
+                return CloseSession(resolved.GetErrorMessage(), NPersQueue::NErrorCode::BAD_REQUEST, ctx);
+            }
+            TopicRewritten = resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten;
+            if (resolved->Outcome != NPathAliasing::EPathRewriteOutcome::NoMatch
+                && resolved->Path != DiscoveryConverter->GetPrimaryPath()) {
+                // Preserve converter metadata and do not parse a physical target
+                // again. ACL refresh reuses this resolved converter unchanged.
+                DiscoveryConverter->SetPrimaryPath(resolved->Path);
+            }
+        }
+    }
     if (!event->Database.empty()) {
         Database = CanonizePath(event->Database);
+        if (PathContext) {
+            LogicalDatabase = Database;
+            // Match an explicit root header without changing its legacy empty representation on a miss or identity.
+            auto database = PathContext->NormalizePath(LogicalDatabase.empty() ? TString("/") : LogicalDatabase);
+            if (database.IsFail()) {
+                return CloseSession(database.GetErrorMessage(), NPersQueue::NErrorCode::BAD_REQUEST, ctx);
+            }
+            if (database->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
+                Database = database.DetachResult().Path;
+            }
+        }
     }
 
     SourceId = init.GetSourceId();
@@ -247,6 +281,9 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     LogSession(ctx);
 
     auto* request = new TEvDescribeTopicsRequest({DiscoveryConverter});
+    if (PathContext && !ConverterFactory->GetNoDCMode()) {
+        request->PathContext = PathContext;
+    }
     //TODO: GetNode for /Root/PQ then describe from balancer
     ctx.Send(SchemeCache, request);
     State = ES_WAIT_SCHEME;
@@ -337,9 +374,13 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
 
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+    if (!ev->Get()->PathRewriteError.empty()) {
+        return CloseSession(ev->Get()->PathRewriteError, NPersQueue::NErrorCode::BAD_REQUEST, ctx);
+    }
     if (State != ES_WAIT_SCHEME && State != ES_INITED) {
         return CloseSession("erroneous internal state", NPersQueue::NErrorCode::ERROR, ctx);
     }
+    TopicRewritten |= ev->Get()->RewrittenTopics.contains(DiscoveryConverter->GetOriginalPath());
 
     auto& res = ev->Get()->Result;
     Y_ABORT_UNLESS(res->ResultSet.size() == 1);
@@ -604,7 +645,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     init->SetMaxSeqNo(maxSeqNo);
     init->SetPartition(Partition);
     Y_ABORT_UNLESS(FullConverter);
-    init->SetTopic(FullConverter->GetClientsideName());
+    init->SetTopic(TopicRewritten ? LogicalTopic : FullConverter->GetClientsideName());
 
     YDB_LOG_INFO_CTX(ctx, "Session inited",
         {"cookie", Cookie},
@@ -936,6 +977,9 @@ void TWriteSessionActor::HandleWakeup(const TActorContext& ctx) {
         if (Auth.GetCredentialsCase() != NPersQueueCommon::TCredentials::CREDENTIALS_NOT_SET) {
             ACLCheckInProgress = true;
             auto* request = new TEvDescribeTopicsRequest({DiscoveryConverter});
+            if (PathContext && !ConverterFactory->GetNoDCMode()) {
+                request->PathContext = PathContext;
+            }
             ctx.Send(SchemeCache, request);
         }
     }

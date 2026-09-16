@@ -73,7 +73,8 @@ void SendLoginRequest(const TString& database, const TString& user, const TStrin
 
     using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
-    auto rpcFuture = NRpcService::DoLocalRpc<TEvLoginRequest>(std::move(request), database, {}, actorSystem);
+    auto rpcFuture = NRpcService::DoLocalRpc<TEvLoginRequest>(std::move(request), database, {}, actorSystem,
+        false, NGRpcService::TPathRewriteSettings::UserInput());
     rpcFuture.Subscribe([actorSystem, recipientId](const auto& future) {
         actorSystem->Send(recipientId, new TEvPrivate::TEvLoginResponse(future.GetValueSync()));
     });

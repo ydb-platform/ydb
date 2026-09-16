@@ -24,7 +24,7 @@ public:
 
     void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database_path")) {
+        if (!PathRewriteInitialized && params.Has("database_path")) {
             Database = params.Get("database_path");
         }
         TBase::Bootstrap();

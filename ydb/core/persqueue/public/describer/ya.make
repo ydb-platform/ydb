@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/containers/absl
     ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/path_aliasing/context
     ydb/core/persqueue/public/nameresolver
 #    ydb/core/persqueue/public
 )

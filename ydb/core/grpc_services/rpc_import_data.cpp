@@ -119,12 +119,16 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     /// Resolve path
 
     void ResolvePath() {
+        TString path;
+        if (!ResolveRootSchemaPath(*Request, GetProtoRequest()->path(), path)) {
+            return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Invalid rewritten table path");
+        }
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
-        entry.Path = NKikimr::SplitPath(GetProtoRequest()->path());
+        entry.Path = NKikimr::SplitPath(path);
 
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateResolvePath);

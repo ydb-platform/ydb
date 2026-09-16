@@ -272,7 +272,7 @@ public:
     }
 
     const TString& GetTable() {
-        return GetProto()->path();
+        return ResolvedTable;
     }
 
     bool CheckAccess(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -331,6 +331,9 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
+        if (!ResolveRootSchemaPath(*Request, GetProto()->path(), ResolvedTable)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path");
+        }
         StartTime = TAppData::TimeProvider->Now();
         if (!ResolveTable()) {
             return;
@@ -857,6 +860,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
+    TString ResolvedTable;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

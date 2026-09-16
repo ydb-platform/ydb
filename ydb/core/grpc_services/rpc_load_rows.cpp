@@ -248,10 +248,16 @@ public:
     }
 
 private:
-    void OnBeforeStart(const TActorContext& ctx) override {
+    bool OnBeforeStart(const TActorContext& ctx) override {
+        if (!ResolveRootSchemaPath(*Request, GetProtoRequest(Request.get())->table(), ResolvedTable)) {
+            Request->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            Die(ctx);
+            return false;
+        }
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
+        return true;
     }
 
     void OnBeforePoison(const TActorContext&) override {
@@ -272,7 +278,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return ResolvedTable;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -370,6 +376,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    TString ResolvedTable;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -388,10 +395,16 @@ public:
     }
 
 private:
-    void OnBeforeStart(const TActorContext& ctx) override {
+    bool OnBeforeStart(const TActorContext& ctx) override {
+        if (!ResolveRootSchemaPath(*Request, GetProtoRequest(Request.get())->table(), ResolvedTable)) {
+            Request->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            Die(ctx);
+            return false;
+        }
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
+        return true;
     }
 
     void OnBeforePoison(const TActorContext&) override {
@@ -423,7 +436,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return GetProtoRequest(Request.get())->table();
+        return ResolvedTable;
     }
 
     const TString& GetSourceData() const override {
@@ -641,6 +654,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
+    TString ResolvedTable;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

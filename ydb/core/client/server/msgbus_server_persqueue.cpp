@@ -183,7 +183,11 @@ void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     for (const auto& topic : TopicsToRequest) {
         topicsToRequest.push_back(topic);
     }
-    bool ret = ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest(topicsToRequest));
+    auto request = MakeHolder<NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest>(topicsToRequest);
+    if (LogicalPaths && AppData(ctx)->PathNormalizer && !AppData(ctx)->PathNormalizer->Empty()) {
+        request->PathContext = std::make_shared<NPathAliasing::TPathContext>(*AppData(ctx)->PathNormalizer, Nothing());
+    }
+    bool ret = ctx.Send(PqMetaCache, request.Release());
     YDB_LOG_TRACE_CTX(ctx, "Send to PqMetaCache TEvDescribeTopicsRequest",
         {"result", ret});
 
@@ -299,6 +303,9 @@ THashSet<TString> GetTopicsListOrThrow(
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx
 ) {
+    if (!ev->Get()->PathRewriteError.empty()) {
+        return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::BAD_REQUEST, ev->Get()->PathRewriteError);
+    }
     TopicsConverters.reserve(ev->Get()->TopicsRequested.size());
     Y_ABORT_UNLESS(ev->Get()->Result->ResultSet.size() == ev->Get()->TopicsRequested.size());
     for (ui32 i = 0; i < ev->Get()->TopicsRequested.size(); ++i) {
@@ -306,7 +313,9 @@ void TPersQueueBaseRequestProcessor::Handle(
             const auto& pqTabletConfig = ev->Get()->Result->ResultSet[i].PQGroupInfo->Description.GetPQTabletConfig();
             TopicsConverters.push_back(ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(
                     pqTabletConfig,
-                    AppData(ctx)->PQConfig.GetTestDatabaseRoot()));
+                    AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
+                    ev->Get()->RewrittenTopics.contains(ev->Get()->TopicsRequested[i]->GetOriginalPath())
+                        ? TMaybe<TString>(ev->Get()->TopicsRequested[i]->GetOriginalTopic()) : Nothing()));
         } else {
             TopicsConverters.push_back(nullptr);
         }
@@ -496,6 +505,8 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
 
 
 class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> {
+public:
+    bool LogicalPaths = false;
 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
@@ -945,6 +956,10 @@ public:
 
     void Handle(TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
+        if (!ev->Get()->PathRewriteError.empty()) {
+            ErrorReason = ev->Get()->PathRewriteError;
+            return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::BAD_REQUEST, ctx), ctx);
+        }
         auto& resultSet = ev->Get()->Result->ResultSet;
 
         Y_ABORT_UNLESS(TopicInfo.size() == resultSet.size());
@@ -954,11 +969,16 @@ public:
             if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
                 auto& description = entry.PQGroupInfo->Description;
                 auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(description.GetPQTabletConfig(),
-                                                                                                           AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+                    AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
+                    ev->Get()->RewrittenTopics.contains(ev->Get()->TopicsRequested[i]->GetOriginalPath())
+                        ? TMaybe<TString>(ev->Get()->TopicsRequested[i]->GetOriginalTopic()) : Nothing());
                 Y_ABORT_UNLESS(TopicInfo.contains(converter->GetClientsideName()));
                 auto& topicInfo = TopicInfo[converter->GetClientsideName()];
                 topicInfo.BalancerTabletId = description.GetBalancerTabletID();
                 topicInfo.PQInfo = entry.PQGroupInfo;
+                if (ev->Get()->RewrittenTopics.contains(ev->Get()->TopicsRequested[i]->GetOriginalPath())) {
+                    topicInfo.Converter = std::move(converter);
+                }
             }
         }
 
@@ -1056,6 +1076,9 @@ public:
 
             PQClient.push_back(ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
             ActorIdToProto(PQClient.back(), RequestProto.MutablePartitionRequest()->MutablePipeClient());
+            if (info.Converter) {
+                RequestProto.MutablePartitionRequest()->SetTopic(info.Converter->GetPrimaryPath());
+            }
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&RequestProto);
@@ -1308,7 +1331,7 @@ public:
         preq->Record.SetRequestId(reqId);
         auto partReq = preq->Record.MutablePartitionRequest();
         partReq->SetCookie(CurrentCookie);
-        partReq->SetTopic(topic);
+        partReq->SetTopic(it->second.Converter ? it->second.Converter->GetPrimaryPath() : topic);
         partReq->SetPartition(part);
         auto read = partReq->MutableCmdRead();
         read->SetClientId(clientId);
@@ -1397,6 +1420,9 @@ public:
             topics.push_back(topic);
         }
         auto* request = new TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest(topics);
+        if (LogicalPaths && AppData(ctx)->PathNormalizer && !AppData(ctx)->PathNormalizer->Empty()) {
+            request->PathContext = std::make_shared<NPathAliasing::TPathContext>(*AppData(ctx)->PathNormalizer, Nothing());
+        }
         ctx.Send(SchemeCache, request);
         ++DescribeRequests;
 
@@ -1459,6 +1485,7 @@ private:
 
 class TErrorReplier : public TActorBootstrapped<TErrorReplier> {
 public:
+    bool LogicalPaths = false;
     TErrorReplier(const NKikimrClient::TPersQueueRequest& request, const TActorId& /*schemeCache*/)
         : RequestId(request.HasRequestId() ? request.GetRequestId() : "<none>")
     {
@@ -1481,8 +1508,14 @@ public:
 template <template <class TImpl, class... TArgs> class TSenderImpl, class... T>
 IActor* CreatePersQueueRequestProcessor(
     const NKikimrClient::TPersQueueRequest& request,
+    bool logicalPaths,
     T&&... constructorParams
 ) {
+    auto create = [&]<class TImpl>() -> IActor* {
+        auto* actor = new TSenderImpl<TImpl>(std::forward<T>(constructorParams)...);
+        actor->LogicalPaths = logicalPaths;
+        return actor;
+    };
     try {
         if (request.HasMetaRequest() + request.HasPartitionRequest() + request.HasFetchRequest() > 1) {
             throw std::runtime_error("only one from meta partition or fetch requests must be filled");
@@ -1495,24 +1528,22 @@ IActor* CreatePersQueueRequestProcessor(
                 throw std::runtime_error("multiple or none requests in MetaRequest");
             }
             if (meta.HasCmdGetPartitionLocations()) {
-                return new TSenderImpl<TPersQueueGetPartitionLocationsProcessor>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TPersQueueGetPartitionLocationsProcessor>();
             } else if (meta.HasCmdGetPartitionOffsets()) {
-                return new TSenderImpl<TPersQueueGetPartitionOffsetsProcessor>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TPersQueueGetPartitionOffsetsProcessor>();
             } else if (meta.HasCmdGetTopicMetadata()) {
-                return new TSenderImpl<TPersQueueGetTopicMetadataProcessor>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TPersQueueGetTopicMetadataProcessor>();
             } else if (meta.HasCmdGetPartitionStatus()) {
-                return new TSenderImpl<TPersQueueGetPartitionStatusProcessor>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TPersQueueGetPartitionStatusProcessor>();
             } else if (meta.HasCmdGetReadSessionsInfo()) {
-                return new TSenderImpl<TPersQueueGetReadSessionsInfoProcessor>(
-                    std::forward<T>(constructorParams)...
-                );
+                return create.template operator()<TPersQueueGetReadSessionsInfoProcessor>();
             } else {
                 throw std::runtime_error("Not implemented yet");
             }
         } else if (request.HasPartitionRequest()) {
-            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TMessageBusServerPersQueueImpl>();
         } else if (request.HasFetchRequest()) {
-            return new TSenderImpl<TMessageBusServerPersQueueImpl>(std::forward<T>(constructorParams)...);
+                return create.template operator()<TMessageBusServerPersQueueImpl>();
         } else {
             throw std::runtime_error("empty request");
         }
@@ -1555,6 +1586,7 @@ IActor* CreateMessageBusServerPersQueue(
     const NKikimrClient::TPersQueueRequest& request = static_cast<TBusPersQueue*>(msg.GetMessage())->Record;
     return CreatePersQueueRequestProcessor<TMessageBusServerPersQueue>(
         request,
+        true,
         msg,
         schemeCache
     );
@@ -1563,10 +1595,12 @@ IActor* CreateMessageBusServerPersQueue(
 IActor* CreateActorServerPersQueue(
     const TActorId& parentId,
     const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache
+    const TActorId& schemeCache,
+    bool logicalPaths
 ) {
     return CreatePersQueueRequestProcessor<TReplierToParent>(
         request,
+        logicalPaths,
         parentId,
         request,
         schemeCache

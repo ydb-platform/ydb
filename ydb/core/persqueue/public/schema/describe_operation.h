@@ -23,6 +23,8 @@ struct TDescribeOperationSettings {
     bool IncludeStats = false;
     bool IncludeLocation = false;
     bool ForceSyncVersion = false;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 struct TPartitionDescribeInfo {

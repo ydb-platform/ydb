@@ -203,16 +203,18 @@ IEventHandle* GetRequestAuthAndCheckHandle(
             {"database", database});
     }
 
-    return new NActors::IEventHandle(
-        NGRpcService::CreateGRpcRequestProxyId(),
-        owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,
             NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
             std::move(peerName),
-            std::move(requestId)),
+            std::move(requestId));
+    request->SetPathRewriteSettings(NGRpcService::TPathRewriteSettings::UserInput());
+    return new NActors::IEventHandle(
+        NGRpcService::CreateGRpcRequestProxyId(),
+        owner,
+        request.release(),
         IEventHandle::FlagTrackDelivery
     );
 }

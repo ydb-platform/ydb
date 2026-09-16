@@ -1,5 +1,6 @@
 #include "service_cms.h"
 #include "rpc_deferrable.h"
+#include "rpc_common/rpc_common.h"
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
@@ -143,6 +144,29 @@ private:
     {
         auto request = MakeHolder<TCmsRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
+        if constexpr (std::is_same_v<TRequest, TEvCreateTenantRequest>
+            || std::is_same_v<TRequest, TEvAlterTenantRequest>
+            || std::is_same_v<TRequest, TEvGetTenantStatusRequest>
+            || std::is_same_v<TRequest, TEvRemoveTenantRequest>) {
+            auto* body = request->Record.MutableRequest();
+            TString path;
+            if (!ResolveRootSchemaPath(*this->Request_, body->path(), path)) {
+                this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                return Die(ctx);
+            }
+            body->set_path(path);
+            if constexpr (std::is_same_v<TRequest, TEvCreateTenantRequest>) {
+                if (body->has_serverless_resources()) {
+                    auto* resources = body->mutable_serverless_resources();
+                    TString sharedDatabase;
+                    if (!ResolveRootSchemaPath(*this->Request_, resources->shared_database_path(), sharedDatabase)) {
+                        this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+                        return Die(ctx);
+                    }
+                    resources->set_shared_database_path(sharedDatabase);
+                }
+            }
+        }
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());
         NTabletPipe::SendData(ctx, CmsPipe, request.Release());

@@ -1,6 +1,7 @@
 #include "test_client.h"
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
@@ -547,6 +548,8 @@ namespace Tests {
 
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
+
+            appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(Settings->AppConfig->GetPathRewriteConfig());
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())

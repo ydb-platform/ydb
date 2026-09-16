@@ -96,10 +96,18 @@ bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
 void TKafkaSaslAuthActor::StartScramAuth() {
     DatabasePath = AppData()->TenantName;
+    LogicalDatabasePath = DatabasePath;
+    if (const auto& normalizer = AppData()->PathNormalizer; normalizer && !normalizer->Empty()) {
+        PathContext = std::make_shared<NKikimr::NPathAliasing::TPathContext>(*normalizer, Nothing());
+    }
 }
 
 void TKafkaSaslAuthActor::StartMtlsAuth() {
     DatabasePath = AppData()->TenantName;
+    LogicalDatabasePath = DatabasePath;
+    if (const auto& normalizer = AppData()->PathNormalizer; normalizer && !normalizer->Empty()) {
+        PathContext = std::make_shared<NKikimr::NPathAliasing::TPathContext>(*normalizer, Nothing());
+    }
 }
 
 void TKafkaSaslAuthActor::HandleFirstLoginResponse(NSasl::TEvSasl::TEvSaslScramFirstServerResponse::TPtr& ev) {
@@ -300,6 +308,8 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
                                                         ResourcePath, IsServerless, errorMessage, ResourseDatabasePath,
                                                         Ticket, TicketParserEntries, AuthDatabasePath,
                                                         TStringBuilder() << Address);
+        authResult->LogicalDatabasePath = LogicalDatabasePath;
+        authResult->PathContext = PathContext;
         Send(Context->ConnectionId, authResult);
     }
 
@@ -334,6 +344,16 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     }
 
     authData.Password = password;
+    LogicalDatabasePath = DatabasePath;
+    if (const auto& normalizer = AppData()->PathNormalizer; normalizer && !normalizer->Empty()) {
+        PathContext = std::make_shared<NKikimr::NPathAliasing::TPathContext>(*normalizer, DatabasePath);
+        if (!PathContext->GetError().empty()) {
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::BAD_REQUEST,
+                PathContext->GetError(), "Invalid rewritten database path", ctx);
+            return false;
+        }
+        DatabasePath = PathContext->GetDatabase().GetOrElse(DatabasePath);
+    }
     return true;
 }
 

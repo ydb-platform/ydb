@@ -139,6 +139,9 @@ public:
         TString TraceId;
         TInstant Deadline = TInstant::Max();
         std::shared_ptr<std::atomic_bool> ClientLostStatus;
+        // Local calls contain physical server operands by default. External
+        // bridges must explicitly supply UserInput or their retained context.
+        NGRpcService::TPathRewriteSettings PathRewrite = NGRpcService::TPathRewriteSettings::Internal();
     };
 
     template<typename TProto, typename TCb>
@@ -153,6 +156,7 @@ public:
         , Deadline(settings.Deadline)
         , ClientLostStatus(std::move(settings.ClientLostStatus))
     {
+        this->SetPathRewriteSettings(std::move(settings.PathRewrite));
         SetupTokenAndSpan(settings.Token);
     }
 
@@ -165,6 +169,7 @@ public:
         , RequestType(requestType)
         , InternalCall(internalCall)
     {
+        this->SetPathRewriteSettings(NGRpcService::TPathRewriteSettings::Internal());
         SetupTokenAndSpan(token);
     }
 
@@ -174,10 +179,7 @@ public:
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
-        if (DatabaseName) {
-            return DatabaseName;
-        }
-        return Nothing();
+        return this->GetPathResolvedDatabase(DatabaseName ? TMaybe<TString>(DatabaseName) : Nothing());
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
@@ -392,26 +394,44 @@ void SetRequestSyncOperationMode(TRequest&) {
     // nothing
 }
 
+template <typename TContext>
+bool PrepareLocalPathContext(TContext& request, const TAppData& appData,
+    NGRpcService::TPathRewriteSettings settings)
+{
+    request.SetPathRewriteSettings(std::move(settings));
+    if (const TString error = request.InitializePathRewriteContext(appData); !error.empty()) {
+        request.RaiseIssue(NYql::TIssue(error));
+        request.ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        return false;
+    }
+    return true;
+}
+
 template<typename TRpc>
 NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database,
         const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        TActorSystem* actorSystem, bool internalCall = false, NWilson::TTraceId traceId = {})
+        TActorSystem* actorSystem, bool internalCall = false, NWilson::TTraceId traceId = {},
+        NGRpcService::TPathRewriteSettings pathRewrite = NGRpcService::TPathRewriteSettings::Internal())
 {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
 
     SetRequestSyncOperationMode(proto);
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
-    auto actor = TRpc::CreateRpcActor(req);
+    auto req = std::make_unique<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), TCbWrapper(promise), database, token, requestType, internalCall, std::move(traceId));
+    if (!PrepareLocalPathContext(*req, *actorSystem->AppData<TAppData>(), std::move(pathRewrite))) {
+        return promise.GetFuture();
+    }
+    auto actor = TRpc::CreateRpcActor(req.release());
     actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
     return promise.GetFuture();
 }
 
 template<typename TRpc>
-NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false) {
-    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall);
+NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(typename TRpc::TRequest&& proto, const TString& database, const TMaybe<TString>& token, TActorSystem* actorSystem, bool internalCall = false,
+    NGRpcService::TPathRewriteSettings pathRewrite = NGRpcService::TPathRewriteSettings::Internal()) {
+    return DoLocalRpc<TRpc>(std::move(proto), database, token, Nothing(), actorSystem, internalCall, {}, std::move(pathRewrite));
 }
 
 template<typename TRpc>
@@ -423,7 +443,8 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
         TActorSystem* actorSystem,
         const TMap<TString, TString>& peerMeta,
         bool internalCall = false,
-        NWilson::TTraceId traceId = {}
+        NWilson::TTraceId traceId = {},
+        NGRpcService::TPathRewriteSettings pathRewrite = NGRpcService::TPathRewriteSettings::Internal()
 )
 {
     auto promise = NThreading::NewPromise<typename TRpc::TResponse>();
@@ -431,7 +452,7 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
     SetRequestSyncOperationMode(proto);
 
     using TCbWrapper = TPromiseWrapper<typename TRpc::TResponse>;
-    auto req = new TLocalRpcCtx<TRpc, TCbWrapper>(
+    auto req = std::make_unique<TLocalRpcCtx<TRpc, TCbWrapper>>(
         std::move(proto),
         TCbWrapper(promise),
         database,
@@ -445,7 +466,10 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
         req->PutPeerMeta(key, value);
     }
 
-    auto actor = TRpc::CreateRpcActor(req);
+    if (!PrepareLocalPathContext(*req, *actorSystem->AppData<TAppData>(), std::move(pathRewrite))) {
+        return promise.GetFuture();
+    }
+    auto actor = TRpc::CreateRpcActor(req.release());
     actorSystem->Register(actor, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
 
     return promise.GetFuture();
@@ -454,18 +478,23 @@ NThreading::TFuture<typename TRpc::TResponse> DoLocalRpc(
 template<typename TRpc>
 TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb,
         const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-        const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {})
+        const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {},
+        NGRpcService::TPathRewriteSettings pathRewrite = NGRpcService::TPathRewriteSettings::Internal())
 {
     SetRequestSyncOperationMode(proto);
 
-    auto req = new TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>(std::move(proto), std::move(cb), database, token, requestType, internalCall, std::move(traceId));
-    auto actor = TRpc::CreateRpcActor(req);
+    auto req = std::make_unique<TLocalRpcCtx<TRpc, std::function<void(typename TRpc::TResponse)>>>(std::move(proto), std::move(cb), database, token, requestType, internalCall, std::move(traceId));
+    if (!PrepareLocalPathContext(*req, *AppData(ctx), std::move(pathRewrite))) {
+        return {};
+    }
+    auto actor = TRpc::CreateRpcActor(req.release());
     return ctx.RegisterWithSameMailbox(actor);
 }
 
 template<typename TRpc>
-TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {}) {
-    return DoLocalRpcSameMailbox<TRpc>(std::move(proto), std::move(cb), database, token, Nothing(), ctx, internalCall, std::move(traceId));
+TActorId DoLocalRpcSameMailbox(typename TRpc::TRequest&& proto, std::function<void(typename TRpc::TResponse)>&& cb, const TString& database, const TMaybe<TString>& token, const TActorContext& ctx, bool internalCall = false, NWilson::TTraceId traceId = {},
+    NGRpcService::TPathRewriteSettings pathRewrite = NGRpcService::TPathRewriteSettings::Internal()) {
+    return DoLocalRpcSameMailbox<TRpc>(std::move(proto), std::move(cb), database, token, Nothing(), ctx, internalCall, std::move(traceId), std::move(pathRewrite));
 }
 
 //// Streaming part
@@ -610,24 +639,42 @@ template <typename TResponsePart>
 using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart>>;
 
 template <typename TRpc, typename... TRpcActorArgs>
-TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailboxWithPathContext(typename TRpc::TRequest&& proto,
     const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
-    const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+    const TActorContext& ctx, bool internalCall, NGRpcService::TPathRewriteSettings pathRewrite, TRpcActorArgs... args)
 {
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
-    auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
+    localRpcCtx->SetPathRewriteSettings(std::move(pathRewrite));
+    const TString error = localRpcCtx->InitializePathRewriteContext(*AppData(ctx));
+    auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(localRpcCtx);
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    // Keep the original database and resource origins across the outer wrapper.
+    localRpcRequest->SetPathRewriteSettings(localRpcCtx->GetPathRewriteSettings());
     // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
     if (token && !token->empty()) {
         localRpcRequest->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+    }
+    if (!error.empty()) {
+        localRpcRequest->RaiseIssue(NYql::TIssue(error));
+        localRpcRequest->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        return localRpcStreamCtx;
     }
     auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
     ctx.RegisterWithSameMailbox(actor);
 
     return localRpcStreamCtx;
+}
+
+template <typename TRpc, typename... TRpcActorArgs>
+TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto,
+    const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& requestType,
+    const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
+{
+    return DoLocalRpcStreamSameMailboxWithPathContext<TRpc>(std::move(proto), database, token,
+        requestType, ctx, internalCall, NGRpcService::TPathRewriteSettings::Internal(), args...);
 }
 
 template <typename TRpc, typename... TRpcActorArgs>

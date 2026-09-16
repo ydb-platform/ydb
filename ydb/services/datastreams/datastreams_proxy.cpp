@@ -191,6 +191,9 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TCreateStreamActor::CreateTopic(const TActorContext& ctx) {
+        if (!ResolveTopicPath()) {
+            return;
+        }
         Ydb::Topic::CreateTopicRequest topicRequest;
         topicRequest.set_path(GetTopicPath());
         topicRequest.mutable_partitioning_settings()->set_min_active_partitions(GetProtoRequest()->shard_count());
@@ -1064,6 +1067,9 @@ namespace NKikimr::NDataStreams::V1 {
                                   "' is out of range [" << MIN_MAX_RESULTS << ", " << MAX_MAX_RESULTS <<
                                   "]");
         }
+        if (Request_->HasActivePathRewriting() && !GetProtoRequest()->next_token().empty()) {
+            SetContinuationTopicPath(StreamArn);
+        }
         SendDescribeProposeRequest(ctx);
         Become(&TListStreamConsumersActor::StateWork);
     }
@@ -1086,6 +1092,9 @@ namespace NKikimr::NDataStreams::V1 {
         ui32 leftToRead{0};
         const auto& response = result->ResultSet.front();
         const auto& pqGroupDescription = response.PQGroupInfo->Description;
+        if (Request_->HasActivePathRewriting()) {
+            StreamArn = CanonizePath(response.Path);
+        }
         const auto& streamConsumers = pqGroupDescription.GetPQTabletConfig().GetConsumers();
         const auto alreadyRead = NextToken.GetAlreadyRead();
 
@@ -1483,6 +1492,9 @@ namespace NKikimr::NDataStreams::V1 {
                                   TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]");
         }
 
+        if (Request_->HasActivePathRewriting()) {
+            SetContinuationTopicPath(ShardIterator.GetStreamName());
+        }
         SendDescribeProposeRequest(ctx, ShardIterator.IsCdcTopic());
         Become(&TGetRecordsActor::StateWork);
     }
@@ -1793,6 +1805,9 @@ namespace NKikimr::NDataStreams::V1 {
                                   " but no ShardId provided");
         }
 
+        if (Request_->HasActivePathRewriting() && !GetProtoRequest()->next_token().empty()) {
+            SetContinuationTopicPath(StreamName);
+        }
         SendDescribeProposeRequest(ctx);
         Become(&TListShardsActor::StateWork);
     }
@@ -1814,6 +1829,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
+        if (Request_->HasActivePathRewriting()) {
+            StreamName = CanonizePath(topicInfo.Path);
+        }
 
         if (!this->Request_->GetSerializedToken().empty()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());

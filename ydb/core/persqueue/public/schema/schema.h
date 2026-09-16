@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/path_aliasing/context/path_context.h>
 
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -69,6 +70,8 @@ struct TAlterTopicSettings {
     bool IfExists = false;
     bool PrepareOnly = false;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);
@@ -98,6 +101,8 @@ struct TRemoveConsumerSettings {
     TString ConsumerName;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateRemoveConsumerActor(const NActors::TActorId& parentId, TRemoveConsumerSettings&& settings);
@@ -113,6 +118,8 @@ struct TCreateTopicSettings {
     bool IfNotExists = true;
     bool PrepareOnly = false;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateCreateTopicActor(const NActors::TActorId& parentId, TCreateTopicSettings&& settings);
@@ -128,6 +135,8 @@ struct TDropTopicSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IfExists = false;
     ui64 Cookie = 0;
+    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
+    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateDropTopicActor(const NActors::TActorId& parentId, TDropTopicSettings&& settings);

@@ -1,4 +1,5 @@
 #include "rpc_scheme_base.h"
+#include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
 #include <ydb/core/grpc_services/base/base.h>
@@ -31,10 +32,14 @@ public:
 private:
 
     void DescribeScheme() {
+        TString path;
+        if (!ResolveRootSchemaPath(*Request_, GetProtoRequest()->path(), path)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ActorContext());
+        }
         auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev.get(), *Request_);
-        ev->Record.MutableDescribePath()->SetPath(GetProtoRequest()->path());
+        ev->Record.MutableDescribePath()->SetPath(path);
 
         Send(MakeTxProxyID(), ev.release());
         Become(&TDescribeExternalTableRPC::StateDescribeScheme);

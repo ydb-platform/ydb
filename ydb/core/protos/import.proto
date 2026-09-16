@@ -29,6 +29,9 @@ message TCreateImportRequest {
         Ydb.Import.ImportFromS3Settings ImportFromS3Settings = 2;
         Ydb.Import.ImportFromFsSettings ImportFromFsSettings = 3;
     }
+    // Server-owned provenance for destinations composed after manifest download.
+    optional string PathRewriteFingerprint = 4;
+    optional string LogicalDatabase = 5;
 }
 
 message TEvCreateImportRequest {

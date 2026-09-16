@@ -5,6 +5,9 @@ SIZE(MEDIUM)
 FORK_SUBTESTS()
 
 PEERDIR(
+    ydb/core/grpc_services/local_rpc
+    ydb/core/path_aliasing/context
+    ydb/public/sdk/cpp/src/client/driver
     contrib/restricted/nlohmann_json
     library/cpp/resource
     library/cpp/http/misc
@@ -31,6 +34,7 @@ PEERDIR(
 )
 
 SRCS(
+    path_aliasing_ut.cpp
     json_proto_conversion_ut.cpp
     http_ut.cpp
     utils_ut.cpp

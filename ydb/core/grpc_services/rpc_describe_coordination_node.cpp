@@ -80,12 +80,16 @@ private:
 
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
+        TString path;
+        if (!ResolveRootSchemaPath(*Request_, req->path(), path)) {
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(path);
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }

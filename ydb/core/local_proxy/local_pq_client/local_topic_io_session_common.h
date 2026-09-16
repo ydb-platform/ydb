@@ -145,6 +145,8 @@ protected:
         }
 
         auto ev = std::make_unique<TRpcEvent>(std::move(ctx), NGRpcService::TRequestAuxSettings{.RequestType = requestType});
+        // Query compilation has already resolved these local topic operands.
+        ev->SetPathRewriteSettings(NGRpcService::TPathRewriteSettings::Internal());
 
         if (token) {
             ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));

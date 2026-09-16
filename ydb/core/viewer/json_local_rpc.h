@@ -140,7 +140,8 @@ public:
 
     void SendGrpcRequest(TRequestProtoType&& request) {
         // TODO(xenoxeno): pass trace id
-        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database, Event->Get()->UserToken, TActivationContext::ActorSystem());
+        RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(request), Database,
+            Event->Get()->UserToken, TActivationContext::ActorSystem(), false, PathRewrite);
         RpcFuture.Subscribe([actorId = TBase::SelfId(), actorSystem = TActivationContext::ActorSystem()]
                             (const NThreading::TFuture<TProtoResponse>& future) {
             actorSystem->Send(actorId, new TEvGrpcRequestResult(future.GetValueSync()));

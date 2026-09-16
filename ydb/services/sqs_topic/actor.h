@@ -153,9 +153,56 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     protected:
+        TString GetTopicPath() const override {
+            return ResolvedQueuePath_ ? *ResolvedQueuePath_ : TBase::GetTopicPath();
+        }
+
+        bool ResolveQueuePath(const TString& logicalPath) {
+            if (!this->Request_->HasActivePathRewriting()) {
+                return true;
+            }
+            auto resolved = NGRpcService::ResolveTopicSchemaPath(*this->Request_, logicalPath);
+            if (resolved.IsFail()) {
+                ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, resolved.GetErrorMessage()));
+                return false;
+            }
+            ResolvedQueuePath_ = resolved.DetachResult().Path;
+            return true;
+        }
+
+        bool ResolveQueueUrlPath(TString& fullTopicPath, TString& database) {
+            if (!this->Request_->HasActivePathRewriting()) {
+                return true;
+            }
+            // QueueUrl already names a complete resource. A miss must not
+            // rebase that path under the request's database.
+            auto resolved = this->Request_->NormalizePath(CanonizePath(fullTopicPath));
+            if (resolved.IsFail()) {
+                ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, resolved.GetErrorMessage()));
+                return false;
+            }
+            const auto physicalDatabase = CanonizePath(this->Database);
+            if (!physicalDatabase.empty() && resolved->Path != physicalDatabase
+                && (resolved->Path.size() <= physicalDatabase.size()
+                    || !resolved->Path.StartsWith(physicalDatabase)
+                    || resolved->Path[physicalDatabase.size()] != '/')) {
+                ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
+                    "Rewritten queue path is outside the request database"));
+                return false;
+            }
+            if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
+                database = this->Database;
+            }
+            ResolvedQueuePath_ = resolved.DetachResult().Path;
+            fullTopicPath = *ResolvedQueuePath_;
+            return true;
+        }
+
         bool ShouldBeCharged_ = false;
 
     private:
+        TMaybe<TString> ResolvedQueuePath_;
+
         void HandleDescribeTopicsResponse(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* topicInfo = TakeSingleTopic(*ev->Get());
             if (!topicInfo) {

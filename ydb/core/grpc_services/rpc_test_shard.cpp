@@ -249,6 +249,7 @@ class TCreateTestShardSetRequest : public TRpcSchemeRequestActor<TCreateTestShar
 public:
     using TBase = TRpcSchemeRequestActor<TCreateTestShardSetRequest, TEvCreateTestShardSetRequest>;
     using TBase::TBase;
+    TString ResolvedPath;
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
@@ -266,13 +267,15 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;
+        ResolvedPath = Request_->HasActivePathRewriting()
+            ? JoinPath({workingDir, name}) : req->path();
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = this->CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
@@ -306,13 +309,12 @@ public:
 
     void OnNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) override {
         Y_UNUSED(ev);
-        const auto req = this->GetProtoRequest();
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *this->Request_);
         SetDatabase(navigateRequest.get(), *this->Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(ResolvedPath);
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -373,7 +375,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitRootSchemaPath(*Request_, req->path());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);

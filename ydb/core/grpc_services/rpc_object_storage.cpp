@@ -1,5 +1,6 @@
 #include "grpc_request_proxy.h"
 #include "rpc_calls.h"
+#include "rpc_common/rpc_common.h"
 
 #include "util/string/vector.h"
 #include "yql/essentials/minikql/mkql_type_ops.h"
@@ -112,7 +113,11 @@ public:
         //     Timeout = TDuration::MilliSeconds(userTimeoutMillisec);
         // }
 
-        ResolveTable(Request->Gettable_name(), ctx);
+        TString table;
+        if (!ResolveRootSchemaPath(*GrpcRequest, Request->Gettable_name(), table)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path", ctx);
+        }
+        ResolveTable(table, ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {

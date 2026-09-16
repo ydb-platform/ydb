@@ -3,6 +3,7 @@
 #include "auth_factory.h"
 #include "sqs_xml/params.h"
 #include "utils.h"
+#include <ydb/core/base/appdata.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
@@ -54,6 +55,24 @@ namespace NKikimr::NHttpProxy {
         return false;
     }
 
+    TString THttpRequestContext::InitializePathRewriting(const TAppData& appData) {
+        if (PathRewriteInitialized) {
+            return PathRewrite.Context ? PathRewrite.Context->GetError() : TString{};
+        }
+        PathRewriteInitialized = true;
+        if (PathRewrite.Database == NGRpcService::EPathInputOrigin::Logical &&
+            appData.PathNormalizer && !appData.PathNormalizer->Empty()) {
+            PathRewrite.Context = std::make_shared<NPathAliasing::TPathContext>(
+                *appData.PathNormalizer, DatabasePath);
+            if (!PathRewrite.Context->GetError().empty()) {
+                return PathRewrite.Context->GetError();
+            }
+            DatabasePath = PathRewrite.Context->GetDatabase().GetOrElse(TString{});
+        }
+        PathRewrite.Database = NGRpcService::EPathInputOrigin::Resolved;
+        return {};
+    }
+
     TString GenerateRequestId(const TString& sourceReqId) {
         if (!sourceReqId.empty()) {
             return CreateGuidAsString() + "-" + sourceReqId;
@@ -100,6 +119,7 @@ namespace NKikimr::NHttpProxy {
     }
 
     THolder<NKikimr::NSQS::TAwsRequestSignV4> THttpRequestContext::GetSignature() {
+        // Signing always uses the original HTTP bytes, not resolved routing names.
         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature;
         if (IamToken.empty()) {
             const TString fullRequest = TString(Request->Method) + " " +

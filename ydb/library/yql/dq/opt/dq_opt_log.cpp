@@ -134,11 +134,7 @@ static bool HasNonCompactFullAggregate(const TCoCalcOverWindowTuple& calc, TExpr
         }
 
         for (ui32 i = 1; i < frame.Ref().ChildrenSize(); ++i) {
-            const auto item = frame.Ref().Child(i);
-            if (item->Head().Content().StartsWith("_yql_partition_rows_")) {
-                continue;
-            }
-            if (item->Child(1)->IsCallable("WindowTraits")) {
+            if (frame.Ref().Child(i)->Child(1)->IsCallable("WindowTraits")) {
                 return true;
             }
         }
@@ -150,14 +146,6 @@ static bool HasNonCompactFullAggregate(const TCoCalcOverWindowTuple& calc, TExpr
 static bool DependsOnlyOnInput(const TCoCalcOverWindowTuple& calc, const TStructExprType& inputItemType) {
     for (const auto& key : calc.Keys()) {
         if (!inputItemType.FindItem(key.Value())) {
-            return false;
-        }
-    }
-
-    if (const auto sort = calc.SortSpec().Maybe<TCoSortTraits>()) {
-        const auto& sortItemType = *sort.Cast().ListType().Ref().GetTypeAnn()
-            ->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (!IsFieldSubset(sortItemType, inputItemType)) {
             return false;
         }
     }

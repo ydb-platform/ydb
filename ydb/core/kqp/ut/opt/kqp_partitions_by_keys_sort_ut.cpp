@@ -7,12 +7,7 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void CheckWindowFunctionAst(
-    const TString& selectBody,
-    bool useSortForPartitionsByKeys,
-    bool rejectSqueezeToList = false,
-    bool allowSqueezeToDict = false)
-{
+void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(useSortForPartitionsByKeys);
     TKikimrRunner kikimr(appConfig);
@@ -34,15 +29,40 @@ void CheckWindowFunctionAst(
         UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
         UNIT_ASSERT_C(ast.Contains("Chopper"), ast);
         UNIT_ASSERT_C(ast.Contains("HashShuffle"), ast);
-        if (!allowSqueezeToDict) {
-            UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
-        }
-        if (rejectSqueezeToList) {
-            UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
-        }
+        UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
     } else {
         UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
     }
+}
+
+void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(windowFunctionsV2);
+    TKikimrRunner kikimr(appConfig);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    const TString query = TStringBuilder() << "--!syntax_v1\n" << selectBody;
+
+    auto explain = session.ExplainDataQuery(query).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+    const TString ast{explain.GetAst()};
+
+    Cerr << "=== Full-frame SUM AST, WindowFunctionsV2="
+         << (windowFunctionsV2 ? "true" : "false")
+         << " ===\n" << ast << Endl;
+
+    if (windowFunctionsV2) {
+        UNIT_ASSERT_C(!ast.Contains("WinFramesCollector"), ast);
+        UNIT_ASSERT_C(ast.Contains("WideCondense1") || ast.Contains("Condense1"), ast);
+        UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin") || ast.Contains("GraceJoin"), ast);
+    } else {
+        UNIT_ASSERT_C(ast.Contains("WinFramesCollector"), ast);
+    }
+
+    auto exec = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(exec.GetResultSet(0).RowsCount(), 24);
 }
 
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
@@ -140,27 +160,24 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
         CheckStandardWindowFunctionAst("CUME_DIST() OVER w AS dist", UseSortForPartitionsByKeys);
     }
 
-    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameAfterRowNumbersAst, UseSortForPartitionsByKeys) {
-        CheckWindowFunctionAst(
+    Y_UNIT_TEST_TWIN(WindowFunctionLisFullFrameSumAst, WindowFunctionsV2) {
+        CheckFullFrameSumPlan(
             "SELECT Key, Text, Data,\n"
-            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Key) AS rn1,\n"
-            "    ROW_NUMBER() OVER (PARTITION BY Data ORDER BY Key) AS rn2,\n"
-            "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
-            "FROM `/Root/EightShard`;\n",
-            UseSortForPartitionsByKeys,
-            true,
-            true);
+            "    SUM(COALESCE(Data, 0)) OVER wgrp AS grp_prem,\n"
+            "    SUM(COALESCE(Data, 0)) OVER wgrp AS grp_fact,\n"
+            "    SUM(IF(Data != 0, Data, 0)) OVER wgrp AS grp_wo_prem,\n"
+            "    SUM(IF(Data != 0, Data, 0)) OVER wgrp AS grp_fact_wo\n"
+            "FROM `/Root/EightShard`\n"
+            "WINDOW wgrp AS (PARTITION BY Text, Data);\n",
+            WindowFunctionsV2);
     }
 
-    Y_UNIT_TEST_TWIN(WindowFunctionComputedSortKeyWithFullFrameAst, UseSortForPartitionsByKeys) {
-        CheckWindowFunctionAst(
+    Y_UNIT_TEST_TWIN(WindowFunctionOssFullFrameSumAst, WindowFunctionsV2) {
+        CheckFullFrameSumPlan(
             "SELECT Key, Text, Data,\n"
-            "    SUM(Data) OVER (PARTITION BY Text) AS total,\n"
-            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Abs(Data) DESC, Key) AS rn\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS tot\n"
             "FROM `/Root/EightShard`;\n",
-            UseSortForPartitionsByKeys,
-            true,
-            true);
+            WindowFunctionsV2);
     }
 }
 

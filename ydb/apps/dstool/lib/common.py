@@ -208,8 +208,9 @@ class ConnectionParams:
         if token_file_path is None:
             return default_token_type, None
         try:
-            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
-        except Exception:
+            with open(token_file_path, 'r') as token_file:
+                return self.read_token_from_file(token_file, default_token_type)
+        except OSError:
             return default_token_type, None
 
     def parse_token_value(self, token_value, default_token_type):

@@ -4285,6 +4285,57 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             {NLs::PathNotExist});
     }
 
+    Y_UNIT_TEST_FLAG(RestoreForgetWaitsForFinalization, Reboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> finalize(runtime, [](const auto& event) {
+            const auto& record = event->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpIncrementalRestoreFinalize;
+        });
+        const ui64 originalId = ++txId;
+        TestRestoreBackupCollection(runtime, originalId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, originalId);
+        runtime.WaitFor("restore finalization proposal", [&] { return !finalize.empty(); });
+        if (Reboot) {
+            const auto heldBeforeReboot = finalize.size();
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("recovered restore finalization proposal", [&] { return finalize.size() > heldBeforeReboot; });
+        }
+        const auto pending = TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetBackupCollectionRestore().GetProgress()),
+            static_cast<ui32>(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA));
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetBackupCollectionRestore().GetProgressPercent(), 99);
+
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        finalize.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
     static TVector<TString> PrepareRestoreWithOneIncremental(
             TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, bool nestedTable = false) {
         TestMkDir(runtime, ++txId, "/MyRoot", ".backups");

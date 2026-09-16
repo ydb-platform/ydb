@@ -1099,7 +1099,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         prefixKeys.push_back(indexDesc.KeyColumns[i]);
     }
 
-    TMaybe<size_t> numPrefixGroups;
+    size_t numPrefixGroups = 1;
     {
         THashSet<TString> possibleKeys;
         TPredicateExtractorSettings predSettings;
@@ -1141,37 +1141,14 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
 
     const auto levelTop = GetKMeansTreeSearchTopSize(kqpCtx, withOverlap);
-    TExprNode::TPtr levelTopTotal;
-    if (numPrefixGroups) {
-        levelTopTotal = ctx.Builder(pos)
-            .Callable("Uint64")
-            .Atom(0, std::to_string(levelTop * *numPrefixGroups), TNodeFlags::Default)
-            .Seal()
-            .Build();
-    } else {
-        const auto rootGroupCount = Build<TCoLength>(ctx, pos)
-            .List(prefixRootRows)
-            .Done();
-        const auto nonZeroRootGroupCount = Build<TCoIf>(ctx, pos)
-            .Predicate<TCoCmpEqual>()
-                .Left(rootGroupCount)
-                .Right<TCoUint64>().Literal().Build("0").Build()
-            .Build()
-            .ThenValue<TCoUint64>().Literal().Build("1").Build()
-            .ElseValue(rootGroupCount)
-            .Done();
-        levelTopTotal = Build<TCoMul>(ctx, pos)
-            .Left<TCoUint64>().Literal().Build(std::to_string(levelTop)).Build()
-            .Right(nonZeroRootGroupCount)
-            .Done().Ptr();
-    }
+    const auto levelTopTotal = levelTop * numPrefixGroups;
 
     TKqpStreamLookupSettings firstLevelSettings;
     firstLevelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
     firstLevelSettings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
     firstLevelSettings.VectorTopIndex = indexDesc.Name;
     firstLevelSettings.VectorTopTarget = targetVector;
-    firstLevelSettings.VectorTopLimit = levelTopTotal;
+    firstLevelSettings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default).Seal().Build();
     auto firstLevelSettingsNode = firstLevelSettings.BuildNode(ctx, pos);
     auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
@@ -1181,10 +1158,14 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         .Done().Ptr();
 
     {
+        auto levelTopCount = ctx.Builder(pos)
+            .Callable("Uint64")
+            .Atom(0, std::to_string(levelTopTotal), TNodeFlags::Default)
+            .Seal().Build();
         TKqpStreamLookupSettings levelSettings;
         levelSettings.Strategy = EStreamLookupStrategyType::LookupRows;
         auto levelSettingsNode = levelSettings.BuildNode(ctx, pos);
-        VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, levelTopTotal, levelSettingsNode, levelRows);
+        VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, levelTopCount, levelSettingsNode, levelRows);
     }
 
     read = Build<TCoUnionAll>(ctx, pos)
@@ -2920,7 +2901,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         return extracted;
     };
 
-    auto extractPrefixColumns = [&](const TIndexDescription& index, bool allowLeadingSubPrefix) -> TMaybe<TPrefixColumns> {
+    auto extractPrefixColumns = [&](const TIndexDescription& index) -> TMaybe<TPrefixColumns> {
         if (index.KeyColumns.size() <= 1) {
             return TPrefixColumns{};
         }
@@ -2934,26 +2915,15 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         TPrefixColumns ordered;
         ordered.reserve(index.KeyColumns.size() - 1);
 
-        bool missingPrefixColumn = false;
         for (size_t i = 0; i + 1 < index.KeyColumns.size(); ++i) {
             const auto& prefixColumn = index.KeyColumns[i];
             auto value = FindIf(extracted, [&](const auto& item) {
                 return item.first == prefixColumn;
             });
             if (value == extracted.end()) {
-                if (!allowLeadingSubPrefix) {
-                    return Nothing();
-                }
-                missingPrefixColumn = true;
-                continue;
-            }
-            if (missingPrefixColumn) {
                 return Nothing();
             }
             ordered.emplace_back(prefixColumn, value->second);
-        }
-        if (allowLeadingSubPrefix && ordered.empty()) {
-            return Nothing();
         }
         return ordered;
     };
@@ -3079,7 +3049,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     return addError(TStringBuilder() << "fulltext index '" << *indexOverride
                         << "' is not built on the FullTextScore column '" << b.ScoredColumn << "'");
                 }
-                auto prefixColumns = extractPrefixColumns(*idx, false);
+                auto prefixColumns = extractPrefixColumns(*idx);
                 if (!prefixColumns) {
                     return addError(TStringBuilder() << "prefixed fulltext index '" << *indexOverride
                         << "' requires equality predicates on every prefix column in WHERE");
@@ -3094,7 +3064,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                         && isFulltextRelevanceIndex(idx)
                         && !idx.KeyColumns.empty() && idx.KeyColumns.back() == b.ScoredColumn)
                     {
-                        auto prefixColumns = extractPrefixColumns(idx, false);
+                        auto prefixColumns = extractPrefixColumns(idx);
                         if (!prefixColumns) {
                             if (!unboundPrefixedIndex) {
                                 unboundPrefixedIndex = &idx;
@@ -3177,10 +3147,10 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                     return addError(TStringBuilder() << "vector index '" << *indexOverride
                         << "' has an incompatible metric; expected " << expectedUsage);
                 }
-                auto prefixColumns = extractPrefixColumns(*idx, true);
+                auto prefixColumns = extractPrefixColumns(*idx);
                 if (!prefixColumns) {
                     return addError(TStringBuilder() << "prefixed vector index '" << *indexOverride
-                        << "' requires equality predicates on a contiguous leading prefix in WHERE");
+                        << "' requires equality predicates on every prefix column in WHERE");
                 }
                 b.IndexName = *indexOverride;
                 b.PrefixColumns = std::move(*prefixColumns);
@@ -3193,14 +3163,14 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                         && idx.KeyColumns.back() == b.ScoredColumn
                         && IsVectorIndexMetricCompatible(idx, knnMethodName, !b.IsSimilarity))
                     {
-                        auto prefixColumns = extractPrefixColumns(idx, true);
+                        auto prefixColumns = extractPrefixColumns(idx);
                         if (!prefixColumns) {
                             if (!unboundPrefixedIndex) {
                                 unboundPrefixedIndex = &idx;
                             }
                             continue;
                         }
-                        // Prefer the longest bound prefix; equally specific indexes remain ambiguous.
+                        // Prefer the longest fully bound prefix; equally specific indexes remain ambiguous.
                         if (matches == 0 || prefixColumns->size() > b.PrefixColumns.size()) {
                             b.IndexName = idx.Name;
                             b.PrefixColumns = std::move(*prefixColumns);
@@ -3213,7 +3183,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
                 if (matches == 0) {
                     if (unboundPrefixedIndex) {
                         return addError(TStringBuilder() << "prefixed vector index '" << unboundPrefixedIndex->Name
-                            << "' requires equality predicates on a contiguous leading prefix in WHERE");
+                            << "' requires equality predicates on every prefix column in WHERE");
                     }
                     return addError(TStringBuilder() << "no ready vector (kmeans-tree) index found on column '" << b.ScoredColumn << "'");
                 }

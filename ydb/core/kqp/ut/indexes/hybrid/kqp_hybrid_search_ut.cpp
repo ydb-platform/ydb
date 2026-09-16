@@ -536,17 +536,6 @@ std::vector<ui64> RunKeysWithContext(TQueryClient& db, const TString& sql, const
     return keys;
 }
 
-std::vector<ui64> RunUint64Column(TQueryClient& db, const TString& sql, const TString& column) {
-    auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    std::vector<ui64> values;
-    TResultSetParser parser(result.GetResultSet(0));
-    while (parser.TryNextRow()) {
-        values.push_back(*parser.ColumnParser(column).GetOptionalUint64());
-    }
-    return values;
-}
-
 std::vector<ui64> RunUint64Column(TQueryClient& db, const TString& sql, const TString& column, const TParams& params) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx(), params).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2159,12 +2148,12 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u}), keys);
     }
 
-    Y_UNIT_TEST(UsesLeadingSubPrefixWithPkInVectorIndex) {
+    Y_UNIT_TEST(RejectsLeadingSubPrefixWithPkInVectorIndex) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         SetupUserPkPrefixedDocs(db);
 
-        const auto keys = RunUint64Column(db, TargetDecl + R"sql(
+        const auto issues = RunBadRequestIssues(db, TargetDecl + R"sql(
             SELECT pk FROM `/Root/UserDocs`
             WHERE user = "alice"
             ORDER BY HybridRank(
@@ -2172,9 +2161,9 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                 Knn::CosineDistance(embedding, $target),
                 ("ft_idx", "vec_idx") AS Indexes)
             LIMIT 4;
-        )sql", "pk");
-        UNIT_ASSERT_C((std::set<ui64>{keys.begin(), keys.end()} == std::set<ui64>{1u, 2u}),
-            TStringBuilder() << "unexpected keys; result count: " << keys.size());
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues,
+            "prefixed vector index 'vec_idx' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(UsesPrefixedCompactFulltextIndexWithPlainVectorIndex) {
@@ -2439,7 +2428,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql", params);
         UNIT_ASSERT_STRING_CONTAINS(vectorIssues,
-            "prefixed vector index 'vec_prefixed' requires equality predicates on a contiguous leading prefix");
+            "prefixed vector index 'vec_prefixed' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(UsesNullablePrefix) {
@@ -2523,9 +2512,12 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                     const THybridPrefixMatrixShape shape{multiPrefix, nullablePrefix, pkSuffix};
                     SetupHybridPrefixMatrixFixture(db, shape);
                     const TString table = HybridPrefixMatrixTable(shape);
-                    const TString predicates = multiPrefix
+                    TString predicates = multiPrefix
                         ? R"sql(Tenant = "a" AND Region = "r1")sql"
                         : R"sql(Tenant = "a")sql";
+                    if (pkSuffix) {
+                        predicates += " AND Key = 2u";
+                    }
 
                     for (const auto& fusionCase : fusionCases) {
                         const TString context = TStringBuilder()
@@ -2546,7 +2538,9 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                             fusionCase.Options), context);
                         ++executedQueries;
 
-                        if (fusionCase.ExpectedOrder == EExpectedOrder::TextFirst) {
+                        if (pkSuffix) {
+                            UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{2u}), keys, context);
+                        } else if (fusionCase.ExpectedOrder == EExpectedOrder::TextFirst) {
                             UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{1u, 2u}), keys, context);
                         } else {
                             UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{2u, 1u}), keys, context);
@@ -2581,7 +2575,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
 
         auto vectorIssues = RunBadRequestIssues(db, TargetDecl + R"sql(
             SELECT Key FROM `/Root/MultiDocs`
-            WHERE Category = "a"
+            WHERE Region = "r1"
             ORDER BY HybridRank(
                 FullTextScore(Text, "cats"),
                 Knn::CosineDistance(Embedding, $target),
@@ -2589,7 +2583,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_STRING_CONTAINS(vectorIssues,
-            "prefixed vector index 'vec_multi' requires equality predicates on a contiguous leading prefix");
+            "prefixed vector index 'vec_multi' requires equality predicates on every prefix column");
     }
 
     Y_UNIT_TEST(RejectsPrefixEqualityUnderOr) {
@@ -2688,7 +2682,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         }
     }
 
-    Y_UNIT_TEST(AutoDetectionComparesBoundVectorPrefixLengths) {
+    Y_UNIT_TEST(AutoDetectionSkipsPartiallyBoundVectorPrefixes) {
         auto kikimr = MakeRunner();
         auto db = kikimr.GetQueryClient();
         CreateMultiPrefixDocs(db);
@@ -2702,15 +2696,15 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         )sql");
         AddMultiPrefixedVectorIndex(db);
 
-        // Only Region is bound, so both prefixed indexes have a bound prefix of length one.
+        // Only vec_region has its full prefix bound; vec_multi is unusable without Category.
         const TString partiallyBoundQuery = TargetDecl + R"sql(
             SELECT Key FROM `/Root/MultiDocs`
             WHERE Region = "r1"
             ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
             LIMIT 4;
         )sql";
-        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, partiallyBoundQuery),
-            "multiple vector indexes match column");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u, 4u}), RunKeys(db, partiallyBoundQuery));
+        AssertVectorIndexInPlan(db, partiallyBoundQuery, "vec_region", {"vec_idx", "vec_multi"});
 
         const TString fullyBoundQuery = TargetDecl + R"sql(
             SELECT Key FROM `/Root/MultiDocs`
@@ -2756,7 +2750,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             LIMIT 4;
         )sql");
         UNIT_ASSERT_STRING_CONTAINS(issues,
-            "prefixed vector index 'vp_idx' requires equality predicates on a contiguous leading prefix");
+            "prefixed vector index 'vp_idx' requires equality predicates on every prefix column");
 
         // Naming it explicitly reports the missing prefix binding precisely.
         auto issues2 = RunFailIssues(db, TargetDecl + R"sql(

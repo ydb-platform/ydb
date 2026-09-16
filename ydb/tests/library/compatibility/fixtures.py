@@ -150,7 +150,6 @@ class RestartToAnotherVersionFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
-        self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
@@ -237,7 +236,6 @@ class MixedClusterFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
-        self.http_proxy_endpoint = "http://%s:%s" % ('localhost', self.cluster.nodes[1].http_proxy_port)
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
@@ -305,32 +303,30 @@ class RollingUpgradeAndDowngradeFixture:
             .with_cancel_after(request_timeout)
         )
 
-        try:
-            start_time = time.time()
-            last_exception = None
-            attempt = 0
-            while time.time() - start_time < timeout:
-                attempt += 1
-                try:
-                    logger.info("Readiness check attempt %d", attempt)
-                    with ydb.QuerySessionPool(self.driver) as session_pool:
-                        session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1), settings=settings)
-                    break
-                except Exception as e:
-                    last_exception = e
-                    logger.warning(
-                        "Readiness check attempt %d failed after %.1fs: %r",
-                        attempt,
-                        time.time() - start_time,
-                        e,
-                    )
-                    time.sleep(interval)
-            else:
-                raise last_exception
-        finally:
-            query = """DROP TABLE IF EXISTS `test_readiness`"""
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query, settings=settings)
+        start_time = time.time()
+        last_exception = None
+        attempt = 0
+        while time.time() - start_time < timeout:
+            attempt += 1
+            try:
+                logger.info("Readiness check attempt %d", attempt)
+                with ydb.QuerySessionPool(self.driver) as session_pool:
+                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1), settings=settings)
+                break
+            except Exception as e:
+                last_exception = e
+                logger.warning(
+                    "Readiness check attempt %d failed after %.1fs: %r",
+                    attempt,
+                    time.time() - start_time,
+                    e,
+                )
+                time.sleep(interval)
+        else:
+            raise last_exception
+        query = """DROP TABLE `test_readiness`"""
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(query, settings=settings)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -347,13 +343,10 @@ class RollingUpgradeAndDowngradeFixture:
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         self.endpoints = []
-        self.http_proxy_endpoints = []
         for i in range(1, len(self.cluster.nodes) + 1):
             self.endpoints.append("grpc://%s:%s" % ('localhost', self.cluster.nodes[i].port))
-            self.http_proxy_endpoints.append("http://%s:%s" % ('localhost', self.cluster.nodes[i].http_proxy_port))
 
         self.endpoint = self.endpoints[0]
-        self.http_proxy_endpoint = self.http_proxy_endpoints[0]
 
         if tenant_db is not None:
             with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:

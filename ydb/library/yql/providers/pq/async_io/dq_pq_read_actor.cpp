@@ -26,6 +26,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/retry_policy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -41,6 +42,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
+#include <util/system/env.h>
 
 #include <limits>
 #include <queue>
@@ -88,6 +90,8 @@ struct TEvPrivate {
         EvCheckPartitionCount,
         EvCheckPartitionCountResult,
         EvRequestPartitionStatus,
+        EvReadSessionRetry,
+        EvCheckClusterAvailability,
 
         EvEnd
     };
@@ -146,6 +150,22 @@ struct TEvPrivate {
 
     struct TEvRequestPartitionStatus : public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {};
 
+    struct TEvCheckClusterAvailability : public TEventLocal<TEvCheckClusterAvailability, EvCheckClusterAvailability> {};
+
+    struct TEvReadSessionRetry : public TEventLocal<TEvReadSessionRetry, EvReadSessionRetry> {
+        TEvReadSessionRetry(ui32 clusterIndex, NYdb::EStatus status, ui64 callNumber, TMaybe<TDuration> retryDelay)
+            : ClusterIndex(clusterIndex)
+            , Status(status)
+            , CallNumber(callNumber)
+            , RetryDelay(retryDelay)
+        {}
+
+        const ui32 ClusterIndex;
+        const NYdb::EStatus Status;
+        const ui64 CallNumber;
+        const TMaybe<TDuration> RetryDelay;
+    };
+
     struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
         explicit TEvCheckPartitionCount(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
@@ -167,6 +187,49 @@ struct TEvPrivate {
         const ui32 PartitionsCount = 0;
         TMaybe<NYdb::TStatus> Status;
     };
+};
+
+class TReadSessionRetryPolicy : public NYdb::NTopic::IRetryPolicy {
+public:
+    TReadSessionRetryPolicy(TPtr policy, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex)
+        : Policy(std::move(policy))
+        , ActorSystem(actorSystem)
+        , ActorId(actorId)
+        , ClusterIndex(clusterIndex)
+    {}
+
+    IRetryState::TPtr CreateRetryState() const override {
+        return std::make_unique<TRetryState>(Policy->CreateRetryState(), ActorSystem, ActorId, ClusterIndex);
+    }
+
+private:
+    class TRetryState : public IRetryState {
+    public:
+        TRetryState(IRetryState::TPtr state, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex)
+            : State(std::move(state))
+            , ActorSystem(actorSystem)
+            , ActorId(actorId)
+            , ClusterIndex(clusterIndex)
+        {}
+
+        TMaybe<TDuration> GetNextRetryDelay(NYdb::EStatus status) override {
+            const auto delay = State->GetNextRetryDelay(status);
+            ActorSystem->Send(ActorId, new TEvPrivate::TEvReadSessionRetry(ClusterIndex, status, ++CallNumber, delay));
+            return delay;
+        }
+
+    private:
+        const IRetryState::TPtr State;
+        TActorSystem* const ActorSystem;
+        const TActorId ActorId;
+        const ui32 ClusterIndex;
+        ui64 CallNumber = 0;
+    };
+
+    const TPtr Policy;
+    TActorSystem* const ActorSystem;
+    const TActorId ActorId;
+    const ui32 ClusterIndex;
 };
 
 } // anonymous namespace
@@ -248,6 +311,10 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
+        // Availability is a heuristic: data received or no retry notifications for RetryMaxTime.
+        bool Available = true;
+        TInstant LastRetryTime;
+        TDuration RetryMaxTime;
     };
 
 public:
@@ -329,7 +396,8 @@ public:
         SRC_LOG_I("Start read actor, metadatafields: {" << JoinSeq(',', SourceParams.GetMetadataFields())
             << "}, stop at current end offsets: " << SourceParams.GetStopAtCurrentEndOffsets()
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName()
-            << ", predicates: offsets {" << BeginOffset << ", " << EndOffset << "}, write time {" << BeginWriteTime << ", " << EndWriteTime << "}");
+            << ", predicates: offsets {" << BeginOffset << ", " << EndOffset << "}, write time {" << BeginWriteTime << ", " << EndWriteTime << "}"
+            << ", clusters count " << SourceParams.FederatedClustersSize());
     }
 
     ~TDqPqReadActor() {
@@ -490,8 +558,51 @@ private:
         hFunc(TEvPrivate::TEvCheckPartitionCount, Handle);
         hFunc(TEvPrivate::TEvCheckPartitionCountResult, Handle);
         hFunc(TEvPrivate::TEvRequestPartitionStatus, Handle);
+        hFunc(TEvPrivate::TEvReadSessionRetry, Handle);
+        hFunc(TEvPrivate::TEvCheckClusterAvailability, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
     )
+
+    void Handle(TEvPrivate::TEvReadSessionRetry::TPtr& ev) {
+        const auto& event = *ev->Get();
+        if (event.ClusterIndex < Clusters.size()) {
+            auto& cluster = Clusters[event.ClusterIndex];
+            cluster.Available = false;
+            cluster.LastRetryTime = TInstant::Now();
+            if (!ClusterAvailabilityCheckScheduled) {
+                ClusterAvailabilityCheckScheduled = true;
+                Schedule(cluster.RetryMaxTime, new TEvPrivate::TEvCheckClusterAvailability());
+            }
+        }
+        SRC_LOG_I("Read session retry: cluster index " << event.ClusterIndex
+            << ", status " << event.Status
+            << ", call number " << event.CallNumber
+            << ", retry delay " << (event.RetryDelay ? ToString(*event.RetryDelay) : "no further retry"));
+    }
+
+    void Handle(TEvPrivate::TEvCheckClusterAvailability::TPtr&) {
+        ClusterAvailabilityCheckScheduled = false;
+        const auto now = TInstant::Now();
+        TMaybe<TDuration> nextCheckDelay;
+        for (auto& cluster : Clusters) {
+            if (cluster.Available) {
+                continue;
+            }
+            const auto elapsed = now - cluster.LastRetryTime;
+            if (elapsed > 2 * cluster.RetryMaxTime) {
+               SRC_LOG_I("Read session retry: cluster index " << cluster.Index
+                << ", Available!!! ");
+ 
+                cluster.Available = true;
+            } else if (!nextCheckDelay) {
+                nextCheckDelay = cluster.RetryMaxTime;
+            }
+        }
+        if (nextCheckDelay) {
+            ClusterAvailabilityCheckScheduled = true;
+            Schedule(*nextCheckDelay, new TEvPrivate::TEvCheckClusterAvailability());
+        }
+    }
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
         if (ev.Get()->Cookie && !Clusters.empty()) {
@@ -561,6 +672,7 @@ private:
             ui32 index = 0;
             if (SourceParams.FederatedClustersSize()) {
                 for (const auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+                    Cerr << "cluster name " << federatedCluster.GetName() <<  Endl;
                     auto& cluster = Clusters.emplace_back(
                         index++,
                         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
@@ -878,12 +990,18 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
+        ui64 maxTimeMs = 60000;
+        if (TryFromString<ui64>(GetEnv("YDB_TEST_PQ_READ_ACTOR_RETRY_POLICY_MAX_TIME_MS"), maxTimeMs)) {
+
+        }
+
+        clusterState.RetryMaxTime = TDuration::MilliSeconds(maxTimeMs);
         auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
             /* minDelay           */ TDuration::MilliSeconds(500),
             /* minLongRetryDelay  */ TDuration::Seconds(5),
-            /* maxDelay           */ TDuration::Seconds(20),
+            /* maxDelay           */ TDuration::Seconds(10),
             /* maxRetries         */ 100,
-            /* maxTime            */ TDuration::Seconds(60),
+            /* maxTime            */ Clusters.size() > 2 ? TDuration::Max() : clusterState.RetryMaxTime,
             /* scaleFactor        */ 2.0,
             /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
@@ -899,7 +1017,8 @@ private:
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)
             .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets())     // In table mode the query will not fail query by TEndPartitionSessionEvent.
-            .RetryPolicy(retryPolicy);
+            .RetryPolicy(std::make_shared<TReadSessionRetryPolicy>(
+                std::move(retryPolicy), TActivationContext::ActorSystem(), SelfId(), clusterState.Index));
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -1095,6 +1214,7 @@ private:
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+            ClusterState.Available = true;
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             auto& partitionInfo = Self.Partitions[partitionKey];
 
@@ -1164,7 +1284,7 @@ private:
 
         void operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
             const auto& LogPrefix = Self.LogPrefix;
-            TString message = (TStringBuilder() << "Read session to topic \"" << Self.SourceParams.GetTopicPath() << "\" was closed");
+            TString message = (TStringBuilder() << "Read session to topic \"" << Self.SourceParams.GetTopicPath() << "\" " << (Cluster ? ('[' + Cluster + ']') : "") << " was closed");
             SRC_LOG_E("SessionId: " << Self.GetSessionId(Index) << " " << message << ": " << ev.DebugString());
             TIssue issue(message);
             for (const auto& subIssue : ev.GetIssues()) {
@@ -1318,6 +1438,7 @@ private:
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
     bool WakeupScheduled = false;
+    bool ClusterAvailabilityCheckScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
     bool FinishedByOffsets = false;

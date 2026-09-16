@@ -9,13 +9,8 @@ PY_SRCS(
 )
 
 PEERDIR(
-    library/python/port_manager
     library/python/testing/recipe
-    library/python/testing/yatest_common
-    ydb/public/tools/lib/cmds
-    ydb/tests/library
-    contrib/python/grpcio
-    contrib/python/ydb/py3
+    ydb/tests/library/logbroker_federation
 )
 
 DEPENDS(

@@ -48,14 +48,18 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     const auto existing = source->GetStageResult().GetNotAppliedFilter();
     const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
-    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId);
+    // The key is either the fetched column itself or derived from it (JSON_VALUE over a sub-column). The SSA optimizer
+    // enables dictionary-only fetching only when the whole request needs exactly one data column and the DISTINCT key
+    // is computed from it, so any dictionary-only fetch means the key values are dictionary entries, not rows.
+    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId) || !sr.GetDictionaryOnlyFetchColumns().empty();
     bool applyRowFilter = false;
     std::optional<NArrow::TColumnFilter::TIterator> filterIterator;
-    if (isDictionaryOnlyFetch) {
-        // Dictionary accessor is indexed by dict entries; portion-row deny filters are incompatible.
-        AFL_VERIFY(!hasRowFilter);
-    } else if (hasRowFilter) {
-        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount);
+    if (hasRowFilter) {
+        // Dictionary-only accessors are indexed by dictionary entries: portion-row deny filters (PK range, duplicates,
+        // deletions) are excluded by the fetch guards, so a filter here was produced by the program over the same
+        // entries (e.g. the projection cut to the requested limit) and its length must match the accessor.
+        AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount)("filter", existing->GetRecordsCountVerified())("records", recordsCount)(
+            "dictionary_only", isDictionaryOnlyFetch);
         applyRowFilter = true;
         filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }

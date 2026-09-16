@@ -903,7 +903,8 @@ const TStructExprType* GetRowStructType(const TExprNode& arg) {
 ///
 /// Used only when the legacy "shadow the source column" naming is not applicable:
 ///  - `alias` is the forced OLAP DISTINCT key (`OptForceOlapPushdownDistinct`), or
-///  - `col` is still referenced by a predicate that was not pushed down (legacy naming would refuse to push).
+///  - `col` is referenced by the FlatMap predicate (`predicateMembers`): shadowing `col` with the JSON_VALUE result
+///    would break that predicate, so legacy naming refuses to push such a projection at all.
 /// Otherwise legacy naming is kept so plain JSON projections do not additionally ship the raw source column.
 bool CollectOlapOperationForAliasProjection(const TCoAtom& aliasAtom, const TExprNode::TPtr& value, const TExprNode& arg,
     const TStructExprType* rowType, const THashSet<TString>& predicateMembers, const TMaybe<TString>& forceDistinctKey,
@@ -1014,6 +1015,9 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
     auto memberPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
     THashSet<TString> notSuitableToPushMembers;
+    // Alias candidates are recorded in `aliasColumns` only if they survive the `notSuitableToPushMembers` filter below,
+    // so every alias column always has a matching pushed projection.
+    THashSet<TString> aliasCandidates;
     ui32 nextMemberId = 0;
 
     TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>> projectionCandidates;
@@ -1033,7 +1037,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
             && CollectOlapOperationForAliasProjection(child.Item(0).Cast<TCoAtom>(), nodeToProcess, arg, rowType, predicateMembers,
                                                       forceDistinctKey, projectionMembers, projectionCandidates, ctx, pushdownOptions))
         {
-            aliasColumns.insert(std::get<0>(projectionCandidates.back()));
+            aliasCandidates.insert(std::get<0>(projectionCandidates.back()));
             continue;
         }
 
@@ -1050,6 +1054,11 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
         if (!notSuitableToPushMembers.count(colName)) {
             replaces[TExprBase(projection).Raw()] = replace;
             olapOperationsForProjections.emplace_back(colName, olapOperation);
+            if (aliasCandidates.contains(colName)) {
+                aliasColumns.insert(colName);
+            }
+        } else if (aliasCandidates.contains(colName)) {
+            YQL_CLOG(TRACE, ProviderKqp) << "[OLAP PROJECTION] Alias projection '" << colName << "' dropped: member is not suitable to push";
         }
     }
 
@@ -1130,7 +1139,10 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
             .Build()
         .Done();
 
-    if (!aliasColumns.empty() && flatmap.Input().Maybe<TKqpReadOlapTableRanges>()) {
+    const auto maybeExtract = flatmap.Input().Maybe<TCoExtractMembers>();
+    // Stored columns the FlatMap still needs after the rewrite (alias mode only). Nothing = keep every column.
+    TMaybe<THashSet<TString>> neededStoredColumns;
+    if (!aliasColumns.empty()) {
         // Alias projections add new output columns while keeping the source column. Narrow the read output to the
         // columns the FlatMap lambda still references (typically only the alias for `SELECT DISTINCT JSON_VALUE(...) AS alias`),
         // so the stored JSON column is not shipped and the read keeps the same width a forced OLAP DISTINCT expects.
@@ -1142,7 +1154,8 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
                 usedMembers.insert(TString(m.Name().StringValue()));
             }
         }
-        // The whole row used other than through Member(row, name) (e.g. Just(row), AddMember(row, ...)): keep every column.
+        // The whole row used other than through Member(row, name) (e.g. Just(row), AddMember(row, ...)): keep every column
+        // the FlatMap sees (all read columns for a direct read, the ExtractMembers list otherwise).
         const bool wholeRowUsed = !!FindNode(previewBody, [&lambdaArg](const TExprNode::TPtr& n) {
             if (TCoMember::Match(n.Get())) {
                 return false;
@@ -1154,12 +1167,33 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
             }
             return false;
         });
-        const TStructExprType* rowType = wholeRowUsed ? nullptr : GetRowStructType(lambdaArg);
+        if (maybeExtract) {
+            neededStoredColumns.ConstructInPlace();
+            for (const auto& member : maybeExtract.Cast().Members()) {
+                const TString name(member.StringValue());
+                if (wholeRowUsed || usedMembers.contains(name)) {
+                    neededStoredColumns->insert(name);
+                }
+            }
+        } else if (!wholeRowUsed) {
+            neededStoredColumns = std::move(usedMembers);
+        }
+    }
+
+    if (neededStoredColumns) {
+        // Read output row type: the process lambda result (Flow<Struct>).
+        const TStructExprType* rowType = nullptr;
+        if (const TTypeAnnotationNode* readType = read.Ref().GetTypeAnn(); readType && readType->GetKind() == ETypeAnnotationKind::Flow) {
+            const auto* itemType = readType->Cast<TFlowExprType>()->GetItemType();
+            if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                rowType = itemType->Cast<TStructExprType>();
+            }
+        }
         if (rowType) {
             TVector<TExprNode::TPtr> keepMembers;
             THashSet<TString> keepNames;
             for (const auto* item : rowType->GetItems()) {
-                if (usedMembers.contains(TString(item->GetName())) && keepNames.insert(TString(item->GetName())).second) {
+                if (neededStoredColumns->contains(TString(item->GetName())) && keepNames.insert(TString(item->GetName())).second) {
                     keepMembers.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
                 }
             }
@@ -1198,19 +1232,28 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
         .Process(newLambda)
         .Done();
 
-    if (const auto maybeExtract = flatmap.Input().Maybe<TCoExtractMembers>(); maybeExtract && !aliasColumns.empty()) {
+    if (maybeExtract && !aliasColumns.empty()) {
         // Alias projections are new output columns: keep them through ExtractMembers, otherwise the
-        // FlatMap lambda `Member(row, alias)` would not type-check.
+        // FlatMap lambda `Member(row, alias)` would not type-check. Stored columns the FlatMap no longer
+        // references are dropped (they were narrowed out of the read above as well).
+        // Defensive: with the current rule order `ExtractMembers(KqpReadOlapTableRanges)` is folded into the read
+        // (KqpApplyExtractMembersToReadOlapTable) before projections are pushed, so a subselect projecting a subset
+        // of columns reaches this rule as a direct read (covered by JsonValueDistinct_SubselectExtractMembers_* tests).
         const auto extract = maybeExtract.Cast();
         TVector<TExprNode::TPtr> members;
         THashSet<TString> present;
         for (const auto& member : extract.Members()) {
+            const TString name(member.StringValue());
+            if (neededStoredColumns && !neededStoredColumns->contains(name)) {
+                continue;
+            }
             members.push_back(member.Ptr());
-            present.insert(TString(member.StringValue()));
+            present.insert(name);
         }
-        for (const auto& alias : aliasColumns) {
-            if (!present.contains(alias)) {
-                members.push_back(ctx.NewAtom(node.Pos(), alias));
+        // Deterministic order: follow the projection list, not the alias hash set.
+        for (const auto& [columnName, _] : olapOperationsForProjections) {
+            if (aliasColumns.contains(columnName) && present.insert(columnName).second) {
+                members.push_back(ctx.NewAtom(node.Pos(), columnName));
             }
         }
         auto newExtract = Build<TCoExtractMembers>(ctx, node.Pos())

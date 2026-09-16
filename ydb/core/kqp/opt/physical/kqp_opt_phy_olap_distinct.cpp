@@ -54,19 +54,23 @@ void CollectOlapReadsUnderCombineInput(const TExprBase& combineInput, TOlapReads
     out.WideReads = FindWideOlapReadsInExpr(ptr);
 }
 
-bool ExprTreeContainsOlapJsonValue(const TExprNode::TPtr& root) {
+// `includeSqlJsonValue == false`: only already lowered OLAP JSON_VALUE nodes.
+// `includeSqlJsonValue == true`: also not-yet-pushed SQL JSON_VALUE nodes.
+bool ExprTreeContainsJsonValue(const TExprNode::TPtr& root, const bool includeSqlJsonValue) {
     if (!root) {
         return false;
     }
-    return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()); });
+    return !!FindNode(root, [includeSqlJsonValue](const TExprNode::TPtr& n) {
+        return TKqpOlapJsonValue::Match(n.Get()) || (includeSqlJsonValue && TCoJsonValue::Match(n.Get()));
+    });
 }
 
-// Either an already lowered OLAP JSON_VALUE or a not-yet-pushed SQL JSON_VALUE.
+bool ExprTreeContainsOlapJsonValue(const TExprNode::TPtr& root) {
+    return ExprTreeContainsJsonValue(root, /*includeSqlJsonValue=*/false);
+}
+
 bool ExprTreeContainsAnyJsonValue(const TExprNode::TPtr& root) {
-    if (!root) {
-        return false;
-    }
-    return !!FindNode(root, [](const TExprNode::TPtr& n) { return TKqpOlapJsonValue::Match(n.Get()) || TCoJsonValue::Match(n.Get()); });
+    return ExprTreeContainsJsonValue(root, /*includeSqlJsonValue=*/true);
 }
 
 // The forced DISTINCT key is neither a stored column nor a pushed projection output, and there is no JSON_VALUE

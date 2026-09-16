@@ -46,6 +46,7 @@ RECURSE(
     testlib
     time_series_vec
     union_copy_set
+    vector_distance
     wilson_ids
     wasm
     workload

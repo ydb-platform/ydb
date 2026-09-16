@@ -1,8 +1,13 @@
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/statistics/aggregator/analyze_actor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
@@ -24,6 +29,182 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpAnalyze) {
 
 using namespace NStat;
+
+template <bool PerShard>
+void CheckAnalyzeWithNewRbo(bool persistStatistics) {
+    TTestEnv env(1, 1, false, [persistStatistics](Tests::TServerSettings& settings) {
+        auto* tableService = settings.AppConfig->MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(true);
+        tableService->SetEnableFallbackToYqlOptimizer(persistStatistics);
+        settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeColumnTableWholeTableScanMaxBytes(
+            PerShard ? 0 : (1ULL << 30));
+    });
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+    ExecuteYqlScript(env, R"(
+        CREATE TABLE `/Root/Database/nested/Table` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 String,
+            PRIMARY KEY (Key),
+            STATISTICS multi_stat ON (Value1, Value2)
+                WITH (COUNT_MIN_SKETCH, EQ_HEIGHT_HISTOGRAM)
+        )
+        PARTITION BY HASH(Key)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+    )");
+    runtime.SimulateSleep(TDuration::Seconds(1));
+    InsertDataIntoTable(env, "Database", "nested/Table", ColumnTableRowsNumber, MultiColumnValueColumns());
+    TTableInfo table;
+    table.PathId = ResolvePathId(runtime, "/Root/Database/nested/Table", &table.DomainKey, &table.SaTabletId);
+    WaitForSchemeShardStatsUpdate(runtime, table.PathId.OwnerId, true);
+
+    size_t scanRequests = 0;
+    auto observer = runtime.AddObserver<TEvKqp::TEvQueryRequest>([&](auto& ev) {
+        if (ev->Get()->GetRequestType() == NRequestTypes::Analyze) {
+            UNIT_ASSERT(ev->Get()->IsInternalCall());
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetQuery().Contains("WITH TabletId"), PerShard);
+            ++scanRequests;
+        }
+    });
+    const auto failedCompilations = [&] {
+        ui64 result = 0;
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            TKqpCounters counters(runtime.GetAppData(node).Counters);
+            result += counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val();
+        }
+        return result;
+    };
+    const auto failedBefore = failedCompilations();
+    if (!persistStatistics) {
+        // Exercise generated scans with fallback disabled. Persistence uses a
+        // separate query that still needs the normal optimizer fallback.
+        TAnalyzeActor::TConfig config;
+        config.ColumnTableWholeTableScanMaxBytes = PerShard ? 0 : (1ULL << 30);
+        config.TableBytesSize = 1; // The fixture fits in the whole-table threshold.
+        const auto edge = runtime.AllocateEdgeActor(1);
+        runtime.Register(new TAnalyzeActor(edge, "newRbo", "/Root/Database", table.PathId, {}, config), 1);
+        bool haveSummary = false;
+        bool haveSketch = false;
+        bool haveHistogram = false;
+        while (true) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeActorResult>(edge);
+            UNIT_ASSERT(response);
+            const auto& result = *response->Get();
+            UNIT_ASSERT_C(result.Status == TEvStatistics::TEvAnalyzeActorResult::EStatus::Success,
+                result.Issues.ToString());
+            for (const auto& item : result.Statistics) {
+                if (item.Type == EStatType::TABLE_SUMMARY) {
+                    NKikimrStat::TTableSummaryStatistics summary;
+                    UNIT_ASSERT(summary.ParseFromString(item.Data));
+                    UNIT_ASSERT_VALUES_EQUAL(summary.GetRowCount(), ColumnTableRowsNumber);
+                    haveSummary = true;
+                }
+                const auto* tags = item.ColumnTags.AsMulti();
+                if (tags && *tags == std::vector<ui32>{2, 3}) {
+                    UNIT_ASSERT(!item.Data.empty());
+                    haveSketch |= item.Type == EStatType::COUNT_MIN_SKETCH;
+                    haveHistogram |= item.Type == EStatType::EQ_HEIGHT_HISTOGRAM;
+                }
+            }
+            if (result.Final) {
+                break;
+            }
+        }
+        UNIT_ASSERT(haveSummary);
+        UNIT_ASSERT(haveSketch);
+        UNIT_ASSERT(haveHistogram);
+        UNIT_ASSERT_GT(scanRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(failedCompilations(), failedBefore);
+        return;
+    }
+
+    Analyze(runtime, table.SaTabletId, {table.PathId}, "newRbo", "/Root/Database");
+    UNIT_ASSERT_GT(scanRequests, 0);
+
+    CheckMultiColumnStatisticsProbes(env, runtime, table.PathId, {2, 3});
+    const auto summary = GetStatistics(runtime, table.PathId, EStatType::TABLE_SUMMARY, {std::nullopt});
+    UNIT_ASSERT_VALUES_EQUAL(summary.size(), 1);
+    UNIT_ASSERT(summary[0].Success && summary[0].TableSummary.Data);
+    UNIT_ASSERT_VALUES_EQUAL(summary[0].TableSummary.Data->GetRowCount(), ColumnTableRowsNumber);
+    CheckEqHeightHistogram(runtime, table.PathId, {2, 3}, ColumnTableRowsNumber,
+        /*expectedMinBuckets=*/1, std::vector<TEqHeightHistogramProbe>{
+            {MakeStringTuplePresortKey({"zz", "zz"}, true), ColumnTableRowsNumber},
+        });
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeScansWithNewRboWithoutFallback, PerShard) {
+    CheckAnalyzeWithNewRbo<PerShard>(false);
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeWithNewRbo, PerShard) {
+    CheckAnalyzeWithNewRbo<PerShard>(true);
+}
+
+Y_UNIT_TEST_TWIN(AnalyzeOptimizerCache, AnalyzeFirst) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+    TKikimrRunner kikimr{TKikimrSettings(appConfig).SetWithSampleTables(false)};
+    // Session creation waits for the proxy to register its compile service.
+    const auto session = kikimr.GetQueryClient().GetSession().GetValueSync();
+    UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("analyze-cache", "/Root", "analyze-cache");
+    TKqpCounters counters(runtime.GetAppData().Counters);
+    const auto successes = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success");
+    const auto failures = counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed");
+
+    const auto compile = [&](bool isAnalyze, const TString& recompileUid = TString()) {
+        TKqpQuerySettings settings(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        settings.IsInternalCall = true;
+        settings.IsAnalyze = isAnalyze;
+        TMaybe<TKqpQueryId> query = TKqpQueryId(TString(DefaultKikimrPublicClusterName),
+            "/Root", "", "root@builtin", "SELECT 1 AS value;", settings, nullptr, TGUCSettings{});
+        if (recompileUid.empty()) {
+            runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+                token, "", Nothing(), std::move(query), /*keepInCache=*/true,
+                /*isQueryActionPrepare=*/false, /*perStatementResult=*/false,
+                TInstant::Max(), nullptr, std::make_shared<TGUCSettings>(), Nothing(),
+                std::make_shared<std::atomic<bool>>(true), context)));
+        } else {
+            runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(
+                token, "", recompileUid, query, /*isQueryActionPrepare=*/false,
+                TInstant::Max(), nullptr, std::make_shared<TGUCSettings>(), Nothing(),
+                std::make_shared<std::atomic<bool>>(true), context)));
+        }
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+        UNIT_ASSERT(result->Query);
+        UNIT_ASSERT_VALUES_EQUAL(result->Query->Settings.IsAnalyze, isAnalyze);
+        return std::make_pair(result->Uid, response->Get()->Stats.FromCache);
+    };
+
+    const auto failedBefore = failures->Val();
+    TString uids[2];
+    for (bool isAnalyze : {AnalyzeFirst, !AnalyzeFirst}) {
+        const auto before = successes->Val();
+        auto [uid, fromCache] = compile(isAnalyze);
+        UNIT_ASSERT(!fromCache);
+        UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, isAnalyze ? 0 : 1);
+        uids[isAnalyze] = uid;
+        const auto cached = compile(isAnalyze);
+        UNIT_ASSERT(cached.second);
+        UNIT_ASSERT_VALUES_EQUAL(cached.first, uid);
+    }
+    UNIT_ASSERT_VALUES_UNEQUAL(uids[0], uids[1]);
+    for (bool isAnalyze : {false, true}) {
+        const auto before = successes->Val();
+        UNIT_ASSERT(!compile(isAnalyze, uids[isAnalyze]).second);
+        UNIT_ASSERT_VALUES_EQUAL(successes->Val() - before, isAnalyze ? 0 : 1);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(failures->Val(), failedBefore);
+}
 
 Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     TTestEnv env(1, 1, true);

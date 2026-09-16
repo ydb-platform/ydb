@@ -70,6 +70,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         VChunkConfig,
+        DirtyMapStateProto,
         BlockSize,
         VChunkBlockCount);
 

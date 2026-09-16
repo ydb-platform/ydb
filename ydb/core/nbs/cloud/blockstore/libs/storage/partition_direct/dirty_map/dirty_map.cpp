@@ -22,6 +22,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
+    const TDirtyMapStateProto& state,
     ui32 blockSize,
     ui16 blockCount)
     : ArenaAllocatorPool(std::move(arenaAllocatorPool))
@@ -38,6 +39,16 @@ TBlocksDirtyMap::TBlocksDirtyMap(
     }
 
     UpdateConfig(vChunkConfig);
+
+    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
+    for (const auto& ddiskState: state.GetDDiskStates()) {
+        DDiskStates[ddisk].Load(ddiskState);
+        ++ddisk;
+    }
+
+    if (state.GetDDiskTouched()) {
+        DDiskTouchedGeneration = PersistedStateGeneration;
+    }
 }
 
 TBlocksDirtyMap::~TBlocksDirtyMap()
@@ -49,19 +60,6 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
 
             return TInflightMap::EEnumerateContinuation::Continue;
         });
-}
-
-void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
-{
-    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
-    for (const auto& ddiskState: proto.GetDDiskStates()) {
-        DDiskStates[ddisk].Load(ddiskState);
-        ++ddisk;
-    }
-
-    if (proto.GetDDiskTouched()) {
-        DDiskTouchedGeneration = PersistedStateGeneration;
-    }
 }
 
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)

@@ -76,7 +76,12 @@ struct TFixture
         // already started writing to DDisks.
         TDirtyMapStateProto state;
         state.SetDDiskTouched(true);
-        DirtyMap->Load(state);
+        DirtyMap = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            VChunkConfig,
+            state,
+            BlockSize,
+            VChunkBlockCount);
 
         VChunkConfig.PromoteHost(3);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);

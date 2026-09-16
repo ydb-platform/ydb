@@ -32,18 +32,21 @@ std::shared_ptr<TBlocksDirtyMap> MakeUntouchedDirtyMap(
     return std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         vchunkConfig,
+        TDirtyMapStateProto{},
         DefaultBlockSize,
         GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 }
 
 std::shared_ptr<TBlocksDirtyMap> MakeDirtyMap(const TVChunkConfig& vchunkConfig)
 {
-    auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
     TDirtyMapStateProto state;
     state.SetDDiskTouched(true);
-    dirtyMap->Load(state);
-
-    return dirtyMap;
+    return std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
+        vchunkConfig,
+        state,
+        DefaultBlockSize,
+        GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2648,16 +2651,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         const auto persisted = source->GetStateForPersist();
         UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
 
-        // Load into a freshly constructed dirty map with the same config.
-        auto target = MakeDirtyMap(vchunkConfig);
-
-        // Before load the target contains the unsynced fresh tail.
-        UNIT_ASSERT_VALUES_EQUAL("", target->DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "  H3: [5..32767]\n",
-            target->DebugPrintBehind());
-
-        target->Load(persisted);
+        auto target = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            vchunkConfig,
+            persisted,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         // After load the target mirrors the source's Ahead/Behind fields.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2668,17 +2667,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             target->DebugPrintBehind());
     }
 
-    // Loading a default-constructed (empty) proto must be a no-op: no DDisk
-    // states are present, so the target keeps its freshly constructed state
-    // with no tracked Ahead/Behind ranges.
-    Y_UNIT_TEST(ShouldLoadEmptyStateAsNoOp)
+    // A default-constructed proto keeps the initial DDisk state derived from
+    // the VChunk config.
+    Y_UNIT_TEST(ShouldConstructFromEmptyState)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
 
         const auto before = dirtyMap->DebugPrintDDiskState();
-
-        dirtyMap->Load(TDirtyMapStateProto());
 
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
@@ -2719,8 +2715,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         TDirtyMapStateProto state;
         state.SetDDiskTouched(true);
 
-        auto dirtyMap = MakeUntouchedDirtyMap(vchunkConfig);
-        dirtyMap->Load(state);
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            vchunkConfig,
+            state,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
 
         UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->IsDDiskTouched());
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());

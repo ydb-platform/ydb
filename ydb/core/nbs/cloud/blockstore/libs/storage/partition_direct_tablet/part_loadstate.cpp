@@ -72,8 +72,8 @@ TVChunkConfig MakeCompactedConfig(
         std::move(watermarks));
 }
 
-// The dirty map matches its entries to hosts by position (see
-// TBlocksDirtyMap::Load), so it is compacted by the same pass.
+// The dirty map constructor matches persisted entries to hosts by position,
+// so the state is compacted by the same pass.
 TDirtyMapStateProto MakeCompactedDirtyMapState(
     const TDirtyMapStateProto& state,
     THostMask deadSlots)

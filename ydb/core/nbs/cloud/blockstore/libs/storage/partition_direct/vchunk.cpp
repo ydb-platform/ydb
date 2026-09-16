@@ -82,6 +82,7 @@ TVChunk::TVChunk(
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
           DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
+          dirtyMapState,
           BlockSize,
           BlocksCount))
 {
@@ -92,8 +93,6 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
-
-    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()

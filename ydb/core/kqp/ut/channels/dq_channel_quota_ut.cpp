@@ -4,14 +4,9 @@
 // quota manager which arrives after the descriptor - assigned late on the output side, reallocated on
 // bind on the input side, reassigned on the local buffer.
 
-// Expects the abort of the given role only, whatever else happens to the channel; the quota must be
-// back to 0 once the runtime is gone, with nothing freed twice
+// Both sides of the channel are aborted when a quota runs out, whichever side's it is; the quota must
+// be back to 0 once the runtime is gone, with nothing freed twice
 struct TQuotaAbortTest : public TSessionTest {
-
-    void Prepare() override {
-        ExpectReconciliation = true; // a peer which is never told hangs, no clean run to expect
-        TSessionTest::Prepare();
-    }
 
     void CheckAbort(const TEvTestPrivate::TFinishInfo& finished) {
         UNIT_ASSERT_C(finished.Aborted, finished.Reason);
@@ -20,20 +15,14 @@ struct TQuotaAbortTest : public TSessionTest {
         UNIT_ASSERT_C(!finished.Error, finished.Reason);
     }
 
-    // the given control has nothing to report: the other side of the channel is never told
-    void CheckNotTold(NActors::TActorId control, const TString& who) {
-        auto old = Runtime->SetDispatchTimeout(TDuration::MilliSeconds(500));
-        try {
-            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(control);
-            UNIT_ASSERT_C(false, TStringBuilder() << who << " finished: " << msg->Get()->Reason);
-        } catch (NActors::TEmptyEventQueueException&) {
-        }
-        Runtime->SetDispatchTimeout(old);
+    void CheckBothAborted() {
+        CheckAbort(WaitFinished(Control0, NodeIndex0, "the producer"));
+        CheckAbort(WaitFinished(Control1, NodeIndex1, "the consumer"));
     }
 };
 
 // The output quota is held from the push to the ack of the session; with the acks held the 3rd
-// message of the channel does not fit and the producer is aborted
+// message of the channel does not fit
 struct TOutputQuotaTest : public TQuotaAbortTest {
 
     void Run() override {
@@ -44,26 +33,22 @@ struct TOutputQuotaTest : public TQuotaAbortTest {
 
         OutputQuotaManager->Limit = 100_KB;
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
-        ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
 
         Debug0->PauseChannelAck();
         StartChannel(1, true);
-        CheckAbort(WaitFinished(Control0, NodeIndex0, "the producer"));
+        CheckBothAborted();
         // the producer keeps pushing into the void until the window is full, every push rejected
         UNIT_ASSERT_C(OutputQuotaManager->Rejected.load() >= 1, OutputQuotaManager->Rejected.load());
 
-        // the consumer waits for a finish which is not coming: the descriptor of the producer is gone
         Debug0->ResumeChannelAck();
-        CheckNotTold(Control1, "the consumer");
-
+        CheckSensors();
         Destroy();
         CheckQuota();
     }
 };
 
-// The input quota runs out with the consumer stalled. The abort is sent to the *output* actor of the
-// channel, the producer on the other node (TInputDescriptor::AbortChannelByMemoryLimit), and the
-// consumer whose quota it was is never told: a decision point for the refactoring, pinned as it is.
+// The input quota runs out with the consumer stalled, on a push of the receiver
 struct TInputQuotaTest : public TQuotaAbortTest {
 
     void Run() override {
@@ -73,7 +58,7 @@ struct TInputQuotaTest : public TQuotaAbortTest {
         InputQuotaManager->Limit = 100_KB;
         ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
         ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000,
-            .PauseMessageIndex = 0, .PauseDelayMs = 30000 };
+            .PauseMessageIndex = 0, .PauseDelayMs = 30000, .ExpectAbort = true };
 
         // the consumer binds first, so that the quota runs out on a push and not on the bind (see
         // TInputBindQuotaTest for that)
@@ -84,17 +69,16 @@ struct TInputQuotaTest : public TQuotaAbortTest {
         Runtime->Send(consumer, Control1, new TEvTestPrivate::TEvStart(producer), NodeIndex1, true);
         UNIT_ASSERT_C(WaitFor([&]() { return GetCounter(Service1, "InputBuffer/Count") == 1; }, TDuration::Seconds(10)), "the consumer did not bind");
         Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
-        CheckAbort(WaitFinished(Control0, NodeIndex0, "the producer"));
+        CheckBothAborted();
         UNIT_ASSERT_C(InputQuotaManager->Rejected.load() >= 1, InputQuotaManager->Rejected.load());
-        CheckNotTold(Control1, "the consumer");
 
+        CheckSensors();
         Destroy();
         CheckQuota();
     }
 };
 
-// The local buffer: the push of the producer fails, the abort goes to the *input* actor
-// (TLocalBuffer::AbortChannelByMemoryLimit) and the producer keeps pushing into a void. Pinned as it is.
+// The local buffer: the push of the producer fails, both actors share the buffer
 struct TLocalQuotaTest : public TQuotaAbortTest {
 
     void Run() override {
@@ -104,16 +88,18 @@ struct TLocalQuotaTest : public TQuotaAbortTest {
         // the buffer keeps the quota manager of whoever binds first, the same limit on both
         OutputQuotaManager->Limit = 100_KB;
         InputQuotaManager->Limit = 100_KB;
-        ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000 };
+        ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000, .ExpectAbort = true };
         ConsumerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 40000, .MaxMessageSize = 40000,
             .PauseMessageIndex = 0, .PauseDelayMs = 30000, .ExpectAbort = true };
 
         StartChannel(1, true);
-        auto finished = WaitFinished(Control0, NodeIndex0, "the consumer");
-        UNIT_ASSERT_C(finished.Role == TEvTestPrivate::ERole::Consumer, "the producer finished instead of the consumer");
-        CheckAbort(finished);
+        // both on node 0, in whichever order
+        CheckAbort(WaitFinished(Control0, NodeIndex0, "one side"));
+        CheckAbort(WaitFinished(Control0, NodeIndex0, "the other side"));
+        UNIT_ASSERT(FindFinished(1, TEvTestPrivate::ERole::Producer) && FindFinished(1, TEvTestPrivate::ERole::Consumer));
         UNIT_ASSERT_C(OutputQuotaManager->Rejected.load() + InputQuotaManager->Rejected.load() > 0, "nothing was rejected");
 
+        CheckSensors();
         Destroy();
         CheckQuota();
     }
@@ -244,13 +230,10 @@ struct TInputBindQuotaTest : public TSessionTest {
 
     void Run() override {
         Prepare();
-        if (Fails) {
-            ExpectReconciliation = true;
-        }
         Init();
 
         ProducerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10000, .MaxMessageSize = 10000, .ExpectAbort = Fails };
-        ConsumerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10000, .MaxMessageSize = 10000 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10000, .MaxMessageSize = 10000, .ExpectAbort = Fails };
         if (Fails) {
             InputQuotaManager->Limit = 100_KB;
         }
@@ -273,11 +256,13 @@ struct TInputBindQuotaTest : public TSessionTest {
 
         StartConsumer(channel);
         if (Fails) {
-            auto finished = WaitFinished(Control0, NodeIndex0, "the producer");
-            UNIT_ASSERT_C(finished.Aborted && finished.Reason.Contains("OVERLOADED"), finished.Reason);
+            for (auto [control, nodeIndex] : {std::make_pair(Control0, NodeIndex0), std::make_pair(Control1, NodeIndex1)}) {
+                auto finished = WaitFinished(control, nodeIndex, "a side");
+                UNIT_ASSERT_C(finished.Aborted && finished.Reason.Contains("OVERLOADED"), finished.Reason);
+            }
             UNIT_ASSERT_VALUES_EQUAL(InputQuotaManager->Rejected.load(), 1);
             UNIT_ASSERT_VALUES_EQUAL(InputQuotaManager->Allocated.load(), 0);
-            // the consumer pops without a quota and then waits for a confirmation which is not coming
+            CheckSensors();
         } else {
             WaitChannel("input bind");
             UNIT_ASSERT_VALUES_EQUAL(InputQuotaManager->Allocated.load(), queued);

@@ -25,7 +25,7 @@ Release date: September 16, 2026.
 * Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
 * Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
 * Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection. This functionality is disabled by a feature flag.
-* [Column-oriented tables](https://github.com/ydb-platform/ydb/issues/26498) can be exported and imported using S3-compatible storage. Tables with a large number of columns are not supported. This functionality is disabled by a feature flag.
+* [Column-oriented tables](https://github.com/ydb-platform/ydb/issues/26498) can be exported and imported using S3-compatible storage. This functionality is disabled by a feature flag.
 * Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS. This functionality is disabled by a feature flag.
 * Added [snapshot retention](https://github.com/ydb-platform/ydb/pull/36668) for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes. This functionality is disabled by a feature flag.
 * QueryService can [notify SDKs when a node or session is shutting down](https://github.com/ydb-platform/ydb/pull/39274), allowing clients to stop sending new queries there. This functionality is disabled by a feature flag.

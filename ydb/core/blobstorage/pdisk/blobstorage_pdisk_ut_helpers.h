@@ -20,7 +20,8 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization = false,
         bool plainDataChunks = false, bool enableFormatAndMetadataEncryption = true,
         std::optional<bool> enableSectorEncryption = std::nullopt,
-        std::optional<bool> forceRandomizeMagic = std::nullopt);
+        std::optional<bool> forceRandomizeMagic = std::nullopt,
+        std::optional<ui32> physicalChunkSize = std::nullopt);
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData);
 i64 FindLastDifferingBytes(NPDisk::TAlignedData &dataBefore, NPDisk::TAlignedData &dataAfter, ui32 dataSize);

@@ -206,6 +206,26 @@ namespace NKikimr::NStorage {
             pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pdiskConfig->SectorMap);
         }
 
+        const bool hasChunkSize = (pdisk.HasPDiskConfig() && pdisk.GetPDiskConfig().HasChunkSize())
+            || Cfg->PDiskConfigOverlay.HasChunkSize();
+        if (hasChunkSize && pdiskConfig->PhysicalChunkSize) {
+            const TString warning = TStringBuilder()
+                << "PDiskConfig has both ChunkSize and PhysicalChunkSize; "
+                << "ignoring PhysicalChunkSize, the physical size is derived from ChunkSize"
+                << " ChunkSize# " << pdiskConfig->ChunkSize
+                << " PhysicalChunkSize# " << pdiskConfig->PhysicalChunkSize;
+            YDB_LOG_WARN("PDiskConfig has both ChunkSize and PhysicalChunkSize",
+                {"marker", "NW119"},
+                {"PDiskId", pdiskID},
+                {"path", path},
+                {"chunkSize", pdiskConfig->ChunkSize},
+                {"physicalChunkSize", pdiskConfig->PhysicalChunkSize});
+            if (configWarning && configWarning->empty()) {
+                *configWarning = warning;
+            }
+            pdiskConfig->PhysicalChunkSize = 0;
+        }
+
         const bool hasExpectedSlotCount = pdiskConfig->ExpectedSlotCount != 0;
         const bool hasSlotSizeInUnits = pdiskConfig->SlotSizeInUnits != 0;
         const bool hasExpectedSlotSize = pdiskConfig->ExpectedSlotSize != 0;

@@ -104,4 +104,11 @@ message TPDiskConfig {
     optional bool SortFreeChunksHDD = 2010;
     optional uint64 ExpectedSlotSize = 2011; // Per-vdisk disk space limit.
     optional uint32 MaxSlots = 2012; // Upper bound for ExpectedSlotCount inferred from ExpectedSlotSize.
+
+    // Physical (on-device) chunk size, including the per-sector PDisk metadata. An alternative to
+    // ChunkSize, which is the user-accessible size the physical one is derived from; setting both is
+    // a misconfiguration and ChunkSize wins. Must be a multiple of ChunkSizeAlignment (2 MiB).
+    // Takes effect only when the disk is formatted; the resulting size is persisted in the format
+    // record, so changing or removing this option later has no effect on an already formatted disk.
+    optional uint32 PhysicalChunkSize = 2013;
 };

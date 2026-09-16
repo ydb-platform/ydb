@@ -574,7 +574,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         });
     }
 
-<<<<<<< HEAD
+    // MoveReplace test. Parametrized test
+
+    //TODO: switch to iteration through all possible pairs when all variants will work
+    static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
+        { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
+        { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
+        { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
+        { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
+        { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
+    };
+    struct TTestRegistration_MoveReplace {
+        TTestRegistration_MoveReplace() {
+            static std::vector<TString> TestNames;
+            TestNames.reserve(MoveReplaceTests.size());
+            for (const auto& param : MoveReplaceTests) {
+                TestNames.emplace_back(TStringBuilder() << "Move-" << param.Tag);
+                TCurrentTest::AddTest(
+                    TestNames.back().c_str(),
+                    std::bind(std::bind(MoveReplaceTest, param), std::placeholders::_1),
+                    /*forceFork*/ false
+                );
+            }
+        }
+    };
+    static TTestRegistration_MoveReplace testRegistration_MoveReplace;
+
     Y_UNIT_TEST(MoveReplaceOverColumnTableDisabledByDefault) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -623,33 +648,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"), {NLs::PathExist, NLs::IsColumnTable});
     }
-=======
-    // MoveReplace test. Parametrized test
-
-    //TODO: switch to iteration through all possible pairs when all variants will work
-    static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
-        { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
-        { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
-        { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
-        { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
-        { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
-    };
-    struct TTestRegistration_MoveReplace {
-        TTestRegistration_MoveReplace() {
-            static std::vector<TString> TestNames;
-            TestNames.reserve(MoveReplaceTests.size());
-            for (const auto& param : MoveReplaceTests) {
-                TestNames.emplace_back(TStringBuilder() << "Move-" << param.Tag);
-                TCurrentTest::AddTest(
-                    TestNames.back().c_str(),
-                    std::bind(std::bind(MoveReplaceTest, param), std::placeholders::_1),
-                    /*forceFork*/ false
-                );
-            }
-        }
-    };
-    static TTestRegistration_MoveReplace testRegistration_MoveReplace;
->>>>>>> 4a157b7fbc3 (schemeshard: extend move-with-replace test with src-dst combinations (#46838))
 
     Y_UNIT_TEST(Replace2) {
         TTestBasicRuntime runtime;

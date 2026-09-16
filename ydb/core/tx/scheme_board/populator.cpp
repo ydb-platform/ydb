@@ -874,6 +874,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
         }
 
+        // Discard acknowledgements from replicas no longer in use and complete pending
+        // publications whose remaining acknowledgements satisfy the new configuration's quorum.
         for (auto updateIt = UpdateAcks.begin(); updateIt != UpdateAcks.end(); ) {
             auto& update = updateIt->second;
             for (auto pathIt = update.PathAcks.begin(); pathIt != update.PathAcks.end(); ) {

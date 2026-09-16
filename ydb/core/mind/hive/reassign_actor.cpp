@@ -132,7 +132,11 @@ public:
 
     void Handle(TEvPrivate::TEvRestartCancelled::TPtr& ev) {
         if (TTabletInfo* tablet = Hive->FindTablet(ev->Get()->TabletId)) {
-            std::erase(tablet->ActorsToNotifyOnRestart, SelfId());
+            if (std::erase(tablet->ActorsToNotifyOnRestart, SelfId()) == 0) {
+                return;
+            }
+        } else {
+            return;
         }
         --ReassignInFlight;
         ReassignNextTablet();

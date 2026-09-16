@@ -286,6 +286,7 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
+            NotifyCancel(tablet);
             if (hasEmptyChannel) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
@@ -301,7 +302,6 @@ public:
                         tablet->ChannelProfileNewGroup.reset(channelId);
                     }
                 }
-                NotifyCancel(tablet);
                 newTabletState = ETabletState::ReadyToWork;
             }
         }

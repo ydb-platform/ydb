@@ -1306,8 +1306,12 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
     std::vector<TChannelInfo> failedBuffers;
 
     for (auto& [info, descriptor] : InputDescriptors) {
-        if (!descriptor->IsFinished() && descriptor->OutputNodeGenMajor) {
-            if (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor) {
+        if (!descriptor->IsFinished()) {
+            // a descriptor which has not heard from any peer yet is fine with the peer which comes; it is
+            // as bound to a session which goes as the others
+            bool mismatch = descriptor->OutputNodeGenMajor
+                && (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor);
+            if (!outputNodeActorId || mismatch) {
                 TStringBuilder message;
                 if (outputNodeActorId) {
                     // the same actor at a higher generation has reconciled, not restarted
@@ -2519,8 +2523,7 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
     auto it = NodeStates.find(nodeId);
     if (it != NodeStates.end()) {
         if (it->second->Terminating.load()) {
-            ActorSystem->Send(it->second->NodeActorId, new NActors::TEvents::TEvPoison());
-            NodeStates.erase(it);
+            DropNodeSession(it, "Node session replaced with the channel still open");
         } else {
             return it->second;
         }
@@ -2562,10 +2565,21 @@ void TDqChannelService::FreeNodeSession(ui32 nodeId, NActors::TActorId sender) {
     if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
         auto& nodeState = it->second;
         if (nodeState->NodeActorId == sender && nodeState->Terminating.load()) {
-            ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
-            NodeStates.erase(it);
+            DropNodeSession(it, "Node session freed with the channel still open");
         }
     }
+}
+
+// A buffer bound to the session keeps it alive after this, but nothing reaches it any more: the peer
+// talks to the session which takes its place. Whatever is still bound is failed.
+void TDqChannelService::DropNodeSession(std::unordered_map<ui32, std::shared_ptr<TNodeState>>::iterator it, const TString& reason) {
+    auto& nodeState = it->second;
+    {
+        std::lock_guard lock(nodeState->Mutex);
+        nodeState->FailDescriptors(reason);
+    }
+    ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
+    NodeStates.erase(it);
 }
 
 // unbinded stubs

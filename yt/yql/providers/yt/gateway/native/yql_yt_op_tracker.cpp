@@ -78,7 +78,6 @@ TOperationTracker::~TOperationTracker() {
 void TOperationTracker::Stop() {
     if (Running_) {
         Running_ = false;
-        StopEvent_.Signal();
         Thread_.Join();
     }
 }
@@ -317,7 +316,7 @@ void TOperationTracker::Tracker() {
             RunningOperations_.insert(RunningOperations_.end(), activeOps.begin(), activeOps.end());
         }
 
-        StopEvent_.WaitT(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1));
     }
 }
 

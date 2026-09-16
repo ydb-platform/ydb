@@ -12,7 +12,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/system/event.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
@@ -42,7 +41,6 @@ private:
     TMutex Mutex_;
     TVector<std::function<bool()>> RunningOperations_;
     std::atomic<bool> Running_{false};
-    TManualEvent StopEvent_;
     TThread Thread_;
 };
 

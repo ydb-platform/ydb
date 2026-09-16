@@ -495,7 +495,13 @@ private:
                 << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
         }
 
-        if (!computationNode->IsSuitableForCache()) {
+        if (!computationNode->IsSuitableForCache() ||
+            name == "KqpWideReadTable" ||
+            name == "KqpWideReadTableRanges" ||
+            name == "KqpBlockReadTableRanges" ||
+            name == "KqpLookupTable" ||
+            name == "KqpReadTable" ||
+            name == "DqWatermarkGenerator") {
             PatternNodes_->SuitableForCache_ = false;
         }
 

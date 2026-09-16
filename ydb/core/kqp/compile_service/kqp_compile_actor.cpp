@@ -608,7 +608,7 @@ private:
                                                        << kqpResult.Issues().ToOneLineString());
             FallbackToYqlOptimizerIssue->SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
-            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
+            RebuildConfigAndStartCompilation(ctx, std::move(logMessage), status, kqpResult.Issues());
             return;
         } else if (IsSuitableToReportSuccessOnNewRBO(status)) {
             Counters->ReportCompileNewRBOSuccess(DbCounters);
@@ -696,11 +696,14 @@ private:
         return result;
     }
 
-    void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
+    void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage,
+                                          Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
             {"database", QueryId.Database},
+            {"status", Ydb::StatusIds_StatusCode_Name(status)},
+            {"issues", issues},
             {"queryText", GetQueryTextForLog(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost

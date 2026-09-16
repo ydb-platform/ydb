@@ -509,6 +509,7 @@ public:
             ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
         }
 
+        bool adjustArena = false;
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
@@ -518,13 +519,20 @@ public:
                         it->second->Release(resources.Memory);
                     }
                 }
+                if (resources.ExternalMemory || resources.ExecutionUnits) {
+                    ApplyArenaDemandLocked(resources, /* allocate */ false);
+                    ReconcileArenaLocked();
+                    adjustArena = ArenaPlanLocked(ArenaUsedLocked()) != Arena.Size;
+                } else {
+                    // the freed node memory may be the room a pending arena growth was missing
+                    adjustArena = ArenaGrowPending.load(std::memory_order_relaxed);
+                }
             }
+        } else {
+            ApplyArenaDemand(resources, /* allocate */ false);
         }
 
-        if (resources.ExternalMemory || resources.ExecutionUnits) {
-            ApplyArenaDemand(resources, /* allocate */ false);
-        } else if (resources.Memory && ArenaGrowPending.load(std::memory_order_relaxed)) {
-            // the freed node memory may be the room a pending arena growth was missing
+        if (adjustArena) {
             AdjustArena();
         }
 
@@ -736,9 +744,16 @@ public:
             TotalMemoryResource->Release(Arena.Charged - footprint);
         }
         Arena.Charged = footprint;
-        Counters->RmArenaSize->Set(Arena.Size);
+        // the demand moves on every call, the other two only when the arena is resized
         Counters->RmArenaUsed->Set(used);
-        Counters->RmArenaDeficit->Set(ArenaDeficitLocked(used));
+        if (Arena.Size != Arena.ShownSize) {
+            Counters->RmArenaSize->Set(Arena.Size);
+            Arena.ShownSize = Arena.Size;
+        }
+        if (const ui64 deficit = ArenaDeficitLocked(used); deficit != Arena.ShownDeficit) {
+            Counters->RmArenaDeficit->Set(deficit);
+            Arena.ShownDeficit = deficit;
+        }
         return changed;
     }
 
@@ -765,29 +780,43 @@ public:
         return limit > others + Arena.Size ? limit - others - Arena.Size : 0;
     }
 
+    void ApplyArenaDemandLocked(const TKqpResourcesRequest& resources, bool allocate) {
+        if (allocate) {
+            Arena.ExternalMemory += resources.ExternalMemory;
+            Arena.ExecutionUnits += resources.ExecutionUnits;
+        } else {
+            // TTxState::Released has already verified the tx part of the demand
+            Y_DEBUG_ABORT_UNLESS(Arena.ExternalMemory >= resources.ExternalMemory);
+            Y_DEBUG_ABORT_UNLESS(Arena.ExecutionUnits >= resources.ExecutionUnits);
+            Arena.ExternalMemory -= resources.ExternalMemory;
+            Arena.ExecutionUnits -= resources.ExecutionUnits;
+        }
+    }
+
+    // The size the arena should be resized to, Arena.Size when it should not.
+    ui64 ArenaPlanLocked(ui64 used) {
+        if (Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker) {
+            return Arena.Size;
+        }
+        ui64 target = ArenaTargetLocked(used);
+        // before the cap: a growth withheld by it is pending just as a refused one is
+        ArenaGrowPending.store(target > Arena.Size, std::memory_order_relaxed);
+        if (target > Arena.Size) {
+            target = Arena.Size + Min(target - Arena.Size, ArenaGrowthCapLocked());
+        }
+        return target;
+    }
+
     void ApplyArenaDemand(const TKqpResourcesRequest& resources, bool allocate) {
-        if (!resources.ExternalMemory && !resources.ExecutionUnits) {
-            return;
+        if (resources.ExternalMemory || resources.ExecutionUnits) {
+            AdjustArena(&resources, allocate);
         }
-        with_lock (Lock) {
-            if (allocate) {
-                Arena.ExternalMemory += resources.ExternalMemory;
-                Arena.ExecutionUnits += resources.ExecutionUnits;
-            } else {
-                // TTxState::Released has already verified the tx part of the demand
-                Y_DEBUG_ABORT_UNLESS(Arena.ExternalMemory >= resources.ExternalMemory);
-                Y_DEBUG_ABORT_UNLESS(Arena.ExecutionUnits >= resources.ExecutionUnits);
-                Arena.ExternalMemory -= resources.ExternalMemory;
-                Arena.ExecutionUnits -= resources.ExecutionUnits;
-            }
-        }
-        AdjustArena();
     }
 
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller
     // only records and charges its demand, which the loop picks up when it re-evaluates after a round. A refused
     // growth is not asked again here but stays pending for the next free, broker attach or config change.
-    void AdjustArena() {
+    void AdjustArena(const TKqpResourcesRequest* demand = nullptr, bool allocate = false) {
         bool publish = false;
         bool growRefused = false;
         for (;;) {
@@ -797,22 +826,18 @@ public:
             ui64 target = 0;
             ui64 deficit = 0;
             with_lock (Lock) {
-                publish |= ReconcileArenaLocked();
-                if (Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker) {
-                    break;
+                if (demand) {
+                    ApplyArenaDemandLocked(*demand, allocate);
+                    demand = nullptr;
                 }
+                publish |= ReconcileArenaLocked();
                 const ui64 used = ArenaUsedLocked();
                 size = Arena.Size;
-                taskId = Arena.TaskId;
-                target = ArenaTargetLocked(used);
-                // before the cap: a growth withheld by it is pending just as a refused one is
-                ArenaGrowPending.store(target > size, std::memory_order_relaxed);
-                if (target > size) {
-                    target = size + Min(target - size, ArenaGrowthCapLocked());
-                }
+                target = ArenaPlanLocked(used);
                 if (target == size || (growRefused && target > size)) {
                     break;
                 }
+                taskId = Arena.TaskId;
                 deficit = ArenaDeficitLocked(used);
                 Arena.AdjustInProgress = true;
                 broker = ResourceBroker;
@@ -969,6 +994,9 @@ public:
         ui64 Size = 0;
         ui64 TaskId = 0;
         ui64 Charged = 0; // force-acquired from TotalMemoryResource, Max(Size, Used) after every reconcile
+        // the last values published to the gauges
+        ui64 ShownSize = 0;
+        ui64 ShownDeficit = 0;
         bool AdjustInProgress = false;
         bool Stopped = false; // TKqpResourceManagerActor::PassAway
     };

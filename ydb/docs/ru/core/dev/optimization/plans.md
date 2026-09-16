@@ -9,7 +9,7 @@
 | Цель | Режим | CLI | UI | Раздел |
 | --- | --- | --- | --- | --- |
 | Оценка плана без выполнения запроса | EXPLAIN | `ydb sql --explain` | кнопка **Explain** | [EXPLAIN через CLI и SDK](#explain-cli), [EXPLAIN в UI](#explain-ui) |
-| План с фактическими метриками выполнения | EXPLAIN ANALYZE | `ydb sql --explain-analyze` | кнопка **Run** | [ANALYZE через CLI](#analyze-cli), [ANALYZE в UI](#analyze-ui) |
+| План с фактическими метриками выполнения | EXPLAIN ANALYZE | `ydb sql --explain-analyze` | кнопка **Run**  с настройкой Statistics collection mode=Full или кнопка **Explain Analyze** | [ANALYZE через CLI](#analyze-cli), [ANALYZE в UI](#analyze-ui) |
 | Графический план в формате SVG | SVG | `ydb sql --explain-analyze --format svg` | **Open Execution Plan** | [SVG через CLI](#svg-cli), [SVG в UI](#svg-ui) |
 
 ## Получение плана выполнения запроса в режиме EXPLAIN через CLI и SDK {#explain-cli}

@@ -48,16 +48,6 @@ struct TOperationUidIdentity {
     TMaybe<TStringBuf> RequestBody;
 };
 
-enum class EUidReplayMatch {
-    Match,
-    OwnerMismatch,
-    DomainMismatch,
-    RequestMismatch,
-};
-
-// Only the identity fields requested by the operation are compared.
-EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested);
-
 // The kind preserves the separate UID namespaces of the existing operations.
 using TOperationUidKey = std::pair<Ydb::TOperationId_EKind, TString>;
 
@@ -76,7 +66,7 @@ public:
     enum class EDecision { Proceed, Replay, AlreadyExists, OwnerMismatch, DomainMismatch, RequestMismatch };
 
     using TLookup = std::function<TMaybe<TOperationUidRecord>(const TOperationUidKey&)>;
-    using TCheck = std::function<EUidReplayMatch(const TOperationUidRecord&)>;
+    using TCheck = std::function<EDecision(const TOperationUidRecord&)>;
 
     // Empty legacy UIDs disable deduplication. Protocol-specific validation
     // (including rejecting explicitly empty SQL UIDs) belongs to the caller.
@@ -95,6 +85,10 @@ private:
     ui64 OperationId = 0;
     bool Committed = false;
 };
+
+// Only the identity fields requested by the operation are compared.
+TOperationUidAdmission::EDecision CompareOperationUid(
+    const TOperationUidIdentity& stored, const TOperationUidIdentity& requested);
 
 TMaybe<Ydb::TOperationId_EKind> GetOperationUidKind(NKikimrSchemeOp::EOperationType operationType);
 

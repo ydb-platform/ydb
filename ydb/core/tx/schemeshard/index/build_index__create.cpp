@@ -44,7 +44,7 @@ public:
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::BUILD_INDEX, request.GetOperationParams());
-        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::BUILD_INDEX, uid},
+        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::BUILD_INDEX, uid},
             TOperationUidAdmission::EDuplicatePolicy::Reject,
             [&](const auto& key) { return Self->FindOperationByUid(key); });
         if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
@@ -364,23 +364,21 @@ public:
             buildInfo->UserSID = request.GetUserSID();
         }
 
-        admission.Commit(true, [&] {
-            Self->PersistCreateBuildIndex(db, *buildInfo);
+        Self->PersistCreateBuildIndex(db, *buildInfo);
 
-            if (buildInfo->IsFulltextProvisioning()) {
-                Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
-                // Provision the rowid infrastructure (sequentially, via child builds) before this build
-                // takes its own lock and builds the fulltext index.
-                buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
-                    ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
-                    : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
-            } else {
-                buildInfo->State = TIndexBuildInfo::EState::Locking;
-            }
+        if (buildInfo->IsFulltextProvisioning()) {
+            Self->PersistBuildIndexFulltextProvisioning(db, *buildInfo);
+            // Provision the rowid infrastructure (sequentially, via child builds) before this build
+            // takes its own lock and builds the fulltext index.
+            buildInfo->State = buildInfo->FulltextNeedsRowIdColumn
+                ? TIndexBuildInfo::EState::ProvisioningRowIdColumn
+                : TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex;
+        } else {
+            buildInfo->State = TIndexBuildInfo::EState::Locking;
+        }
 
-            Self->PersistBuildIndexState(db, *buildInfo);
-            Self->AddIndexBuild(buildInfo);
-        });
+        Self->PersistBuildIndexState(db, *buildInfo);
+        Self->AddIndexBuild(buildInfo);
 
         Progress(BuildId);
 

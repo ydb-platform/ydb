@@ -241,7 +241,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::IMPORT, request.GetRequest().GetOperationParams());
-        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::IMPORT, uid},
+        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::IMPORT, uid},
             TOperationUidAdmission::EDuplicatePolicy::Replay,
             [&](const auto& key) { return Self->FindOperationByUid(key); },
             [&](const auto& stored) {
@@ -372,15 +372,13 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->SanitizedToken = request.GetSanitizedToken();
 
         NIceDb::TNiceDb db(txc.DB);
-        admission.Commit(true, [&] {
-            Self->PersistCreateImport(db, *importInfo);
+        Self->PersistCreateImport(db, *importInfo);
 
-            importInfo->State = initialState;
-            importInfo->StartTime = TAppData::TimeProvider->Now();
-            Self->PersistImportState(db, *importInfo);
+        importInfo->State = initialState;
+        importInfo->StartTime = TAppData::TimeProvider->Now();
+        Self->PersistImportState(db, *importInfo);
 
-            Self->AddImport(importInfo);
-        });
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;

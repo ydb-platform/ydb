@@ -49,7 +49,7 @@ public:
         }
 
         const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
-        auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
+        const auto admission = TOperationUidAdmission::Prepare({Ydb::TOperationId::SET_NOT_NULL, uid},
             TOperationUidAdmission::EDuplicatePolicy::Reject,
             [&](const auto& key) { return Self->FindOperationByUid(key); });
         if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
@@ -147,14 +147,12 @@ public:
             operationInfo->UserSID = request.GetUserSID();
         }
 
-        admission.Commit(true, [&] {
-            Self->PersistCreateSetColumnConstraint(db, *operationInfo);
+        Self->PersistCreateSetColumnConstraint(db, *operationInfo);
 
-            operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
-            Self->PersistSetColumnConstraintState(db, *operationInfo);
+        operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState::Locking;
+        Self->PersistSetColumnConstraintState(db, *operationInfo);
 
-            Self->AddSetColumnConstraintOperation(operationInfo);
-        });
+        Self->AddSetColumnConstraintOperation(operationInfo);
 
         Progress(BuildId);
 

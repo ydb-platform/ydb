@@ -10,6 +10,8 @@
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 using namespace NActors;
 
 namespace NKafka {
@@ -48,7 +50,10 @@ struct TEvKafka {
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
         EvTokenRecheck,
-        EvSetCounter,
+        // EvSetCounter,
+        EvGetGroupMemberCounter,
+        EvGroupMemberCounter,
+        EvReleaseGroupMemberCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -257,15 +262,6 @@ struct TEvKafka {
         {}
     };
 
-    struct TEvSetCounter : public TEventLocal<TEvSetCounter, EvSetCounter> {
-        i64 Value;
-        TVector<std::pair<TString, TString>> Labels;
-
-        TEvSetCounter(const i64 value, const TVector<std::pair<TString, TString>> labels)
-        : Value(value)
-        , Labels(labels)
-        {}
-    };
 
     struct TEvReadSessionInfo : public TEventLocal<TEvReadSessionInfo, EvReadSessionInfo> {
         TEvReadSessionInfo(const TString& groupId)
@@ -290,6 +286,41 @@ struct TEvKafka {
     };
 
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {
+    };
+
+    struct TEvGetGroupMemberCounter : public TEventLocal<TEvGetGroupMemberCounter, EvGetGroupMemberCounter> {
+        TVector<std::pair<TString, TString>> Labels;
+        TActorId ConnectionId;
+        TString GroupId;
+        std::optional<i64> MemberCount;
+
+        TEvGetGroupMemberCounter(TVector<std::pair<TString, TString>> labels,
+                                 TActorId connectionId,
+                                 TString groupId,
+                                 std::optional<i64> memberCount = std::nullopt)
+            : Labels(std::move(labels))
+            , ConnectionId(connectionId)
+            , GroupId(std::move(groupId))
+            , MemberCount(memberCount)
+        {}
+    };
+
+    struct TEvGroupMemberCounter : public TEventLocal<TEvGroupMemberCounter, EvGroupMemberCounter> {
+        NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        TString GroupId;
+
+        TEvGroupMemberCounter(NMonitoring::TDynamicCounters::TCounterPtr counter, TString groupId)
+            : Counter(std::move(counter))
+            , GroupId(std::move(groupId))
+        {}
+    };
+
+    struct TEvReleaseGroupMemberCounter : public TEventLocal<TEvReleaseGroupMemberCounter, EvReleaseGroupMemberCounter> {
+        TString GroupId;
+
+        explicit TEvReleaseGroupMemberCounter(TString groupId)
+            : GroupId(std::move(groupId))
+        {}
     };
 
 struct TPartitionOffsetsInfo {

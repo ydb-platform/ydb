@@ -14,7 +14,7 @@ DEPENDS(
     ydb/public/tools/local_ydb
 )
 
-ENV(LOCAL_YDB_BINARY="${BINDIR}/../local_ydb")
+ENV(LOCAL_YDB_BINARY="${ARCADIA_BUILD_ROOT}/ydb/public/tools/local_ydb/local_ydb")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_KAFKA_PROXY_PORT=0)
 ENV(YDB_TINY_MODE=true)

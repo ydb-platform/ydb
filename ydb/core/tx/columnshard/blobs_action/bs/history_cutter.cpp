@@ -85,6 +85,10 @@ bool THistoryCutterWrapper::IsMeasureOnly() {
     return HasAppData() && AppDataVerified().ColumnShardConfig.GetCutHistoryMeasureOnly();
 }
 
+bool THistoryCutterWrapper::IsAccessorAuditEnabled() {
+    return HasAppData() && AppDataVerified().ColumnShardConfig.GetCutHistoryAccessorAudit();
+}
+
 bool THistoryCutterWrapper::IsEnabled() const {
     return Enabled;
 }
@@ -419,19 +423,25 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx, bool triggered
         return false;
     }
 
+    ++SweepRound;
+    NominateEpoch = ReseedEpoch;
+    Signals.OnNomination();
+
+    if (!IsAccessorAuditEnabled()) {
+        PublishLevels(0);
+        DecideAndCut(batch, ctx);
+        return true;
+    }
+
     for (const auto& key : batch) {
         CutState[key] = ECutState::Verifying;
     }
     SweepInFlight = true;
-    ++SweepRound;
-    NominateEpoch = ReseedEpoch;
-    Signals.OnNomination();
     PublishLevels(batch.size());
     SweepSurvivors = batch;
     SweepCandidates = std::make_shared<const TVector<TEntryKey>>(std::move(batch));
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
-
     ctx.Send(TabletActorId, new NColumnShard::TEvPrivate::TEvStartCutHistorySweep());
     return true;
 }
@@ -451,6 +461,68 @@ TVector<std::pair<TInternalPathId, ui64>> THistoryCutterWrapper::GetNextBatch(si
     SweepPortionOffset += take;
     isLast = (SweepPortionOffset >= SweepPortionIds.size());
     return batch;
+}
+
+void THistoryCutterWrapper::DecideAndCut(const TVector<TEntryKey>& candidates, const TActorContext& ctx) {
+    for (const auto& key : candidates) {
+        if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        if (!IsDrained(key)) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        // History may have changed since nomination: the same-group gate must hold at send time.
+        if (!SeenGroupsCheckPasses(key)) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        const ui32 nextFromGen = GetNextFromGeneration(key);
+        if (!nextFromGen) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        std::optional<ui32> groupId;
+        if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
+            // Exact match, not GroupForGeneration: once cut, that generation resolves to a different live group.
+            if (const auto* entry = FindIfPtr(TabletInfo->Channels[key.Channel].History, [&key](const TTabletChannelInfo::THistoryEntry& e) {
+                    return e.FromGeneration == key.FromGeneration;
+                })) {
+                groupId = entry->GroupID;
+            }
+        }
+        if (!groupId) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        if (SeedingState != ESeedState::Seeded || ReseedEpoch != NominateEpoch) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        Signals.OnEntryProven();
+        if (IsMeasureOnly()) {
+            // Nothing durable happens: reset to None so the next round re-measures the same entry.
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        // The first GC round of this incarnation carries a soft barrier for every history group, so wait for it.
+        if (const auto mgr = Manager.lock(); !mgr || !mgr->HasCollectedBeforeCurrentGeneration()) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
+        DisprovedAt.erase(key);
+        PublishLevels();
+        CutState[key] = ECutState::Cut;
+        NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
+        Signals.OnEntryCut();
+        auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
+        req->Record.SetTabletID(TabletInfo->TabletID);
+        req->Record.SetChannel(key.Channel);
+        req->Record.SetFromGeneration(key.FromGeneration);
+        req->Record.SetGroupID(*groupId);
+        ctx.Send(LauncherActorId, req.Release());
+    }
 }
 
 void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved, bool exhausted, const TActorContext& ctx) {
@@ -479,74 +551,10 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
 
-    for (const auto& key : SweepSurvivors) {
-        if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-        if (!IsDrained(key)) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-        // History may have changed since nomination: the same-group gate must hold at barrier-send time.
-        if (!SeenGroupsCheckPasses(key)) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-
-        const ui32 nextFromGen = GetNextFromGeneration(key);
-        if (!nextFromGen) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-
-        std::optional<ui32> groupId;
-        if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
-            // Exact match, not GroupForGeneration: once cut, that generation resolves to a different live group.
-            if (const auto* entry =
-                    FindIfPtr(TabletInfo->Channels[key.Channel].History, [&key](const TTabletChannelInfo::THistoryEntry& historyEntry) {
-                        return historyEntry.FromGeneration == key.FromGeneration;
-                    })) {
-                groupId = entry->GroupID;
-            }
-        }
-        if (!groupId) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-
-        if (SeedingState != ESeedState::Seeded || ReseedEpoch != NominateEpoch) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-        Signals.OnEntryProven();
-        if (IsMeasureOnly()) {
-            // Nothing durable happens: reset to None so the next round re-measures the same entry.
-            CutState[key] = ECutState::None;
-            continue;
-        }
-
-        // The first GC round of this incarnation carries a soft barrier for every history group, so wait for it.
-        if (const auto mgr = Manager.lock(); !mgr || !mgr->HasCollectedBeforeCurrentGeneration()) {
-            CutState[key] = ECutState::None;
-            continue;
-        }
-
-        DisprovedAt.erase(key);
-        PublishLevels();
-        CutState[key] = ECutState::Cut;
-        NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
-        Signals.OnEntryCut();
-        auto req = MakeHolder<TEvTablet::TEvCutTabletHistory>();
-        req->Record.SetTabletID(TabletInfo->TabletID);
-        req->Record.SetChannel(key.Channel);
-        req->Record.SetFromGeneration(key.FromGeneration);
-        req->Record.SetGroupID(*groupId);
-        ctx.Send(LauncherActorId, req.Release());
-    }
+    DecideAndCut(SweepSurvivors, ctx);
     SweepSurvivors.clear();
 
-    // Safety net: the disproved loop settled these already, so reset without counting an attempt.
+    // Safety net: candidates that never reached DecideAndCut would otherwise stay Verifying forever.
     for (auto& [key, state] : CutState) {
         if (state == ECutState::Verifying) {
             state = ECutState::None;

@@ -2967,6 +2967,8 @@ message TColumnShardConfig {
 
     // Run the whole proof pipeline and export its timings, but never place a barrier or cut.
     optional bool CutHistoryMeasureOnly = 79 [default = true];
+    // Audit sweep only cross-checks the counters and never gates a cut.
+    optional bool CutHistoryAccessorAudit = 81 [default = false];
     optional uint64 NodePortionsCountLimit = 73;
 
     message TFlowControlConfig {

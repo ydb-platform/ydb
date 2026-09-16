@@ -520,12 +520,13 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(Max<ui32>()), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
     }
 
-    // Happy path: after the first GC round, a proven entry gets TEvCutTabletHistory.
-    Y_UNIT_TEST(SweepHappyPathCutsAfterFirstGcRound) {
+    // Happy path: after the first GC round, a proven entry gets TEvCutTabletHistory (counter path, audit off).
+    Y_UNIT_TEST(HappyPathCutsAfterFirstGcRound) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
         runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        // CutHistoryAccessorAudit defaults to false — counter path.
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 3030;
@@ -557,15 +558,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             nominated = cutter.TryNominate(ctx);
         });
         UNIT_ASSERT(nominated);
-        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
         UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), 1);
-        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Verifying);
-
-        // Clean exhausted sweep → direct cut, no barrier actor.
-        cutter.SetPortionSnapshot({});
-        runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
-        });
+        // Counter path: DecideAndCut runs inline, no sweep event.
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
 
@@ -615,19 +609,14 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.OnBootComplete({});
         const TEntryKey key{ DataChannel, OldFromGen };
 
-        // First round: GC not committed → entry stays None after a clean sweep.
+        // Counter path: GC not committed → DecideAndCut runs inline, entry stays None.
         runInActor([&](const NActors::TActorContext& ctx) {
             cutter.TryNominate(ctx);
-        });
-        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
-        cutter.SetPortionSnapshot({});
-        runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::None);
         UNIT_ASSERT(guard->GetCut().empty());
 
-        // Commit the GC round; next nomination must now cut.
+        // Commit the GC round; next nomination must now cut directly.
         CommitFirstGcRound(bm, CurrentGen, shared);
         runtime.AdvanceCurrentTime(THistoryCutterWrapper::DefaultNominateCadence + TDuration::Seconds(1));
         bool nominated = false;
@@ -635,11 +624,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             nominated = cutter.TryNominate(ctx);
         });
         UNIT_ASSERT(nominated);
-        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
-        cutter.SetPortionSnapshot({});
-        runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
-        });
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher));
@@ -761,11 +745,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             nominated = cutter.TryNominate(ctx);
         });
         UNIT_ASSERT(nominated);
-        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
-        cutter.SetPortionSnapshot({});
-        runInActor([&](const NActors::TActorContext& ctx) {
-            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
-        });
+        // Counter path: cut happens directly, no sweep event.
         UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher));
     }
@@ -776,6 +756,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         TAppPrepare app;
         runtime.Initialize(app.Unwrap());
         runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        // Disproval only happens via the accessor sweep; enable the audit path.
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryAccessorAudit(true);
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         static constexpr ui64 TabletId = 4040;
@@ -1135,7 +1117,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             result = cutter.TryNominate(ctx);
         });
         UNIT_ASSERT_C(result, "Seeded state must allow nomination");
-        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+        // Counter path: DecideAndCut runs inline, no sweep event.
     }
 
     // OnBootComplete = BeginSeeding + ApplySeedBatch + FinishSeeding; portions seeded into counters are correct.
@@ -1478,6 +1460,132 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
             cutter.FinishSeeding();
         });
         UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "FinishSeeding must request nomination once Seeded");
+    }
+
+    // Counter path with audit off: TryNominate cuts without starting any sweep.
+    Y_UNIT_TEST(CutWithNoSweepWhenAuditOff) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        // CutHistoryAccessorAudit defaults to false.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 8001;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 CurrentGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, 3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
+        CommitFirstGcRound(bm, CurrentGen, shared);
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        bool sweepSeen = false;
+        auto sweepObserver = runtime.AddObserver<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(
+            [&](NColumnShard::TEvPrivate::TEvStartCutHistorySweep::TPtr&) {
+                sweepSeen = true;
+            });
+
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT(nominated);
+        UNIT_ASSERT_C(!sweepSeen, "no sweep must start when audit is off");
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher));
+    }
+
+    // Audit path: TryNominate starts the sweep and the entry is cut after it completes.
+    Y_UNIT_TEST(AuditOnCutsAndRunsSweep) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryAccessorAudit(true);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 8002;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 CurrentGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, 3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
+        CommitFirstGcRound(bm, CurrentGen, shared);
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT(nominated);
+        // Audit path: sweep must start, entry enters Verifying.
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Verifying);
+
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher));
+    }
+
+    // A nonzero counter blocks a cut on both paths: TryNominate (counter) and DecideAndCut (audit).
+    Y_UNIT_TEST(NonzeroCounterBlocksCutOnBothPaths) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 8003;
+        static constexpr ui32 CurrentGen = 5;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui64 PortionId = 99;
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, 3, { { 0, 100 }, { CurrentGen, 200 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ DataChannel, 0 };
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[PortionId].push_back(MakeUnifiedBlob(MakeBlob(TabletId, DataChannel, 1)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1u);
+
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+        // Counter path: TryNominate skips the entry; batch is empty so it returns false.
+        UNIT_ASSERT(!cutter.TryNominate(ctx));
+        UNIT_ASSERT(guard->GetCut().empty());
+
+        // Audit path: even if forced via StartSweepForTest, counter blocks the cut in DecideAndCut.
+        cutter.StartSweepForTest({ key });
+        cutter.SetPortionSnapshot({});
+        cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::None);
+        UNIT_ASSERT(guard->GetCut().empty());
     }
 
 }   // TCutHistoryCutterCounters

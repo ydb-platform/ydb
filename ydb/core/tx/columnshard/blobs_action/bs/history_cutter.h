@@ -115,6 +115,8 @@ public:
 
     // True while the build only measures: the proof runs to the end but stops short of the barrier.
     static bool IsMeasureOnly();
+    // True when the accessor sweep audit is enabled; by default only counters gate a cut.
+    static bool IsAccessorAuditEnabled();
 
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
@@ -221,6 +223,9 @@ private:
     bool SeenGroupsCheckPasses(const TEntryKey& key) const;
 
     bool GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const;
+
+    // Final per-entry gates and the cut itself for a proven candidate list.
+    void DecideAndCut(const TVector<TEntryKey>& candidates, const TActorContext& ctx);
 
     void IncrementCounter(const TEntryKey& key);
 

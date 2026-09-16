@@ -55,17 +55,8 @@ public:
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {
             auto tabletId = tablet->GetFullTabletId();
             if (node.MatchesFilter(tablet->NodeFilter)) {
-<<<<<<< HEAD
                 BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId);
-                tabletsToStop.erase(tabletId);
-=======
-                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute confirmed tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"nodeId", Local.NodeId()},
-                    {"state", state},
-                    {"tabletId", tabletId});
                 tabletsToRestart.erase(tabletId);
->>>>>>> d9c48c2a8cf ([Hive] Fix locked tablet state and metrics accounting (#53187))
             } else {
                 BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
             }
@@ -108,16 +99,8 @@ public:
                 stopTabletIfNeeded(tablet, ti.GetBootMode());
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-<<<<<<< HEAD
                 BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown starting tablet " << tabletId);
-                tabletsToStop.erase(tabletId);
-=======
-                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown starting tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"nodeId", Local.NodeId()},
-                    {"tabletId", tabletId});
                 tabletsToRestart.erase(tabletId);
->>>>>>> d9c48c2a8cf ([Hive] Fix locked tablet state and metrics accounting (#53187))
             }
         }
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetOnlineTablets()) {
@@ -152,16 +135,8 @@ public:
                 stopTabletIfNeeded(tablet, ti.GetBootMode());
             } else {
                 SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId));
-<<<<<<< HEAD
                 BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") rejected unknown running tablet " << tabletId);
-                tabletsToStop.erase(tabletId);
-=======
-                YDB_LOG_TRACE("THive::TTxSyncTablets::Execute rejected unknown running tablet",
-                    {"logPrefix", GetLogPrefix()},
-                    {"nodeId", Local.NodeId()},
-                    {"tabletId", tabletId});
                 tabletsToRestart.erase(tabletId);
->>>>>>> d9c48c2a8cf ([Hive] Fix locked tablet state and metrics accounting (#53187))
             }
         }
         for (std::pair<TTabletId, TFollowerId> tabletId : tabletsToRestart) {

@@ -146,7 +146,7 @@ TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
         << "DECLARE $type AS Utf8; "
-        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
+           << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error, manifest FROM `"
         << EscapeTablePath(tablePath)
         << "` WHERE name = $name AND type = $type;";
 }
@@ -183,6 +183,7 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
         TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
     }
     ReadUtf8Column(resultSet, "compile_error", row.CompileError);
+    ReadUtf8Column(resultSet, "manifest", row.Manifest);
     return true;
 }
 

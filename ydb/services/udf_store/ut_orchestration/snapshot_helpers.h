@@ -18,7 +18,7 @@ struct TModuleDesc {
 
 inline TString MakeManifest(const TString& moduleName, const TVector<TString>& requiredLibraries = {}) {
     TStringBuilder sb;
-    sb << "{\"module_name\":\"" << moduleName << "\"";
+    sb << "{\"module_type\":\"module\",\"module_kind\":\"wasm\",\"module_name\":\"" << moduleName << "\"";
     if (!requiredLibraries.empty()) {
         sb << ",\"required_libraries\":[";
         for (size_t i = 0; i < requiredLibraries.size(); ++i) {

@@ -18,6 +18,7 @@ struct TModuleSourceRow {
     ui64 Size = 0;
     ui64 ChunkCount = 0;
     TString Body;
+    TString Manifest;
     ECompileStatus CompileStatus = ECompileStatus::Pending;
     TString CompileError;
 };

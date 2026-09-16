@@ -24,7 +24,7 @@ SELECT count(*) FROM lineitem
 | `Statistics` | Суммарные метрики по [стадии](../../concepts/glossary.md#processing-stage) | [Метрики по стадиям](#statistics), [Визуализация метрик запроса](metrics.md) |
 | Временная шкала | Графики метрик во времени | [Временные графики](#timeline), [Визуализация метрик запроса](metrics.md) |
 
-## Структура плана {#structure}
+## `Query - ...` -- структура плана {#structure}
 
 Самая левая колонка — [структура стадий плана](structure.md). Каждая строка таблицы соответствует одной [стадии](../../concepts/glossary.md#processing-stage); [операторы](../../concepts/glossary.md#operator) внутри стадии — шаги обработки данных (подробнее — в [Структуре фактического плана запроса](structure.md)).
 

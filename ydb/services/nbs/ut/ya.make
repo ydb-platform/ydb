@@ -13,7 +13,4 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-# service.proto has no message symbols to pull its descriptor into the test.
-WHOLE_ARCHIVE(ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc)
-
 END()

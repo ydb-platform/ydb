@@ -552,6 +552,7 @@ struct TTableSettings {
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
     TMaybe<ui64> ExternalDataChannelsCount;
+    TMaybe<Ydb::Table::MetricsSettings::MetricsLevel> MetricsLevel;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -1761,6 +1762,7 @@ bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type&
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);
+bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error);
 
 } // namespace NYql
 

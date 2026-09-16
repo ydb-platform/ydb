@@ -706,7 +706,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     if (HasIndex()) {
         MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
     }
-    // Vacuum runs in parallel with rewriting; the response waits on ClassifyMoveDataGate.
+    // Vacuum runs in parallel with rewriting; the response waits on CheckMoveDataGate.
     Executor()->StartMoveDataVacuumFromOwner();
 }
 
@@ -745,32 +745,28 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     const bool hasCleanupPortions =
         !MoveDataState.CleanupWatermark || (runningCleanupOldest && *runningCleanupOldest <= *MoveDataState.CleanupWatermark) ||
         (HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().HasCleanupPortionsAtOrBefore(*MoveDataState.CleanupWatermark));
-    // HasBlobsForGroups scans the GC queues, so short-circuit it behind the cheap gates.
-    const bool cheapGatesPass = MoveDataState.VacuumCompleted && queues.GetTotal() == 0 && !hasCleanupPortions;
-    switch (NOlap::NActualizer::ClassifyMoveDataGate(MoveDataState.VacuumCompleted, queues, hasCleanupPortions,
-        cheapGatesPass && GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
-        case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
-            Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
-            return;
-        case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
-            Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
-            if (queues.Uncommitted) {
-                LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
-                           << queues.Uncommitted << " uncommitted writes hold blobs in the target groups, waiting for commit or abort at tablet "
-                           << TabletID());
-            }
-            return;
-        case NOlap::NActualizer::EMoveDataGate::BlockedByCleanup:
-            Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
-            LOG_S_INFO(
-                "TColumnShard::CheckMoveDataGate: portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
-            return;
-        case NOlap::NActualizer::EMoveDataGate::BlockedByGC:
-            Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-            LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
-            return;
-        case NOlap::NActualizer::EMoveDataGate::Ready:
-            break;
+    if (!MoveDataState.VacuumCompleted) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
+        return;
+    }
+    if (queues.GetTotal() != 0) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
+        if (queues.Uncommitted) {
+            LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
+                       << queues.Uncommitted << " uncommitted writes hold blobs in the target groups, waiting for commit or abort at tablet "
+                       << TabletID());
+        }
+        return;
+    }
+    if (hasCleanupPortions) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
+        LOG_S_INFO("TColumnShard::CheckMoveDataGate: portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
+        return;
+    }
+    if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
+        LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
+        return;
     }
     LOG_S_INFO("TColumnShard::CheckMoveDataGate: gate passed at tablet " << TabletID());
 

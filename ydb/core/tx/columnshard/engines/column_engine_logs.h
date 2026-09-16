@@ -268,10 +268,8 @@ public:
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
 
-    // O(1): checks whether any cleanup portion has planInstant <= instant.
     bool HasCleanupPortionsAtOrBefore(TInstant instant) const {
-        const auto earliest = CleanupPortions.empty() ? std::nullopt : std::make_optional(CleanupPortions.begin()->first);
-        return NActualizer::CleanupBlocksGate(earliest, instant);
+        return !CleanupPortions.empty() && CleanupPortions.begin()->first <= instant;
     }
 
     // O(1): newest pending cleanup, used to seed the MoveData gate watermark.

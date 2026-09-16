@@ -40,11 +40,6 @@ enum class EMoveDataGate {
     BlockedByGC,
 };
 
-// Portions retired after the queues drained hold no target data, so only earlier ones block the gate.
-inline bool CleanupBlocksGate(const std::optional<TInstant>& earliestCleanupInstant, const TInstant& watermark) {
-    return earliestCleanupInstant.has_value() && *earliestCleanupInstant <= watermark;
-}
-
 // FreezeCleanupWatermark raises the boundary to Max(maxPending, runningOldest) so that cleanup already in flight (portions already moved out of CleanupPortions) still blocks the gate.
 inline TInstant FreezeCleanupWatermark(const TInstant maxPending, const std::optional<TInstant>& runningOldest) {
     return runningOldest ? Max(maxPending, *runningOldest) : maxPending;

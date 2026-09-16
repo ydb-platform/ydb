@@ -8,6 +8,7 @@
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
+#include <ydb/library/backup/proto/proto.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -75,7 +76,7 @@ bool BuildTopicScheme(
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
-    return google::protobuf::TextFormat::PrintToString(request, &scheme);
+    return NYdb::NBackup::PrintProto(request, scheme);
 }
 
 bool BuildReplicationScheme(
@@ -195,8 +196,7 @@ bool BuildSysViewScheme(
 
     describeSysViewResult.clear_self();
 
-    google::protobuf::TextFormat::PrintToString(describeSysViewResult, &scheme);
-    return true;
+    return NYdb::NBackup::PrintProto(describeSysViewResult, scheme);
 }
 
 bool BuildScheme(

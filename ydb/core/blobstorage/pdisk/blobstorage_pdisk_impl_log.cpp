@@ -964,7 +964,7 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
 }
 
 bool TPDisk::PreallocateLogChunks(ui64 headedRecordSize, TOwner owner, ui64 lsn, EOwnerGroupType ownerGroupType,
-        bool isAllowedForSpaceRed) {
+        bool isAllowedForSpaceRed, ui64 firstLsnToKeep) {
     ui32 additionalChunksNeeded = 0;
     ui32 additionalChunksContainingPayload = 0;
     if (CommonLogger->SectorBytesFree < headedRecordSize + sizeof(TFirstLogPageHeader)) {
@@ -983,14 +983,23 @@ bool TPDisk::PreallocateLogChunks(ui64 headedRecordSize, TOwner owner, ui64 lsn,
         }
     }
 
-    return AllocateLogChunks(
-        additionalChunksNeeded, additionalChunksContainingPayload, owner, lsn, ownerGroupType, isAllowedForSpaceRed);
+    return AllocateLogChunks(additionalChunksNeeded, additionalChunksContainingPayload, owner, lsn, ownerGroupType,
+        isAllowedForSpaceRed, firstLsnToKeep);
 }
 
 bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, TOwner owner, ui64 lsn,
-        EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed) {
+        EOwnerGroupType ownerGroupType, bool isAllowedForSpaceRed, ui64 firstLsnToKeep) {
     TGuard<TMutex> guard(StateMutex);
     TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
+
+    // A record that moves the owner's retention point forward lets the log be cut, so it
+    // earns the same RED exception as one that deletes chunks. A record that merely
+    // carries the retention point it already has -- or an older one -- frees nothing and
+    // must not spend the last of the log pool. This mirrors the comparison that updates
+    // CurrentFirstLsnToKeep once the record is written.
+    if (!isAllowedForSpaceRed && firstLsnToKeep) {
+        isAllowedForSpaceRed = firstLsnToKeep > OwnerData[owner].CurrentFirstLsnToKeep;
+    }
 
     // Check space and free it if needed
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
@@ -1079,8 +1088,14 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
 
     ui64 headedRecordSize = payloadSize + sizeof(TFirstLogPageHeader);
     *Mon.BandwidthPLogRecordHeader += sizeof(TFirstLogPageHeader);
-    bool isAllowedForSpaceRed = isCommitRecord && (evLog.CommitRecord.DeleteChunks.size() > 0);
-    if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed)) {
+    // Deleting chunks shrinks the log outright; advancing the retention point lets it be
+    // cut. Refusing either in RED would leave no way to shrink a log that has already
+    // filled its pool. Whether the retention point really advances is decided against
+    // this owner's current one, inside the allocation itself.
+    bool isAllowedForSpaceRed = isCommitRecord && evLog.CommitRecord.DeleteChunks.size() > 0;
+    const ui64 firstLsnToKeep = isCommitRecord ? evLog.CommitRecord.FirstLsnToKeep : 0;
+    if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed,
+            firstLsnToKeep)) {
         // TODO: make sure that commit records that delete chunks are applied atomically even if this error occurs.
         TStringStream str;
         str << PCtx->PDiskLogPrefix << "Can't preallocate log chunks!"
@@ -1091,6 +1106,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
             NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str(),
             Keeper.GetLogChunkCount()));
         Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
+        evLog.Result->Headroom = Keeper.GetSpaceHeadroom(evLog.Owner);
         evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
     }
@@ -1159,6 +1175,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
         GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), "", Keeper.GetLogChunkCount()));
     Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
+    evLog.Result->Headroom = Keeper.GetSpaceHeadroom(evLog.Owner);
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
 

@@ -132,6 +132,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql

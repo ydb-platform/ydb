@@ -11,12 +11,25 @@ namespace NYdb::NBS::NBlockStore {
 //////////////////////////////////////////////////////////////////////////////
 
 // Memory usage of one arena slot-size class.
-struct TArenaAllocatorStats
+struct TArenaAllocatorSlotStats
 {
     size_t SlotSize = 0;
+    size_t ArenaSize = 0;
     size_t ReservedSize = 0;
     size_t UsedSize = 0;
-    size_t Count = 0;   // Total allocations performed
+    size_t MaxUsedSize = 0;   // Maximum simultaneous usage of one arena
+    size_t Count = 0;         // Total allocations performed
+};
+
+using TArenaAllocatorStats = TVector<TArenaAllocatorSlotStats>;
+
+struct TArenaPoolStats
+{
+    size_t ReservedSize = 0;
+    size_t UsedSize = 0;
+    size_t AllocationCount = 0;
+
+    void Aggregate(const TArenaPoolStats& stats);
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -31,7 +44,8 @@ public:
 
     [[nodiscard]] virtual size_t AllocatedBlocks() const = 0;
     [[nodiscard]] virtual size_t AllocatedSize() const = 0;
-    [[nodiscard]] virtual TVector<TArenaAllocatorStats> GetStats() const = 0;
+    [[nodiscard]] virtual size_t UsedSize() const = 0;
+    [[nodiscard]] virtual TArenaAllocatorStats GetDetailedStat() const = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////

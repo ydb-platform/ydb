@@ -65,6 +65,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoinForCross;
     NCommon::TConfSetting<bool, Static> EnableNewRBOPhysicalStagePeephole;
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
+    NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
@@ -128,6 +129,7 @@ public:
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
+    NCommon::TConfSetting<bool, Static> EnableCsWriteAffinity;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
@@ -260,11 +262,13 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;
+    bool GetEnableBlockHashJoinEqualNulls() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool GetWindowFunctionsV2() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
+    bool GetEnableCsWriteAffinity() const;
 };
 
 } // namespace NYql

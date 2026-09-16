@@ -183,17 +183,15 @@ class SkillTests(Fixture):
         code, out = self.run_check(path, strict=True)
         self.assertEqual(code, 0, out)
 
-    def test_claude_symlink_and_claude_skills_are_errors(self):
+    def test_claude_symlink_and_claude_skills_are_left_alone(self):
         owner, _ = self.make_skill()
         os.symlink(".agents", os.path.join(owner, ".claude"))
         code, out = self.run_check(owner)
-        self.assertEqual(code, 1)
-        self.assertIn("is a symlink", out)
+        self.assertEqual(code, 0, out)
         os.remove(os.path.join(owner, ".claude"))
         write(os.path.join(owner, ".claude", "skills", "x", "SKILL.md"), "x\n")
         code, out = self.run_check(owner)
-        self.assertEqual(code, 1)
-        self.assertIn("skills live only in .agents/skills", out)
+        self.assertEqual(code, 0, out)
 
     def test_paths_are_checked_outside_code(self):
         body = "# D\n\nRead ydb/core/base/README.md, [x](missing.md \"t\") and ydb/nope/missing.md, not `ydb/nope/in-code.md` or ydb/nope/<name>.md.\n\n```bash\ncat ydb/nope/example.md\n```\n"

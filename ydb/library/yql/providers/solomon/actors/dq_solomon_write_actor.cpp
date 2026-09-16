@@ -370,6 +370,7 @@ private:
                 httpRequest->Set(authorizationHeader, "OAuth " + authToken);
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
@@ -472,6 +473,7 @@ private:
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 parser.AddField("sensorsProcessed", true);
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
@@ -608,11 +610,17 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
+            auto txId = args.TxId;
+            auto taskParamsIt = args.TaskParams.find("query_path");
+            if (taskParamsIt != args.TaskParams.end()) {
+                txId = taskParamsIt->second;
+            }
+
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 args.Callback,
@@ -627,7 +635,8 @@ TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& proje
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
     switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
+        case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+        case NSo::NProto::ESolomonClusterType::CT_MONIUM: {
             builder.AddPathComponent("api");
             builder.AddPathComponent("v2");
             builder.AddPathComponent("push");

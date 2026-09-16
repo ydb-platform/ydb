@@ -251,47 +251,6 @@ class CompileCacheView:
             "saved_ms": counters.get("Warmup/SavedCompileMs", 0),
         }
 
-    @staticmethod
-    def get_peer_scan_warnings(node):
-        """Read CompileCacheView/PeerScanWarnings from the node's monitoring port."""
-        try:
-            url = f"http://localhost:{node.mon_port}/counters/counters=kqp/json"
-            response = requests.get(url, timeout=5)
-            if response.status_code != 200:
-                return 0
-            sensors = response.json().get("sensors", [])
-            # On a dynamic node the counter can appear under several label sets (db-scoped etc.);
-            # sum every sensor with this name so we don't miss the incremented one.
-            matches = [s.get("value", 0) for s in sensors
-                       if s.get("labels", {}).get("sensor") == "CompileCacheView/PeerScanWarnings"]
-            if matches:
-                logger.info("[PeerWarnings] node %d: %d PeerScanWarnings sensor(s), values=%s",
-                            node.node_id, len(matches), matches)
-                return sum(matches)
-        except Exception as e:
-            logger.warning("Failed to read PeerScanWarnings from node %d: %s", node.node_id, e)
-        return 0
-
-    def trigger_compile_cache_scan(self, node, timeout_seconds=30):
-        """Run a SELECT against compile_cache_queries sysview pinned to `node`.
-
-        Discovery is disabled so the scan (and any retry) runs on `node` itself.
-        With a plain discovery-enabled driver SessionPool could balance the query
-        onto another node, and PeerScanWarnings would then move on the wrong node.
-        """
-        sql = f"SELECT NodeId, Query FROM `{self.database}/.sys/compile_cache_queries`"
-        settings = ydb.BaseRequestSettings().with_timeout(timeout_seconds)
-        with _node_pinned_driver(node, database=self.database) as driver:
-            pool = ydb.SessionPool(driver)
-            try:
-                def _do(session):
-                    return session.transaction(ydb.SerializableReadWrite()).execute(
-                        sql, commit_tx=True, settings=settings,
-                    )
-                pool.retry_operation_sync(_do)
-            finally:
-                pool.stop()
-
     @classmethod
     def wait_for_warmup_finished(cls, node, timeout=60):
         """Poll warmup counters until compilation stabilizes."""
@@ -853,69 +812,6 @@ class TestWarmupCounters:
             f"(one per fresh probe), got delta={misses_delta}. "
             f"after_hit={after_hit}, after_miss={after_miss}"
         )
-
-
-class TestCompileCacheViewPeerWarnings:
-    """Wiring sanity check for CompileCacheView/PeerScanWarnings."""
-
-    @classmethod
-    def setup_class(cls):
-        cls.config = _make_warmup_config(nodes=3)
-        cls.cluster, cls.nodes = _start_warmup_tenant(cls.config, slot_count=3)
-        cls.database = WARMUP_DATABASE
-        cls.cache = CompileCacheView(cls.nodes, cls.database)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, "cluster"):
-            cls.cluster.stop()
-
-    def test_peer_scan_warnings_increment_on_dead_peer(self):
-        all_node_ids = sorted(self.nodes)
-        live_node_id = all_node_ids[0]
-        dead_node_id = all_node_ids[-1]
-        live_node = self.nodes[live_node_id]
-        dead_node = self.nodes[dead_node_id]
-
-        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
-        time.sleep(2)
-
-        baseline = CompileCacheView.get_peer_scan_warnings(live_node)
-        logger.info("[PeerWarnings] baseline on node %d: %d", live_node_id, baseline)
-
-        logger.info("[PeerWarnings] stopping node %d to simulate dead peer", dead_node_id)
-        dead_node.stop()
-        # Give interconnect time to publish the disconnect; without this the
-        # first scan falls through to NodeRequestTimeout (10s).
-        time.sleep(3)
-
-        try:
-            # Each successful scan against a federated sysview that hits the dead
-            # peer should bump PeerScanWarnings exactly once. Run a fixed number
-            # of scans and require the counter to grow by at least that many.
-            scans_to_run = 3
-            deadline = time.time() + 60
-            scans_done = 0
-            while scans_done < scans_to_run and time.time() < deadline:
-                self.cache.trigger_compile_cache_scan(live_node, timeout_seconds=30)
-                scans_done += 1
-                current = CompileCacheView.get_peer_scan_warnings(live_node)
-                logger.info(
-                    "[PeerWarnings] after scan %d/%d: %d (baseline %d)",
-                    scans_done, scans_to_run, current, baseline,
-                )
-                time.sleep(1)
-
-            final = CompileCacheView.get_peer_scan_warnings(live_node)
-            delta = final - baseline
-            assert delta >= scans_done, (
-                "CompileCacheView/PeerScanWarnings must increment at least once "
-                f"per scan that hits the dead peer; ran {scans_done} scans, "
-                f"got delta={delta} (baseline={baseline}, final={final})"
-            )
-        finally:
-            dead_node.start()
-            time.sleep(3)
 
 
 class TestWarmupSkip:

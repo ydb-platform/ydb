@@ -93,7 +93,6 @@ ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
 }
 
 TVector<TRegionPtr> CreateRegions(
-    IArenaAllocatorPtr arenaAllocator,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -105,11 +104,11 @@ TVector<TRegionPtr> CreateRegions(
     const TStorageConfig& storageConfig)
 {
     blockSize = CheckedBlockSize(blockSize, storageConfig);
-    const size_t regionCount = CalcRegionCount(blockCount, blockSize);
+    const size_t regionCount =
+        GetRegionCount(blockCount, blockSize, storageConfig.GetVChunkSize());
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         regions[i] = std::make_shared<TRegion>(
-            arenaAllocator,
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
@@ -150,11 +149,11 @@ TFastPathService::TFastPathService(
     , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
-    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ArenaAllocator(
+          DirectBlockGroups.front()->GetArenaAllocatorPool()->GetAllocator())
     , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
-          ArenaAllocator,
           this,
           this,
           DiskDescription,
@@ -188,6 +187,7 @@ TFastPathService::TFastPathService(
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
     Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+    Y_ABORT_UNLESS(ArenaAllocator);
 
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
@@ -537,10 +537,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     return {
         .LsnCounter = SequenceGenerator.load(),
         .LastSafeBarrier = LastSafeBarrier.load(),
-        .TotalVChunks =
-            Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
-        .DbgCount = DirectBlockGroups.size(),
-        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
 
@@ -636,13 +633,11 @@ TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
     const auto notFound =
         MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
 
-    const size_t regionIndex =
-        GetRegionIndexByVChunk(*VolumeConfig, vchunkIndex);
+    const size_t regionIndex = GetRegionIndexByVChunk(vchunkIndex);
     if (regionIndex >= Regions.size()) {
         return notFound;
     }
-    const size_t vChunkIndexInRegion =
-        GetVChunkIndexInRegion(*VolumeConfig, vchunkIndex);
+    const size_t vChunkIndexInRegion = GetVChunkIndexInRegion(vchunkIndex);
     auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
     if (!vchunk) {
         return notFound;
@@ -880,13 +875,6 @@ void TFastPathService::OnVChunkStats(const TVChunkStatsGatherResult& result)
 {
     VChunkCounters.Publish(result.Total);
     ScheduleVChunkCountersUpdate();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-size_t CalcRegionCount(ui64 blockCount, ui32 blockSize)
-{
-    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

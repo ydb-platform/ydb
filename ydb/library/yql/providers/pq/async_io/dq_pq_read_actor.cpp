@@ -25,7 +25,6 @@
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -42,7 +41,6 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-#include <limits>
 #include <queue>
 #include <variant>
 
@@ -878,28 +876,13 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
-        auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
-            /* minDelay           */ TDuration::MilliSeconds(500),
-            /* minLongRetryDelay  */ TDuration::Seconds(5),
-            /* maxDelay           */ TDuration::Seconds(20),
-            /* maxRetries         */ 100,
-            /* maxTime            */ TDuration::Seconds(60),
-            /* scaleFactor        */ 2.0,
-            /* customRetryClass   */ [](NYdb::EStatus status) {
-                if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
-                    return ERetryErrorClass::LongRetry;
-                }
-                return NYdb::NTopic::GetRetryErrorClass(status);
-            });
-
         auto settings = NYdb::NTopic::TReadSessionSettings();
         settings
             .TraceId(LogPrefix)
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
             .ReadFromTimestamp(StartingMessageTimestamp)
-            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets())     // In table mode the query will not fail query by TEndPartitionSessionEvent.
-            .RetryPolicy(retryPolicy);
+            .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets());    // In table mode the query will not fail query by TEndPartitionSessionEvent.
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -1431,8 +1414,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
         ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
 
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
+
         TDuration checkPartitionCountPeriod;
-        auto taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
+        taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
         if (taskParamsIt != args.TaskParams.end()) {
             if (taskParamsIt->second == "true") {
                 checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
@@ -1451,7 +1440,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 std::move(settings),
                 args.InputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 std::move(readTaskParamsMsg),
@@ -1480,7 +1469,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,
-            args.TxId,
+            txId,
             args.TaskId,
             args.SecureParams,
             std::move(readTaskParamsMsg),

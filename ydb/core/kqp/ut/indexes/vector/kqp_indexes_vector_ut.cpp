@@ -2154,6 +2154,68 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(HalfVectorIndex, BFloat16) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString type = BFloat16 ? "BFloat16" : "Float16";
+        const TString sqlType = BFloat16 ? "bfloat16" : "float16";
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        TStringBuilder insert;
+        insert << "UPSERT INTO `/Root/TestTable` (pk, emb) VALUES ";
+        for (ui32 i = 0; i < 8; ++i) {
+            if (i) {
+                insert << ", ";
+            }
+            insert << "(" << i << ", Untag(Knn::ToBinaryString" << type
+                << "([" << (static_cast<float>(i) / 4 - 0.9375f) << "f, 0.25f]), \"" << type << "Vector\"))";
+        }
+        auto inserted = ExecuteDataQuery(session, insert);
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        for (bool autoDetect : {false, true}) {
+            TStringBuilder ddl;
+            ddl << "ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (emb) "
+                << "WITH (distance=euclidean, levels=2, clusters=2";
+            if (!autoDetect) {
+                ddl << ", vector_type=" << sqlType << ", vector_dimension=2";
+            }
+            ddl << ");";
+            status = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto indexes = described.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes.front().GetIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorType, BFloat16
+                ? TVectorIndexSettings::EVectorType::BFloat16 : TVectorIndexSettings::EVectorType::Float16);
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorDimension, 2);
+
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto shown = qSession.ExecuteQuery("SHOW CREATE TABLE `/Root/TestTable`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+            TResultSetParser parser(shown.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_STRING_CONTAINS(parser.ColumnParser(0).GetOptionalUtf8().value_or(""),
+                TStringBuilder() << "vector_type = '" << sqlType << "'");
+
+            const TString target = TStringBuilder() << "$target = Knn::ToBinaryString" << type << "([0.3125f, 0.25f]);\n";
+            const TString order = " ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 3;";
+            const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
+            const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
+                << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+    }
+
     const TTtlNotAllowedIndexTestConfig VectorTtlNotAllowedConfig{
         .IndexInCreateTable = R"(INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (Text)
             WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2),)",

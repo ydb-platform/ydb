@@ -80,6 +80,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
+    {"RespectWarnPolicyForUnusedSqlHints", &TContext::RespectWarnPolicyForUnusedSqlHints},
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},

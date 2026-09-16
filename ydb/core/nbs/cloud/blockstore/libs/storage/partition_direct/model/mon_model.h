@@ -8,6 +8,8 @@
 #include "host_state.h"
 #include "time_predictor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
+
 #include <util/generic/map.h>
 
 #include <compare>
@@ -34,9 +36,7 @@ struct THostSnapshot
     EHostHealth Health = EHostHealth::Offline;
     TInflightByOperation InflightByOperation{};
     THostErrorsInfo Errors;
-    TCountAndSize PBuffersUsage;
-    ui64 FreshTotalBytes = 0;
-    ui64 RottenTotalBytes = 0;
+    TDirtyMapHostStats DirtyMapStats;
     TLatencyByOperation LatencyByOperation;
 };
 

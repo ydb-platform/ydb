@@ -433,27 +433,26 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(const TExprNode::TP
     // clang-format on
 }
 
-TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages) {
+// Collects param bindings walking from root stage.
+TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TExprNode::TPtr& rootStage) {
     auto& ctx = RBOCtx.ExprCtx;
     auto pos = Root.Pos;
 
     TVector<TKqpParamBinding> paramBindings;
     THashSet<TString> paramsCollected;
-    for (const auto& physicalStage : physicalStages) {
-        const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
-        for (const auto& param : params) {
-            const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
-            if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
-                // clang-format off
-                const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Value(paramName)
-                    .Build()
-                .Done();
-                // clang-format on
-                paramBindings.push_back(paramBinding);
-                paramsCollected.insert(paramName);
-            }
+    const auto params = FindNodes(rootStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
+    for (const auto& param : params) {
+        const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
+        if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
+            // clang-format off
+            const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(paramName)
+                .Build()
+            .Done();
+            // clang-format on
+            paramBindings.push_back(paramBinding);
+            paramsCollected.insert(paramName);
         }
     }
 
@@ -465,7 +464,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     auto& ctx = RBOCtx.ExprCtx;
 
     TVector<TExprBase> phyTxs;
-    auto paramBindingsMainTx = CollectParamBindings(physicalStages);
+    auto paramBindingsMainTx = CollectParamBindings(physicalStages.back());
 
     TVector<TExprBase> phyStagesForMaterialize;
     TVector<TExprBase> resultsForMaterialize;
@@ -494,7 +493,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         paramBindingsMainTx.emplace_back(paramBinding);
 
         auto materializeStage = materializeResult.Output().Stage();
-        const auto paramBindingsMaterialize = CollectParamBindings({materializeStage.Ptr()});
+        const auto paramBindingsMaterialize = CollectParamBindings(materializeStage.Ptr());
         // Bindings params in materialize.
         paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
         // Stages for phy tx.
@@ -756,7 +755,7 @@ void TPhysicalQueryBuilder::KeepTypeAnnotationForStageAndFirstLevelChilds(TDqPhy
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages, bool enableWideChannels) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back();
-    if (!root->GetTypeAnn()) {
+    if (!root->GetTypeAnn() && enableWideChannels) {
         TypeAnnotate(root);
     }
     auto& ctx = RBOCtx.ExprCtx;
@@ -774,10 +773,14 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PreparePhysicalStages(TVector<TE
         .Done().Ptr();
         // clang-format on
 
-        TypeAnnotate(newStage);
-        rootStage = enableWideChannels
-            ? NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr()
-            : newStage;
+        // We don't need to run type annotation when wide channels is off.
+        if (enableWideChannels) {
+            TypeAnnotate(newStage);
+            rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        } else {
+            rootStage = newStage;
+        }
+
         replaces[dqPhyStage.Raw()] = rootStage;
     }
 
@@ -822,6 +825,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
                 // If the body of input stage is `FromBlocks` propagate it through connection.
                 if (body->IsCallable("WideFromBlocks")) {
                     body = body->ChildPtr(0);
+                    const TTypeAnnotationNode* blockType = body->GetTypeAnn();
+                    Y_ENSURE(blockType);
 
                     // New arg for the current stage has a `Blocks` type, so we need to add `FromBlocks` here.
                     // clang-format off
@@ -844,11 +849,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
                     .Done().Ptr();
                     // clang-format on
 
-                    // Update the type to `Blocks`, which should be easy since it only works on the lambda and not the entire graph.
-                    newProgram = PeepHoleOptimize(newProgram, GetArgsType(program.Ptr()));
-                    Y_ENSURE(newProgram->GetTypeAnn());
-
-                    newStageArg->SetTypeAnn(newProgram->GetTypeAnn());
+                    // Update the type to `Blocks`.
+                    newStageArg->SetTypeAnn(blockType);
                     // Update map, since stage body was updated.
                     programsMap[inputStage.Program().Raw()] = newProgram;
                 }
@@ -963,7 +965,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     .Done();
     // clang-format on
 
-    // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
     auto status =
         ::NKikimr::NKqp::NOpt::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
@@ -985,8 +986,8 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
 
     if (status != IGraphTransformer::TStatus::Ok) {
         RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+        Y_ENSURE(false);
     }
-    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
     input = output;
 }

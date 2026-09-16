@@ -89,7 +89,11 @@ public:
 
     ~TInputTransformStreamLookupCommonBase() override {
         if (TaskCountersGroup && TaskCountersRoot)  {
-            // XXX Group may be removed muliple times; should be harmless (in each join task of query)
+            // XXX Group will be removed by each task of query (repeatedly);
+            // Should be mostly harmless (as all of them removed approximately at once,
+            // even though not completely synchronously);
+            // Though, there are some racing potential on query restart;
+            // This is common problem with solomon sink, pq source, pq sink and this actor
             TaskCountersRoot->RemoveSubgroup(TaskCountersGroup->first, TaskCountersGroup->second);
         }
     }
@@ -216,13 +220,20 @@ private: //IDqComputeActorAsyncInput
         if (!TaskCounters) {
             return;
         }
-        switch(args.StatsLevel) {
+
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
+
+        switch (args.StatsLevel) {
             case TCollectStatsLevel::None:
             case TCollectStatsLevel::Basic:
                 TaskCounters = nullptr;
                 return;
             case TCollectStatsLevel::Profile:
-                TaskCountersGroup = std::pair { "tx_id", ToString(args.TxId) };
+                TaskCountersGroup = std::pair { "tx_id", ToString(txId) };
                 // XXX this nests counters twice by $TxId, ("operation_id", $TxId)->("tx_id", $TxId) in (obsolete) yqv1
                 TaskCounters = TaskCounters
                     ->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)
@@ -279,7 +290,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
-    TCollectStatsLevel StatsLevel;
+    const TCollectStatsLevel StatsLevel;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     ::NMonitoring::TDynamicCounterPtr TaskCountersRoot;
     std::optional<std::pair<TString, TString>> TaskCountersGroup;

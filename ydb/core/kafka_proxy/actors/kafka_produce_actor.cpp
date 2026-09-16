@@ -647,7 +647,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             w->SetSeqNo(GetRecordSeqNo(batch, batchIndex, record));
 
             w->SetData(str);
-            ui64 createTime = batch.BaseTimestamp + record.TimestampDelta;
+            ui64 createTime = GetRecordTimestamp(batch.BaseTimestamp, record.TimestampDelta);
             w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
             w->SetDisableDeduplication(true);
             w->SetUncompressedSize(record.Value ? record.Value->size() : 0);

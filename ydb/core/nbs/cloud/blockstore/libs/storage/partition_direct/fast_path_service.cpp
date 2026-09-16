@@ -453,6 +453,16 @@ TPersistResultFuture TFastPathService::UpdateDirtyMapState(
     return result;
 }
 
+TPersistResultFuture TFastPathService::SetVChunkTouched(ui32 vChunkIndex)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvSetVChunkTouched>(
+            vChunkIndex);
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
 void TFastPathService::QueryAddHost(
     size_t directBlockGroupId,
     ui32 dbgConnectionsConfigGeneration)

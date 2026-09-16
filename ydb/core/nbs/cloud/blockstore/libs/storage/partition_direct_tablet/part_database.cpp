@@ -216,6 +216,43 @@ void TPartitionDatabase::StoreDirtyMapState(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllTouchedVChunks(TTouchedVChunks& out)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    auto it = Table<TTable>()
+                  .Range()
+                  .Select<TTable::VChunkStartIndex, TTable::Mask>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::Mask>()) {
+            out.Load({
+                .VChunkStartIndex = it.GetValue<TTable::VChunkStartIndex>(),
+                .Mask = it.GetValue<TTable::Mask>(),
+            });
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreTouchedVChunkMask(
+    const TTouchedVChunks::TChunk& chunk)
+{
+    using TTable = TPartitionSchema::TouchedVChunks;
+
+    Table<TTable>()
+        .Key(chunk.VChunkStartIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::Mask>(chunk.Mask));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool TPartitionDatabase::ReadAddHostInProgress(
     TMaybe<TAddHostInProgress>& addHostInProgress)
 {

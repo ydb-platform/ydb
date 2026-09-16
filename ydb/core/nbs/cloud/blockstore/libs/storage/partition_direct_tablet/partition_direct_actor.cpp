@@ -161,7 +161,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
          executingDirtyMapPromises =
              std::move(ExecutingUpdateDirtyMapStatePromises),
          pendingDirtyMapRequests =
-             std::move(PendingUpdateDirtyMapStateRequests)]() mutable
+             std::move(PendingUpdateDirtyMapStateRequests),
+         touchedVChunks = std::move(TouchedVChunks)]() mutable
     {
         for (auto& promise: executingConfigPromises) {
             promise.TrySetValue(EPersistResult::Cancelled);
@@ -176,6 +177,8 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         for (auto& req: pendingDirtyMapRequests) {
             req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
         }
+
+        touchedVChunks.OnSaveInterrupted();
     };
 
     if (FastPathService) {
@@ -884,6 +887,18 @@ void TPartitionActor::HandleUpdateDirtyMapState(
     }
 }
 
+void TPartitionActor::HandleSetVChunkTouched(
+    const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    if (TouchedVChunks.Add(
+            ev->Get()->VChunkIndex,
+            std::move(ev->Get()->UpdateCompleted)))
+    {
+        ExecuteTx(ctx, CreateTx<TSetVChunkTouched>(TouchedVChunks.BeginSave()));
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void TPartitionActor::SendToBsc(
@@ -966,6 +981,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
             HandleUpdateDirtyMapState);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvSetVChunkTouched,
+            HandleSetVChunkTouched);
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);

@@ -1,8 +1,20 @@
 #pragma once
 
+#include <library/cpp/threading/future/core/future.h>
+
 #include <memory>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum class EPersistResult
+{
+    Success,
+    Cancelled,
+};
+using TPersistResultFuture = NThreading::TFuture<EPersistResult>;
+using TPersistResultPromise = NThreading::TPromise<EPersistResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

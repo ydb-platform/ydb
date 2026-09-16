@@ -122,6 +122,8 @@ public:
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override;
+
     void QueryAddHost(
         size_t directBlockGroupId,
         ui32 dbgConnectionsConfigGeneration) override;

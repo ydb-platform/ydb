@@ -121,6 +121,7 @@ bool TPartitionActor::PrepareLoadState(
         db.ReadDirectBlockGroupsConnections(args.DirectBlockGroupsConnections),
         db.ReadAllVChunkConfigs(args.VChunkConfigs),
         db.ReadAllDirtyMapStates(args.DirtyMapStates),
+        db.ReadAllTouchedVChunks(args.TouchedVChunks),
         db.ReadAddHostInProgress(args.AddHostInProgress),
         db.ReadRemoveHostInProgress(args.RemoveHostInProgress),
     };
@@ -193,6 +194,7 @@ void TPartitionActor::CompleteLoadState(
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;
+            TouchedVChunks = std::move(args.TouchedVChunks);
             Start(
                 ctx,
                 std::move(*args.DirectBlockGroupsConnections),

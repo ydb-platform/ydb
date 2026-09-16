@@ -34,7 +34,7 @@ SELECT count(*) FROM lineitem
 - `Sink` — модифицирующие запросы (`INSERT`, `UPDATE`, `DELETE`);
 - `Precompute` — отдельно выполняемые фрагменты плана, см. [Составные структуры](structure.md#complex).
 
-## Операторная статистика {#operators}
+## `Rows` -- операторная статистика {#operators}
 
 [Стадия](../../concepts/glossary.md#processing-stage) состоит из одного или нескольких [операторов](../../concepts/glossary.md#operator). Если хотя бы один [физический оператор](../../concepts/glossary.md#physical-operator) отдаёт статистику, колонка `Operators` заполнена; у стадий без отчётности по [операторам](../../concepts/glossary.md#operator) ячейка пуста. Содержимое колонки дополняет картину по [структуре стадии](structure.md) и агрегированным метрикам в `Stages`.
 

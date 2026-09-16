@@ -344,8 +344,8 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
                 break;
             case ENodeReaderFormat::Auto:
                 if (dynamic || !strict) {
-                    YT_LOG_DEBUG("Cannot use skiff format for table '%v' as it is dynamic or has non-strict schema",
-                        tablePath);
+                    YT_TLOG_DEBUG("Cannot use skiff format; table is dynamic or has a non-strict schema")
+                        .With("Path", tablePath);
                     return nullptr;
                 }
                 break;

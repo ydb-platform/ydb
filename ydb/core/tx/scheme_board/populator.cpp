@@ -738,7 +738,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size(), 0));
+        it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
 
         Update(pathId, isDeletion, ev->Cookie);
 
@@ -747,31 +747,33 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    void ProcessReplicaAck(TVector<ui32>& ringGroupAcks, TActorId ackedReplica, TVector<bool>& ringGroupQuorums) const {
-        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
-            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+    bool CheckQuorum(const THashSet<TActorId>& ackedReplicas) const {
+        for (const auto& ringGroup : GroupInfo->RingGroups) {
+            if (ShouldIgnoreInQuorum(ringGroup)) {
+                continue;
+            }
+            ui32 acks = 0;
             for (const auto& ring : ringGroup.Rings) {
                 for (const auto& replica : ring.Replicas) {
-                    if (replica == ackedReplica) {
-                        ++ringGroupAcks[ringGroupIndex];
-                        if (IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex])) {
-                            ringGroupQuorums[ringGroupIndex] = true;
-                        }
-                        break;
-                    }
+                    acks += ackedReplicas.contains(replica);
                 }
             }
+            if (!IsMajorityReached(ringGroup, acks)) {
+                return false;
+            }
         }
+        return true;
     }
 
-    bool CheckQuorum(TVector<ui32>& ringGroupAcks, TActorId ackedReplica) const {
-        TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
-        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
-            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-            ringGroupQuorums[ringGroupIndex] = ShouldIgnoreInQuorum(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
-        }
-        ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
-        return Count(ringGroupQuorums, false) == 0;
+    void AckUpdate(TActorId recipient, ui64 cookie, const TPathId& pathId, ui64 version) {
+        YDB_LOG_NOTICE("Ack update",
+            {"selfId", SelfId()},
+            {"to", recipient},
+            {"cookie", cookie},
+            {"pathId", pathId},
+            {"version", version});
+        auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, version);
+        Send(recipient, std::move(ack), 0, cookie);
     }
 
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
@@ -808,16 +810,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            if (CheckQuorum(pathIt->second, *ackedReplica)) {
-                YDB_LOG_NOTICE("Ack update",
-                    {"selfId", SelfId()},
-                    {"to", it->second.AckTo},
-                    {"cookie", ev->Cookie},
-                    {"pathId", pathId},
-                    {"version", pathIt->first.second});
-
-                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
-                Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
+            pathIt->second.insert(*ackedReplica);
+            if (CheckQuorum(pathIt->second)) {
+                AckUpdate(it->second.AckTo, ev->Cookie, pathId, pathIt->first.second);
 
                 auto eraseIt = pathIt;
                 ++pathIt;
@@ -849,31 +844,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
-        // Pending acknowledgements belong to replica groups, not their positions
-        // in the configuration: reconfiguration may reorder or remove groups.
-        TVector<size_t> previousGroups(info->RingGroups.size(), Max<size_t>());
-        if (GroupInfo) {
-            for (size_t next : xrange(info->RingGroups.size())) {
-                for (size_t previous : xrange(GroupInfo->RingGroups.size())) {
-                    if (info->RingGroups[next].Rings == GroupInfo->RingGroups[previous].Rings) {
-                        previousGroups[next] = previous;
-                        break;
-                    }
-                }
-            }
-        }
-        for (auto& [cookie, update] : UpdateAcks) {
-            for (auto& [pathVersion, acks] : update.PathAcks) {
-                TVector<ui32> remapped(info->RingGroups.size(), 0);
-                for (size_t next : xrange(previousGroups.size())) {
-                    if (previousGroups[next] != Max<size_t>()) {
-                        remapped[next] = acks[previousGroups[next]];
-                    }
-                }
-                acks.swap(remapped);
-            }
-        }
-
         THashSet<TActorId> neededReplicas;
 
         GroupInfo = info;
@@ -901,6 +871,33 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
                 ReplicaToReplicaPopulatorBackMap.erase(it->second);
                 ReplicaToReplicaPopulator.erase(it++);
+            }
+        }
+
+        // Acknowledgements are tied to replica identities, not configuration positions.
+        // Dropping a group or making it write-only may complete a pending publication.
+        for (auto updateIt = UpdateAcks.begin(); updateIt != UpdateAcks.end(); ) {
+            auto& update = updateIt->second;
+            for (auto pathIt = update.PathAcks.begin(); pathIt != update.PathAcks.end(); ) {
+                auto& ackedReplicas = pathIt->second;
+                for (auto replicaIt = ackedReplicas.begin(); replicaIt != ackedReplicas.end(); ) {
+                    if (!neededReplicas.contains(*replicaIt)) {
+                        ackedReplicas.erase(replicaIt++);
+                    } else {
+                        ++replicaIt;
+                    }
+                }
+                if (CheckQuorum(ackedReplicas)) {
+                    AckUpdate(update.AckTo, updateIt->first, pathIt->first.first, pathIt->first.second);
+                    update.PathAcks.erase(pathIt++);
+                } else {
+                    ++pathIt;
+                }
+            }
+            if (update.PathAcks.empty()) {
+                UpdateAcks.erase(updateIt++);
+            } else {
+                ++updateIt;
             }
         }
 
@@ -942,7 +939,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 pathAck.MutablePathId()->SetLocalPathId(pathIdVersion.first.LocalPathId);
 
                 pathAck.SetVersion(pathIdVersion.second);
-                pathAck.SetAcksCount(Accumulate(acksCount.begin(), acksCount.end(), 0));
+                pathAck.SetAcksCount(acksCount.size());
             }
 
             if (record.UpdateAcksSize() >= limit) {
@@ -1081,7 +1078,7 @@ private:
 
     struct TUpdateAckInfo {
         TActorId AckTo;
-        TMap<std::pair<TPathId, ui64>, TVector<ui32>> PathAcks;
+        TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
     };
 
     THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie

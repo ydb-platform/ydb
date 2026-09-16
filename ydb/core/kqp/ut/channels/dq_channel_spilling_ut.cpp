@@ -239,7 +239,8 @@ struct TStorageFullTest : public TSpillTest {
     }
 };
 
-// The consumer lets go of the channel while most of it is still in the storage
+// The consumer lets go of the channel while most of it is still in the storage: the data there is never
+// read again, the control chunks - checkpoints and the finish - are
 struct TSpillEarlyFinishTest : public TSpillTest {
 
     void Run() override {
@@ -248,9 +249,10 @@ struct TSpillEarlyFinishTest : public TSpillTest {
 
         ProducerSettings.MessageCount = 200;
         ProducerSettings.MinMessageSize = ProducerSettings.MaxMessageSize = 10000;
+        ProducerSettings.CheckpointEvery = 10;
         ProducerSettings.ExpectEarlyFinished = true;
         ConsumerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10000, .MaxMessageSize = 10000,
-            .EarlyFinish = true, .PauseMessageIndex = 0, .PauseDelayMs = 1000 };
+            .EarlyFinish = true, .PauseMessageIndex = 0, .PauseDelayMs = 1000, .CheckpointEvery = 10 };
 
         StartChannel(1, true);
         WaitSpilled();
@@ -258,6 +260,12 @@ struct TSpillEarlyFinishTest : public TSpillTest {
             TStringBuilder() << "the producer stopped at SoftLimit, " << Details());
 
         WaitChannel([&]() { return Details(); });
+        if (!Local) {
+            // 200 data chunks went in, a handful were read back before the early finish; the rest stays
+            UNIT_ASSERT_C(Storage->GetPutCount() - Storage->GetGetCount() > 150, Details());
+            UNIT_ASSERT_VALUES_EQUAL_C(SpilledBytes(), 0, Details());
+            UNIT_ASSERT_VALUES_EQUAL_C(LoadingQueueSize(), 0, Details());
+        }
         Finish();
     }
 };

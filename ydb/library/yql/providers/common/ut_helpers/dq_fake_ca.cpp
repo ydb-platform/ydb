@@ -5,10 +5,10 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <util/system/env.h>
 
-#include <condition_variable>
 #include <thread>
 
 namespace NYql::NDq {
@@ -81,10 +81,20 @@ NKikimr::NMiniKQL::THolderFactory& TFakeActor::GetHolderFactory() {
     return HolderFactory;
 }
 
-TFakeCASetup::TFakeCASetup()
-    : Runtime(new NActors::TTestActorRuntimeBase(1, true))
+TFakeCASetup::TFakeCASetup(ui32 nodeCount)
+    : Runtime(new NActors::TTestActorRuntimeBase(nodeCount, true))
     , FakeActorId(0, "FakeActor")
 {
+    if (nodeCount > 1) {
+        auto nameserver = MakeIntrusive<TTableNameserverSetup>();
+        for (ui32 node = 0; node < nodeCount; ++node) {
+            nameserver->StaticNodeTable[Runtime->GetNodeId(node)] = std::make_pair(TString("127.0.0.1"), node + 1);
+        }
+        for (ui32 node = 0; node < nodeCount; ++node) {
+            Runtime->AddLocalService(GetNameserviceActorId(),
+                TActorSetupCmd(CreateNameserverTable(nameserver), TMailboxType::Simple, 0), node);
+        }
+    }
     Runtime->AddLocalService(
         FakeActorId,
         NActors::TActorSetupCmd(
@@ -96,10 +106,12 @@ TFakeCASetup::TFakeCASetup()
 
     Runtime->Initialize();
 
-    Runtime->GetLogSettings(0)->Append(
-        NKikimrServices::EServiceKikimr_MIN,
-        NKikimrServices::EServiceKikimr_MAX,
-        NKikimrServices::EServiceKikimr_Name);
+    for (ui32 node = 0; node < nodeCount; ++node) {
+        Runtime->GetLogSettings(node)->Append(
+            NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            NKikimrServices::EServiceKikimr_Name);
+    }
 
     Runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
 }

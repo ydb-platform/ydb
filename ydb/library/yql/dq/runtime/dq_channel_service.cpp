@@ -2309,15 +2309,24 @@ TString TNodeState::GetReconciliationLog() {
 void TNodeState::DoReconciliation(char logSymbol) {
     AddReconciliationLog(logSymbol);
     if (ReconciliationCount >= Limits.ReconciliationCount) {
-        // give up and request destroy
-        AddReconciliationLog('X');
-        LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
-        Terminating.store(true);
-        FailDescriptors(TStringBuilder() << "Node session terminated, the peer has not answered "
-            << ReconciliationCount << " discoveries in a row");
-        ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
-            new TEvPrivate::TEvFreeNodeSession(NodeId)));
-        return;
+        if (Queue.empty() && LastPeerActivity.load() > ReconSent.load()) {
+            // Nothing to deliver and the peer heard from since the last discovery: alive, only slow to
+            // answer. Giving up would fail its channels to this node for nothing, the probe goes on
+            // instead, its timeout doubling as before.
+            AddReconciliationLog('K');
+            LOG_W(LogPrefix << "RECONCILIATION x" << ReconciliationCount << " unanswered by a peer which is heard from, G="
+                << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
+        } else {
+            // give up and request destroy
+            AddReconciliationLog('X');
+            LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
+            Terminating.store(true);
+            FailDescriptors(TStringBuilder() << "Node session terminated, the peer has not answered "
+                << ReconciliationCount << " discoveries in a row");
+            ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
+                new TEvPrivate::TEvFreeNodeSession(NodeId)));
+            return;
+        }
     }
     ReconciliationCount++;
 

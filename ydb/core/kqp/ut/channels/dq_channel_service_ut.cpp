@@ -226,82 +226,64 @@ struct TInflightLeakTest : public TSessionTest {
     }
 };
 
-// The give-up path of the reconciliation calls FailDescriptors, which aborts the inbound channels too, so
-// a session with an idle and empty outbound half destroys healthy ones as soon as the peer is slow to
-// answer a handshake. Here that peer keeps streaming: its service is locked, its bound channels are not.
-//
-// Expected to fail until it is settled what such a session should do. Dropping the FailDescriptors call is
-// not enough: the give-up frees the session, whose destructor fails the same descriptors, and the next
-// message of the peer would reach a new session which knows nothing of the channel.
-struct TInboundChannelAbortTest : public TSessionTest {
+// The give-up of a reconciliation fails the inbound channels too, so a session with nothing to deliver
+// would destroy healthy ones as soon as the peer is slow to answer a handshake. A peer which is heard
+// from - here it keeps streaming, replayed by the debug session while its channel service is locked -
+// is alive, and the probe goes on instead of giving up.
+struct TSlowHandshakeTest : public TSessionTest {
 
     void Prepare() override {
-        // give up after 2 unanswered discoveries (~3s) instead of the default 3 (~7s)
+        // the budget runs out after 2 unanswered discoveries (~3s) instead of the default 3 (~7s)
         Limits.ReconciliationCount = 2;
+        ExpectReconciliation = true;
         TSessionTest::Prepare();
     }
 
     void Run() override {
         Prepare();
+        UseDebugSessions = true;
         Init();
-
-        ProducerSettings = TWorkerSettings{ .MessageCount = 2, .MinMessageSize = 10, .MaxMessageSize = 20 };
-        ConsumerSettings = ProducerSettings;
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0 && Debug1->Reconciliation.load() == 0; }, TDuration::Seconds(5)), "no session");
 
         auto peerNodeId = Runtime->GetNodeId(1);
 
-        StartChannel(1, true);
-        WaitChannel("warm up");
-
-        auto session = FindNodeState(Service0, peerNodeId);
-        UNIT_ASSERT_C(session, "node session not found");
-        WaitSettled(session);
-
-        // the peer streams to us and stops being consumed after the 1st messages, so the input descriptor
-        // is bound, alive and holding data when the outbound handshake starts to fail
-        ProducerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 100 };
-        ConsumerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 100,
-            .PauseMessageIndex = 2, .PauseDelayMs = 30000 };
-
-        StartInboundChannel(2, true);
-        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(session) > 0; }, TDuration::Seconds(10)),
+        // the peer streams to us, the data replayed by the test at its pace
+        Debug0->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .MessageCount = 100, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartInboundChannel(1, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->PendingDataCount.load() >= 50; }, TDuration::Seconds(10)),
+            "the data of the peer did not arrive");
+        Debug0->ProcessPending(5);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(Debug0) > 0; }, TDuration::Seconds(10)),
             "the consumer did not bind and pop");
-        auto pushBytes = GetInputPushBytes(session);
-        auto popBytes = GetInputPopBytes(session);
-        UNIT_ASSERT_C(pushBytes > popBytes, "nothing is left unconsumed in the input descriptor");
+        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(Debug0), 0, "the outbound half of the session is not empty");
 
         // the peer cannot answer a discovery while its channel service is locked, but the channels it has
         // already bound keep sending - it is alive and it never restarts
         std::unique_lock serviceLock(Service1->Mutex);
+        Runtime->Send(Debug0->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(peerNodeId), NodeIndex0, true);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(session), 0, "the outbound half of the session is not empty");
-
-        Runtime->Send(session->NodeActorId, Control0,
-            new NActors::TEvInterconnect::TEvNodeDisconnected(peerNodeId), NodeIndex0, true);
-
-        UNIT_ASSERT_C(WaitFor([&]() { return session->Terminating.load(); }, TDuration::Seconds(20)),
-            TStringBuilder() << "the session did not give up, reconciliation log: " << GetReconciliationLog(session));
+        // well past the budget, a message of the peer every 200ms all along
+        auto deadline = TInstant::Now() + TDuration::Seconds(7);
+        while (TInstant::Now() < deadline && !Debug0->Terminating.load()) {
+            Debug0->ProcessPending(1);
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        auto details = TStringBuilder() << "reconciliation log: " << GetReconciliationLog(Debug0)
+            << ", inbound traffic left: " << Debug0->PendingDataCount.load();
+        UNIT_ASSERT_C(!Debug0->Terminating.load(), TStringBuilder() << "the session gave up on a peer which is heard from, " << details);
+        UNIT_ASSERT_C(GetReconciliationLog(Debug0).Contains("K"), details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetInputCount(Debug0), 1, TStringBuilder() << "the inbound channel is gone, " << details);
 
         serviceLock.unlock();
-
-        auto details = [&]() {
-            return TStringBuilder() << "inbound channel: pushed " << pushBytes << " bytes, popped " << popBytes
-                << ", outbound queue was empty, reconciliation log: " << GetReconciliationLog(session);
-        };
-
-        // the give-up must not touch the inbound half: the peer is alive and everything it sent is there
-        bool aborted = false;
-        try {
-            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(5));
-            Actors.erase(msg->Sender);
-            aborted = msg->Get()->Error;
-        } catch (NActors::TEmptyEventQueueException&) {
-        }
-        UNIT_ASSERT_C(!aborted, TStringBuilder() << "the inbound channel was aborted by an outbound reconciliation timeout, " << details());
-
-        // a node session logs through the actor system from its destructor, so it may not outlive it
-        session.reset();
+        UNIT_ASSERT_C(WaitFor([&]() { return Debug0->Reconciliation.load() == 0; }, TDuration::Seconds(5)),
+            TStringBuilder() << "not reconciled once the peer answers, " << details);
+        Debug0->ResumeChannelData();
+        WaitChannel(details);
+        CheckSensors();
         Destroy();
+        CheckQuota();
     }
 };
 
@@ -914,15 +896,11 @@ Y_UNIT_TEST_SUITE(Channels20) {
         test.Run();
     }
 
-    // Disabled while the defect it reproduces is open, see TInboundChannelAbortTest above; enable it with
-    // the fix. The body stays compiled so that it keeps up with the helpers it uses.
-    /*
-    Y_UNIT_TEST(InboundChannelAbortedByOutboundTimeout) {
-        TInboundChannelAbortTest test;
+    Y_UNIT_TEST(InboundChannelSurvivesSlowHandshake) {
+        TSlowHandshakeTest test;
 
         test.Local = false;
 
         test.Run();
     }
-    */
 }

@@ -55,7 +55,8 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
     if (windowFunctionsV2) {
         UNIT_ASSERT_C(!ast.Contains("WinFramesCollector"), ast);
         UNIT_ASSERT_C(ast.Contains("WideCondense1") || ast.Contains("Condense1"), ast);
-        UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin") || ast.Contains("GraceJoin"), ast);
+        UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin")
+            || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin"), ast);
     } else {
         UNIT_ASSERT_C(ast.Contains("WinFramesCollector"), ast);
     }

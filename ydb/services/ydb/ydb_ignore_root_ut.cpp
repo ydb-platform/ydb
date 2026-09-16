@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
@@ -10,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/scope.h>
@@ -22,6 +24,7 @@ namespace NKikimr::NGRpcService {
 namespace {
 
 using TDiscovery = Ydb::Discovery::V1::DiscoveryService::Stub;
+using TCms = Ydb::Cms::V1::CmsService::Stub;
 using TTable = Ydb::Table::V1::TableService::Stub;
 using TQuery = Ydb::Query::V1::QueryService::Stub;
 using TScripting = Ydb::Scripting::V1::ScriptingService::Stub;
@@ -52,7 +55,9 @@ public:
     const TString Database;
     TString Token;
     bool AbsoluteSqlPaths = false;
+    TPortManager PortManager;
     NKqp::TKikimrRunner Runner;
+    Tests::TTenants Tenants;
     std::unique_ptr<TDiscovery> Discovery;
     std::unique_ptr<TTable> Table;
     std::unique_ptr<TQuery> Query;
@@ -63,10 +68,12 @@ public:
     static NKqp::TKikimrSettings Settings(const TString& root, bool ignoreRoot, bool authenticated, bool useRealThreads) {
         NKqp::TKikimrSettings settings;
         settings.SetDomainRoot(root).SetWithSampleTables(false)
-            .SetDynamicNodeCount(2).SetStoragePoolTypes({"ssd"}).SetUseRealThreads(useRealThreads);
+            .SetDynamicNodeCount(2).SetStoragePoolTypes({"ssd", "ssd-sibling"}).SetUseRealThreads(useRealThreads);
         settings.SetEnableScriptExecutionOperations(true);
         settings.AppConfig.MutableGRpcConfig()->SetIgnoreRoot(ignoreRoot);
+        settings.AppConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         settings.FeatureFlags.SetCheckDatabaseAccessPermission(true);
+        settings.FeatureFlags.SetAllowYdbRequestsWithoutDatabase(false);
         if (authenticated && useRealThreads) {
             settings.SetAuthToken("root@builtin");
         }
@@ -81,6 +88,7 @@ public:
         , Database("/" + Root + "/" + Name)
         , Token(authenticated ? "root@builtin" : "")
         , Runner(Settings(Root, ignoreRoot, authenticated, useRealThreads))
+        , Tenants(&Runner.GetTestServer())
     {
         if (authenticated) {
             // The simulated runtime needs dispatching during the initial grant.
@@ -130,17 +138,48 @@ public:
         SetValue("target");
     }
 
-    TString CreateDatabase(const TString& name) {
-        // The tenant helper uses an anonymous local RPC. Restore the admin
-        // restrictions before any client requests or permission assertions.
-        auto& adminSids = Runner.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs;
-        auto savedAdminSids = std::exchange(adminSids, {});
-        Y_DEFER {
-            adminSids = std::move(savedAdminSids);
-        };
-        return Runner.RunCall([&] {
-            return Runner.CreateDatabase(name, "ssd", {});
-        });
+    TString CreateDatabase(const TString& name, const TString& storagePoolType = "ssd") {
+        if (Runner.GetTestServer().GetRuntime()->IsRealThreads()) {
+            // The tenant helper uses an anonymous local RPC. Restore the admin
+            // restrictions before any client requests or permission assertions.
+            auto& adminSids = Runner.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs;
+            auto savedAdminSids = std::exchange(adminSids, {});
+            Y_DEFER {
+                adminSids = std::move(savedAdminSids);
+            };
+            return Runner.RunCall([&] {
+                return Runner.CreateDatabase(name, storagePoolType, {});
+            });
+        }
+
+        const TString database = "/" + Root + "/" + name;
+        auto cms = Ydb::Cms::V1::CmsService::NewStub(
+            grpc::CreateChannel(Runner.GetEndpoint(), grpc::InsecureChannelCredentials()));
+        Ydb::Cms::CreateDatabaseRequest create;
+        create.set_path(database);
+        auto* storage = create.mutable_resources()->add_storage_units();
+        storage->set_unit_kind(storagePoolType);
+        storage->set_count(1);
+        // Only gRPC calls run on the worker: tenant helpers dispatch the
+        // simulated runtime themselves and must stay on the test thread.
+        Call(*cms, &TCms::CreateDatabase, create, "/" + Root);
+        Tenants.Run(database);
+
+        Ydb::Cms::GetDatabaseStatusRequest request;
+        request.set_path(database);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        do {
+            auto status = Unpack<Ydb::Cms::GetDatabaseStatusResult>(
+                Call(*cms, &TCms::GetDatabaseStatus, request, "/" + Root));
+            if (status.state() == Ydb::Cms::GetDatabaseStatusResult::RUNNING) {
+                for (const auto node : Tenants.List(database)) {
+                    Runner.GetTestServer().EnableGRpc(PortManager.GetPort(), node, database);
+                }
+                return database;
+            }
+        } while (TInstant::Now() < deadline);
+        UNIT_FAIL("Database did not start: " << database);
+        return {};
     }
 
     void Configure(grpc::ClientContext& context, const TString& database) const {
@@ -506,7 +545,9 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
                 env.Call(*env.Table, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database,
                     true, Ydb::StatusIds::BAD_REQUEST);
             }
-            env.Call(*env.Discovery, &TDiscovery::WhoAmI, Ydb::Discovery::WhoAmIRequest{}, "");
+            env.Call(*env.Discovery, &TDiscovery::WhoAmI, Ydb::Discovery::WhoAmIRequest{}, "",
+                true, Ydb::StatusIds::BAD_REQUEST);
+            env.Call(*env.Discovery, &TDiscovery::WhoAmI, Ydb::Discovery::WhoAmIRequest{}, env.Database);
         }
     }
 
@@ -586,7 +627,9 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
 
     Y_UNIT_TEST_TWIN(SiblingDatabaseIsolation, SingleComponent) {
         TEnvironment env(SingleComponent, true);
-        const TString sibling = env.CreateDatabase("sibling");
+        // The runner's pool-type templates contain fixed pool IDs, so each
+        // tenant needs its own type to avoid redefining the first tenant's pool.
+        const TString sibling = env.CreateDatabase("sibling", "ssd-sibling");
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(env.Runner.GetEndpoint())
             .SetDatabase(sibling).SetAuthToken(env.Token));
         NYdb::NTable::TTableClient table(driver);
@@ -806,6 +849,7 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
     Y_UNIT_TEST_TWIN(StreamExecuteScanQuery, SingleComponent) {
         RunSqlCases(SingleComponent, [](TEnvironment& env, const TString& db, bool success) {
             Ydb::Table::ExecuteScanQueryRequest request;
+            request.set_mode(Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC);
             request.mutable_query()->set_yql_text(env.Select());
             auto parts = env.Stream(*env.Table, &TTable::StreamExecuteScanQuery, request, db, success);
             if (success) {

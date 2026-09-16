@@ -450,6 +450,19 @@ public:
     // Called when a seeding run completes successfully; portionKeyCount is the number of live portions found.
     virtual void OnCutHistorySeedingCompleted(const size_t /*portionKeyCount*/) {
     }
+
+    // Fires after each non-final seeding batch with its portions, charged bytes and the next batch size.
+    virtual void OnSeedingBatchCompleted(const size_t /*portionCount*/, const ui64 /*bytesCharged*/, const ui64 /*nextN*/) {
+    }
+
+    // Called when the seeding TX transitions the cutter to Failed (corrupt row or missing V2 entry).
+    virtual void OnCutHistorySeedingFailed(const TString& /*reason*/) {
+    }
+
+    // If non-empty, the seeding TX injects this string as a seeding error (for error-path coverage).
+    virtual TString GetSeedingInjectedErrorForTest() const {
+        return {};
+    }
 };
 
 class IKqpController {

@@ -350,6 +350,140 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         }
     }
 
+    // A seeding error injected via the test hook transitions the cutter to Failed and raises OnCutHistorySeedingFailed.
+    Y_UNIT_TEST(SeedingTxInjectedErrorTransitionsToFailed) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        class TInjectErrorController: public TCutHistoryTabletController {
+        public:
+            std::atomic<bool> FailedCalled{ false };
+            std::atomic<int> CompletedCount{ 0 };
+
+            TString GetSeedingInjectedErrorForTest() const override {
+                return "test-injected-error";
+            }
+
+            void OnCutHistorySeedingFailed(const TString& /*reason*/) override {
+                FailedCalled.store(true);
+            }
+
+            void OnCutHistorySeedingCompleted(const size_t /*portionKeyCount*/) override {
+                CompletedCount.fetch_add(1);
+            }
+        };
+
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TInjectErrorController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        TWrittenBlobs written;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                const TLogoBlobID& id = ev->Get()->Id;
+                if (id.TabletID() == TTestTxConfig::TxTablet0) {
+                    written.Generation = Max(written.Generation, id.Generation());
+                    if (id.Channel() >= 2) {
+                        written.DataChannels.insert(id.Channel());
+                    }
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+            TestTableDescription table;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 1, TableId, MakeTestBlob({ 0, 1000 }, table.Schema), table.Schema, &writeIds));
+            const auto planStep = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 1, writeIds);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, TSet<ui64>{ 1 });
+            for (int i = 0; i < 10; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            }
+        }
+        UNIT_ASSERT_C(!written.DataChannels.empty(), "the write must put portion blobs into data channels");
+
+        RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
+        // The first boot seeds an empty database and completes; only the run after the reboot reads portions.
+        const int completedBeforeWakeups = guard->CompletedCount.load();
+
+        const bool neverStop = false;
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+
+        UNIT_ASSERT_C(guard->FailedCalled.load(), "OnCutHistorySeedingFailed must be called when a seeding error is injected");
+        UNIT_ASSERT_VALUES_EQUAL_C(guard->CompletedCount.load(), completedBeforeWakeups, "seeding must not complete after it failed");
+    }
+
+    // Seeding walks several batches when a batch holds one portion, and still completes.
+    Y_UNIT_TEST(SeedingCompletesAcrossMultipleBatches) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        class TBatchCountController: public TCutHistoryTabletController {
+        public:
+            std::atomic<int> BatchCompletedCount{ 0 };
+            std::atomic<bool> SeedingCompleted{ false };
+
+            ui64 GetSeedBatchPortions(const ui64 /*defaultValue*/) const override {
+                return 1;
+            }
+
+            void OnSeedingBatchCompleted(const size_t /*portionCount*/, const ui64 /*bytesCharged*/, const ui64 /*nextN*/) override {
+                BatchCompletedCount.fetch_add(1);
+            }
+
+            void OnCutHistorySeedingCompleted(const size_t /*portionKeyCount*/) override {
+                SeedingCompleted.store(true);
+            }
+        };
+
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TBatchCountController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        TWrittenBlobs written;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                const TLogoBlobID& id = ev->Get()->Id;
+                if (id.TabletID() == TTestTxConfig::TxTablet0) {
+                    written.Generation = Max(written.Generation, id.Generation());
+                    if (id.Channel() >= 2) {
+                        written.DataChannels.insert(id.Channel());
+                    }
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+            TestTableDescription table;
+            // Write two separate batches to create two separately indexed portions.
+            std::vector<ui64> writeIds1;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 1, TableId, MakeTestBlob({ 0, 500 }, table.Schema), table.Schema, &writeIds1));
+            const auto planStep1 = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 1, writeIds1);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep1, TSet<ui64>{ 1 });
+            std::vector<ui64> writeIds2;
+            UNIT_ASSERT(WriteData(
+                runtime, sender, TTestTxConfig::TxTablet0, 2, TableId, MakeTestBlob({ 500, 1000 }, table.Schema), table.Schema, &writeIds2));
+            const auto planStep2 = ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, 2, writeIds2);
+            PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep2, TSet<ui64>{ 2 });
+            for (int i = 0; i < 10; ++i) {
+                runtime.SimulateSleep(TDuration::Seconds(2));
+            }
+        }
+        UNIT_ASSERT_C(!written.DataChannels.empty(), "the writes must put portion blobs into data channels");
+
+        RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
+
+        const bool neverStop = false;
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 120, neverStop);
+
+        UNIT_ASSERT_C(guard->SeedingCompleted.load(), "seeding must complete across several batches");
+        UNIT_ASSERT_C(guard->BatchCompletedCount.load() > 0, "a non-final batch must be reported");
+    }
+
     // An old entry that holds no data is cut once the first GC round of the new incarnation commits.
     Y_UNIT_TEST(EmptyOldEntryIsCutAfterFirstGcRound) {
         TTestBasicRuntime runtime;

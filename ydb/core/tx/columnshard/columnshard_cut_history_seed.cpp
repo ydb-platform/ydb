@@ -161,6 +161,12 @@ public:
         }
         TotalBytesPrecharged += idxResult.BytesPrecharged;
 
+        // Allow test injection of a seeding error without DB corruption.
+        if (const TString injError = NYDBTest::TControllers::GetColumnShardController()->GetSeedingInjectedErrorForTest(); !injError.empty()) {
+            SeedException = TSeedError{ NOlap::TInternalPathId{}, 0, injError };
+            return true;
+        }
+
         // Check that every portion from step 1 has an IndexColumnsV2 row.
         for (const auto& [pathId, portionId] : portionIds) {
             if (!colBlobIds.contains(portionId)) {
@@ -224,6 +230,7 @@ public:
         }
         // cost == 0 means all rows came from memtables; keep N.
 
+        NYDBTest::TControllers::GetColumnShardController()->OnSeedingBatchCompleted(PortionBatch.size(), TotalBytesPrecharged, N);
         Self->Execute(new TTxCutHistorySeed(Self, SeedRun, NextStartKey, N, StartTime), ctx);
     }
 };

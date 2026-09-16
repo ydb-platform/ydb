@@ -307,6 +307,7 @@ void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, 
     SeedingState = ESeedState::Failed;
     PublishSeedLevels();
     Signals.OnSeedingFailed();
+    NYDBTest::TControllers::GetColumnShardController()->OnCutHistorySeedingFailed(reason);
 }
 
 void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {

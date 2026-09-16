@@ -84,17 +84,17 @@ To estimate the required equipment, perform the following steps.
 
 
    ```text
-   SlotSize = (DriveSize - 27.65 GB) / ExpectedSlotCount
+   SlotSize = (DriveSize - 28.08 GB) / ExpectedSlotCount
    ```
 
 
     <!-- 1 (SysLog) + 5 (SysReserveSize) + 200 (MaxCommonLogChunks) = -->
 
-    <!-- 206 chunks (128 MiB each) ≈ 27.65 GB -->
+    <!-- 206 chunks (130 MiB each: 128 MiB payload + 2 MiB overhead) ≈ 28.08 GB -->
 
-   About 27.65 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
+   About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
 
-   This formula is applicable for disks with a capacity of 800 GB or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
+   This formula is applicable for disks with a capacity of 800 GiB or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 3. Estimate the number of storage groups:
 
 
@@ -209,8 +209,8 @@ Suppose you need to place 100 TB of data (Tablet Storage) in a cluster with faul
 **Calculation:**
 
 1. Database Storage = 100 000 × 1.5 × 2 = **300 000 GB**
-2. SlotSize = (3 200 − 27.65) / 16 ≈ **198.27 GB**
-3. TotalGroups = ⌈300 000 / (198.27 × 8 × 0.85)⌉ = **223 storage groups**
+2. SlotSize = (3 200 − 28.08) / 16 ≈ **198.25 GB**
+3. TotalGroups = ⌈300 000 / (198.25 × 8 × 0.85)⌉ = **223 storage groups**
 4. UsedSlots = 223 × 8 = **1 784 slots**
 5. TotalPDisks (without reserve) = ⌈1 784 / 16⌉ = **112 disks**
 6. Next, we will select a specific cluster configuration, providing a reserve of empty slots to ensure fault tolerance. To do this, we will consider various equipment options and evaluate compliance with the minimum requirements, taking into account that for mode `block-4-2` at least 8 failure domains (servers or racks) are required, and for stable practical operation 10 or more are recommended:
@@ -228,9 +228,9 @@ Next, let's take the configuration from the previous example — 30 servers with
 2. MinEmptySlots = ⌈MaxSlotsInRack + 0.027 × TotalSlots⌉ = ⌈4 × 16 + 0.027 × 1,920⌉ = ⌈115.84⌉ = **116 slots**
 3. UsableSlots = 1,920 − 116 = **1,804 slots**
 4. TotalGroups = ⌊1,804 / 8⌋ = **225 storage groups**
-5. SlotSize = (3,200 − 27.65) / 16 ≈ **198.27 GB**
-6. Database Storage = 225 × 8 × 198.27 × 0.85 ≈ **303,353 GB**
-7. Tablet Storage = 303,353 / (1.5 × 2) ≈ **101,118 GB**
+5. SlotSize = (3,200 − 28.08) / 16 ≈ **198.25 GB**
+6. Database Storage = 225 × 8 × 198.25 × 0.85 ≈ **303,323 GB**
+7. Tablet Storage = 303,323 / (1.5 × 2) ≈ **101,108 GB**
 
 Thus, a cluster of 30 servers and 120 SSD disks of 3.2 TB each in `block-4-2` mode can store about 101.1 TB of data (Tablet Storage).
 

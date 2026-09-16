@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_sensors
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_sensors, counter_nodes
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 import ydb.issues
 import os
@@ -1272,7 +1272,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
 
         hits = 0
         miss = 0
-        for node_index in kikimr.cluster.slots:
+        for node_index in counter_nodes(kikimr.cluster):
             sensors = get_sensors(kikimr.cluster, node_index, "kqp")
             for component in ["Lookup", "LookupSrc"]:
                 componentSensors = sensors.find_sensors(

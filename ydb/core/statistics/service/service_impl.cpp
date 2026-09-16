@@ -27,6 +27,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/datetime/cputimer.h>
+#include <util/generic/hash_set.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -167,6 +168,65 @@ private:
         entry.ShowPrivatePath = true;
     }
 
+    void LogNavigateFailure(const TNavigate& navigate, ui64 requestId, bool resolvingDatabase) const {
+        constexpr size_t maxDetails = 16;
+        THashSet<std::pair<TTableId, ui32>> failures;
+        TStringBuilder failureDetails;
+        size_t shownFailures = 0;
+        for (const auto& entry : navigate.ResultSet) {
+            if (entry.Status == TNavigate::EStatus::Ok
+                || !failures.emplace(entry.TableId, static_cast<ui32>(entry.Status)).second) {
+                continue;
+            }
+            if (shownFailures < maxDetails) {
+                if (shownFailures++) {
+                    failureDetails << ", ";
+                }
+                failureDetails << "{tableId: " << entry.TableId
+                    << ", status: " << entry.Status
+                    << ", statusCode: " << static_cast<ui32>(entry.Status) << "}";
+            }
+        }
+
+        const auto it = InFlight.find(requestId);
+        const bool requestFound = it != InFlight.end();
+        THashSet<TPathId> requestedPaths;
+        TStringBuilder requestedPathDetails;
+        size_t shownPaths = 0;
+        if (requestFound) {
+            for (const auto& req : it->second.StatRequests) {
+                if (!requestedPaths.insert(req.PathId).second) {
+                    continue;
+                }
+                if (shownPaths < maxDetails) {
+                    if (shownPaths++) {
+                        requestedPathDetails << ", ";
+                    }
+                    requestedPathDetails << req.PathId;
+                }
+            }
+        }
+
+        const auto* message = resolvingDatabase
+            ? "[TStatService::TEvNavigateKeySetResult] Resolve database navigate failed"
+            : "[TStatService::TEvNavigateKeySetResult] Navigate failed";
+        YDB_LOG_ERROR(message,
+            {"requestId", requestId},
+            {"phase", resolvingDatabase ? "database" : "table"},
+            {"database", navigate.DatabaseName},
+            {"requestFound", requestFound},
+            {"requestDatabase", requestFound ? it->second.Database : "<unavailable>"},
+            {"statType", requestFound ? ToString(static_cast<ui32>(it->second.StatType)) : "<unavailable>"},
+            {"replyToActorId", requestFound ? ToString(it->second.ReplyToActorId) : "<unavailable>"},
+            {"resultCount", navigate.ResultSet.size()},
+            {"distinctFailureCount", failures.size()},
+            {"failures", failureDetails},
+            {"omittedFailureCount", failures.size() - shownFailures},
+            {"requestedPathCount", requestedPaths.size()},
+            {"requestedPaths", requestedPathDetails},
+            {"omittedRequestedPathCount", requestedPaths.size() - shownPaths});
+    }
+
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {
         ui64 requestId = NextRequestId++;
         auto& request = InFlight[requestId];
@@ -227,8 +287,7 @@ private:
             });
 
             if (entry == navigate->ResultSet.end()) {
-                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] Navigate failed",
-                    {"requestId", requestId});
+                LogNavigateFailure(*navigate, requestId, false);
                 ReplyFailed(requestId, true);
                 return;
             }
@@ -283,8 +342,7 @@ private:
             });
 
             if (entry == navigate->ResultSet.end()) {
-                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] Resolve database navigate failed",
-                    {"requestId", originalRequestId});
+                LogNavigateFailure(*navigate, originalRequestId, true);
                 ReplyFailed(originalRequestId, true);
                 return;
             }

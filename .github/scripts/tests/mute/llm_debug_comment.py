@@ -4,7 +4,7 @@ After a mute issue is created we post one markdown comment listing the latest
 failing/muted CI run for every test in the issue (job run URL, history
 dashboard, stderr / stdout / log / logsdir) and attach an AI review label so
 a downstream LLM workflow can pick the issue up. Compact LLM instructions are
-inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v3 -->``).
+inlined in a collapsed ``<details>`` block (``<!-- mute-llm-prompt:v4 -->``).
 Allowed ``area/*`` labels come from ``.github/config/areas.json``.
 
 Best-effort: any YDB / GitHub failure is logged but never raised — issue
@@ -32,7 +32,7 @@ AI_REVIEW_LABEL = 'need_ai_review'
 FAILURE_LOOKBACK_DAYS = 7
 MAX_COMMENT_LENGTH = 60000
 _COMMENT_MARKER = '<!-- mute-llm-debug-links:v1 -->'
-MUTE_LLM_PROMPT_VERSION = 'v3'
+MUTE_LLM_PROMPT_VERSION = 'v4'
 _PROMPT_MARKER = f'<!-- mute-llm-prompt:{MUTE_LLM_PROMPT_VERSION} -->'
 _AREAS_JSON = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..', 'config', 'areas.json')
@@ -85,6 +85,11 @@ Pick first match:
      Example: test lives in tests/stress/topic_balancing, crash is
      ydb/core/persqueue/pqrb/read_balancer__balancing.cpp → area/topics,
      not engineering.
+     Do not take ydb/core/kqp (compile actor / timeout / "query compilation")
+     as the failed file when the test is index / fulltext / vector and there
+     is no KQP crash or wrong-plan VERIFY. Use CODEOWNERS of the feature
+     (ydb/core/tx/datashard, ydb/core/tx/schemeshard/index). A real KQP
+     SIGSEGV / VERIFY still uses the KQP file.
   3) The introducing PR added this test/helper and it was wrong from day one
      (forgot a sibling test, immediately too heavy, flakes on /proc, …)
      → PR author's GitHub org team, then areas.json / gh_teams.

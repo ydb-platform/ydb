@@ -79,10 +79,12 @@ Forbidden: area/topic, TEAM:@ydb-platform/..., area/@ydb-platform/..., any label
 Pick first match:
   1) A human comment already named the cause (CI CPU/RAM, OOM, …) → follow it.
      Host/CI resources with no product bug → area/engineering.
-  2) YDB_ISSUE → TESTOWNERS longest prefix of the broken product file
-     (ydb/core, ydb/library, ydb/services, …). Never the test path.
-     Then map TESTOWNERS slug via .github/config/owner_area_mapping.json and
-     canonicalize via areas.json aliases (system-infra→area/core, qp→area/queryprocessor).
+  2) YDB_ISSUE: find the product file that actually failed (stack / VERIFY path),
+     not the test file. Responsible = CODEOWNERS of that file (longest prefix),
+     then owner_area_mapping.json + areas.json aliases.
+     Example: test lives in tests/stress/topic_balancing, crash is
+     ydb/core/persqueue/pqrb/read_balancer__balancing.cpp → area/topics,
+     not engineering.
   3) The introducing PR added this test/helper and it was wrong from day one
      (forgot a sibling test, immediately too heavy, flakes on /proc, …)
      → PR author's GitHub org team, then areas.json / gh_teams.
@@ -90,7 +92,8 @@ Pick first match:
      → TESTOWNERS of that harness file, then areas.json.
   5) Else area/engineering.
 
-Do not use these TESTOWNERS prefixes as Responsible by themselves:
+TESTOWNERS is for mute Owner and for (4) only. Do not use these TESTOWNERS
+prefixes as Responsible by themselves:
   /ydb/tests/compatibility
   /ydb/tests/stress
 A more specific child wins (topic/, topic_kafka/, oltp_workload, …).

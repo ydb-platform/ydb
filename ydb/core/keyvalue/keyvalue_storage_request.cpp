@@ -66,7 +66,8 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     };
 
     TMap<ui64, TInFlightBatch> InFlightBatchByCookie;
-    TDeque<TReadQueueItem> ReadItems;
+    TDeque<TReadQueueItem> RealtimeReadItems;
+    TDeque<TReadQueueItem> BackgroundReadItems;
 
     TStackVec<ui32, 16> YellowMoveChannels;
     TStackVec<ui32, 16> YellowStopChannels;
@@ -412,7 +413,10 @@ public:
         }
         LastSuccess = now;
         bool sentSomething = false;
-        while (SendSomeReadRequests(ctx)) {
+        while (SendSomeReadRequests(ctx, RealtimeReadItems, NKikimrBlobStorage::FastRead)) {
+            sentSomething = true;
+        }
+        while (SendSomeReadRequests(ctx, BackgroundReadItems, NKikimrBlobStorage::AsyncRead)) {
             sentSomething = true;
         }
         if (sentSomething) {
@@ -537,10 +541,13 @@ public:
 
         TraverseReadItems([&](TIntermediate::TRead& read, TIntermediate::TRead::TReadItem& readItem) {
                 if (readItem.Status != NKikimrProto::SCHEDULED) {
-                    ReadItems.push_back(TReadQueueItem{&read, &readItem});
+                    auto& queue = read.HandleClass == NKikimrBlobStorage::AsyncRead
+                        ? BackgroundReadItems : RealtimeReadItems;
+                    queue.push_back(TReadQueueItem{&read, &readItem});
                 }
             });
-        Sort(ReadItems.begin(), ReadItems.end());
+        Sort(RealtimeReadItems.begin(), RealtimeReadItems.end());
+        Sort(BackgroundReadItems.begin(), BackgroundReadItems.end());
 
         SendWriteRequests(ctx);
         SendPatchRequests(ctx);
@@ -581,7 +588,8 @@ public:
         Die(ctx);
     }
 
-    bool SendSomeReadRequests(const TActorContext &ctx) {
+    bool SendSomeReadRequests(const TActorContext &ctx, TDeque<TReadQueueItem>& items,
+            NKikimrBlobStorage::EGetHandleClass handleClass) {
         if (InFlightBatchByCookie.size() >= InFlightRequestsLimit) {
             return false;
         }
@@ -591,11 +599,9 @@ public:
 
         TLogoBlobID prevId;
         ui32 prevGroup = Max<ui32>();
-        decltype(ReadItems)::iterator it;
+        TDeque<TReadQueueItem>::iterator it;
         TVector<TReadQueueItem> skippedItems;
-        NKikimrBlobStorage::EGetHandleClass handleClass = NKikimrBlobStorage::FastRead;
-        bool isHandleClassSet = false;
-        for (it = ReadItems.begin(); it != ReadItems.end(); ++it) {
+        for (it = items.begin(); it != items.end(); ++it) {
             auto& readItem = *it->ReadItem;
             Y_ABORT_UNLESS(!readItem.InFlight && readItem.Status == NKikimrProto::UNKNOWN);
 
@@ -612,16 +618,6 @@ public:
             if (!isSameGroup) {
                 skippedItems.push_back(std::move(*it));
                 continue;
-            }
-            if (isHandleClassSet) {
-                bool isSameClass = (handleClass == it->Read->HandleClass);
-                if (!isSameClass) {
-                    skippedItems.push_back(std::move(*it));
-                    continue;
-                }
-            } else {
-                handleClass = it->Read->HandleClass;
-                isHandleClassSet = true;
             }
 
             bool isSeq = id.TabletID() == prevId.TabletID()
@@ -646,7 +642,7 @@ public:
             ++InFlightQueries;
         }
 
-        std::move(skippedItems.begin(), skippedItems.end(), ReadItems.erase(ReadItems.begin(), it - skippedItems.size()));
+        std::move(skippedItems.begin(), skippedItems.end(), items.erase(items.begin(), it - skippedItems.size()));
 
         if (request.ReadQueue.empty()) {
             return false;

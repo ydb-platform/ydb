@@ -1,6 +1,7 @@
 #include "flat_dbase_sz_env.h"
 #include "flat_executor_ut_common.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 namespace NKikimr {
@@ -2339,6 +2340,57 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
         }
     };
 
+    struct TTxRemoveManyRowVersions : public ITransaction {
+        explicit TTxRemoveManyRowVersions(size_t count)
+            : Count(count)
+        { }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            static constexpr ui64 Base = ui64(1) << 63;
+
+            for (size_t index = 0; index < Count; ++index) {
+                const ui64 step = Base + 2 * index;
+                txc.DB.RemoveRowVersions(
+                    TRowsModel::TableId,
+                    TRowVersion(step, Base),
+                    TRowVersion(step + 1, Base));
+            }
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+
+    private:
+        const size_t Count;
+    };
+
+    struct TTxVerifyRemovedRowVersions : public ITransaction {
+        explicit TTxVerifyRemovedRowVersions(size_t expectedCount)
+            : ExpectedCount(expectedCount)
+        { }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            UNIT_ASSERT_VALUES_EQUAL(
+                txc.DB.GetRemovedRowVersions(TRowsModel::TableId).size(),
+                ExpectedCount);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+
+    private:
+        const size_t ExpectedCount;
+    };
+
     void DoVersionedRows(EVariant variant)
     {
         TMyEnvBase env;
@@ -2447,6 +2499,33 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_VersionedRows) {
 
     Y_UNIT_TEST(TestVersionedRowsLargeBlobs) {
         DoVersionedRows(EVariant::LargeBlobs);
+    }
+
+    Y_UNIT_TEST(TestManyRemovedRowVersionRanges) {
+        static constexpr size_t RangeCount = 175'000;
+
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto cacheConfig = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        cacheConfig->Record.MutableConfig()->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
+        env->Send(NSharedCache::MakeSharedPageCacheId(), TActorId{}, cacheConfig.Release());
+        env->Send(NSharedCache::MakeSharedPageCacheId(), TActorId{},
+            new NMemory::TEvConsumerLimit(32_MB));
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy));
+
+        // Each range has the maximum protobuf wire size, making the combined
+        // payload larger than the 8 MiB single-blob limit.
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveManyRowVersions(RangeCount) });
+        env.SendSync(new NFake::TEvExecute{ new TTxVerifyRemovedRowVersions(RangeCount) });
+
+        // Verify all part switches are replayed during tablet boot.
+        env.RestartTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.SendSync(new NFake::TEvExecute{ new TTxVerifyRemovedRowVersions(RangeCount) });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
     }
 
 }

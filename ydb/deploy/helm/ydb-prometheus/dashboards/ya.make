@@ -2,7 +2,7 @@ LIBRARY()
 
 ALL_RESOURCE_FILES(
     json
-    PREFIX ydb_bench/grafana/
+    PREFIX ydb/deploy/helm/ydb-prometheus/dashboards/
     .
 )
 

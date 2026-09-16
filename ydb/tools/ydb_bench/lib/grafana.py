@@ -13,7 +13,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.hosts import NoRedirect
 from ydb.tools.ydb_bench.lib.monitoring_settings import exchange
 
-RESOURCE_PREFIX = 'ydb_bench/grafana/'
+RESOURCE_PREFIX = 'ydb/deploy/helm/ydb-prometheus/dashboards/'
 BUNDLES = {
     path.removeprefix(RESOURCE_PREFIX).removesuffix('.json'): json.loads(resource.resfs_read(path))['title']
     for path in sorted(resource.resfs_files(RESOURCE_PREFIX))

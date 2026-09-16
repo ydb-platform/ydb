@@ -280,7 +280,7 @@ private:
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
             }
-            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
+            YQL_ENSURE(false, "Cannot start DQ local file spilling service at " << root << ": " << e.what());
         }
 
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(

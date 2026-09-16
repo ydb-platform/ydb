@@ -330,6 +330,24 @@ void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TStri
     ExecuteYqlScript(env, replace);
 }
 
+namespace {
+
+// Builds a TTableInfo from a path, resolving shard IDs and path ID.
+TTableInfo MakeTableInfo(TTestActorRuntime& runtime, const TString& databaseName,
+    const TString& tableName, bool columnShard) {
+    TTableInfo tableInfo;
+    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    if (columnShard) {
+        tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    } else {
+        tableInfo.ShardIds = GetTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    }
+    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
+}
+
+} // anonymous namespace
+
 TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount, const std::vector<TColumnDesc>& valueColumns)
 {
@@ -522,6 +540,34 @@ TTableInfo PrepareMultiColumnUniformTable(TTestEnv& env, const TString& database
     tableInfo.ShardIds = GetTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
     tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
     return tableInfo;
+}
+
+TTableInfo PrepareUniformTableWithData(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    CreateUniformTable(env, databaseName, tableName);
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
+
+    auto& runtime = *env.GetServer().GetRuntime();
+    return MakeTableInfo(runtime, databaseName, tableName, false);
+}
+
+TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName, bool columnShard) {
+    if (columnShard) {
+        return PrepareColumnTable(env, databaseName, tableName, 1);
+    }
+    return PrepareUniformTableWithData(env, databaseName, tableName);
+}
+
+void ValidateStatistics(TTestActorRuntime& runtime, const TPathId& pathId, ui64 N) {
+    // TAnalyzeActor builds count-min sketches based on column cardinality, not
+    // index declarations, so both ColumnShard and DataShard produce the same
+    // statistics for the same data. Key column (tag 1): high cardinality
+    // (N distinct values) -> ndv >= 0.8 * n -> no CMS. Value column (tag 2):
+    // low cardinality (10 distinct values, Value = key % 10) -> CMS with probes.
+    std::vector<TCountMinSketchProbes> expected = {
+        {.Tag = 1, .Probes = std::nullopt},
+        {.Tag = 2, .Probes = {{{"1", N / 10}, {"2", N / 10}, {"10", 0}}}},
+    };
+    CheckCountMinSketch(runtime, pathId, expected);
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {

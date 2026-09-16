@@ -377,7 +377,6 @@ def _pad_wat(path, size):
 
 @pytest.mark.parametrize("source_size", [0, 64 * 1024 * 1024, 75 * 1024 * 1024],
                          ids=["small", "full_pages", "partial_page"])
-
 def test_using_wasm_udf(source_size):
     """
     Upload a WASM UDF (.wat) with JSON manifest into modules(+chunks) tables,

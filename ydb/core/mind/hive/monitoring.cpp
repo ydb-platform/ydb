@@ -2713,7 +2713,8 @@ public:
                 if (!node.IsAlive()
                     && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine
                     && !node.Down
-                    && !node.Freeze) {
+                    && !node.Freeze)
+                {
                     continue;
                 }
 

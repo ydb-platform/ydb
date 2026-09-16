@@ -6,6 +6,8 @@
 #include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -14,20 +16,17 @@ using namespace NSchemeShard;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     const TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropFileStore::TPropose"
-            << ", operationId: " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(
@@ -35,12 +34,10 @@ public:
         TOperationContext& context) override
     {
         const auto step = TStepId(ev->Get()->StepId);
-        const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -97,11 +94,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        const auto ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -116,6 +109,8 @@ public:
 
 class TDropFileStore: public TSubOperation {
 public:
+    virtual const char* Name() const override final { return "TDropFileStore"; }
+
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(
@@ -172,12 +167,10 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     const TString& parentPathStr = Transaction.GetWorkingDir();
     const TString& name = operation.GetName();
 
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TDropFileStore Propose"
-        << ", path: " << parentPathStr << "/" << name
-        << ", pathId: " << operation.GetId()
-        << ", opId: " << OperationId
-        << ", at schemeshard: " << ssId);
+    YDB_LOG_NOTICE_CTX(context.Ctx, "",
+        {"path", TStringBuilder() << parentPathStr << "/" << name},
+        {"pathId", operation.GetId()},
+    );
 
     auto result = MakeHolder<TProposeResponse>(
         NKikimrScheme::StatusAccepted,
@@ -276,3 +269,5 @@ ISubOperation::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState stat
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -43,6 +43,34 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     return true;
 }
 
+bool IsHybridRankTopInput(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
+    const auto parents = parentsMap.find(node);
+    if (parents == parentsMap.end()) {
+        return false;
+    }
+
+    for (const auto* parent : parents->second) {
+        auto maybeTop = TMaybeNode<TCoTopBase>(parent);
+        if (!maybeTop || maybeTop.Cast().Input().Raw() != node) {
+            continue;
+        }
+
+        bool hasHybridRank = false;
+        VisitExpr(maybeTop.Cast().KeySelectorLambda().Body().Ptr(), [&](const TExprNode::TPtr& expr) {
+            if (expr->IsCallable("HybridRank")) {
+                hasHybridRank = true;
+                return false;
+            }
+            return true;
+        });
+        if (hasHybridRank) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const TExprNode* GetSingleConsumerParent(const TExprNode* node, const NYql::TParentsMap& parentsMap) {
     auto it = parentsMap.find(node);
     if (it != parentsMap.end()) {
@@ -612,6 +640,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     auto flatmap = node.Cast<TCoFlatMapBase>();
+
+    if (IsHybridRankTopInput(node.Raw(), parentsMap)) {
+        return node;
+    }
 
     if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
         return node;

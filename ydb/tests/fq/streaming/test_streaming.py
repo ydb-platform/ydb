@@ -2012,7 +2012,7 @@ FROM `{table_name}`"""
         path = f"{kikimr.get_database_name()}/{query_name}"
         self.wait_completed_checkpoints(kikimr, query_name)
 
-        # Check that streaming.query.tasks.count metric exists for both queries
+        # Check that streaming.query.tasks.count metric exists
         self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [

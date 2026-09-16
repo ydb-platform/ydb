@@ -286,6 +286,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             }
             // 1 of each 4 requests external traced + 1 of each 3 other requests sampled
             // (but not greater than 0.5 of them according to throttling)
+            // With independent sampling, P(false failure) < 2.42e-51.
             UNIT_ASSERT_C(traced >= 250 + 125 - 50 && traced <= 250 + 125 + 50, traced);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -310,6 +311,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 9.96e-10.
             UNIT_ASSERT_C(sampled >= 174 && sampled <= 330, sampled);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -370,6 +372,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
+            // With independent sampling, P(false failure) < 4.61e-10.
             UNIT_ASSERT_C(traced >= 542 && traced <= 700, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
         }
     }
@@ -514,6 +517,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     timeProvider->Advance(TDuration::MilliSeconds(500));
                 }
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
         }
 
@@ -528,11 +532,13 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(125));
             }
+            // With independent sampling, P(false failure) < 1.70e-68.
             UNIT_ASSERT(sampled >= 190 && sampled <= 260);
         }
         for (size_t i = 0; i < 50; ++i) {
             controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators));
         }
+        // With independent sampling, P(any false failure in this loop) < 2.11e-9.
         for (size_t i = 0; i < 50; ++i) {
             UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators)).first, TTracingControls::OFF);
         }
@@ -572,6 +578,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(6));
             }
+            // With independent sampling, P(false failure) < 9.27e-10.
             UNIT_ASSERT(sampled >= 170 && sampled <= 336);
         }
     }
@@ -618,7 +625,9 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 9.32e-10.
             UNIT_ASSERT(level8 >= 391 && level8 <= 613);
+            // With independent sampling, P(false failure) < 9.32e-10.
             UNIT_ASSERT(level10 >= 391 && level10 <= 613);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -639,7 +648,9 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250));
             }
+            // With independent sampling, P(false failure) < 3.80e-10.
             UNIT_ASSERT(level8 >= 456 && level8 <= 760);
+            // With independent sampling, P(false failure) < 6.38e-16.
             UNIT_ASSERT(level10 >= 340 && level10 <= 385);
         }
     }
@@ -777,6 +788,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
 
         }
@@ -790,6 +802,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     ++sampled;
                 }
             }
+            // With independent sampling, P(false failure) < 5.88e-9.
             UNIT_ASSERT_EQUAL(sampled, 11);
         }
 
@@ -808,6 +821,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
             timeProvider->Advance(TDuration::Minutes(1));
 
@@ -944,6 +958,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(notMatchingDiscriminators)).first, TTracingControls::OFF);
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -958,6 +973,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     ++sampled;
                 }
             }
+            // With independent sampling, P(false failure) < 5.88e-9.
             UNIT_ASSERT_EQUAL(sampled, 11);
         }
     }

@@ -532,6 +532,58 @@ namespace {
             VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
         }
 
+        Y_UNIT_TEST(WarmupLoadsOtherUsersQueriesWithRestrictedAdmins) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0", "user1"};
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            UNIT_ASSERT(env.ExpectedUniqueCount > 0);
+
+            kikimr.RunCall([&] {
+                auto schemeClient = kikimr.GetSchemeClient();
+                for (const auto& userSid : params.UserSids) {
+                    auto result = schemeClient.ModifyPermissions("/Root",
+                        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                            NYdb::NScheme::TPermissions(userSid + "@builtin",
+                                {"ydb.database.connect", "ydb.granular.describe_schema", "ydb.granular.select_row"})))
+                        .ExtractValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                }
+                return true;
+            });
+
+            // Configure every scan node, without racing actor threads. Neither
+            // metadata@system nor the client users are cluster/database admins.
+            for (ui32 node = 0; node < params.NodeCount; ++node) {
+                auto& appData = env.Runtime.GetAppData(node);
+                appData.AdministrationAllowedSIDs = {"root@builtin"};
+                appData.FeatureFlags.SetEnableDatabaseAdmin(false);
+            }
+
+            TKqpWarmupConfig config;
+            auto complete = RunWarmup(env, config, config.HardDeadline);
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT_C(complete->Get()->Success, complete->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, env.ExpectedUniqueCount);
+            VerifyLocalCacheContainsUsers(env.Runtime, env.NodeId, "/Root", env.UserSids);
+            VerifyQueriesServedFromCache(kikimr, env.UserSids, env.IsThreadLocked);
+
+            auto result = ExecuteQueryWithCache(kikimr, "user0",
+                "SELECT UserSID FROM `/Root/.sys/compile_cache_queries`", env.IsThreadLocked);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            size_t rows = 0;
+            while (parser.TryNextRow()) {
+                auto userSid = parser.ColumnParser("UserSID").GetOptionalUtf8();
+                UNIT_ASSERT(userSid);
+                UNIT_ASSERT_VALUES_EQUAL(*userSid, "user0@builtin");
+                ++rows;
+            }
+            UNIT_ASSERT(rows > 0);
+        }
+
         Y_UNIT_TEST(WarmupSoftDeadlineStopsNewQueriesButCompletesPending) {
             TWarmupTestParams params;
             params.UserSids = {"user0", "user1", "user2"};

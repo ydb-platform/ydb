@@ -1,30 +1,15 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <ydb/core/base/events.h>
-#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr {
 namespace NGRpcProxy {
-
-struct TEvPQClustersUpdater {
-    enum EEv {
-        EvUpdateClusters = EventSpaceBegin(TKikimrEvents::ES_PQ_CLUSTERS_UPDATER),
-        EvEnd,
-    };
-
-    struct TEvUpdateClusters : public NActors::TEventLocal<TEvUpdateClusters, EvUpdateClusters> {
-        TEvUpdateClusters()
-        {}
-    };
-};
 
 class IPQClustersUpdaterCallback {
 public:
@@ -74,14 +59,12 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPQClustersUpdater::TEvUpdateClusters, Handle);
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+            HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
         }
     }
 
-    void Handle(TEvPQClustersUpdater::TEvUpdateClusters::TPtr &ev, const TActorContext &ctx);
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 
 };

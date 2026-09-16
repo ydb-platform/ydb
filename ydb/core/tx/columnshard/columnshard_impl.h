@@ -618,6 +618,7 @@ private:
 
     void Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCutHistoryNominate::TPtr& ev, const TActorContext& ctx);
 
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);

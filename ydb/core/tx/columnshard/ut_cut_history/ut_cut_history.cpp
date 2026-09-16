@@ -111,6 +111,8 @@ public:
     using THistoryCutterWrapper::GetTombstoneCountForTest;
     using THistoryCutterWrapper::IsChannelPoisonedForTest;
     using THistoryCutterWrapper::IsDrained;
+    using THistoryCutterWrapper::IsNominationPendingForTest;
+    using THistoryCutterWrapper::IsNominationTriggeredForTest;
     using THistoryCutterWrapper::StartSweepForTest;
     using THistoryCutterWrapper::THistoryCutterWrapper;
 };
@@ -155,6 +157,24 @@ public:
 };
 
 // Stands in for Local: observers see an edge actor's events zero or several times, so a real actor counts them.
+class TNominationCounter: public NActors::TActor<TNominationCounter> {
+public:
+    explicit TNominationCounter(ui32& count)
+        : NActors::TActor<TNominationCounter>(&TNominationCounter::StateWork)
+        , Count(count)
+    {
+    }
+
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == NColumnShard::TEvPrivate::TEvCutHistoryNominate::EventType) {
+            ++Count;
+        }
+    }
+
+private:
+    ui32& Count;
+};
+
 class TCutRequestCounter: public NActors::TActor<TCutRequestCounter> {
 public:
     explicit TCutRequestCounter(ui32& count)
@@ -1239,6 +1259,225 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
         UNIT_ASSERT_C(cutter.GetCutStateForTest(key) == ECutState::None, "stale nomination must not cut after a re-seed");
         UNIT_ASSERT_C(guard->GetCut().empty(), "no TEvCutTabletHistory for a stale nomination");
+    }
+
+    // Counter reaching zero while Seeded sends TEvCutHistoryNominate, not an inline TryNominate.
+    Y_UNIT_TEST(DeferredNominationOnCounterZero) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 9001;
+        static constexpr ui32 CurrentGen = 5;
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen);
+        // Use a counter actor as TabletActorId; edge-actor observers are unreliable for event counting.
+        ui32 nominateCount = 0;
+        const auto nominationActor = runtime.Register(new TNominationCounter(nominateCount));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, nominationActor, TestSignals());
+        const TEntryKey key{ 2, 0 };
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        // OnBootComplete runs outside an actor context; FinishSeeding sets NominationPending without sending.
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1u);
+        // Consume the boot nomination so NominationPending is clear before the portion removal.
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnNominationEvent(ctx);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 0u, "boot nomination not sent (no ctx); count must stay zero");
+
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(42);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "exactly one TEvCutHistoryNominate after counter reaches zero");
+        UNIT_ASSERT_C(cutter.IsNominationPendingForTest(), "NominationPending must be true while event is in flight");
+        UNIT_ASSERT_C(cutter.IsNominationTriggeredForTest(), "a counter-triggered nomination must be marked triggered");
+        // TryNominate must not have run inline.
+        UNIT_ASSERT_C(guard->GetNominated().empty(), "sweep must not start until the deferred event is processed");
+    }
+
+    // A second counter reaching zero while an event is already in flight does not send a second event.
+    Y_UNIT_TEST(DeferredNominationDeduplicatedWhileEventInFlight) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 9002;
+        static constexpr ui32 CurrentGen = 5;
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        // Four channels so portions on channels 2 and 3 each carry their own counter.
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/4, { { 0, 100 }, { 5, 200 } });
+        ui32 nominateCount = 0;
+        const auto nominationActor = runtime.Register(new TNominationCounter(nominateCount));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, nominationActor, TestSignals());
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        portionBlobs[43].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 3, 3)));
+        // Consume the boot nomination so NominationPending is clear before the first removal.
+        cutter.OnBootComplete(portionBlobs);
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnNominationEvent(ctx);
+        });
+
+        // First zero: one event queued, pending flag set.
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(42);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "one event after first zero");
+        UNIT_ASSERT_C(cutter.IsNominationPendingForTest(), "pending after first zero");
+
+        // Second zero while event still in flight: no second event, flag stays set and triggered.
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(43);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "no second event while first is in flight");
+        UNIT_ASSERT_C(cutter.IsNominationPendingForTest(), "still pending after second zero");
+        UNIT_ASSERT_C(cutter.IsNominationTriggeredForTest(), "still triggered after second zero");
+    }
+
+    // After the in-flight event is consumed, the next counter reaching zero sends a fresh event.
+    Y_UNIT_TEST(DeferredNominationSendsNewEventAfterConsumption) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 9003;
+        static constexpr ui32 CurrentGen = 5;
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/4, { { 0, 100 }, { 5, 200 } });
+        ui32 nominateCount = 0;
+        const auto nominationActor = runtime.Register(new TNominationCounter(nominateCount));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, nominationActor, TestSignals());
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        portionBlobs[43].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 3, 3)));
+        // Consume the boot nomination so NominationPending is clear before the first removal.
+        cutter.OnBootComplete(portionBlobs);
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnNominationEvent(ctx);
+        });
+
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(42);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "one event after first zero");
+
+        // Consume the event: clears NominationPending and runs TryNominate.
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnNominationEvent(ctx);
+        });
+        UNIT_ASSERT_C(!cutter.IsNominationPendingForTest(), "NominationPending must be cleared after event is consumed");
+
+        // A new zero must now send a fresh event.
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(43);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 2u, "new event queued after pending was cleared");
+    }
+
+    // Completing the seeding transition inside an actor context sends one nomination event.
+    Y_UNIT_TEST(DeferredNominationOnSeedingComplete) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 9004;
+        static constexpr ui32 CurrentGen = 5;
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen);
+        ui32 nominateCount = 0;
+        const auto nominationActor = runtime.Register(new TNominationCounter(nominateCount));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, nominationActor, TestSignals());
+
+        cutter.BeginSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeding);
+
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.FinishSeeding();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "FinishSeeding must request exactly one nomination");
+        UNIT_ASSERT_C(cutter.IsNominationPendingForTest(), "nomination must be pending after seeding completes");
+        UNIT_ASSERT_C(cutter.IsNominationTriggeredForTest(), "seeding-triggered nomination must be marked triggered");
+    }
+
+    // While seeding (non-Seeded state), a counter reaching zero must not request a nomination.
+    Y_UNIT_TEST(DeferredNominationGatedBySeededState) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 9005;
+        static constexpr ui32 CurrentGen = 5;
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen);
+        ui32 nominateCount = 0;
+        const auto nominationActor = runtime.Register(new TNominationCounter(nominateCount));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, nominationActor, TestSignals());
+
+        // Put one counter into the cutter while it is in Seeding state.
+        cutter.BeginSeeding();
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        cutter.ApplySeedBatch(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 1u);
+
+        // Removing the portion in Seeding state must not request a nomination.
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.OnPortionRemoved(42);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 0u, "no nomination event while in Seeding state");
+        UNIT_ASSERT_C(!cutter.IsNominationPendingForTest(), "NominationPending must stay false in Seeding state");
+
+        // Positive control: completing the seeding triggers exactly one nomination.
+        runInActor([&](const NActors::TActorContext&) {
+            cutter.FinishSeeding();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(nominateCount, 1u, "FinishSeeding must request nomination once Seeded");
     }
 
 }   // TCutHistoryCutterCounters

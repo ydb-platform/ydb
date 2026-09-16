@@ -12,6 +12,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/hash_set.h>
 
+#include <functional>
+
 namespace NKikimr {
 
 using namespace NColumnShard;
@@ -63,8 +65,9 @@ void RebootWithOldEntry(TTestBasicRuntime& runtime, const TActorId& tabletActorI
     BootTablet(runtime, MakeTwoEntryInfo(TTestTxConfig::TxTablet0, firstGeneration + 1), launcher);
 }
 
-void DriveWakeups(TTestBasicRuntime& runtime, TActorId sender, const int count, const bool& stop) {
-    for (int i = 0; i < count && !stop; ++i) {
+// Wakeups drive the tablet's background activities; the loop ends as soon as stop() sees the awaited outcome.
+void DriveWakeups(TTestBasicRuntime& runtime, TActorId sender, const int count, const std::function<bool()>& stop = {}) {
+    for (int i = 0; i < count && !(stop && stop()); ++i) {
         runtime.AdvanceCurrentTime(TDuration::Seconds(2));
         Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
         runtime.SimulateSleep(TDuration::MilliSeconds(200));
@@ -135,8 +138,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
                 cutChannels.insert(ev->Get()->Record.GetChannel());
             }
         });
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 25, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 25);
         for (const ui32 channel : written.DataChannels) {
             UNIT_ASSERT_C(!cutChannels.contains(channel), "an old entry holding live portion blobs was cut, channel " << channel);
         }
@@ -186,8 +188,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
                 cutChannels.insert(ev->Get()->Record.GetChannel());
             }
         });
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30);
         for (const ui32 channel : written.DataChannels) {
             UNIT_ASSERT_C(
                 !cutChannels.contains(channel), "a data channel with live compacted portions was incorrectly cut, channel " << channel);
@@ -265,13 +266,15 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         });
 
         // Drive until seeding completes, then a few more rounds to check for spurious cuts.
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+        const auto seeded = [&] {
+            return guard->SeedingPortionKeyCount.load() != static_cast<size_t>(-1);
+        };
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, seeded);
         const size_t seedingCount = guard->SeedingPortionKeyCount.load();
         UNIT_ASSERT_C(seedingCount != static_cast<size_t>(-1), "seeding must have completed");
         UNIT_ASSERT_VALUES_EQUAL_C(seedingCount, inMemoryCount, "seeded portionKeyCount must equal the in-memory portion count");
 
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20);
         for (const ui32 channel : written.DataChannels) {
             UNIT_ASSERT_C(!cutChannels.contains(channel), "an old entry holding live portion blobs must not be cut, channel " << channel);
         }
@@ -337,14 +340,16 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         });
 
         // Drive until seeding completes (many small batches → more iterations needed).
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, neverStop);
+        const auto seeded = [&] {
+            return guard->SeedingPortionKeyCount.load() != static_cast<size_t>(-1);
+        };
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, seeded);
         const size_t seedingCount = guard->SeedingPortionKeyCount.load();
         UNIT_ASSERT_C(seedingCount != static_cast<size_t>(-1), "seeding must complete even with SeedBatchPortions=1");
         UNIT_ASSERT_C(seedingCount > 0, "seeded portionKeyCount must be > 0 after writing rows");
 
         // Old entry must not be cut (seeding found all portions across the many small batches).
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 20);
         for (const ui32 channel : written.DataChannels) {
             UNIT_ASSERT_C(!cutChannels.contains(channel), "an old entry with seeded live portions must not be cut, channel " << channel);
         }
@@ -408,8 +413,9 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
         // The first boot seeds an empty database and completes; only the run after the reboot reads portions.
         const int completedBeforeWakeups = guard->CompletedCount.load();
 
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 30, [&] {
+            return guard->FailedCalled.load();
+        });
 
         UNIT_ASSERT_C(guard->FailedCalled.load(), "OnCutHistorySeedingFailed must be called when a seeding error is injected");
         UNIT_ASSERT_VALUES_EQUAL_C(guard->CompletedCount.load(), completedBeforeWakeups, "seeding must not complete after it failed");
@@ -477,8 +483,9 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
 
         RebootWithOldEntry(runtime, tabletActorId, written.Generation, launcher);
 
-        const bool neverStop = false;
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 120, neverStop);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 120, [&] {
+            return guard->SeedingCompleted.load() && guard->BatchCompletedCount.load() > 0;
+        });
 
         UNIT_ASSERT_C(guard->SeedingCompleted.load(), "seeding must complete across several batches");
         UNIT_ASSERT_C(guard->BatchCompletedCount.load() > 0, "a non-final batch must be reported");
@@ -516,8 +523,55 @@ Y_UNIT_TEST_SUITE(TCutHistoryTablet) {
                 sawOldEntryCut = true;
             }
         });
-        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, sawOldEntryCut);
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, [&] {
+            return sawOldEntryCut;
+        });
         UNIT_ASSERT_C(sawOldEntryCut, "an empty old entry must be cut after the first GC round commits");
+    }
+
+    // A cut arrives only after a deferred nomination event, never inline inside a Complete handler.
+    Y_UNIT_TEST(CutOnlyAfterDeferredNominationEvent) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryTabletController>();
+        const TActorId launcher = runtime.AllocateEdgeActor();
+        ConfigureCutter(runtime);
+
+        ui32 firstGen = 0;
+        TActorId tabletActorId;
+        {
+            auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPut>([&](TEvBlobStorage::TEvPut::TPtr& ev) {
+                if (ev->Get()->Id.TabletID() == TTestTxConfig::TxTablet0) {
+                    firstGen = Max(firstGen, ev->Get()->Id.Generation());
+                }
+            });
+            tabletActorId = BootTablet(runtime, MakeOneEntryInfo(TTestTxConfig::TxTablet0), launcher);
+            TActorId sender = runtime.AllocateEdgeActor();
+            Y_UNUSED(SetupSchema(runtime, sender, TableId));
+        }
+        UNIT_ASSERT_C(firstGen > 0, "first boot must write to blob storage");
+
+        RebootWithOldEntry(runtime, tabletActorId, firstGen, launcher);
+
+        // Count deferred nomination events; record any cut that fires before the first one.
+        ui32 nominationCount = 0;
+        ui32 cutBeforeNomination = 0;
+        auto nominateObserver =
+            runtime.AddObserver<NColumnShard::TEvPrivate::TEvCutHistoryNominate>([&](NColumnShard::TEvPrivate::TEvCutHistoryNominate::TPtr&) {
+                ++nominationCount;
+            });
+        auto cutObserver = runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetFromGeneration() == 0 && nominationCount == 0) {
+                ++cutBeforeNomination;
+            }
+        });
+
+        DriveWakeups(runtime, runtime.AllocateEdgeActor(), 60, [&] {
+            return nominationCount > 0;
+        });
+
+        UNIT_ASSERT_C(nominationCount > 0, "at least one deferred TEvCutHistoryNominate must be dispatched");
+        UNIT_ASSERT_VALUES_EQUAL_C(cutBeforeNomination, 0u, "no cut must fire before the first deferred nomination event");
     }
 }
 

@@ -36,6 +36,35 @@ bool THistoryCutterWrapper::ComputeEnabled() {
     return HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardGroupDecommission();
 }
 
+TDuration THistoryCutterWrapper::GetMinTriggeredNominateInterval() {
+    return NYDBTest::TControllers::GetColumnShardController()->GetMinTriggeredNominateInterval(MinTriggeredNominateInterval);
+}
+
+void THistoryCutterWrapper::RequestNomination(bool triggered) {
+    if (NominationPending) {
+        // Upgrade to triggered if a more urgent caller arrives while the event is in flight.
+        NominationTriggered = NominationTriggered || triggered;
+        return;
+    }
+    NominationPending = true;
+    NominationTriggered = triggered;
+    if (triggered) {
+        Signals.OnTriggeredNomination();
+    }
+    // Guard against callers that run outside an actor context (unit tests, seeding bootstrap).
+    if (!TabletActorId || !NActors::TlsActivationContext) {
+        return;
+    }
+    NActors::TActivationContext::AsActorContext().Send(TabletActorId, new NColumnShard::TEvPrivate::TEvCutHistoryNominate());
+}
+
+void THistoryCutterWrapper::OnNominationEvent(const TActorContext& ctx) {
+    const bool wasTriggered = NominationTriggered;
+    NominationPending = false;
+    NominationTriggered = false;
+    TryNominate(ctx, wasTriggered);
+}
+
 TDuration THistoryCutterWrapper::GetNominateCadence() {
     if (!HasAppData()) {
         return DefaultNominateCadence;
@@ -180,6 +209,9 @@ void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
     }
     if (--it->second == 0) {
         Counters.erase(it);
+        if (SeedingState == ESeedState::Seeded) {
+            RequestNomination(/*triggered=*/true);
+        }
     }
 }
 
@@ -244,6 +276,8 @@ void THistoryCutterWrapper::BeginSeeding() {
     PortionKeys.clear();
     DisprovedAt.clear();
     LastNominateAt = TInstant::Zero();
+    NominationPending = false;
+    NominationTriggered = false;
     NextChannelToCheck = TGlobal::FirstDataChannel;
     SweepInFlight = false;
     SweepCandidates.reset();
@@ -299,6 +333,7 @@ void THistoryCutterWrapper::FinishSeeding() {
     PublishSeedLevels();
     Signals.OnSeedingCompleted();
     NYDBTest::TControllers::GetColumnShardController()->OnCutHistorySeedingCompleted(PortionKeys.size());
+    RequestNomination(/*triggered=*/true);
 }
 
 void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, const TString& reason) {
@@ -316,15 +351,16 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     FinishSeeding();
 }
 
-bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
+bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx, bool triggered) {
     if (!Enabled || SeedingState != ESeedState::Seeded) {
         return false;
     }
     if (SweepInFlight) {
         return false;
     }
-    // Candidate evaluation scans the GC queues, so rate-limit rather than scan per enqueue.
-    if (LastNominateAt && ctx.Now() - LastNominateAt < GetNominateCadence()) {
+    // Triggered nominations bypass the full cadence but still respect a minimum interval to prevent spin.
+    const TDuration rateLimit = triggered ? GetMinTriggeredNominateInterval() : GetNominateCadence();
+    if (LastNominateAt && ctx.Now() - LastNominateAt < rateLimit) {
         return false;
     }
     LastNominateAt = ctx.Now();

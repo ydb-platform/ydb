@@ -4,6 +4,9 @@ SIZE(MEDIUM)
 
 FORK_SUBTESTS()
 
+# The tablet tests drive long wakeup loops; one chunk per few tests keeps each inside the medium budget.
+SPLIT_FACTOR(8)
+
 PEERDIR(
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/counters

@@ -116,7 +116,7 @@ private:
 
 void TColumnShard::SetupCutHistory() {
     if (CutHistoryCutter) {
-        CutHistoryCutter->TryNominate(NActors::TActivationContext::AsActorContext());
+        CutHistoryCutter->RequestNomination(/*triggered=*/false);
         return;
     }
     auto op = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
@@ -220,6 +220,13 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistorySweepBatchDone::TPtr& ev, con
     }
 
     CutHistoryCutter->OnBatchComplete(disproved, msg->Exhausted, ctx);
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvCutHistoryNominate::TPtr& /*ev*/, const TActorContext& ctx) {
+    if (!CutHistoryCutter) {
+        return;
+    }
+    CutHistoryCutter->OnNominationEvent(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -48,6 +48,7 @@ class THistoryCutterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr Nominations;
+    NMonitoring::TDynamicCounters::TCounterPtr TriggeredNominations;
     NMonitoring::TDynamicCounters::TCounterPtr SweepsCompleted;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesCut;
     NMonitoring::TDynamicCounters::TCounterPtr SweepCandidates;
@@ -72,6 +73,10 @@ public:
 
     void OnNomination() const {
         Nominations->Add(1);
+    }
+
+    void OnTriggeredNomination() const {
+        TriggeredNominations->Add(1);
     }
 
     void OnSweepCompleted() const {

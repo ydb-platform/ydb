@@ -463,6 +463,11 @@ public:
     virtual TString GetSeedingInjectedErrorForTest() const {
         return {};
     }
+
+    // Minimum interval between consecutive triggered nominations (i.e. those that bypass the full cadence).
+    virtual TDuration GetMinTriggeredNominateInterval(const TDuration defaultValue) const {
+        return defaultValue;
+    }
 };
 
 class IKqpController {

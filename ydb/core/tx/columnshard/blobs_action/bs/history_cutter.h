@@ -70,13 +70,22 @@ public:
         LauncherActorId = id;
     }
 
+    // Minimum interval between consecutive triggered nominations (bypasses normal cadence).
+    static constexpr TDuration MinTriggeredNominateInterval = TDuration::Seconds(1);
+    static TDuration GetMinTriggeredNominateInterval();
+
+    // Request a deferred nomination; if one is already pending this upgrades it to triggered if needed.
+    void RequestNomination(bool triggered = false);
+    // Clear the pending flag and evaluate TryNominate; call only from the TEvCutHistoryNominate handler.
+    void OnNominationEvent(const TActorContext& ctx);
+
     void OnPortionAdded(const TPortionDataAccessor& accessor);
 
     void OnPortionRemoved(ui64 portionId);
 
     void OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds);
 
-    bool TryNominate(const TActorContext& ctx);
+    bool TryNominate(const TActorContext& ctx, bool triggered = false);
 
     std::shared_ptr<const TVector<TEntryKey>> GetSweepCandidates() const {
         static const auto empty = std::make_shared<const TVector<TEntryKey>>();
@@ -155,6 +164,14 @@ protected:
 
     // protected for tests: no public call sequence reaches the underflow branch.
     void DecrementCounter(const TEntryKey& key);
+
+    bool IsNominationPendingForTest() const {
+        return NominationPending;
+    }
+
+    bool IsNominationTriggeredForTest() const {
+        return NominationTriggered;
+    }
 
 public:
     void BeginSeeding();
@@ -265,6 +282,10 @@ private:
     };
 
     THashMap<TEntryKey, TDisprovalState> DisprovedAt;
+
+    // Deferred nomination: NominationPending prevents duplicate in-flight events.
+    bool NominationPending = false;
+    bool NominationTriggered = false;
 
     TInstant LastNominateAt;
     ui32 NextChannelToCheck = TGlobal::FirstDataChannel;

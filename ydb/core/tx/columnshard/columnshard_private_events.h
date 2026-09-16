@@ -97,6 +97,8 @@ struct TEvPrivate {
         EvStartCutHistorySweep,
         EvCutHistorySweepBatchDone,
 
+        EvCutHistoryNominate,
+
         EvEnd
     };
 
@@ -523,6 +525,9 @@ struct TEvPrivate {
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
 
     struct TEvStartCutHistorySweep: public TEventLocal<TEvStartCutHistorySweep, EvStartCutHistorySweep> {};
+
+    // Deferred nomination signal: the cutter sends this to itself so nomination never runs inside a tx Complete.
+    struct TEvCutHistoryNominate: public TEventLocal<TEvCutHistoryNominate, EvCutHistoryNominate> {};
 
     struct TEvCutHistorySweepBatchDone: public TEventLocal<TEvCutHistorySweepBatchDone, EvCutHistorySweepBatchDone> {
         TVector<std::pair<ui32, ui32>> Disproved;

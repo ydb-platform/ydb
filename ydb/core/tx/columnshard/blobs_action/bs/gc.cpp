@@ -25,7 +25,7 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
 bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
     if (auto* cutter = Manager->GetHistoryCutter()) {
-        cutter->TryNominate(NActors::TActivationContext::AsActorContext());
+        cutter->RequestNomination(/*triggered=*/true);
     }
     return true;
 }

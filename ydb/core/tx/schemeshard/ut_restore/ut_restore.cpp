@@ -87,6 +87,7 @@ namespace {
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
+        FillMetricsSettings(scheme, tableDesc);
 
         TString result;
         UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(scheme, &result));
@@ -2085,6 +2086,78 @@ value {
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
+    }
+
+    Y_UNIT_TEST_FLAG(ExportImportDatabaseMetricsLevel, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+            DetailedMetricsSettings {
+              Configured {
+                MetricsLevel: MetricsLevelDisabled
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        const auto schemeIt = s3Mock.GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != s3Mock.GetData().end());
+        Ydb::Table::CreateTableRequest scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(schemeIt->second, &scheme));
+        UNIT_ASSERT(scheme.has_metrics_settings());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(scheme.metrics_settings().metrics_level()),
+            static_cast<int>(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE));
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        const auto restored = DescribePath(runtime, "/MyRoot/Restored", true, true);
+        TestDescribeResult(restored, {NLs::PathExist});
+        const auto& metrics = restored.GetPathDescription().GetTable().GetDetailedMetricsSettings();
+        UNIT_ASSERT(metrics.HasConfigured());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(metrics.GetConfigured().GetMetricsLevel()),
+            static_cast<int>(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled));
+
+        Ydb::Table::CreateTableRequest restoredScheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(GenerateScheme(restored), &restoredScheme));
+        UNIT_ASSERT(restoredScheme.has_metrics_settings());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restoredScheme.metrics_settings().metrics_level()),
+            static_cast<int>(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE));
     }
 
     Y_UNIT_TEST_FLAG(ShouldRestoreTableWithMultiColumnStatistics, EnableDataShardDirectPartImport) {

@@ -1606,6 +1606,68 @@ partitioning_settings {
 )");
     }
 
+    Y_UNIT_TEST(ShouldExportMetricsLevel) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        const TVector<TString> tables = {R"(
+            Name: "Table"
+            Columns {
+              Name: "key"
+              Type: "Uint32"
+            }
+            KeyColumnNames: ["key"]
+            DetailedMetricsSettings {
+              Configured {
+                MetricsLevel: MetricsLevelTable
+              }
+            }
+        )", R"(
+            Name: "TableDatabase"
+            Columns {
+              Name: "key"
+              Type: "Uint32"
+            }
+            KeyColumnNames: ["key"]
+            DetailedMetricsSettings {
+              Configured {
+                MetricsLevel: MetricsLevelDisabled
+              }
+            }
+        )"};
+
+        Run(Runtime(), Env(), tables, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+              items {
+                source_path: "/MyRoot/TableDatabase"
+                destination_prefix: "database"
+              }
+            }
+        )", S3Port()));
+
+        auto schemeIt = S3Mock().GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != S3Mock().GetData().end());
+
+        TString scheme = schemeIt->second;
+
+        UNIT_ASSERT_STRING_CONTAINS(scheme, "METRICS_LEVEL_TABLE");
+
+        auto databaseSchemeIt = S3Mock().GetData().find("/database/scheme.pb");
+        UNIT_ASSERT(databaseSchemeIt != S3Mock().GetData().end());
+
+        Ydb::Table::CreateTableRequest databaseScheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(databaseSchemeIt->second, &databaseScheme));
+        UNIT_ASSERT(databaseScheme.has_metrics_settings());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(databaseScheme.metrics_settings().metrics_level()),
+            static_cast<int>(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE));
+    }
+
     Y_UNIT_TEST(ShouldRejectExportOfTableWithGeneratedColumn) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);

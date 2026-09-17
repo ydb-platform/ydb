@@ -351,6 +351,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceWaitTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IdleDeviceChecks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IdleDeviceCheckSuccesses;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IdleDeviceCheckErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IdleDeviceCheckInFlight;
 
     // Set once when the shared UringRouter is first created (or creation fails).
     ::NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
@@ -374,6 +378,7 @@ struct TPDiskMon {
     TTimesHistogram DeviceWriteDuration;
     TTimesHistogram DeviceTrimDuration;
     TTimesHistogram DeviceFlushDuration;
+    TTimesHistogram IdleDeviceCheckDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;

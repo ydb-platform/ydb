@@ -138,6 +138,10 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
+    COUNTER_INIT(DeviceGroup, IdleDeviceChecks, true);
+    COUNTER_INIT(DeviceGroup, IdleDeviceCheckSuccesses, true);
+    COUNTER_INIT(DeviceGroup, IdleDeviceCheckErrors, true);
+    COUNTER_INIT(DeviceGroup, IdleDeviceCheckInFlight, false);
 
     COUNTER_INIT(DeviceGroup, RegularUringCount, false);
     COUNTER_INIT(DeviceGroup, FallbackUringCount, false);
@@ -170,6 +174,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);
     HISTOGRAM_INIT(DeviceFlushDuration, deviceFlushDuration);
+    HISTOGRAM_INIT(IdleDeviceCheckDuration, idleDeviceCheckDuration);
 
     TRACKER_INIT_IF_EXTENDED(LogQueueTime, logQueueTime, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(GetQueueSyncLog, getQueueSyncLog, Time in millisec);

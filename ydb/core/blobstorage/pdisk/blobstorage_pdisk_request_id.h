@@ -101,6 +101,7 @@ struct TReqId {
         ChangeExpectedSlotCount = 82,
         ChunkReadRaw = 83,
         ChunkWriteRaw = 84,
+        IdleDeviceCheck = 85,
     };
 
     // 56 bit idx, 8 bit source

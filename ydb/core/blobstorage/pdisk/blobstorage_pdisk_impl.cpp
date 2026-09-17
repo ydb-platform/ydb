@@ -24,6 +24,48 @@ namespace NPDisk {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
+namespace {
+
+class TIdleDeviceCheckCompletion final : public TCompletionAction {
+    TBuffer::TPtr Buffer;
+    std::atomic<bool>& InFlight;
+    TPDiskMon& Mon;
+    const NHPTimer::STime StartTime = HPNow();
+
+    void Finish(bool success) {
+        if (success) {
+            Mon.IdleDeviceCheckSuccesses->Inc();
+        } else if (Result != EIoResult::Unknown && Result != EIoResult::Ok) {
+            Mon.IdleDeviceCheckErrors->Inc();
+        }
+        Mon.IdleDeviceCheckDuration.Increment(HPMilliSecondsFloat(HPNow() - StartTime));
+        *Mon.IdleDeviceCheckInFlight = 0;
+        InFlight.store(false, std::memory_order_release);
+        delete this;
+    }
+
+public:
+    TIdleDeviceCheckCompletion(TBuffer* buffer, std::atomic<bool>& inFlight, TPDiskMon& mon)
+        : Buffer(buffer)
+        , InFlight(inFlight)
+        , Mon(mon)
+    {}
+
+    void* GetBuffer() const {
+        return Buffer->Data();
+    }
+
+    void Exec(TActorSystem*) override {
+        Finish(true);
+    }
+
+    void Release(TActorSystem*) override {
+        Finish(false);
+    }
+};
+
+} // anonymous namespace
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,6 +114,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     EnableFreeChunksSortingHDD = TControlWrapper(Cfg->SortFreeChunksHDD, 0, 1);
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
+    IdleDeviceCheckIntervalSeconds = TControlWrapper(0, 0, 3600);
     ChunkBaseLimitPerMille = TControlWrapper(0, 0, 130);  // 0 means ChunkBaseLimit isn't configured via ICB
 
     // Override PDiskConfig.SpaceColorBorder:
@@ -368,14 +411,7 @@ void TPDisk::Stop() {
         {"marker", "BPD01"},
         {"ownerInfo", StartupOwnerInfo()});
 
-#if defined(__linux__)
-    if (SharedUringRouter) {
-        SharedUringRouter->StopSync();
-        SharedUringRouter.reset();
-    }
-#endif
-
-    BlockDevice->Stop();
+    StopDeviceIo();
 
     // BlockDevice is stopped, the data will NOT hit the disk.
     if (CommonLogger.Get()) {
@@ -437,6 +473,17 @@ void TPDisk::Stop() {
         InitialTailBuffer->Exec(PCtx->ActorSystem);
         InitialTailBuffer = nullptr;
     }
+}
+
+void TPDisk::StopDeviceIo() {
+#if defined(__linux__)
+    if (SharedUringRouter) {
+        SharedUringRouter->StopSync();
+        SharedUringRouter.reset();
+    }
+#endif
+
+    BlockDevice->Stop();
 }
 
 void TPDisk::ObliterateCommonLogSectorSet() {
@@ -2193,7 +2240,9 @@ TDeviceIoSampleSink TPDisk::MakeUringSampleSink() const {
     const ui64 readBps = DriveModel.Speed(TDriveModel::OP_TYPE_READ);
     const ui64 writeBps = DriveModel.Speed(TDriveModel::OP_TYPE_WRITE);
     auto sampleAgg = Mon.DeviceOverestimationMerged;
-    return [readBps, writeBps, sampleAgg](const TDeviceIoSample& sample) {
+    auto lastIoActivityTimestamp = SharedUringLastIoActivityTimestamp;
+    return [readBps, writeBps, sampleAgg, lastIoActivityTimestamp](const TDeviceIoSample& sample) {
+        UpdateIoActivityTimestamp(*lastIoActivityTimestamp, TMonotonic::Now().MicroSeconds());
         TDeviceIoSample s = sample;
         const ui64 speed = s.IsWrite ? writeBps : readBps;
         s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
@@ -3292,6 +3341,8 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(EnableFreeChunksSortingHDD);
             TControlBoard::RegisterSharedControl(UseNoopSchedulerHDD, icb->PDiskControls.UseNoopSchedulerHDD);
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
+            TControlBoard::RegisterSharedControl(IdleDeviceCheckIntervalSeconds,
+                    icb->PDiskControls.IdleDeviceCheckIntervalSeconds);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
             TControlBoard::RegisterSharedControl(UseDeviceOverestimationRatioMerged,
@@ -3949,7 +4000,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestChangeExpectedSlotCount:
             break;
         case ERequestType::RequestStopDevice:
-            BlockDevice->Stop();
+            StopDeviceIo();
             delete request;
             return false;
         case ERequestType::RequestChunkReadPiece:
@@ -4409,6 +4460,43 @@ void TPDisk::GetJobsFromForsetti() {
         {"totalChunkReqs", totalNonLogReqs});
 }
 
+void TPDisk::MaybeStartIdleDeviceCheck(bool isNothingToDo) {
+    const ui64 intervalSeconds = IdleDeviceCheckIntervalSeconds;
+    const TMonotonic now = TMonotonic::Now();
+
+    if (!intervalSeconds || !isNothingToDo ||
+            InitPhase.load(std::memory_order_acquire) != EInitPhase::Initialized ||
+            IdleDeviceCheckInFlight.load(std::memory_order_acquire) || !BlockDevice->IsGood() ||
+            InputQueue.GetWaitingSize() != 0 || !ForsetiScheduler.IsEmpty() ||
+            BlockDevice->GetOutstandingIoCount() != 0) {
+        return;
+    }
+
+#if defined(__linux__)
+    if (SharedUringRouter && SharedUringRouter->GetInflight() != 0) {
+        return;
+    }
+#endif
+
+    const ui64 lastActivityTimestamp = Max(BlockDevice->GetLastIoActivityTimestamp(),
+        SharedUringLastIoActivityTimestamp->load(std::memory_order_acquire));
+    // The check itself is physical I/O and advances this timestamp, so it also schedules the next check.
+    if (lastActivityTimestamp && now < TMonotonic::MicroSeconds(lastActivityTimestamp) +
+            TDuration::Seconds(intervalSeconds)) {
+        return;
+    }
+
+    IdleDeviceCheckInFlight.store(true, std::memory_order_release);
+    *Mon.IdleDeviceCheckInFlight = 1;
+    Mon.IdleDeviceChecks->Inc();
+
+    auto *completion = new TIdleDeviceCheckCompletion(BufferPool->Pop(), IdleDeviceCheckInFlight, Mon);
+    completion->CostNs = DriveModel.TimeForSizeNs(Format.SectorSize, 0, TDriveModel::OP_TYPE_READ);
+    // The probe deliberately bypasses Forseti after the admission checks above establish device idleness.
+    BlockDevice->PreadAsync(completion->GetBuffer(), Format.SectorSize, 0, completion,
+        TReqId(TReqId::IdleDeviceCheck, UpdateIdx), nullptr);
+}
+
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
     LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
@@ -4541,6 +4629,8 @@ void TPDisk::Update() {
     LastTact = tact;
 
     ProcessPendingYardInits();
+
+    MaybeStartIdleDeviceCheck(isNothingToDo);
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
     LWTRACK(PDiskStartWaiting, UpdateCycleOrbit, PCtx->PDiskId);

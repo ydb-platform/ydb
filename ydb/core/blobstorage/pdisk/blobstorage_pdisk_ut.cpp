@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_ut.h"
 
 #include "blobstorage_pdisk_abstract.h"
+#include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_tools.h"
@@ -270,6 +271,48 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
     }
 
+    Y_UNIT_TEST(TestDeviceErrorRetiresRetainedRouter) {
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        auto *pdisk = ctx.GetPDisk();
+        std::shared_ptr<NPDisk::TUringRouter> router;
+        ctx.SafeRunOnPDisk([&](NPDisk::TPDisk *current) {
+            router = std::make_shared<NPDisk::TUringRouter>(current->BlockDevice->DuplicateFd(),
+                current->PCtx->ActorSystem);
+            current->SharedUringRouter = router;
+        });
+        UNIT_ASSERT(router);
+
+        ctx.Send(new NPDisk::TEvDeviceError("test"));
+        ctx.GetRuntime()->WaitFor("fatal device shutdown", [&] {
+            return ctx.SafeRunOnPDisk([&](NPDisk::TPDisk *current) {
+                return !current->BlockDevice->IsGood() && NPDisk::TUringRouterTestPeer::Retired(*router);
+            });
+        });
+
+        UNIT_ASSERT(!pdisk->BlockDevice->DuplicateFd().IsOpen());
+        struct TRead : NPDisk::TUringOperationBase {
+            ui32 Completed = 0;
+            ui32 Dropped = 0;
+            void OnComplete(TActorSystem*) noexcept override { ++Completed; }
+            void OnDrop(TActorSystem*) noexcept override { ++Dropped; }
+        } op;
+        alignas(4096) char buffer[4096];
+        op.SetOperationType(NPDisk::TUringOperationBase::EREAD);
+        op.PrepareIov(buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(!router->Read(&op));
+        UNIT_ASSERT_VALUES_EQUAL(op.Completed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(op.Dropped, 0);
+
+        TFile independent(ctx.TestCtx.Path, OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
+    }
+
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
@@ -277,16 +320,20 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto sink = pdisk->MakeUringSampleSink();
         std::weak_ptr<NPDisk::TDeviceOverestimationAggregator> aggregator = pdisk->Mon.DeviceOverestimationMerged;
+        std::weak_ptr<std::atomic<ui64>> lastIoActivityTimestamp = pdisk->SharedUringLastIoActivityTimestamp;
         pdisk.Reset();
         UNIT_ASSERT(!aggregator.expired());
+        UNIT_ASSERT(!lastIoActivityTimestamp.expired());
         NPDisk::TDeviceIoSample sample;
         sample.Size = 4096;
         sample.SubmitCycles = 1;
         sample.CompleteCycles = 2;
         sink(sample);
         UNIT_ASSERT_VALUES_EQUAL(aggregator.lock()->ComputeAndReset(0).SampleCount, 1);
+        UNIT_ASSERT(lastIoActivityTimestamp.lock()->load(std::memory_order_acquire) > 0);
         sink = {};
         UNIT_ASSERT(aggregator.expired());
+        UNIT_ASSERT(lastIoActivityTimestamp.expired());
     }
 
     Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
@@ -1859,6 +1906,128 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         control->RestoreDefault();
         UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+    }
+
+    Y_UNIT_TEST(IdleDeviceCheckControlDefaultsToDisabledAndIsLive) {
+        TActorTestContext testCtx{{}};
+        auto *pdisk = testCtx.GetPDisk();
+        testCtx.GetRuntime()->SetDispatchTimeout(TDuration::Seconds(10));
+
+        auto &icb = testCtx.GetRuntime()->GetAppData().Icb;
+        auto control = icb->PDiskControls.IdleDeviceCheckIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT_C(control, "IdleDeviceCheckIntervalSeconds must be registered by PDisk::Initialize");
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 0);
+        UNIT_ASSERT(control->IsDefault());
+
+        control->SetFromHtmlRequest(3601);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 3600);
+        control->SetFromHtmlRequest(-1);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+
+        const i64 disabledChecks = pdisk->Mon.IdleDeviceChecks->Val();
+        Sleep(TDuration::MilliSeconds(1200));
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceChecks->Val(), disabledChecks);
+
+        control->SetFromHtmlRequest(3600);
+        Sleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceChecks->Val(), disabledChecks);
+
+        control->SetFromHtmlRequest(1);
+        testCtx.GetRuntime()->WaitFor("idle device check", [&] {
+            return pdisk->Mon.IdleDeviceCheckSuccesses->Val() > 0 &&
+                pdisk->Mon.IdleDeviceCheckInFlight->Val() == 0;
+        });
+        UNIT_ASSERT(pdisk->Mon.IdleDeviceChecks->Val() > disabledChecks);
+
+        control->SetFromHtmlRequest(0);
+        testCtx.GetRuntime()->WaitFor("idle device check disabled", [&] {
+            return testCtx.SafeRunOnPDisk([](NPDisk::TPDisk *current) {
+                return static_cast<i64>(current->IdleDeviceCheckIntervalSeconds) == 0 &&
+                    current->Mon.IdleDeviceCheckInFlight->Val() == 0;
+            });
+        });
+        const i64 checksAfterDisable = pdisk->Mon.IdleDeviceChecks->Val();
+        Sleep(TDuration::MilliSeconds(1200));
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceChecks->Val(), checksAfterDisable);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(testCtx.GetPDisk(), pdisk);
+    }
+
+    Y_UNIT_TEST(IdleDeviceCheckIsSuppressedByPhysicalIo) {
+        TActorTestContext testCtx{{}};
+        auto *pdisk = testCtx.GetPDisk();
+        testCtx.GetRuntime()->SetDispatchTimeout(TDuration::Seconds(10));
+
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->PDiskControls
+            .IdleDeviceCheckIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+
+        TManualEvent readStarted;
+        TManualEvent releaseRead;
+        TSignalEvent readDone;
+        std::atomic<bool> firstRead = true;
+        NPDisk::TAlignedData buffer(pdisk->Format.SectorSize);
+        bool readSubmitted = false;
+        testCtx.TestCtx.SectorMap->SetReadCallback([&] {
+            if (firstRead.exchange(false)) {
+                readStarted.Signal();
+                releaseRead.WaitI();
+            }
+        });
+        Y_DEFER {
+            releaseRead.Signal();
+            if (readSubmitted) {
+                Y_ABORT_UNLESS(readDone.WaitT(TDuration::Seconds(5)),
+                    "timed out waiting for physical read cleanup");
+            }
+            testCtx.TestCtx.SectorMap->SetReadCallback({});
+        };
+
+        readSubmitted = true;
+        pdisk->BlockDevice->PreadAsync(buffer.Get(), pdisk->Format.SectorSize, 0,
+            new NPDisk::TCompletionSignal(&readDone), NPDisk::TReqId(NPDisk::TReqId::Test0, 0), nullptr);
+        UNIT_ASSERT_C(readStarted.WaitT(TDuration::Seconds(5)), "physical read did not start");
+        UNIT_ASSERT(pdisk->BlockDevice->GetOutstandingIoCount() > 0);
+
+        const i64 checksBeforeEnable = pdisk->Mon.IdleDeviceChecks->Val();
+        control->SetFromHtmlRequest(1);
+        Sleep(TDuration::MilliSeconds(2200));
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceChecks->Val(), checksBeforeEnable);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceCheckInFlight->Val(), 0);
+
+        releaseRead.Signal();
+        UNIT_ASSERT_C(readDone.WaitT(TDuration::Seconds(5)), "physical read did not complete");
+        readSubmitted = false;
+        testCtx.TestCtx.SectorMap->SetReadCallback({});
+        testCtx.GetRuntime()->WaitFor("idle device check after physical I/O", [&] {
+            return pdisk->Mon.IdleDeviceCheckSuccesses->Val() > 0;
+        });
+        control->SetFromHtmlRequest(0);
+    }
+
+    Y_UNIT_TEST(IdleDeviceCheckFailureStopsPDisk) {
+        TActorTestContext testCtx{{}};
+        auto *pdisk = testCtx.GetPDisk();
+        testCtx.GetRuntime()->SetDispatchTimeout(TDuration::Seconds(10));
+
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->PDiskControls
+            .IdleDeviceCheckIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
+        control->SetFromHtmlRequest(1);
+
+        testCtx.GetRuntime()->WaitFor("idle device check failure", [&] {
+            return testCtx.SafeRunOnPDisk([](NPDisk::TPDisk *current) {
+                return !current->BlockDevice->IsGood();
+            });
+        });
+        UNIT_ASSERT(pdisk->Mon.IdleDeviceChecks->Val() > 0);
+        UNIT_ASSERT(pdisk->Mon.IdleDeviceCheckErrors->Val() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.IdleDeviceCheckInFlight->Val(), 0);
+        UNIT_ASSERT(pdisk->Mon.DeviceIoErrors->Val() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(),
+            static_cast<i64>(NKikimrBlobStorage::TPDiskState::DeviceIoError));
     }
 
     Y_UNIT_TEST(DeviceHaltTooLong) {

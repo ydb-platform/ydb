@@ -637,8 +637,14 @@ private:
     void AddPendingDeferredReadSetAck(TDeferredReadSetAck&& ack);
     void SendDeferredReadSetAcks(const TActorContext& ctx);
 
+    // Max step for which TEvPlanStepAccepted was already sent in this incarnation.
+    // In-memory only (not PlanStep/PlanTxId, not persisted). Retransmits and late
+    // steps <= LastAcked skip the queue and WRITE_TX fence after planning txs.
+    TMaybe<ui64> LastAckedPlanStep;
+
     // FIFO of pending PlanStep acks. Mediator ignores non-head TEvPlanStepAccepted,
     // so we send only a Ready prefix in arrival order. Duplicate Accepted is ok.
+    // Steps <= LastAckedPlanStep never enter this queue.
     //
     // EState is one phase per entry (not independent Ready/FenceInFlight flags):
     //
@@ -659,7 +665,8 @@ private:
     // that arrived while the request was in flight. One KV cycle instead of
     // start-after (Pending/InFlight), which would start a second write for late
     // arrivals. A retransmit of an already Ready unknown is a new WaitWriteTx
-    // and does start another WRITE_TX (previous cycle already completed).
+    // and does start another WRITE_TX (previous cycle already completed) —
+    // unless step <= LastAckedPlanStep, which never enqueues.
     // canProcess keys off WaitWriteTx only, so a known WaitTxExecuted head
     // cannot busy-loop WRITE_TX.
     struct TPlanStepAckEntry {

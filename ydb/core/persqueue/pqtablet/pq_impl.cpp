@@ -516,6 +516,7 @@ void TPersQueue::InitPlanStep(const NKikimrPQ::TTabletTxInfo& info)
 
     ExecStep = info.GetExecStep();
     ExecTxId = info.GetExecTxId();
+    // LastAckedPlanStep is not persisted: after reboot retransmits are fenced again.
 }
 
 void TPersQueue::ReadTxWrites(const NKikimrClient::TKeyValueResponse::TReadResult& read,
@@ -3992,7 +3993,12 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         PlanTxId = *lastPlannedTxId;
     }
 
-    if (lastPlannedTxId.Defined()) {
+    if (LastAckedPlanStep.Defined() && step <= *LastAckedPlanStep) {
+        // Already sent Accepted for this or a later step in this incarnation
+        // (retransmit / late lower step). Planning above still ran. Skip the
+        // queue and WRITE_TX fence; duplicate Accepted is ok.
+        SendPlanStepAcks(ctx, sender, *ev);
+    } else if (lastPlannedTxId.Defined()) {
         // Known: WaitTxExecuted until LastTxId reaches EXECUTED, or Ready now.
         // Retransmits are appended as-is (duplicate PlanStepAccepted is acceptable).
         const auto& tx = Txs.find(*lastPlannedTxId)->second;
@@ -4054,6 +4060,10 @@ void TPersQueue::SendPlanStepAcks(const TActorContext& ctx,
 
     SendPlanStepAck(ctx, step, txAcks);
     SendPlanStepAccepted(ctx, receiver, step);
+
+    if (!LastAckedPlanStep.Defined() || step > *LastAckedPlanStep) {
+        LastAckedPlanStep = step;
+    }
 }
 
 void TPersQueue::SendPlanStepAck(const TActorContext& ctx,

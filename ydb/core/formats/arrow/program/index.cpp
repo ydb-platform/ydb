@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExecute(
+TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto scalarConst = context.GetResources().GetConstantScalarVerified(GetInput().back().GetColumnId());
 
@@ -26,7 +26,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TIndexCheckerProcessor::DoExec
     } else {
         context.MutableResources().AddFilter(*conclusion);
     }
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

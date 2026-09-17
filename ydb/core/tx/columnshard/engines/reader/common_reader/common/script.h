@@ -13,6 +13,9 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class IDataSource;
 class TFetchingScriptCursor;
 
+using IAsyncJob = NArrow::NSSA::IAsyncJob;
+using TExecutionResult = NArrow::NSSA::TExecutionResult;
+
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
@@ -21,7 +24,8 @@ private:
     std::shared_ptr<TFetchingStepSignals> Signals;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const = 0;
 
     virtual TString DoDebugString() const {
         return "";
@@ -44,7 +48,8 @@ public:
 
     virtual ~IFetchingStep() = default;
 
-    [[nodiscard]] TConclusion<bool> ExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    [[nodiscard]] TConclusion<TExecutionResult> ExecuteInplace(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
         return DoExecuteInplace(source, step);
     }
 

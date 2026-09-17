@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExecute(
+TConclusion<TExecutionResult> THeaderCheckerProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto source = context.GetDataSource().lock();
     if (!source) {
@@ -24,7 +24,7 @@ TConclusion<IResourceProcessor::EExecutionResult> THeaderCheckerProcessor::DoExe
     } else {
         context.MutableResources().AddFilter(*conclusion);
     }
-    return IResourceProcessor::EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

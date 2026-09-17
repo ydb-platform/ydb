@@ -3,7 +3,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::DoExecute(
+TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     auto source = context.GetDataSource().lock();
     if (!source) {
@@ -74,17 +74,10 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         }
     }
 
-    auto conclusion = source->StartFetch(context, logic);
-    if (conclusion.IsFail()) {
-        return conclusion;
-    } else if (!*conclusion) {
-        return IResourceProcessor::EExecutionResult::Success;
-    } else {
-        return EExecutionResult::InBackground;
-    }
+    return source->StartFetch(context, logic);
 }
 
-TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
+TConclusion<TExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
     for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
@@ -99,7 +92,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcess
             }
         }
     }
-    return EExecutionResult::Success;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

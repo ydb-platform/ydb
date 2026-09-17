@@ -46,7 +46,7 @@ private:
 private:
     struct TPrevNodeState {
         ui32 NodeId = 0;
-        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Pending = false;
         bool Failed = false;
         bool Defined = false;
     };
@@ -76,11 +76,10 @@ public:
         StartCategoryName = std::move(name);
     }
 
-    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
-        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
-                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
-                           .Failed = conclusion.IsFail(),
-                           .Defined = true }, std::memory_order_release);
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<TExecutionResult>& conclusion) {
+        PrevNode.store(
+            TPrevNodeState{ .NodeId = nodeId, .Pending = conclusion.IsSuccess() && conclusion->IsPending(), .Failed = conclusion.IsFail(),
+                .Defined = true }, std::memory_order_release);
     }
 
     TString GetPrevCategoryName() const {
@@ -98,7 +97,7 @@ public:
         const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
         TString executionResult;
         if (state.Defined) {
-            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
+            executionResult = state.Failed ? "Fail" : (state.Pending ? "Pending" : "Done");
         }
         return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
     }
@@ -192,13 +191,13 @@ private:
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
 
-    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+    virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
-    virtual bool DoStartFetchingColumns(
+    virtual TExecutionResult DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
@@ -430,7 +429,8 @@ public:
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+    TExecutionResult StartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 

@@ -88,6 +88,20 @@ public:
     }
 };
 
+class TBlobsReadingJob: public IAsyncJob {
+private:
+    const std::shared_ptr<NBlobOperations::NRead::ITask> Task;
+
+public:
+    TBlobsReadingJob(std::shared_ptr<NBlobOperations::NRead::ITask>&& task)
+        : Task(std::move(task))
+    {
+        AFL_VERIFY(Task);
+    }
+
+    virtual void Start() override;
+};
+
 class TColumnsFetcherTask: public NBlobOperations::NRead::ITask, public NColumnShard::TMonitoringObjectsCounter<TColumnsFetcherTask> {
 private:
     using TBase = NBlobOperations::NRead::ITask;

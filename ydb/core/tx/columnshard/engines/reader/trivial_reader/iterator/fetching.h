@@ -20,6 +20,8 @@ using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScriptCursor = NCommon::TFetchingScriptCursor;
 using TStepAction = NCommon::TStepAction;
+using TExecutionResult = NCommon::TExecutionResult;
+using TSendEventJob = NCommon::TSendEventJob;
 
 class IFetchingStep: public NCommon::IFetchingStep {
 private:
@@ -44,7 +46,7 @@ public:
     {
     }
 
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 };
 
@@ -61,7 +63,7 @@ public:
     {
     }
 
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 };
 
@@ -72,7 +74,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -98,7 +100,7 @@ private:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -128,7 +130,7 @@ private:
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -155,7 +157,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -179,7 +181,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     virtual TString DoDebugString() const override {
@@ -201,7 +203,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TFilterCutLimit(const ui32 limit, const bool reverse)
@@ -219,7 +221,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
@@ -234,7 +236,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TConflictDetector()
@@ -249,7 +251,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TInitializeSourceStep()
@@ -266,7 +268,7 @@ private:
         const ui64 columnBlobBytes) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDetectInMemFlag(const TColumnsSetIds& columns)
@@ -282,7 +284,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
@@ -297,7 +299,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()
@@ -325,7 +327,7 @@ private:
     };
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TDuplicateFilter()
@@ -340,7 +342,7 @@ private:
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
 
 public:
-    virtual TConclusion<bool> DoExecuteInplace(
+    virtual TConclusion<TExecutionResult> DoExecuteInplace(
         const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
 
     TUpdateAggregatedMemoryStep()

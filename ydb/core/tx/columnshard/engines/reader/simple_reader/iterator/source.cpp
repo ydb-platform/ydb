@@ -159,7 +159,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         {"columns", columnIds.size()});
 }
 
-bool TPortionDataSource::DoStartFetchingColumns(
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingColumns(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
@@ -179,13 +179,12 @@ bool TPortionDataSource::DoStartFetchingColumns(
 
     auto readActions = action.GetReadingActions();
     if (!readActions.size()) {
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
 
     auto constructor =
         std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
-    return true;
+    return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TBlobsReadingJob>(std::move(constructor)));
 }
 
 std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
@@ -199,7 +198,7 @@ std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
     return indexes.front();
 }
 
-TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
+TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
@@ -214,16 +213,15 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
             MutableStageData().AddFetcher(i);
             AFL_VERIFY(readActions.IsEmpty());
         }
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
         AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
-    NActors::TActivationContext::AsActorContext().Register(
-        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
-            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
-    return true;
+    auto task = std::make_shared<NCommon::TColumnsFetcherTask>(
+        std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "");
+    return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TBlobsReadingJob>(std::move(task)));
 }
 
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
@@ -434,7 +432,8 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingAccessor(
+    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -445,8 +444,8 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
     request->AddPortion(Portion);
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
     request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
-    return true;
+    return NCommon::TExecutionResult::Pending(
+        std::make_shared<NCommon::TAccessorsRequestJob>(GetContext()->GetCommonContext()->GetDataAccessorsManager(), std::move(request)));
 }
 
 TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
@@ -474,7 +473,7 @@ TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_p
         {"finish", Finish.DebugString()});
 }
 
-TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
     const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
     const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) {
     class TEntitySize {

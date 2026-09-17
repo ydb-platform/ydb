@@ -24,10 +24,10 @@ void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>&
         Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
-TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
+TConclusion<TExecutionResult> TColumnBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
-    auto result = !source->StartFetchingColumns(source, step, Columns);
+    auto result = source->StartFetchingColumns(source, step, Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     source->AddExecutionDuration(executionDurationMs);
 
@@ -51,7 +51,8 @@ void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, c
         source->GetRecordsCount(), source->GetReservedMemory());
 }
 
-TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<TExecutionResult> TAssemblerStep::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
     source->AssembleColumns(Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
@@ -60,17 +61,17 @@ TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSo
     ui64 bytesAssembled = source->GetColumnRawBytes(Columns->GetColumnIds());
     ReportTracing(source, step, executionDurationMs, bytesAssembled);
 
-    return true;
+    return TExecutionResult::Done();
 }
 
 ui64 TAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
     return source->GetColumnRawBytes(Columns->GetColumnIds());
 }
 
-TConclusion<bool> TOptionalAssemblerStep::DoExecuteInplace(
+TConclusion<TExecutionResult> TOptionalAssemblerStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->AssembleColumns(Columns, !source->IsSourceInMemory());
-    return true;
+    return TExecutionResult::Done();
 }
 
 ui64 TOptionalAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
@@ -140,7 +141,8 @@ void TAllocateMemoryStep::ReportTracing(
         source->GetReservedMemory());
 }
 
-TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<TExecutionResult> TAllocateMemoryStep::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
@@ -159,21 +161,21 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     ReportTracing(source, step, executionDurationMs, size);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
-    source->GetContext()->SendToGroupedMemoryAllocation(source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
-    return false;
+    return TExecutionResult::Pending(
+        std::make_shared<TMemoryAllocationJob>(source->GetContext(), source->GetMemoryGroupId(), allocation, StageIndex));
 }
 
 ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const {
     return 0;
 }
 
-NKikimr::TConclusion<bool> TBuildStageResultStep::DoExecuteInplace(
+TConclusion<TExecutionResult> TBuildStageResultStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->BuildStageResult(source);
-    return true;
+    return TExecutionResult::Done();
 }
 
-TConclusion<bool> StartProgramStepReserveMemory(
+TExecutionResult StartProgramStepReserveMemory(
     const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
     const auto limiterOperator =
         source->GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator();
@@ -183,18 +185,15 @@ TConclusion<bool> StartProgramStepReserveMemory(
     if (IsScanMemoryLimiterEnabled(limiterOperator)) {
         auto allocation = std::make_shared<TAllocateMemoryStep::TFetchingStepAllocation>(
             source, sizeToReserve, source->GetExecutionContext().GetCursorStep(), stage, false /*needNextStep*/, true /*scheduleContinuation*/);
-        const bool async = source->GetContext()->SendToGroupedMemoryAllocation(source->GetMemoryGroupId(), { allocation }, (ui32)stage);
-        // If the limiter was disabled between the check and Send, allocation ran inline and already scheduled a
-        // continuation (scheduleContinuation=true). Always wait for that continuation — do not also continue here.
-        Y_UNUSED(async);
-        return true;
+        return TExecutionResult::Pending(
+            std::make_shared<TMemoryAllocationJob>(source->GetContext(), source->GetMemoryGroupId(), allocation, stage));
     }
 
     auto allocation = std::make_shared<TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, source->GetExecutionContext().GetCursorStep(), stage, false /*needNextStep*/, false /*scheduleContinuation*/);
     AFL_VERIFY(allocation->OnAllocated(
         std::make_shared<NGroupedMemoryManager::TAllocationGuard>(0, 0, 0, NActors::TActorId(), allocation->GetMemory(), nullptr), allocation));
-    return false;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

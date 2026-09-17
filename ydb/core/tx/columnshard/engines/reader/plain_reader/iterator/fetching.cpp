@@ -14,40 +14,40 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(
+TConclusion<TExecutionResult> TPredicateFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
         source->GetStageData().GetTable().ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()), true));
     source->MutableStageData().AddFilter(filter);
-    return true;
+    return TExecutionResult::Done();
 }
 
-TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
+TConclusion<TExecutionResult> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = MakeSnapshotFilter(source->GetStageData().GetTable().ToTable({}, source->GetContext()->GetCommonContext()->GetResolver()),
         source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
-            return true;
+            return TExecutionResult::Done();
         }
     }
     source->MutableStageData().AddFilter(filter);
-    return true;
+    return TExecutionResult::Done();
 }
 
-TConclusion<bool> TDeletionFilter::DoExecuteInplace(
+TConclusion<TExecutionResult> TDeletionFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto collection =
         source->GetStageData().GetTable().SelectOptional(std::vector<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }), false);
     if (!collection) {
-        return true;
+        return TExecutionResult::Done();
     }
 
     auto filterTable = collection->ToTable();
     if (!filterTable) {
-        return true;
+        return TExecutionResult::Done();
     }
     AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
@@ -58,37 +58,37 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(
         }
     }
     source->MutableStageData().AddFilter(filter);
-    return true;
+    return TExecutionResult::Done();
 }
 
-TConclusion<bool> TShardingFilter::DoExecuteInplace(
+TConclusion<TExecutionResult> TShardingFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
     auto filter =
         shardingInfo->GetFilter(source->GetStageData().GetTable().ToTable({}, source->GetContext()->GetCommonContext()->GetResolver()));
     source->MutableStageData().AddFilter(filter);
-    return true;
+    return TExecutionResult::Done();
 }
 
-NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
+TConclusion<TExecutionResult> TFilterCutLimit::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
-    return true;
+    return TExecutionResult::Done();
 }
 
-TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
+TConclusion<TExecutionResult> TPortionAccessorFetchingStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     if (source->HasPortionAccessor()) {
-        return true;
+        return TExecutionResult::Done();
     }
-    return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
+    return source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
 }
 
-TConclusion<bool> TDetectInMem::DoExecuteInplace(
+TConclusion<TExecutionResult> TDetectInMem::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     if (source->HasSourceInMemoryFlag()) {
-        return true;
+        return TExecutionResult::Done();
     }
     if (Columns.GetColumnsCount()) {
         source->SetSourceInMemory(
@@ -103,7 +103,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
     return cursor.Execute(source);
 }
 
-TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
+TConclusion<TExecutionResult> TBuildFakeSpec::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
@@ -119,7 +119,7 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
                     NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
         }
     }
-    return true;
+    return TExecutionResult::Done();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

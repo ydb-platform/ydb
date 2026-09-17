@@ -4090,6 +4090,91 @@ Y_UNIT_TEST_F(PlanStepAccepted_Late_Lower_After_Acked_Skips_Fence, TPQTabletFixt
     Ctx->Runtime->SetObserverFunc(prev);
 }
 
+Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)
+{
+    // Mediator contract: PlanStepAccepted must arrive in ascending step order.
+    // Regression: all-unknown lower step waits for WRITE_TX; known EXECUTED
+    // retransmit is Ready immediately but must not overtake it.
+    // LastAckedPlanStep is not persisted — restart after Accepted(200) so the
+    // watermark is empty and both sends go through the queue, not the fast path.
+    // Keep the tx in Txs (WAIT_RS_ACKS) so retransmit of 200 still hits known/Ready.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424308;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=200, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=200, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=200, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=200, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=200});
+
+    PQTabletRestart(*Ctx);
+    ResetPipe();
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendPlanStep({.Step=100, .TxIds={unknownTxId}});
+    SendPlanStep({.Step=200, .TxIds={txId}});
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    // While the fence WRITE_TX is in flight, neither Accepted may leave (100 blocks
+    // the ready prefix; 200 is Ready but stuck behind it).
+    {
+        auto premature = Ctx->Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(
+            TDuration::Seconds(1));
+        UNIT_ASSERT(premature == nullptr);
+    }
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAccepted({.Step=100});
+    WaitPlanStepAccepted({.Step=200});
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAck({.Step=200, .TxIds={txId}});
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};

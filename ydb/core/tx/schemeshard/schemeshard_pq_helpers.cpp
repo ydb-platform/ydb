@@ -3,6 +3,10 @@
 #include <ydb/core/tx/schemeshard/schemeshard_audit_log.h>
 #include <ydb/core/persqueue/public/cloud_events/cloud_events.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TPath DatabasePathFromModifySchemeOperation(
@@ -72,9 +76,9 @@ void SendTopicCloudEvent(
 {
     NPQ::NCloudEvents::TCloudEventInfo info;
     if (!BuildTopicCloudEventInfo(operation, ss, status, reason, userSID, peerName, info)) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE,
-            "Failed to build topic cloud event info for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType()));
+        YDB_LOG_ERROR_CTX_COMP(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, "Failed to build topic cloud event info for operation",
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(operation.GetOperationType())},
+        );
         return;
     }
 
@@ -106,9 +110,9 @@ void SendTopicCloudEventIfNeeded(
                 return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Sending topic cloud event for operation: "
-                << NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType()));
+        YDB_LOG_DEBUG_CTX(ctx, "Sending topic cloud event for operation",
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(transaction.GetOperationType())},
+        );
 
         SendTopicCloudEvent(
             transaction,
@@ -123,7 +127,7 @@ void SendTopicCloudEventIfNeeded(
     const auto txId = TTxId(record.GetTxId());
     if (ss->Operations.contains(txId)) {
         for (const auto& part : ss->Operations.at(txId)->Parts) {
-            sendTopicCloudEvent(part->GetTransaction());
+            sendTopicCloudEvent(part->GetModifyScheme());
         }
         return;
     }
@@ -134,3 +138,5 @@ void SendTopicCloudEventIfNeeded(
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

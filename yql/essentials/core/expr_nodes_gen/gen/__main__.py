@@ -6,7 +6,7 @@ import re
 from jinja2 import Environment, FileSystemLoader
 
 templateFile = sys.argv[1]
-(templateDir, templateFilename) = os.path.split(templateFile)
+templateDir, templateFilename = os.path.split(templateFile)
 
 jsonFile = sys.argv[2]
 headerOutFile = sys.argv[3]

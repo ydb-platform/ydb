@@ -5,6 +5,10 @@
 
 namespace NKikimr::NNet {
 
+    // X-Forwarded-For lists the original client first, followed by proxy hops.
+    // Return the first value without surrounding whitespace.
+    TString ExtractFirstForwardedForAddress(TStringBuf forwardedFor);
+
     // Peer IP without port via NAddr::PrintHost. AF_INET -> "192.0.2.1",
     // AF_INET6 -> "2001:db8::1" or "::1". nullptr, unsupported family, or
     // PrintHost failure -> "unknown".

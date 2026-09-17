@@ -94,6 +94,7 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
+        TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -204,7 +205,9 @@ public:
         std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
         if (stage.WasmUdfModulesSize() > 0) {
-            wasmScope.emplace(NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()));
+            wasmScope.emplace(
+                NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()),
+                alloc);
             if (wasmScope->HasHandle()) {
                 wasmGuard.emplace(wasmScope->MakeTlsGuard());
             }

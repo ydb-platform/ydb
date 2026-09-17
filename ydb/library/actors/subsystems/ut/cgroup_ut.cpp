@@ -165,6 +165,16 @@ namespace {
             });
     }
 
+    TCGroupV1StatsPtr RequestV1Stats(
+            TActorSystem* actorSystem,
+            const TCGroupV1StatsSubSystem& subsystem) {
+        return RequestStats<TEvCGroupV1Stats, TCGroupV1StatsPtr>(
+            *actorSystem,
+            [&subsystem](const TActorId& recipient, ui64 cookie) {
+                subsystem.ReadStats(recipient, cookie);
+            });
+    }
+
     TCGroupMemoryStatsPtr RequestMemoryStats(
             TActorSystem& actorSystem,
             const ICGroupMemoryStatsProvider& provider) {
@@ -301,9 +311,12 @@ namespace {
         bool HasActiveResult = false;
     };
 
-    TCGroupMemoryStatsPtr MakeMemoryStats(ui64 currentBytes, ui64 maxBytes) {
+    TCGroupMemoryStatsPtr MakeMemoryStats(
+            ui64 currentBytes,
+            ui64 maxBytes,
+            ECGroupVersion version = ECGroupVersion::V2) {
         auto stats = std::make_shared<TCGroupMemoryStats>();
-        stats->Version = ECGroupVersion::V2;
+        stats->Version = version;
         stats->CGroupPath = "/trend";
         stats->CurrentBytes = currentBytes;
         stats->MaxBytes = TCGroupMemoryLimit{
@@ -311,6 +324,155 @@ namespace {
         };
         return stats;
     }
+
+    struct TMockCGroupV2State {
+        TActorSystem* ActorSystem = nullptr;
+        TCGroupMemoryStatsPtr InitialMemoryStats;
+        TCGroupMemoryStatsPtr MemoryStats;
+        std::atomic<bool> ReturnHighMemoryStats = false;
+        std::atomic<ui32> ReadStatsCalls = 0;
+        std::atomic<ui32> ReadMemoryStatsCalls = 0;
+    };
+
+    class TMockCGroupV2StatsSubSystem final : public TCGroupV2StatsSubSystem {
+    public:
+        explicit TMockCGroupV2StatsSubSystem(TMockCGroupV2State* state)
+            : State(state)
+        {
+        }
+
+        void ReadStats(const TActorId& recipient, ui64 cookie) const override {
+            ++State->ReadStatsCalls;
+            State->ActorSystem->Send(recipient, new TEvCGroupV2Stats(nullptr), 0, cookie);
+        }
+
+        void ReadMemoryStats(const TActorId& recipient, ui64 cookie) const override {
+            ++State->ReadMemoryStatsCalls;
+            const auto& stats = State->ReturnHighMemoryStats.load()
+                ? State->MemoryStats
+                : State->InitialMemoryStats;
+            State->ActorSystem->Send(
+                recipient,
+                new TEvCGroupMemoryStats(stats),
+                0,
+                cookie);
+        }
+
+        void OnAfterStart(TActorSystem& actorSystem) override {
+            State->ActorSystem = &actorSystem;
+        }
+
+    private:
+        TMockCGroupV2State* State;
+    };
+
+    struct TMockCGroupV1State {
+        TActorSystem* ActorSystem = nullptr;
+        TCGroupMemoryStatsPtr InitialMemoryStats;
+        TCGroupMemoryStatsPtr MemoryStats;
+        std::atomic<bool> ReturnHighMemoryStats = false;
+        std::atomic<ui32> ReadStatsCalls = 0;
+        std::atomic<ui32> ReadMemoryStatsCalls = 0;
+    };
+
+    class TMockCGroupV1StatsSubSystem final : public TCGroupV1StatsSubSystem {
+    public:
+        explicit TMockCGroupV1StatsSubSystem(TMockCGroupV1State* state)
+            : State(state)
+        {
+        }
+
+        void ReadStats(const TActorId& recipient, ui64 cookie) const override {
+            ++State->ReadStatsCalls;
+            State->ActorSystem->Send(recipient, new TEvCGroupV1Stats(nullptr), 0, cookie);
+        }
+
+        void ReadMemoryStats(const TActorId& recipient, ui64 cookie) const override {
+            ++State->ReadMemoryStatsCalls;
+            const auto& stats = State->ReturnHighMemoryStats.load()
+                ? State->MemoryStats
+                : State->InitialMemoryStats;
+            State->ActorSystem->Send(
+                recipient,
+                new TEvCGroupMemoryStats(stats),
+                0,
+                cookie);
+        }
+
+        void OnAfterStart(TActorSystem& actorSystem) override {
+            State->ActorSystem = &actorSystem;
+        }
+
+    private:
+        TMockCGroupV1State* State;
+    };
+
+    struct TMockCGroupOomState {
+        TCGroupOomConfig Config;
+        TActorId SubscribedActor;
+        TActorId UnsubscribedActor;
+        TActorId TrendRecipient;
+        TActorId TrendSubscriber;
+        TActorId TrendUnsubscriber;
+        ECGroupOomTrendWindow TrendWindow = ECGroupOomTrendWindow::ShortWindow;
+        ui64 TrendCookie = 0;
+        TDuration TrendThreshold;
+        ui32 SubscribeCalls = 0;
+        ui32 UnsubscribeCalls = 0;
+        ui32 ReadTrendCalls = 0;
+        ui32 SubscribeToTrendCalls = 0;
+        ui32 UnsubscribeFromTrendCalls = 0;
+    };
+
+    class TMockCGroupOomSubSystem final : public TCGroupOomSubSystem {
+    public:
+        explicit TMockCGroupOomSubSystem(TMockCGroupOomState* state)
+            : State(state)
+        {
+        }
+
+        const TCGroupOomConfig& GetConfig() const override {
+            return State->Config;
+        }
+
+        void Subscribe(const TActorId& actorId) override {
+            State->SubscribedActor = actorId;
+            ++State->SubscribeCalls;
+        }
+
+        void Unsubscribe(const TActorId& actorId) override {
+            State->UnsubscribedActor = actorId;
+            ++State->UnsubscribeCalls;
+        }
+
+        void ReadTrend(
+                const TActorId& recipient,
+                ECGroupOomTrendWindow window,
+                ui64 cookie) const override {
+            State->TrendRecipient = recipient;
+            State->TrendWindow = window;
+            State->TrendCookie = cookie;
+            ++State->ReadTrendCalls;
+        }
+
+        void SubscribeToTrend(
+                const TActorId& actorId,
+                ECGroupOomTrendWindow window,
+                TDuration timeToOomThreshold) override {
+            State->TrendSubscriber = actorId;
+            State->TrendWindow = window;
+            State->TrendThreshold = timeToOomThreshold;
+            ++State->SubscribeToTrendCalls;
+        }
+
+        void UnsubscribeFromTrend(const TActorId& actorId) override {
+            State->TrendUnsubscriber = actorId;
+            ++State->UnsubscribeFromTrendCalls;
+        }
+
+    private:
+        TMockCGroupOomState* State;
+    };
 
 } // namespace
 
@@ -412,6 +574,149 @@ Y_UNIT_TEST_SUITE(TCGroupStatsSubSystemTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(*alert.MemoryUsage, 0.95, 1e-12);
 
         oom.Unsubscribe(subscriber);
+        actorSystem->Stop();
+    }
+
+    Y_UNIT_TEST(OomControllerUsesMockedV2Provider) {
+        TMockCGroupV2State state;
+        TResultWaiter<TCGroupOomAlert> result;
+        state.InitialMemoryStats = MakeMemoryStats(500, 1'000);
+        state.MemoryStats = MakeMemoryStats(950, 1'000);
+
+        TCGroupOomConfig oomConfig;
+        oomConfig.ExecutorPoolId = SystemPoolId;
+        oomConfig.PollPeriod = TDuration::MilliSeconds(10);
+        oomConfig.MemoryUsageThreshold = 0.9;
+
+        std::unique_ptr<TCGroupV2StatsSubSystem> provider =
+            std::make_unique<TMockCGroupV2StatsSubSystem>(&state);
+        auto actorSystem = MakeActorSystem(
+            std::move(provider),
+            {},
+            MakeCGroupOomSubSystem(oomConfig));
+        actorSystem->Start();
+
+        const auto& v2 = GetCGroupV2StatsSubSystem(*actorSystem);
+        UNIT_ASSERT(!RequestV2Stats(*actorSystem, v2));
+        UNIT_ASSERT_VALUES_EQUAL(state.ReadStatsCalls.load(), 1);
+
+        const TActorId subscriber = actorSystem->Register(
+            new TOomAlertSubscriberActor(result),
+            TMailboxType::Simple,
+            SystemPoolId);
+        GetCGroupOomSubSystem(*actorSystem).Subscribe(subscriber);
+        // Any high-memory reply is enqueued after the subscription.
+        state.ReturnHighMemoryStats.store(true);
+
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(state.ReadMemoryStatsCalls.load() >= 1);
+        UNIT_ASSERT(result.GetValue().HasReason(ECGroupOomReason::MemoryUsageThreshold));
+        actorSystem->Stop();
+    }
+
+    Y_UNIT_TEST(OomControllerUsesMockedV1Provider) {
+        TMockCGroupV1State state;
+        TResultWaiter<TCGroupOomAlert> result;
+        state.InitialMemoryStats = MakeMemoryStats(500, 1'000, ECGroupVersion::V1);
+        state.MemoryStats = MakeMemoryStats(950, 1'000, ECGroupVersion::V1);
+
+        TCGroupOomConfig oomConfig;
+        oomConfig.ExecutorPoolId = SystemPoolId;
+        oomConfig.PollPeriod = TDuration::MilliSeconds(10);
+        oomConfig.MemoryUsageThreshold = 0.9;
+
+        std::unique_ptr<TCGroupV1StatsSubSystem> provider =
+            std::make_unique<TMockCGroupV1StatsSubSystem>(&state);
+        auto actorSystem = MakeActorSystem(
+            {},
+            std::move(provider),
+            MakeCGroupOomSubSystem(oomConfig));
+        actorSystem->Start();
+
+        const auto& v1 = GetCGroupV1StatsSubSystem(*actorSystem);
+        UNIT_ASSERT(!RequestV1Stats(actorSystem.Get(), v1));
+        UNIT_ASSERT_VALUES_EQUAL(state.ReadStatsCalls.load(), 1);
+
+        const TActorId subscriber = actorSystem->Register(
+            new TOomAlertSubscriberActor(result),
+            TMailboxType::Simple,
+            SystemPoolId);
+        GetCGroupOomSubSystem(*actorSystem).Subscribe(subscriber);
+        // Any high-memory reply is enqueued after the subscription.
+        state.ReturnHighMemoryStats.store(true);
+
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(state.ReadMemoryStatsCalls.load() >= 1);
+        UNIT_ASSERT(result.GetValue().HasReason(ECGroupOomReason::MemoryUsageThreshold));
+        actorSystem->Stop();
+    }
+
+    Y_UNIT_TEST(OomControllerFallsBackBetweenMockedProviders) {
+        TMockCGroupV2State v2State; // Registered provider with no available snapshot.
+        TMockCGroupV1State v1State;
+        TResultWaiter<TCGroupOomAlert> result;
+        v1State.InitialMemoryStats = MakeMemoryStats(500, 1'000, ECGroupVersion::V1);
+        v1State.MemoryStats = MakeMemoryStats(950, 1'000, ECGroupVersion::V1);
+
+        TCGroupOomConfig oomConfig;
+        oomConfig.ExecutorPoolId = SystemPoolId;
+        oomConfig.PollPeriod = TDuration::MilliSeconds(10);
+        oomConfig.MemoryUsageThreshold = 0.9;
+
+        auto actorSystem = MakeActorSystem({}, {}, MakeCGroupOomSubSystem(oomConfig));
+        actorSystem->RegisterSubSystem<TCGroupV1StatsSubSystem>(
+            std::make_unique<TMockCGroupV1StatsSubSystem>(&v1State));
+        actorSystem->RegisterSubSystem<TCGroupV2StatsSubSystem>(
+            std::make_unique<TMockCGroupV2StatsSubSystem>(&v2State));
+        actorSystem->Start();
+
+        const TActorId subscriber = actorSystem->Register(
+            new TOomAlertSubscriberActor(result),
+            TMailboxType::Simple,
+            SystemPoolId);
+        GetCGroupOomSubSystem(*actorSystem).Subscribe(subscriber);
+        // The threshold crossing must follow subscription enqueue.
+        v1State.ReturnHighMemoryStats.store(true);
+
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT(v2State.ReadMemoryStatsCalls.load() > 0);
+        UNIT_ASSERT(v1State.ReadMemoryStatsCalls.load() > 0);
+        const auto& alert = result.GetValue();
+        UNIT_ASSERT(alert.Stats == v1State.MemoryStats);
+        UNIT_ASSERT(alert.HasReason(ECGroupOomReason::MemoryUsageThreshold));
+        UNIT_ASSERT(alert.MemoryUsage);
+        UNIT_ASSERT_DOUBLES_EQUAL(*alert.MemoryUsage, 0.95, 1e-12);
+        actorSystem->Stop();
+    }
+
+    Y_UNIT_TEST(OomPublicContractDispatchesToMock) {
+        TMockCGroupOomState state;
+        std::unique_ptr<TCGroupOomSubSystem> mock =
+            std::make_unique<TMockCGroupOomSubSystem>(&state);
+        auto actorSystem = MakeActorSystem({}, {}, std::move(mock));
+        actorSystem->Start();
+        TCGroupOomSubSystem& subsystem = GetCGroupOomSubSystem(*actorSystem);
+        const TActorId actorId(1, "mock");
+
+        UNIT_ASSERT(&subsystem.GetConfig() == &state.Config);
+        subsystem.Subscribe(actorId);
+        subsystem.Unsubscribe(actorId);
+        subsystem.ReadTrend(actorId, ECGroupOomTrendWindow::LongWindow, RequestCookie);
+        subsystem.SubscribeToTrend(
+            actorId,
+            ECGroupOomTrendWindow::LongWindow,
+            TDuration::Seconds(1));
+        subsystem.UnsubscribeFromTrend(actorId);
+
+        UNIT_ASSERT_VALUES_EQUAL(state.SubscribeCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.UnsubscribeCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.ReadTrendCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.SubscribeToTrendCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(state.UnsubscribeFromTrendCalls, 1);
+        UNIT_ASSERT(state.TrendRecipient == actorId);
+        UNIT_ASSERT(state.TrendWindow == ECGroupOomTrendWindow::LongWindow);
+        UNIT_ASSERT_VALUES_EQUAL(state.TrendCookie, RequestCookie);
+        UNIT_ASSERT_VALUES_EQUAL(state.TrendThreshold, TDuration::Seconds(1));
         actorSystem->Stop();
     }
 

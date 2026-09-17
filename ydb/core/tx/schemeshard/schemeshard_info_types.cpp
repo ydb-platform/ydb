@@ -1,5 +1,6 @@
 #include "schemeshard_info_types.h"
 
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
@@ -1148,6 +1149,11 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
         for (auto& c : Columns) {
             const TColumn& column = c.second;
             if (column.IsDropped()) {
+                continue;
+            }
+            // A VIRTUAL generated column is computed at read time by KQP: the datashards
+            // must never learn about it
+            if (IsVirtualGeneratedColumn(column)) {
                 continue;
             }
             auto colDescr = TableDescription.AddColumns();

@@ -1101,6 +1101,36 @@ Y_UNIT_TEST(PackIsValidFuzz) {
     CTEST  << Endl;
 }
 
+Y_UNIT_TEST(EqualNullsIgnoresNullKeyLeftover) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    TColumnDesc key;
+    key.Role = EColumnRole::Key;
+    key.DataSize = 8;
+
+    auto tl = TTupleLayout::Create({key});
+
+    ui64 leftovers[2] = {0x1111111111111111ull, 0x2222222222222222ull};
+    ui8 valid = 0;
+    const ui8* cols[] = {reinterpret_cast<const ui8*>(leftovers)};
+    const ui8* validBits[] = {&valid};
+
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    std::vector<ui8> packed(tl->TotalRowSize * 2, 0);
+
+    auto row = [&](ui32 i) { return packed.data() + i * tl->TotalRowSize; };
+
+    tl->Pack(cols, validBits, packed.data(), overflow, 0, 2);
+    UNIT_ASSERT(!tl->KeysEqual(row(0), overflow.data(), row(1), overflow.data()));
+
+    tl->ApplyEqualNulls({0});
+    overflow.clear();
+    packed.assign(tl->TotalRowSize * 2, 0);
+    tl->Pack(cols, validBits, packed.data(), overflow, 0, 2);
+    UNIT_ASSERT(tl->KeysEqual(row(0), overflow.data(), row(1), overflow.data()));
+    UNIT_ASSERT_VALUES_EQUAL(Hash(row(0)), Hash(row(1)));
+}
+
 }
 
 

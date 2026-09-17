@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
+#include <ydb/core/blobstorage/vdisk/protos/space_report.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage_write_source.h>
@@ -28,6 +29,7 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/maybe.h>
+#include <optional>
 #include <util/stream/str.h>
 #include <util/string/escape.h>
 #include <util/generic/overloaded.h>
@@ -1913,7 +1915,8 @@ namespace NKikimr {
         {}
 
         TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0, ui32 version = 0)
+                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0,
+                std::optional<ui32> version = std::nullopt)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
@@ -1921,7 +1924,7 @@ namespace NKikimr {
                 Record.SetIssuerGuid(issuerGuid);
             }
             if (version) {
-                Record.SetVersion(version);
+                Record.SetVersion(*version);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (deadline != TInstant::Max()) {
@@ -3335,6 +3338,26 @@ namespace NKikimr {
                 Record.set_cancel(true);
             }
         }
+    };
+
+    struct TEvGetVDiskSpaceReportRequest
+        : public TEventPB<TEvGetVDiskSpaceReportRequest,
+                    NKikimrVDisk::TGetVDiskSpaceReportRequest,
+                    TEvBlobStorage::EvGetVDiskSpaceReportRequest>
+    {
+        TEvGetVDiskSpaceReportRequest();
+    };
+
+    struct TEvGetVDiskSpaceReportResponse
+        : public TEvVResultBasePB<TEvGetVDiskSpaceReportResponse,
+                    NKikimrVDisk::TGetVDiskSpaceReportResponse,
+                    TEvBlobStorage::EvGetVDiskSpaceReportResponse>
+    {
+        TEvGetVDiskSpaceReportResponse();
+
+        TEvGetVDiskSpaceReportResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                const TInstant& now, const ::NMonitoring::TDynamicCounters::TCounterPtr& counterPtr,
+                const NVDiskMon::TLtcHistoPtr& histoPtr);
     };
 
     struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};

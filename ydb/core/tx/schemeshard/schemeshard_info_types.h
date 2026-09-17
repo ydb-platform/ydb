@@ -49,6 +49,7 @@
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
@@ -62,6 +63,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1538,8 +1541,9 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
                 Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
             } else {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Read unknown topic partition status value " << value);
+                YDB_LOG_ERROR_CTX(ctx, "Read unknown topic partition status value",
+                    {"topicPartitionStatus", value},
+                );
                 Status = NKikimrPQ::ETopicPartitionStatus::Active;
             }
         }
@@ -2173,6 +2177,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetGraphShard());
     }
 
+    TTabletId GetTenantWasmCompileControllerID() const {
+        if (!ProcessingParams.HasWasmCompileController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetWasmCompileController());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -2565,6 +2576,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         Y_ENSURE(graphs.size() <= 1, "size was: " << graphs.size());
         if (graphs.size()) {
             ProcessingParams.SetGraphShard(ui64(graphs.front()));
+        }
+
+        ProcessingParams.ClearWasmCompileController();
+        TVector<TTabletId> wasmCompileControllers = FilterPrivateTablets(ETabletType::WasmCompileController, allShards);
+        Y_ENSURE(wasmCompileControllers.size() <= 1, "size was: " << wasmCompileControllers.size());
+        if (wasmCompileControllers.size()) {
+            ProcessingParams.SetWasmCompileController(ui64(wasmCompileControllers.front()));
         }
     }
 
@@ -3537,7 +3555,7 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 };
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 
@@ -4626,3 +4644,5 @@ bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
     stream << value.ShortDebugString();
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

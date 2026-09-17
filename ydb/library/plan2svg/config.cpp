@@ -9,7 +9,8 @@ TPlanViewConfig::TPlanViewConfig() {
     OperatorLeft = HeaderLeft + HeaderWidth + GAP_X;
     OperatorWidth = 64;
     TaskLeft = OperatorLeft + OperatorWidth + GAP_X;
-    TaskWidth = 24;
+    // Wide enough for the bold "Tasks" title of the column header strip.
+    TaskWidth = 30;
     SummaryLeft = TaskLeft + TaskWidth + GAP_X;
     SummaryWidth = 200;
     TimelineLeft = SummaryLeft + SummaryWidth + GAP_X;

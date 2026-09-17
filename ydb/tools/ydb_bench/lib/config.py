@@ -11,7 +11,24 @@ from yaml.constructor import ConstructorError
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
+    allowed_load_parameters,
+    allowed_slo_metrics,
+    all_load_parameters,
+    all_slo_percentiles,
+    normalize_workload,
+    validate_workload_profile,
+    workload_definition,
+    workload_effective_warmup_seconds,
+    workload_config_schema,
+)
+from ydb.tools.ydb_bench.lib.load_control import (
+    MAX_AUTOMATIC_SEARCH_ATTEMPTS,
+    MAX_LOAD_VALUE,
+    validate_search_attempt_bound,
+)
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
+from ydb.tools.ydb_bench.lib.distributed_plan import execution_template
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 _PROFILE_NAME_RE = re.compile(PROFILE_NAME_PATTERN)
@@ -24,6 +41,7 @@ BACKGROUND_LOAD_MODES = (
     "coherence-all-numa",
 )
 _COMMON_OPTIONAL_FIELDS = ("timeout", "background-load")
+MAX_LOCAL_YDB_VERIFICATION_REPETITIONS = 20
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -83,6 +101,47 @@ def _parameter_schema(parameter):
 
 
 def _profile_schema(benchmark):
+    if benchmark.profile_kind == "distributed-ydb":
+        schema = _profile_schema(BENCHMARKS.get("local-ydb"))
+        for field in ("geometry", "affinity", "ydbd-binary"):
+            schema["properties"].pop(field, None)
+        schema["properties"]["cluster-template"] = {
+            "type": "object",
+            "required": ["name", "host_ids", "nodes"],
+            "description": "Immutable cluster placement snapshot, including hosts, DC/racks and tenants.",
+        }
+        schema["properties"]["tenant"] = {"type": "string", "pattern": "^/Root/"}
+        schema["required"] = ["cluster-template"]
+        schema["anyOf"] = [{"required": ["tenant", "workload", "load"]}, {"required": ["cli-nodes"]}]
+        actor = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "cpu-count": {"type": "integer", "minimum": 1, "maximum": 32767},
+                **{name: {"type": "boolean"} for name in ("use-shared-threads", "use-united-pool", "use-ring-queue")},
+            },
+        }
+        schema["properties"].update(
+            {
+                "storage": actor,
+                "tenants": {"type": "object", "additionalProperties": actor},
+                "cli-nodes": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["tenant", "dataset", "workload", "load"],
+                        "properties": {
+                            "tenant": {"type": "string"},
+                            "dataset": {"type": "string", "pattern": PROFILE_NAME_PATTERN},
+                            **{key: schema["properties"][key] for key in ("workload", "client", "load")},
+                        },
+                    },
+                },
+            }
+        )
+        return schema
     if benchmark.profile_kind == "local-ydb":
         role_affinity = {
             "type": "object",
@@ -102,43 +161,27 @@ def _profile_schema(benchmark):
             "additionalProperties": False,
             "required": ["workload", "load"],
             "properties": {
-                "workload": {
+                "workload": workload_config_schema(),
+                "ydbd-binary": {
+                    "type": "string",
+                    "pattern": "^/",
+                    "description": "Absolute path to an executable on the benchmark host; omitted uses bundled ydbd.",
+                },
+                "actor-system": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["type", "operation"],
                     "properties": {
-                        "type": {"enum": ["kv", "stock"]},
-                        "operation": {
-                            "enum": [
-                                "upsert",
-                                "select",
-                                "read-rows",
-                                "mixed",
-                                "user-hist",
-                                "rand-user-hist",
-                                "add-rand-order",
-                                "put-rand-order",
-                                "put-same-order",
-                            ]
-                        },
-                        "options": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "min-partitions": {"type": "integer", "minimum": 1},
-                                "max-partitions": {"type": "integer", "minimum": 1},
-                                "partition-size-mb": {"type": "integer", "minimum": 1},
-                                "init-upserts": {"type": "integer", "minimum": 0},
-                                "max-first-key": {"type": "integer", "minimum": 1},
-                                "value-size": {"type": "integer", "minimum": 1},
-                                "columns": {"type": "integer", "minimum": 2},
-                                "rows-per-query": {"type": "integer", "minimum": 1},
-                                "products": {"type": "integer", "minimum": 1, "maximum": 500000},
-                                "quantity": {"type": "integer", "minimum": 1},
-                                "orders": {"type": "integer", "minimum": 0},
-                                "auto-partition": {"enum": [0, 1]},
-                                "limit": {"type": "integer", "minimum": 1},
-                            },
+                        "use-shared-threads": {"type": "boolean", "default": False},
+                        "use-united-pool": {"type": "boolean", "default": False},
+                        "use-ring-queue": {"type": "boolean", "default": True},
+                        **{
+                            role: {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["cpu-count"],
+                                "properties": {"cpu-count": {"type": "integer", "minimum": 1, "maximum": 32767}},
+                            }
+                            for role in ("static-nodes", "dynamic-nodes")
                         },
                     },
                 },
@@ -168,16 +211,16 @@ def _profile_schema(benchmark):
                         # compatibility with configs written before search and
                         # objective became separate concepts.
                         "mode": {"enum": ["points", "maximize-throughput", "latency-slo"]},
-                        "parameter": {"enum": ["rate", "threads"]},
+                        "parameter": {"enum": list(all_load_parameters())},
                         "allow-errors": {"type": "boolean"},
                         "values": {
                             "type": "array",
-                            "items": {"type": "integer", "minimum": 1},
+                            "items": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                             "minItems": 1,
                             "uniqueItems": True,
                         },
-                        "start": {"type": "integer", "minimum": 1},
-                        "maximum": {"type": "integer", "minimum": 1},
+                        "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                        "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                         "multiplier": {"type": "number", "exclusiveMinimum": 1},
                         "target-role": {"enum": ["static", "dynamic", "total"]},
                         "plateau-gain-percent": {"type": "number", "minimum": 0},
@@ -192,7 +235,7 @@ def _profile_schema(benchmark):
                             "type": "object",
                             "additionalProperties": False,
                             "properties": {
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -207,8 +250,8 @@ def _profile_schema(benchmark):
                             "additionalProperties": False,
                             "required": ["start", "maximum"],
                             "properties": {
-                                "start": {"type": "integer", "minimum": 1},
-                                "maximum": {"type": "integer", "minimum": 1},
+                                "start": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
+                                "maximum": {"type": "integer", "minimum": 1, "maximum": MAX_LOAD_VALUE},
                                 "multiplier": {"type": "number", "exclusiveMinimum": 1},
                                 "resolution-percent": {
                                     "type": "number",
@@ -231,7 +274,7 @@ def _profile_schema(benchmark):
                                     "exclusiveMinimum": 0,
                                     "maximum": 100,
                                 },
-                                "percentile": {"enum": ["p50", "p95", "p99", "pmax"]},
+                                "percentile": {"enum": list(all_slo_percentiles())},
                                 "max-ms": {"type": "number", "minimum": 0},
                                 "max-errors": {"type": "integer", "minimum": 0},
                                 "min-achieved-rate-ratio": {
@@ -250,6 +293,11 @@ def _profile_schema(benchmark):
                         "warmup": {"type": "integer", "minimum": 0},
                         "duration": {"type": "integer", "minimum": 1},
                         "repetitions": {"type": "integer", "minimum": 1},
+                        "verification-repetitions": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": MAX_LOCAL_YDB_VERIFICATION_REPETITIONS,
+                        },
                     },
                 },
                 "affinity": {
@@ -420,6 +468,22 @@ def _positive_integer(value, location):
     return value
 
 
+def _load_value(value, location):
+    result = _positive_integer(value, location)
+    if result > MAX_LOAD_VALUE:
+        _config_error(location, "must be at most {}".format(MAX_LOAD_VALUE))
+    return result
+
+
+def _load_value_list(value, location):
+    if not isinstance(value, list) or not value:
+        _config_error(location, "must be a non-empty array of positive integers")
+    parsed = tuple(_load_value(item, "{}[{}]".format(location, index)) for index, item in enumerate(value))
+    if len(set(parsed)) != len(parsed):
+        _config_error(location, "must not contain duplicate values")
+    return parsed
+
+
 def _positive_integer_list(value, location):
     if not isinstance(value, list) or not value:
         _config_error(location, "must be a non-empty array of positive integers")
@@ -466,7 +530,10 @@ def _background_load_modes(value, location):
 def _timeout(value, location):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _config_error(location, "must be a finite positive number")
-    value = float(value)
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        _config_error(location, "must be a finite positive number")
     if value <= 0 or not math.isfinite(value):
         _config_error(location, "must be a finite positive number")
     return value
@@ -502,9 +569,12 @@ def _nonnegative_integer(value, location):
 
 
 def _finite_number(value, location, minimum=None, maximum=None, exclusive_minimum=False):
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
         _config_error(location, "must be a finite number")
-    result = float(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(result):
+        _config_error(location, "must be a finite number")
     if minimum is not None and (result <= minimum if exclusive_minimum else result < minimum):
         _config_error(location, "must be {} {}".format("greater than" if exclusive_minimum else "at least", minimum))
     if maximum is not None and result > maximum:
@@ -529,57 +599,41 @@ def _local_role_affinity(value, location, default_mode, default_cpus=None):
 
 def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = "{}.{}".format(benchmark.name, profile_name)
-    value = _mapping(value, location, ("workload", "geometry", "client", "load", "measurement", "affinity", "timeout"))
+    value = _mapping(
+        value,
+        location,
+        ("workload", "ydbd-binary", "geometry", "actor-system", "client", "load", "measurement", "affinity", "timeout"),
+    )
     if perf_enabled:
         _config_error(location, "does not support --perf; CPU utilization is collected per process role")
 
-    workload = _mapping(value.get("workload"), location + ".workload", ("type", "operation", "options"))
-    for required in ("type", "operation"):
-        if required not in workload:
-            _config_error(location + ".workload", "missing required field: {}".format(required))
-    workload_type = _choice(workload["type"], ("kv", "stock"), location + ".workload.type")
-    operations = {
-        "kv": ("upsert", "select", "read-rows", "mixed"),
-        "stock": ("user-hist", "rand-user-hist", "add-rand-order", "put-rand-order", "put-same-order"),
+    workload = normalize_workload(value.get("workload"), location + ".workload")
+    workload_metadata = workload_definition(workload["type"])
+
+    binary_config = {}
+    if "ydbd-binary" in value:
+        binary_path = value["ydbd-binary"]
+        if not isinstance(binary_path, str) or not binary_path.startswith("/") or "\0" in binary_path:
+            _config_error(location + ".ydbd-binary", "must be an absolute path on the benchmark host")
+        binary_config["ydbd_binary"] = binary_path
+
+    actor_system = _mapping(
+        value.get("actor-system"),
+        location + ".actor-system",
+        ("use-shared-threads", "use-united-pool", "use-ring-queue", "static-nodes", "dynamic-nodes"),
+    )
+    actor_system_config = {
+        name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
+        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
     }
-    operation = _choice(workload["operation"], operations[workload_type], location + ".workload.operation")
-    if workload_type == "kv":
-        option_defaults = {
-            "min-partitions": 40,
-            "max-partitions": 1000,
-            "partition-size-mb": 2000,
-            "init-upserts": 0 if operation == "upsert" else 1000,
-            "max-first-key": 65536,
-            "value-size": 64,
-            "columns": 2,
-            "rows-per-query": 1,
-        }
-    else:
-        option_defaults = {
-            "min-partitions": 40,
-            "products": 100,
-            "quantity": 1000,
-            "orders": 100,
-            "auto-partition": 1,
-            "limit": 10,
-        }
-    raw_options = _mapping(workload.get("options"), location + ".workload.options", tuple(option_defaults))
-    options = {}
-    for name, default in option_defaults.items():
-        raw = raw_options.get(name, default)
-        options[name] = (
-            _nonnegative_integer(raw, location + ".workload.options." + name)
-            if name in ("init-upserts", "orders", "auto-partition")
-            else _positive_integer(raw, location + ".workload.options." + name)
-        )
-    if workload_type == "kv" and options["max-partitions"] < options["min-partitions"]:
-        _config_error(location + ".workload.options.max-partitions", "must not be below min-partitions")
-    if workload_type == "kv" and options["columns"] < 2:
-        _config_error(location + ".workload.options.columns", "must be at least 2")
-    if workload_type == "stock" and options["products"] > 500000:
-        _config_error(location + ".workload.options.products", "must not exceed 500000")
-    if workload_type == "stock" and options["auto-partition"] not in (0, 1):
-        _config_error(location + ".workload.options.auto-partition", "must be 0 or 1")
+    for role in ("static-nodes", "dynamic-nodes"):
+        if role in actor_system:
+            role_location = location + ".actor-system." + role
+            role_config = _mapping(actor_system[role], role_location, ("cpu-count",))
+            cpu_count = _positive_integer(role_config.get("cpu-count"), role_location + ".cpu-count")
+            if cpu_count > 32767:
+                _config_error(role_location + ".cpu-count", "must be at most 32767")
+            actor_system_config[role.replace("-", "_")] = {"cpu_count": cpu_count}
 
     geometry = _mapping(
         value.get("geometry"),
@@ -621,7 +675,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     }
 
     client = _mapping(value.get("client"), location + ".client", ("threads",))
-    client_threads = _positive_integer(client.get("threads", 64), location + ".client.threads")
+    client_threads = _positive_integer(
+        client.get("threads", workload_metadata.default_client_threads),
+        location + ".client.threads",
+    )
 
     load = _mapping(
         value.get("load"),
@@ -646,7 +703,11 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     )
     if "parameter" not in load:
         _config_error(location + ".load", "missing required field: parameter")
-    parameter = _choice(load["parameter"], ("rate", "threads"), location + ".load.parameter")
+    parameter = _choice(
+        load["parameter"],
+        allowed_load_parameters(workload["type"]),
+        location + ".load.parameter",
+    )
     legacy_fields = {
         "mode",
         "start",
@@ -680,7 +741,7 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         if load_mode == "points":
             if "values" not in load:
                 _config_error(location + ".load", "manual load requires values")
-            load_config["values"] = list(_positive_integer_list(load["values"], location + ".load.values"))
+            load_config["values"] = list(_load_value_list(load["values"], location + ".load.values"))
         else:
             for required in ("start", "maximum"):
                 if required not in load:
@@ -716,8 +777,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         for required in ("start", "maximum"):
             if required not in search:
                 _config_error(location + ".load.search", "missing required field: {}".format(required))
-        start = _positive_integer(search["start"], location + ".load.search.start")
-        maximum = _positive_integer(search["maximum"], location + ".load.search.maximum")
+        start = _load_value(search["start"], location + ".load.search.start")
+        maximum = _load_value(search["maximum"], location + ".load.search.maximum")
         if maximum < start:
             _config_error(location + ".load.search.maximum", "must not be below start")
         load_config["search"] = {
@@ -790,13 +851,16 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         else:
             if "max-ms" not in objective:
                 _config_error(location + ".load.objective", "latency-slo requires max-ms")
+            slo_metrics = allowed_slo_metrics(workload["type"])
+            percentile = _choice(
+                objective.get("percentile", "p99"),
+                tuple(slo_metrics),
+                location + ".load.objective.percentile",
+            )
             parsed_objective.update(
                 {
-                    "percentile": _choice(
-                        objective.get("percentile", "p99"),
-                        ("p50", "p95", "p99", "pmax"),
-                        location + ".load.objective.percentile",
-                    ),
+                    "percentile": percentile,
+                    "latency_metric": slo_metrics[percentile],
                     "max_ms": _finite_number(objective["max-ms"], location + ".load.objective.max-ms", 0),
                     "max_errors": _nonnegative_integer(
                         objective.get("max-errors", 0), location + ".load.objective.max-errors"
@@ -811,13 +875,38 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
                 }
             )
         load_config["objective"] = parsed_objective
+        try:
+            validate_search_attempt_bound(load_config)
+        except BenchmarkError as error:
+            _config_error(location + ".load.search", str(error))
 
-    measurement = _mapping(value.get("measurement"), location + ".measurement", ("warmup", "duration", "repetitions"))
+    measurement = _mapping(
+        value.get("measurement"),
+        location + ".measurement",
+        ("warmup", "duration", "repetitions", "verification-repetitions"),
+    )
+    verification_location = location + ".measurement.verification-repetitions"
+    verification_repetitions = _nonnegative_integer(
+        measurement.get("verification-repetitions", 0),
+        verification_location,
+    )
+    if verification_repetitions > MAX_LOCAL_YDB_VERIFICATION_REPETITIONS:
+        _config_error(
+            verification_location,
+            "must be at most {}".format(MAX_LOCAL_YDB_VERIFICATION_REPETITIONS),
+        )
+    configured_warmup = (
+        _nonnegative_integer(measurement["warmup"], location + ".measurement.warmup")
+        if "warmup" in measurement
+        else workload_metadata.default_warmup_seconds
+    )
     measurement_config = {
-        "warmup": _nonnegative_integer(measurement.get("warmup", 10), location + ".measurement.warmup"),
+        "warmup": configured_warmup,
         "duration": _positive_integer(measurement.get("duration", 30), location + ".measurement.duration"),
         "repetitions": _positive_integer(measurement.get("repetitions", 3), location + ".measurement.repetitions"),
+        "verification_repetitions": verification_repetitions,
     }
+    validate_workload_profile(workload, load_config, measurement_config, location)
 
     affinity = _mapping(value.get("affinity"), location + ".affinity", ("ydb-cli", "static-nodes", "dynamic-nodes"))
     affinity_config = {
@@ -833,10 +922,14 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         ),
     }
 
-    attempts = len(load_config.get("values", ())) or 64
-    computed_timeout = 300 + attempts * measurement_config["repetitions"] * (
-        measurement_config["warmup"] + measurement_config["duration"] + 10
-    )
+    attempts = len(load_config.get("values", ())) or MAX_AUTOMATIC_SEARCH_ATTEMPTS
+    measurement_runs = attempts * measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+    if "search" in load_config and load_config["objective"]["type"] == "latency-slo":
+        measurement_runs = attempts * (
+            measurement_config["repetitions"] + measurement_config["verification_repetitions"]
+        )
+    effective_warmup = workload_effective_warmup_seconds(workload, measurement_config["warmup"])
+    computed_timeout = 300 + measurement_runs * (effective_warmup + measurement_config["duration"] + 10)
     timeout_explicit = "timeout" in value
     timeout = _timeout(value.get("timeout", computed_timeout), location + ".timeout")
     return RunConfiguration(
@@ -845,8 +938,10 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
         threads=(client_threads,),
         parameters={
             "local_ydb": {
-                "workload": {"type": workload_type, "operation": operation, "options": options},
+                **binary_config,
+                "workload": workload,
                 "geometry": geometry_config,
+                "actor_system": actor_system_config,
                 "client": {"threads": client_threads},
                 "load": load_config,
                 "measurement": measurement_config,
@@ -864,7 +959,187 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     )
 
 
+def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if isinstance(value, dict) and "cli-nodes" in value:
+        return _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
+    location = "{}.{}".format(benchmark.name, profile_name)
+    value = _mapping(
+        value,
+        location,
+        ("cluster-template", "tenant", "workload", "actor-system", "client", "load", "measurement", "timeout"),
+    )
+    snapshot = value.get("cluster-template")
+    if not isinstance(snapshot, dict):
+        _config_error(location + ".cluster-template", "requires a placement snapshot")
+    hosts = snapshot.get("host_ids")
+    if not isinstance(hosts, list) or any(not isinstance(host, str) for host in hosts):
+        _config_error(location + ".cluster-template.host_ids", "must be an array of host IDs")
+    try:
+        template = execution_template(snapshot, set(hosts), value.get("tenant"))
+    except BenchmarkError as error:
+        _config_error(location + ".cluster-template", str(error))
+    dynamics = sum(node["role"] == "dynamic" and node["tenant"] == value["tenant"] for node in template["nodes"])
+    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant")}
+    common["geometry"] = {
+        "preset": "custom",
+        "static-nodes": sum(node["role"] == "static" for node in template["nodes"]),
+        "dynamic-nodes": dynamics,
+        "max-dynamic-nodes": dynamics,
+    }
+    common["affinity"] = {role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")}
+    configuration = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
+    profile = configuration.parameters["local_ydb"]
+    profile["distributed"] = {"template": template, "tenant": value["tenant"]}
+    # These values come from individual template nodes/tenants, not the local
+    # executor's defaults. Do not publish fictitious 64 GiB disks or no affinity.
+    profile.pop("affinity")
+    profile["geometry"].pop("disk_size_gb")
+    profile["geometry"].pop("storage_groups")
+    return configuration
+
+
+def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    location = "{}.{}".format(benchmark.name, profile_name)
+    value = _mapping(value, location, ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout"))
+    snapshot = value.get("cluster-template")
+    if (
+        not isinstance(snapshot, dict)
+        or not isinstance(snapshot.get("host_ids"), list)
+        or any(not isinstance(host, str) for host in snapshot["host_ids"])
+    ):
+        _config_error(location + ".cluster-template", "requires a placement snapshot")
+    if not isinstance(snapshot.get("nodes"), list) or any(not isinstance(node, dict) for node in snapshot["nodes"]):
+        _config_error(location + ".cluster-template.nodes", "requires a list of nodes")
+    if any(not isinstance(node.get("name"), str) for node in snapshot["nodes"]):
+        _config_error(location + ".cluster-template.nodes", "node names must be strings")
+    names = {node["name"] for node in snapshot["nodes"] if node.get("role") == "cli"}
+    clients = _mapping(value["cli-nodes"], location + ".cli-nodes", names)
+    if len(clients) > 32:
+        _config_error(location + ".cli-nodes", "supports at most 32 simultaneous generators")
+    if not names or set(clients) != names:
+        _config_error(location + ".cli-nodes", "configure every CLI node in the template exactly once")
+    search_clients = [
+        name
+        for name, raw in clients.items()
+        if isinstance(raw, dict) and isinstance(raw.get("load"), dict) and "search" in raw["load"]
+    ]
+    if len(search_clients) > 1:
+        _config_error(location + ".cli-nodes", "a search strategy may be assigned to at most one CLI node")
+    normalized, configurations, datasets = {}, [], {}
+    for name, raw in clients.items():
+        where = location + ".cli-nodes." + name
+        raw = _mapping(raw, where, ("tenant", "dataset", "workload", "client", "load"))
+        dataset = raw.get("dataset")
+        if not isinstance(dataset, str) or not _PROFILE_NAME_RE.fullmatch(dataset):
+            _config_error(where + ".dataset", "use 1–64 letters, digits, dots, underscores or hyphens")
+        try:
+            template = execution_template(snapshot, set(snapshot["host_ids"]), raw.get("tenant"), multiple_cli=True)
+        except BenchmarkError as error:
+            _config_error(where, str(error))
+        dynamics = sum(n["role"] == "dynamic" and n["tenant"] == raw["tenant"] for n in template["nodes"])
+        common = {key: raw[key] for key in ("workload", "client", "load") if key in raw}
+        common.update(
+            geometry={
+                "preset": "custom",
+                "static-nodes": sum(n["role"] == "static" for n in template["nodes"]),
+                "dynamic-nodes": dynamics,
+                "max-dynamic-nodes": dynamics,
+            },
+            measurement=value.get("measurement", {}),
+            affinity={role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")},
+        )
+        if "timeout" in value:
+            common["timeout"] = value["timeout"]
+        parsed = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
+        profile = parsed.parameters["local_ydb"]
+        if "search" in profile["load"] and name not in search_clients:
+            _config_error(where + ".load", "use explicit search and objective for a CLI search strategy")
+        if profile["workload"]["type"] not in ("kv", "stock"):
+            _config_error(where + ".workload", "multi-generator profiles support KV and stock")
+        if "search" not in profile["load"] and len(profile["load"].get("values", [])) != 1:
+            _config_error(where + ".load", "requires one fixed load value for a non-search CLI")
+        if not search_clients and profile["measurement"]["verification_repetitions"]:
+            _config_error(
+                location + ".measurement", "fixed multi-generator profiles require verification-repetitions: 0"
+            )
+        key = (raw["tenant"], dataset)
+        options = (profile["workload"]["type"], profile["workload"]["options"])
+        if key in datasets and datasets[key] != options:
+            _config_error(
+                where + ".workload.options",
+                "CLI nodes sharing a tenant/dataset must use identical workload type and options",
+            )
+        datasets[key] = options
+        normalized[name] = {
+            "tenant": raw["tenant"],
+            "dataset": dataset,
+            **{key: profile[key] for key in ("workload", "client", "load", "geometry")},
+        }
+        configurations.append(parsed)
+    selected = search_clients[0] if search_clients else next(iter(normalized))
+    configuration = configurations[list(normalized).index(selected)]
+    stock_datasets = {}
+    for client in normalized.values():
+        if client["workload"]["type"] == "stock":
+            previous = stock_datasets.setdefault(client["tenant"], client["dataset"])
+            if previous != client["dataset"]:
+                _config_error(
+                    location + ".cli-nodes", "stock uses fixed table names; use one shared stock dataset per tenant"
+                )
+    if len({c["load"]["allow_errors"] for c in normalized.values()}) > 1:
+        _config_error(location + ".cli-nodes", "allow-errors must be the same for all generators")
+    profile = configuration.parameters["local_ydb"]
+    tenant_names = {t["path"] for t in template["tenants"]}
+    tenants = _mapping(value.get("tenants"), location + ".tenants", tenant_names)
+
+    def actor(raw, where, role):
+        raw = _mapping(raw, where, ("cpu-count", "use-shared-threads", "use-united-pool", "use-ring-queue"))
+        count = _positive_integer(raw.get("cpu-count", 4), where + ".cpu-count")
+        if count > 32767:
+            _config_error(where + ".cpu-count", "must be at most 32767")
+        return {
+            role: {"cpu_count": count},
+            **{
+                key.replace("-", "_"): _boolean(raw.get(key, default), where + "." + key)
+                for key, default in (
+                    ("use-shared-threads", False),
+                    ("use-united-pool", False),
+                    ("use-ring-queue", True),
+                )
+            },
+        }
+
+    storage = actor(value.get("storage"), location + ".storage", "static_nodes")
+    tenant_settings = {
+        name: actor(tenants.get(name), location + ".tenants." + name, "dynamic_nodes") for name in tenant_names
+    }
+    profile["actor_system"] = {**storage, "tenants": tenant_settings}
+    profile["distributed"] = {
+        "template": template,
+        "tenant": normalized[selected]["tenant"],
+        "cli_nodes": normalized,
+        "search_cli": search_clients[0] if search_clients else None,
+    }
+    if not search_clients:
+        profile["load"] = {
+            "parameter": "threads",
+            "values": [
+                sum(
+                    c["client"]["threads"] if c["load"]["parameter"] == "rate" else c["load"]["values"][0]
+                    for c in normalized.values()
+                )
+            ],
+            "allow_errors": all(c["load"]["allow_errors"] for c in normalized.values()),
+        }
+    profile.pop("affinity")
+    profile["geometry"].pop("disk_size_gb")
+    profile["geometry"].pop("storage_groups")
+    return configuration
+
+
 def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if benchmark.profile_kind == "distributed-ydb":
+        return _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if benchmark.profile_kind == "local-ydb":
         return _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     location = "{}.{}".format(benchmark.name, profile_name)

@@ -7,7 +7,7 @@
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
 * [Права доступа](../concepts/glossary.md#access-right)
-* [Список доступов](../concepts/glossary.md#access-acl)
+* [Список доступов](../concepts/glossary.md#access-control-list)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
 * [Группа](../concepts/glossary.md#access-group)
@@ -74,7 +74,7 @@
 
 [Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
 
-У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
+У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 
 По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
 
@@ -149,4 +149,3 @@
 - **Administration** (наличие в `administration_allowed_sids`) — даёт право выполнять административные действия с базами данных или кластером. Полный административный доступ к кластеру и его базам данных. Также используется для изменения конфигурации, схемных операций, требующих административных прав, и других административных проверок.
 - **Register node** (наличие в `register_dynamic_node_allowed_sids`) — отдельный (неиерархический) уровень для регистрации динамических узлов в кластере. Не даёт автоматически прав `database`/`viewer`/`monitoring`/`administration`. По техническим причинам, если список задан (не пуст), он должен включать `root@builtin`.
 - **Bootstrap** (наличие в `bootstrap_allowed_sids`) — отдельный (неиерархический) уровень только для операций начальной инициализации кластера. Используется в неинициализированном состоянии, когда подсистема аутентификации ещё не функционирует. Начальная инициализация разрешена, если субъект входит в `bootstrap_allowed_sids` или `administration_allowed_sids`, при этом сам по себе `bootstrap` не выдаёт полные административные привилегии.
-

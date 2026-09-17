@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
     }
 
     void CheckBinaryArrayRoundTrip(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
-        const TString blob = SerializeBinaryArray(array, codec);
-        auto restored = DeserializeBinaryArray(blob, array.length(), codec);
+        const TString blob = SerializeBinaryLikeArray(array, codec);
+        auto restored = DeserializeBinaryLikeArray(blob, array.length(), arrow::binary(), codec);
         UNIT_ASSERT_VALUES_EQUAL(restored->length(), array.length());
         for (i64 i = 0; i < array.length(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(restored->IsNull(i), array.IsNull(i));
@@ -122,6 +122,18 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             CheckStringArrayRoundTrip(withNulls, codec);
             CheckStringArrayRoundTrip(dense, codec);
             CheckStringArrayRoundTrip({}, codec);
+        }
+    }
+
+    Y_UNIT_TEST(Utf8RoundTrip) {
+        const auto array = MakeBinary({ "alpha", std::nullopt, "omega" });
+        for (const auto& codec : { ZstdCodec(), RawCodec() }) {
+            const auto restored = DeserializeBinaryLikeArray(SerializeBinaryLikeArray(*array, codec), array->length(), arrow::utf8(), codec);
+            UNIT_ASSERT(restored->type_id() == arrow::Type::STRING);
+            const auto& strings = static_cast<const arrow::StringArray&>(*restored);
+            UNIT_ASSERT_VALUES_EQUAL(strings.GetString(0), "alpha");
+            UNIT_ASSERT(strings.IsNull(1));
+            UNIT_ASSERT_VALUES_EQUAL(strings.GetString(2), "omega");
         }
     }
 

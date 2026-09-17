@@ -167,7 +167,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             END DO;
         '''
         kikimr.ydb_client.query(sql)
-        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+        self.wait_completed_checkpoints(kikimr, query_name)
         return query_name
 
     def _write_topic(
@@ -182,7 +182,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         self,
         ydb_client: YdbClient,
         kikimr: Kikimr,
-        query_path: str,
+        query_name: str,
         message: str,
         partition_id: int = 0,
     ) -> None:
@@ -201,14 +201,14 @@ class TestWatermarksInYdb(StreamingTestBase):
         state before the next write_time watermark can close its window.
         """
         input_bytes_before = self.get_streaming_query_metric(
-            kikimr, query_path, "streaming.query.input.bytes"
+            kikimr, query_name, "streaming.query.input.bytes"
         )
         self._write_topic(ydb_client, [message], partition_id=partition_id)
         self.wait_streaming_query_metric(
-            kikimr, query_path, "streaming.query.input.bytes",
+            kikimr, query_name, "streaming.query.input.bytes",
             expected_value=input_bytes_before + 1,
         )
-        self.wait_completed_checkpoints(kikimr, query_path)
+        self.wait_completed_checkpoints(kikimr, query_name)
 
     def _wait_for_idle(self, shared_reading: bool, tasks: int) -> None:
         if shared_reading and tasks > 1:
@@ -320,7 +320,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             kikimr, entity_name, query_name, local_topics, shared_reading,
             tasks=1, partitions_count=2, idle_timeout_seconds=idle_timeout_seconds,
         )
-        query_path = f"/Root/{query_name}"
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
@@ -328,17 +327,17 @@ class TestWatermarksInYdb(StreamingTestBase):
             # each event is buffered in the aggregation state before the next write
             # delivers a write_time watermark that would close that window (see
             # _write_topic_and_wait docstring for the full mechanism).
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "snd-0"), partition_id=1)
             idle_started = time.monotonic()
 
             # Visible event that must appear in output.
             self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
-            self.wait_completed_checkpoints(kikimr, query_path)
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             while True:
                 input_bytes_before = self.get_streaming_query_metric(
-                    kikimr, query_path, "streaming.query.input.bytes"
+                    kikimr, query_name, "streaming.query.input.bytes"
                 )
                 self._write_topic(
                     ydb_client,
@@ -346,7 +345,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                     partition_id=0,
                 )
                 self.wait_streaming_query_metric(
-                    kikimr, query_path, "streaming.query.input.bytes",
+                    kikimr, query_name, "streaming.query.input.bytes",
                     expected_value=input_bytes_before + 1,
                 )
                 if time.monotonic() - idle_started >= idle_timeout_seconds + 1:
@@ -368,13 +367,13 @@ class TestWatermarksInYdb(StreamingTestBase):
             # ts=20 event. This ensures each event reaches the aggregation state before
             # any subsequent write causes a new source batch whose write_time watermark
             # would close the [20,21) window.
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(20, "snd-20"), partition_id=1)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(20, "fst-20"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(20, "snd-20"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(20, "fst-20"), partition_id=0)
 
             # Advance both partitions past the window to close [20,21).
             self._write_topic(ydb_client, [self._event(30, "snd-30", filter=True)], partition_id=1)
             self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
-            self.wait_completed_checkpoints(kikimr, query_path)
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             expected = ["fst-0", "snd-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)
@@ -401,19 +400,17 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            query_path = f"/Root/{query_name}"
-
             # Both initial events share window [0,1). Use _write_topic_and_wait so
             # each event is buffered in the aggregation state before the next write
             # delivers a write_time watermark that would close that window (see
             # _write_topic_and_wait docstring for the full mechanism).
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "fst-10"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "snd-0"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(10, "fst-10"), partition_id=0)
 
             # Keep the second partition below idle timeout.
             time.sleep(self.idle_timeout_seconds - 1)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "snd-10"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(10, "snd-10"), partition_id=1)
 
             # Events at ts=20 are not expected in output (window not yet closed).
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
@@ -443,14 +440,12 @@ class TestWatermarksInYdb(StreamingTestBase):
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
-            query_path = f"/Root/{query_name}"
-
             # Both initial events share window [0,1). Use _write_topic_and_wait so
             # each event is buffered in the aggregation state before the next write
             # delivers a write_time watermark that would close that window (see
             # _write_topic_and_wait docstring for the full mechanism).
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "fst-0"), partition_id=0)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(0, "snd-0"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "fst-0"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(0, "snd-0"), partition_id=1)
 
             # Let both partitions become idle after the last ingested event.
             time.sleep(idle_timeout_seconds + 1)
@@ -458,27 +453,27 @@ class TestWatermarksInYdb(StreamingTestBase):
             # Events fst-10 (p0) and snd-10 (p1) share window [10,11). Both must be
             # delivered to the HoppingWindow aggregation state BEFORE the write_time-
             # based watermark from the next source batch closes that window.
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "fst-10"), partition_id=0)
-            self._write_topic_and_wait(ydb_client, kikimr, query_path, self._event(10, "snd-10"), partition_id=1)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(10, "fst-10"), partition_id=0)
+            self._write_topic_and_wait(ydb_client, kikimr, query_name, self._event(10, "snd-10"), partition_id=1)
 
             # Events at ts=20 close window [10,11) via event-time watermarks; their own
             # window [20,21) is never closed, so they must not appear in the output.
             # Wait for ingest and for output to advance (windows closed) before reading —
             # a bare checkpoint wait here can hang under load after a full-topic idle.
             output_bytes_before = self.get_streaming_query_metric(
-                kikimr, query_path, "streaming.query.output.bytes"
+                kikimr, query_name, "streaming.query.output.bytes"
             )
             input_bytes_before = self.get_streaming_query_metric(
-                kikimr, query_path, "streaming.query.input.bytes"
+                kikimr, query_name, "streaming.query.input.bytes"
             )
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
             self.wait_streaming_query_metric(
-                kikimr, query_path, "streaming.query.input.bytes",
+                kikimr, query_name, "streaming.query.input.bytes",
                 expected_value=input_bytes_before + 2,
             )
             self.wait_streaming_query_metric(
-                kikimr, query_path, "streaming.query.output.bytes",
+                kikimr, query_name, "streaming.query.output.bytes",
                 expected_value=output_bytes_before + 1,
             )
 
@@ -511,14 +506,14 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(0, "snd-0", filter=True)], partition_id=1)
 
             # Start measuring idleness only after both partitions consume the initial events.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             # Keep the first partition active while the second approaches idle timeout.
             time.sleep(idle_timeout_seconds / 2 + 1)
             self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
 
             # Ensure this event keeps the first partition active before the next interval starts.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             # Let the second partition exceed idle timeout without idling the first.
             time.sleep(idle_timeout_seconds / 2 + 1)
@@ -526,21 +521,21 @@ class TestWatermarksInYdb(StreamingTestBase):
             # Capture the query's cumulative input byte counter before reactivating the
             # second partition, so we can confirm snd-20 was actually ingested.
             input_bytes_before = self.get_streaming_query_metric(
-                kikimr, f"/Root/{query_name}", "streaming.query.input.bytes"
+                kikimr, query_name, "streaming.query.input.bytes"
             )
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
 
             self.wait_streaming_query_metric(
-                kikimr, f"/Root/{query_name}", "streaming.query.input.bytes",
+                kikimr, query_name, "streaming.query.input.bytes",
                 expected_value=input_bytes_before + 1,
             )
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             time.sleep(idle_timeout_seconds + 1)
 
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             expected = ["fst-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)
@@ -803,9 +798,9 @@ class TestWatermarksInYdb(StreamingTestBase):
         '''
         kikimr.ydb_client.query(sql)
 
-        query_path = f"/Root/{query_name}"
+        query_path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         try:
-            self.wait_completed_checkpoints(kikimr, query_path)
+            self.wait_completed_checkpoints(kikimr, query_name)
 
             result_sets = kikimr.ydb_client.query(f"""
                 SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "{query_path}"

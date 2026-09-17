@@ -110,6 +110,7 @@ public:
         OPTION_FIELD(TString, UserName)
         OPTION_FIELD(TOperationProgressWriter, ProgressWriter)
         OPTION_FIELD(TYqlOperationOptions, OperationOptions)
+        OPTION_FIELD(TCredentials::TPtr, Credentials)
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
@@ -265,6 +266,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -377,6 +380,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
@@ -407,6 +412,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
         OPTION_FIELD(TVector<TString>, LayersPaths)
     };
@@ -458,6 +465,8 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TRuntimeSettings::TConstPtr, RuntimeSettings, MakeRuntimeSettings())
+        OPTION_FIELD_DEFAULT(NKikimr::NUdf::EBridgeMode, BridgeMode, NKikimr::NUdf::EBridgeMode::None)
+        OPTION_FIELD_DEFAULT(TString, BridgeBinaryPath, TString())
     };
 
     struct TCalcResult : public NCommon::TOperationResult {

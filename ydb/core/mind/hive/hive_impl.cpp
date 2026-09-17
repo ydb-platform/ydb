@@ -721,7 +721,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     }
     sideEffects.Complete(TActivationContext::AsActorContext(), Requests);
     if (!reassigns.empty()) {
-        StartReassignActor(std::move(reassigns));
+        ContinueInterruptedReassigns(std::move(reassigns));
     }
     if (AreWeRootHive()) {
         YDB_LOG_DEBUG("Handle TEvPrivate::TEvBootTablets: root Hive is ready",
@@ -835,6 +835,7 @@ void THive::BuildLocalConfig() {
 }
 
 void THive::BuildCurrentConfig() {
+    const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     TabletLimit.clear();
@@ -902,6 +903,23 @@ void THive::BuildCurrentConfig() {
         ObjectDistributions.Disable();
     }
     BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
+
+    const bool lockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    if (previousLockedTabletsSendMetrics != lockedTabletsSendMetrics) {
+        for (auto& [_, node] : Nodes) {
+            for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                if (tablet->IsDeleting()) {
+                    continue;
+                }
+                // Change accounting without stopping external execution or changing the lock.
+                if (lockedTabletsSendMetrics) {
+                    tablet->BecomeUnknown(&node);
+                } else {
+                    tablet->BecomeStopped();
+                }
+            }
+        }
+    }
 }
 
 void THive::Cleanup() {
@@ -1182,6 +1200,7 @@ void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
         break;
     case ETabletState::Deleting:
     case ETabletState::GroupAssignment:
+    case ETabletState::BlockStorage:
         // We need to subscribe until group assignment or deletion is finished
         tablet->StorageInfoSubscribers.emplace_back(ev->Sender);
         Send(ev->Sender, new TEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);
@@ -2778,6 +2797,7 @@ THive::THiveStats THive::GetStats(TIter begin, TIter end) const {
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
+    stats.MinResourceNormValues = minValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -2977,9 +2997,26 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                     balancerType = EBalancerType::Scatter;
                     break;
             }
+            const auto resource = *scatteredResource;
+            const double minScatter = TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), resource);
+            if (!(minScatter >= 0.0 && minScatter < 1.0)) {
+                continue;
+            }
+            const double minUsage = TTabletInfo::ExtractResourceUsage(stats.MinResourceNormValues, resource);
+            const double usageThreshold = minUsage / (1.0 - minScatter);
+
             std::vector<TNodeId> nodeIds;
             nodeIds.reserve(stats.Values.size());
-            std::transform(nodes.begin(), nodes.end(), std::back_inserter(nodeIds), [](const TNodeInfo& node) { return node.Id; });
+            for (const auto& node : stats.Values) {
+                const double usage = TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource);
+                if (usage > usageThreshold) {
+                    nodeIds.push_back(node.NodeId);
+                }
+            }
+            // An empty filter means all nodes to the balancer.
+            if (nodeIds.empty()) {
+                continue;
+            }
             YDB_LOG_TRACE("ProcessTabletBalancer: scatter over limit triggered balancer",
                 {"logPrefix", GetLogPrefix()},
                 {"scatterByResource", stats.ScatterByResource},
@@ -3084,6 +3121,16 @@ void THive::UpdateTotalResourceValues(
     TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(std::get<NMetrics::EResource::CPU>(TotalRawResourceValues));
     TabletCounters->Simple()[NHive::COUNTER_METRICS_MEMORY].Set(std::get<NMetrics::EResource::Memory>(TotalRawResourceValues));
     TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(std::get<NMetrics::EResource::Network>(TotalRawResourceValues));
+}
+
+void THive::ResetTotalResourceValues() {
+    TotalRawResourceValues = {};
+    TotalNormalizedResourceValues = {};
+
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_COUNTER].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_MEMORY].Set(0);
+    TabletCounters->Simple()[NHive::COUNTER_METRICS_NETWORK].Set(0);
 }
 
 void THive::RemoveSubActor(ISubActor* subActor) {

@@ -3001,47 +3001,49 @@ TRuntimeNode TProgramBuilder::Div(TRuntimeNode data1, TRuntimeNode data2) {
     return Invoke(__func__, resultType, args);
 }
 
+TRuntimeNode TProgramBuilder::DecimalIntegralAdd(TRuntimeNode data1, TRuntimeNode data2) {
+    return BuildDecimalIntegralAdditive(__func__, data1, data2);
+}
+
+TRuntimeNode TProgramBuilder::DecimalIntegralSub(TRuntimeNode data1, TRuntimeNode data2) {
+    return BuildDecimalIntegralAdditive(__func__, data1, data2);
+}
+
 TRuntimeNode TProgramBuilder::DecimalDiv(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft;
-    bool isOptionalRight;
-    const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
-    const auto rightType = UnpackOptionalData(data2, isOptionalRight);
-
-    if (rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
-    } else {
-        MKQL_ENSURE(NUdf::GetDataTypeInfo(*rightType->GetDataSlot()).Features & NUdf::IntegralType, "Operands type mismatch");
-    }
-
-    const auto returnType = isOptionalLeft || isOptionalRight ? NewOptionalType(leftType) : leftType;
-
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(data1);
-    callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    return BuildDecimalBinary(__func__, data1, data2);
 }
 
 TRuntimeNode TProgramBuilder::DecimalMod(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft;
-    bool isOptionalRight;
-    const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
-    const auto rightType = UnpackOptionalData(data2, isOptionalRight);
-
-    if (rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id) {
-        MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
-    } else {
-        MKQL_ENSURE(NUdf::GetDataTypeInfo(*rightType->GetDataSlot()).Features & NUdf::IntegralType, "Operands type mismatch");
-    }
-
-    const auto returnType = isOptionalLeft || isOptionalRight ? NewOptionalType(leftType) : leftType;
-
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(data1);
-    callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    return BuildDecimalBinary(__func__, data1, data2);
 }
 
 TRuntimeNode TProgramBuilder::DecimalMul(TRuntimeNode data1, TRuntimeNode data2) {
+    return BuildDecimalBinary(__func__, data1, data2);
+}
+
+TRuntimeNode TProgramBuilder::BuildDecimalIntegralAdditive(
+    const std::string_view& callableName,
+    TRuntimeNode data1,
+    TRuntimeNode data2)
+{
+    if constexpr (RuntimeVersion < 86U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << callableName;
+    }
+
+    bool isOptional;
+    const auto* leftType = UnpackOptionalData(data1, isOptional);
+    const auto* rightType = UnpackOptionalData(data2, isOptional);
+    MKQL_ENSURE(
+        leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id,
+        "Expected decimal left operand");
+    MKQL_ENSURE(
+        NUdf::GetDataTypeInfo(*rightType->GetDataSlot()).Features & NUdf::IntegralType,
+        "Expected integral right operand");
+
+    return BuildDecimalBinary(callableName, data1, data2);
+}
+
+TRuntimeNode TProgramBuilder::BuildDecimalBinary(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
     bool isOptionalLeft;
     bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
@@ -3055,7 +3057,7 @@ TRuntimeNode TProgramBuilder::DecimalMul(TRuntimeNode data1, TRuntimeNode data2)
 
     const auto returnType = isOptionalLeft || isOptionalRight ? NewOptionalType(leftType) : leftType;
 
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    TCallableBuilder callableBuilder(Env_, callableName, returnType);
     callableBuilder.Add(data1);
     callableBuilder.Add(data2);
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);

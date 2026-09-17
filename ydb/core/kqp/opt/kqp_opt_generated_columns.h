@@ -5,6 +5,8 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 
+#include <functional>
+
 namespace NKikimr::NKqp::NOpt {
 
 struct TBuildWriteInputResult {
@@ -23,10 +25,35 @@ struct TGeneratedColumnMembers {
 // STORED generated columns of the table, in column order
 TVector<const NYql::TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const NYql::TKikimrTableDescription& table);
 
-// Applies each stored generated column's compiled lambda to depRow and produces the matching
+// Applies each generated column's compiled lambda to depRow and produces the matching
 // (column name, name-value member) pair
 TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const NYql::TKikimrColumnMetadata*>& generatedColumns,
     const NYql::NNodes::TExprBase& depRow, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+// Replaces requested VIRTUAL generated columns with their physical dependencies
+// Returns logicalColumns itself when no virtual column is present
+NYql::NNodes::TCoAtomList BuildPhysicalColumnsForVirtualGeneratedColumns(
+    const NYql::NNodes::TCoAtomList& logicalColumns,
+    const NYql::TKikimrTableDescription& table,
+    NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
+
+// Computes requested VIRTUAL generated members over physicalRows and projects exactly
+// logicalColumns. Returns physicalRows unchanged when no virtual column is present
+NYql::NNodes::TExprBase BuildVirtualGeneratedColumnProjection(
+    const NYql::NNodes::TExprBase& physicalRows,
+    const NYql::NNodes::TCoAtomList& logicalColumns,
+    const NYql::TKikimrTableDescription& table,
+    NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
+
+// Builds a physical read and applies BuildVirtualGeneratedColumnProjection to it
+NYql::NNodes::TExprBase BuildReadWithVirtualGeneratedColumns(
+    const NYql::NNodes::TCoAtomList& logicalColumns,
+    const NYql::TKikimrTableDescription& table,
+    NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx,
+    const std::function<NYql::NNodes::TExprBase(const NYql::NNodes::TCoAtomList&)>& buildRead);
 
 // Builds the struct of dependency values fed to a generated column lambda during an UPDATE: each
 // dependency is taken from updateStruct when the SET clause provides it, otherwise from rowArg

@@ -96,6 +96,8 @@ message TEvJobStop {
 }
 
 message TEvJobStopResponse {
+    string Error = 1;
+    bool Retryable = 2;
 }
 
 message TEvClusterStatus {

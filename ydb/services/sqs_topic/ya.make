@@ -46,6 +46,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
+    ydb/core/persqueue/public/ru_quoter
     ydb/core/persqueue/public/schema
     ydb/core/ymq/attributes
     ydb/core/ymq/base

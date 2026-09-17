@@ -634,6 +634,7 @@ message TKqpPhyResult {
 message TKqpAnalyzeOperation {
     string TablePath = 1;
     repeated string Columns = 2;
+    double SampleRate = 3;
 }
 
 message TKqpPhyMetadataOperation {

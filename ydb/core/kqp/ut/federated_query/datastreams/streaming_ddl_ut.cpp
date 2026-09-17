@@ -1,10 +1,12 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
@@ -12,6 +14,34 @@
 #include <fmt/format.h>
 
 #include <random>
+
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
 
 namespace NKikimr::NKqp {
 
@@ -24,6 +54,120 @@ using namespace NFederatedQueryTest;
 using namespace NYdb::NConsoleClient::NAi;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
+        auto& appConfig = self.SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingStructuredJsonParsing(true);
+        appConfig.MutableFeatureFlags()->SetEnableRowDispatcherMemoryLimiting(true);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
+        auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        resourceManager.SetQueryMemoryLimit(memoryLimit);
+        auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
+        queue->SetName(NLocalDb::KqpResourceManagerQueue);
+        queue->MutableLimit()->SetMemory(memoryLimit);
+        resourceManager.SetMkqlLightProgramMemoryLimit(1_MB);
+        resourceManager.SetMkqlHeavyProgramMemoryLimit(1_MB);
+        resourceManager.SetChannelBufferSize(128_KB);
+    }
+
+    void CreateRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
+        self.GetRuntime().SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        self.ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        self.CreateTopic("memoryLimitInput");
+        self.CreateTopic("memoryLimitOutput");
+        self.ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE memoryLimitSource WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE",
+                SHARED_READING = "true"
+            );)",
+            "endpoint"_a = TStreamingTestFixture::YDB_ENDPOINT,
+            "database"_a = TStreamingTestFixture::YDB_DATABASE));
+    }
+
+    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& memoryName) {
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher memory limit", [&](TString& error) {
+            error = self.GetStreamingQueryIssues("memoryLimitQuery");
+            return error.contains("Row dispatcher memory limit exceeded")
+                && error.contains("bytes for " + memoryName) && error.contains("failed with code OVERLOADED");
+        });
+        UNIT_ASSERT_GT(self.GetCounters()->GetCounter("RM/NotEnoughMemory", true)->Val(), 0);
+        self.ExecQuery("ALTER STREAMING QUERY memoryLimitQuery SET (RUN = FALSE);");
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
+        constexpr ui64 memoryLimit = 8_MB;
+        ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+
+        TStringBuilder schema;
+        TStringBuilder columns;
+        for (size_t i = 0; i < 512; ++i) {
+            if (i) {
+                schema << ", ";
+                columns << ", ";
+            }
+            schema << "c" << i << " String NOT NULL";
+            columns << "c" << i;
+        }
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT String::JoinFromList(AsList({columns}), "")
+                FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA ({schema})
+                );
+            END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema)));
+
+        WaitForRowDispatcherMemoryLimit(*this, "JsonParserAlloc");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "json_each_row");
+        UNIT_ASSERT(!formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
+        ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT Data FROM memoryLimitSource.memoryLimitInput;
+            END DO;
+        )");
+
+        WaitForRowDispatcherMemoryLimit(*this, "ReadSessionMemory");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
+        UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
+        ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT value FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA (value String NOT NULL)
+                );
+            END DO;
+        )");
+
+        WaitStreamingQueryStatus("memoryLimitQuery");
+        WriteTopicMessage("memoryLimitInput", R"({"value": "small"})");
+        const auto readBytes = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetCounter("SessionDataRate", true);
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher receives the control message", [&] {
+            return readBytes->Val() > 0;
+        });
+        ReadTopicMessages("memoryLimitOutput", {"small"});
+        WriteTopicMessage("memoryLimitInput", "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
+        WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
+    }
+
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -70,6 +214,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        // Seeing the output only means the message was processed, not that its input offset
+        // is durable. ALTER with a changed query text cancels the running execution and the
+        // new one restores offsets from the last *completed* checkpoint, so an offset that is
+        // not checkpointed yet makes the message replay (at-least-once). Wait for two
+        // checkpoint updates: the first may belong to a checkpoint whose barrier was injected
+        // before the message was consumed, the second is guaranteed to be injected after it.
+        const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
 
         ExecQuery(fmt::format(R"(
             CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));
@@ -467,7 +621,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -655,7 +809,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 -- so in test query will be restarted after zero checkpoint completion.
 
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 2 }},
@@ -858,7 +1012,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ) AS
             DO BEGIN
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE"; -- Enable `LIMIT` operator in at-least-once semantic
-                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of chanels will be remote, and one local
+                PRAGMA ydb.MaxTasksPerStage = "2"; -- Ensure configuration where one of channels will be remote, and one local
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 2 }},
                     {{ "tx": 0, "stage": 1, "tasks": 1 }},
@@ -947,15 +1101,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
         UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // No checkpoints due to checkpointing interval
 
-        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> ::NMonitoring::TDynamicCounters::TCounterPtr {
+        const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
             const auto sourceTracker = kqpCounters->GetSubgroup("subsystem", "DqSinkTracker");
             const auto sourceCounters = sourceTracker->GetSubgroup("sink", "PqSink");
             const auto inflyData = sourceCounters->GetCounter("InFlyData");
             const auto inFlyCheckpoints = sourceCounters->GetCounter("InFlyCheckpoints");
+            const auto inFlyPendingAckCheckpoints = sourceCounters->GetCounter("InFlyPendingAckCheckpoints");
 
             if (inflyData->Val() != 0) {
-                return inFlyCheckpoints;
+                return [inFlyCheckpoints, inFlyPendingAckCheckpoints]() {
+                    return inFlyCheckpoints->Val() + inFlyPendingAckCheckpoints->Val();
+                };
             }
 
             return nullptr;
@@ -966,7 +1123,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             counters = pqCountersExtractor(/* nodeIndex */ 1);
         }
         UNIT_ASSERT_C(counters, "Counters not found for PQ sink");
-        UNIT_ASSERT_VALUES_EQUAL(counters->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters(), 0);
 
         WaitFor(CHECKPOINT_INTERVAL, "checkpoint propagation", [&](TString& error) {
             if (GetLastCheckpointSeqNo(checkpointId) == seqNo) {
@@ -974,7 +1131,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 return false;
             }
 
-            return counters->Val() == 1;
+            return counters() == 1;
         });
 
         newSeqNo = GetLastCheckpointSeqNo(checkpointId);
@@ -2222,6 +2379,151 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
     }
 
+    Y_UNIT_TEST_OCTET_F(StreamingQueryWithStreamLookupJoinLocalTable, WithFeatureFlag, WithFullscanFlag, WithColumns, TStreamingTestFixture) {
+        if (!WithFeatureFlag && (WithFullscanFlag || WithColumns)) {
+            // legal, but nothing to check
+            return;
+        }
+        LogSettings
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFeatureFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableNodeShutdownHints(true);
+        }
+
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String NOT NULL,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ) {with_columns})",
+            "table"_a = ydbTable,
+            "with_columns"_a = WithColumns ? "WITH (STORE = COLUMN)" : ""
+        ));
+
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P3"))",
+            "table"_a = ydbTable
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || (payload ?? "NULL")) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "local table lookups are disabled. Please contact your system administrator to enable it");
+        if (!WithFeatureFlag) {
+            return;
+        }
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            {2, R"({"time": 2, "event": "C", "host": "host2.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1", "C-NULL"};
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(sampleMessages);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessages(sampleResult);
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P4"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P5"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P6"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4", "C-P5"});
+
+        {
+            TMockMonHttpRequest monReq("force_shutdown=all");
+            auto edgeActor = GetRuntime().AllocateEdgeActor();
+            auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime().GetNodeId(0));
+            GetRuntime().Send(kqpProxy, edgeActor, new NActors::NMon::TEvHttpInfo(monReq));
+            GetRuntime().template GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>(edgeActor, TDuration::Seconds(5));
+        }
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P7", "B-P9", "A-P7", "C-P8"});
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto results = ExecQuery(
+            "SELECT ast_compressed FROM `.metadata/script_executions`;"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
+            const auto& ast = result.ColumnParser(0).GetOptionalString();
+            UNIT_ASSERT(ast);
+            UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
@@ -2515,7 +2817,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(10, 10));
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
@@ -5827,8 +6129,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             featureFlags.SetEnableStreamingQueriesPqSinkDeduplication(true);
         }
 
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
         CreateTopic(inputTopicName);
@@ -5851,20 +6151,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "Authorization is required for setting `DELIVERY_GUARANTEE` = 'exactly_once'");
 
-        constexpr char queryName[] = "deliveryGuarantyWriteSetting";
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                INSERT INTO `{pq_source}`.`{output_topic}` WITH (
-                    DELIVERY_GUARANTEE = "exactly_once"
-                ) SELECT * FROM `{pq_source}`.`{input_topic}`
-            END DO;)",
-            "pq_source"_a = pqSourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName,
-            "query_name"_a = queryName
-        ));
-
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY deliveryGuarantyWriteSettingWithDeduplication AS
             DO BEGIN
@@ -5877,19 +6163,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "`DELIVERY_GUARANTEE` = 'exactly_once' is not supported with enabled deduplication");
-
-        Sleep(TDuration::Seconds(1));
-
-        {
-            const auto& result = ExecQuery(fmt::format(R"(
-                SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
-                "query_name"_a = queryName
-            ));
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_STRING_CONTAINS(resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or(""), "Deferred publications is not supported");
-            });
-        }
 
         ExecQuery(fmt::format(R"(
             INSERT INTO `{pq_source}`.`{output_topic}` WITH (

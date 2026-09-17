@@ -82,7 +82,7 @@ public:
 
     void InitAll(const TInitParameters initParameters);
 
-    TString FormAuthorizationStr(const TString& region) const;
+    TString FormAuthorizationStr(const TString& region, const TString& service = "kinesis") const;
 
     void EnableAuthorization();
     void DisableAuthorization();

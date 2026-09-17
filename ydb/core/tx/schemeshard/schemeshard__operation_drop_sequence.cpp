@@ -4,39 +4,33 @@
 
 #include <ydb/core/tx/sequenceshard/public/events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 class TDropParts: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TDropParts"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TDropParts"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
 public:
     TDropParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr& ev, TOperationContext& context) override {
-        auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TDropSequence TDropParts HandleReply TEvDropSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"shardId", tabletId},
+            {"status", status},
+        );
 
         switch (status) {
             case NKikimrTxSequenceShard::TEvDropSequenceResult::SUCCESS:
@@ -46,12 +40,10 @@ public:
 
             default:
                 // Treat all other replies as unexpected and spurious
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TDropSequence TDropParts HandleReply ignoring unexpected TEvDropSequenceResult"
-                    << " shardId# " << tabletId
-                    << " status# " << status
-                    << " operationId# " << OperationId
-                    << " at tablet " << ssId);
+                YDB_LOG_WARN_CTX(context.Ctx, "ignoring unexpected TEvDropSequenceResult",
+                    {"shardId", tabletId},
+                    {"status", status},
+                );
                 return false;
         }
 
@@ -62,12 +54,10 @@ public:
 
         auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TDropSequence TDropParts HandleReply ignoring duplicate TEvDropSequenceResult"
-                << " shardId# " << tabletId
-                << " status# " << status
-                << " operationId# " << OperationId
-                << " at tablet " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "ignoring duplicate TEvDropSequenceResult",
+                {"shardId", tabletId},
+                {"status", status},
+            );
             return false;
         }
 
@@ -84,10 +74,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -112,11 +99,10 @@ public:
             // Wait for results from this shard
             txState->ShardsInProgress.insert(shardIdx);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose drop at sequence shard"
-                                    << " tabletId# " << tabletId
-                                    << " pathId# " << pathId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose drop at sequence shard",
+                {"tabletId", tabletId},
+                {"pathId", pathId},
+            );
         }
 
         Y_ABORT_UNLESS(!txState->ShardsInProgress.empty());
@@ -125,33 +111,26 @@ public:
 };
 
 class TPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
+    virtual const char* Name() const override final { return "TPropose"; }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TPropose"
-                << " operationId# " << OperationId;
-    }
+    TOperationId OperationId;
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::EventType,
         });
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << " at schemeshard: " << ssId
-                               << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSequence);
@@ -193,11 +172,8 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << " at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -240,22 +216,20 @@ class TDropSequence: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
+    virtual const char* Name() const override final { return "TDropSequence"; }
 
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& drop = Transaction.GetDrop();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropSequence Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", drop.GetId()},
+        );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
@@ -385,11 +359,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropSequence AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSequence AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -418,3 +392,5 @@ ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -25,7 +25,13 @@ private:
         return "";
     }
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const = 0;
+    // The key the source starts at in scan direction. It reaches KQP as the result's LastKey, which decides
+    // which shards a re-resolution may skip, so it must never be past a row still to come. Only a collection
+    // whose results leave in key order has one at all.
+    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& /*source*/) const {
+        return nullptr;
+    }
+
     virtual bool DoHasData() const = 0;
 
 protected:

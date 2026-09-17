@@ -1,10 +1,11 @@
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
-GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
+GENERATE_ENUM_SERIALIZATION(dbg_connections.h)
 GENERATE_ENUM_SERIALIZATION(partition_direct_service.h)
 
 SRCS(
+    dbg_connections.cpp
     ddisk_data_copier.cpp
     direct_block_group_impl.cpp
     direct_block_group.cpp

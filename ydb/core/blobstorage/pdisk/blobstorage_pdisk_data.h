@@ -962,7 +962,7 @@ struct TDiskFormat {
     }
 
     void UpgradeFrom(const TDiskFormat &format) {
-        Clear(IsEncryptFormat());
+        Clear(format.IsEncryptFormat());
         // Upgrade from version 2
         TimestampUs = 0;
         // Fill the flags according to actual Version2 settings

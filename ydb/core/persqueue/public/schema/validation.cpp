@@ -13,32 +13,25 @@ TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
         return {};
     }
     auto strategy = config.GetPartitionStrategy();
-    if (strategy.GetMinPartitionCount() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST,
-            TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMinPartitionCount()};
-    }
-    if (strategy.GetMaxPartitionCount() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST,
-            TStringBuilder() << "Partitions count must be non-negative, provided " << strategy.GetMaxPartitionCount()};
-    }
+    // Min/MaxPartitionCount are uint32 — negative API values must be rejected before conversion.
     if (strategy.GetMaxPartitionCount() != 0 && strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
         return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "Max active partitions must be greater than or equal to partitions count or equals zero (unlimited), provided "
             << strategy.GetMaxPartitionCount() << " and " << strategy.GetMinPartitionCount()};
     }
-    if (strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() < 0 || strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() > 100) {
+    if (strategy.GetScaleUpPartitionWriteSpeedThresholdPercent() > 100) {
         return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "Partition scale up threshold percent must be between 0 and 100, provided "
             << strategy.GetScaleUpPartitionWriteSpeedThresholdPercent()};
     }
-    if (strategy.GetScaleDownPartitionWriteSpeedThresholdPercent() < 0 || strategy.GetScaleDownPartitionWriteSpeedThresholdPercent() > 100) {
+    if (strategy.GetScaleDownPartitionWriteSpeedThresholdPercent() > 100) {
         return {Ydb::StatusIds::BAD_REQUEST,
             TStringBuilder() << "Partition scale down threshold percent must be between 0 and 100, provided "
             << strategy.GetScaleDownPartitionWriteSpeedThresholdPercent()};
     }
-    if (strategy.GetScaleThresholdSeconds() <= 0) {
+    if (strategy.GetScaleThresholdSeconds() == 0) {
         return {Ydb::StatusIds::BAD_REQUEST,
-            TStringBuilder() << "Partition scale threshold time must be greater then 1 second, provided "
+            TStringBuilder() << "Partition scale threshold time must be greater than 0 seconds, provided "
             << strategy.GetScaleThresholdSeconds() << " seconds"};
     }
     if (config.GetPartitionConfig().HasStorageLimitBytes()) {

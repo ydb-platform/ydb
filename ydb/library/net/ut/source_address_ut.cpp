@@ -86,6 +86,22 @@ TEST(FormatSourceAddress, UnknownFamilyIsUnknown) {
     EXPECT_EQ(FormatSourceAddress(&addr), "unknown");
 }
 
+TEST(ExtractFirstForwardedForAddress, IPv4Chain) {
+    EXPECT_EQ(
+        ExtractFirstForwardedForAddress("203.0.113.42, 10.0.0.10, 10.0.0.11"),
+        "203.0.113.42");
+}
+
+TEST(ExtractFirstForwardedForAddress, IPv6Chain) {
+    EXPECT_EQ(
+        ExtractFirstForwardedForAddress(" 2001:db8::42 , 2001:db8::10, 2001:db8::11"),
+        "2001:db8::42");
+}
+
+TEST(ExtractFirstForwardedForAddress, EmptyValue) {
+    EXPECT_TRUE(ExtractFirstForwardedForAddress("   ").empty());
+}
+
 TEST(PeerSourceAddressFromSocket, IPv4Loopback) {
     EXPECT_EQ((PeerAddressAfterConnect<TSockAddrInet, TInetStreamSocket>("127.0.0.1")), "127.0.0.1");
 }

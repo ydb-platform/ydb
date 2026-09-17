@@ -343,6 +343,7 @@ namespace NKikimr {
             TFreeRes Free(const TDiskPart &addr);
             void AddChunk(ui32 chunkId);
             ui32 RemoveChunk();
+            ui32 TryStealFreeChunk();
             // make chunk not available for allocations, it is used for heap defragmentation
             bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;

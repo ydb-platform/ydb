@@ -1183,6 +1183,145 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         CompareYsonUnordered(R"([[[600u];["session1"]];[[601u];["session2"]]])",
             FormatResultSetYson(readResult.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(StrictSerializable_TableApi_Basic) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (700u, "TableApi");
+        )", TTxControl::BeginTx(TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto beginResult = session.BeginTransaction(TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        UNIT_ASSERT(beginResult.GetTransaction().IsActive());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (701u, "TableApiExplicit");
+        )", TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+
+        auto selectResult = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key IN (700u, 701u);
+        )", TTxControl::BeginTx(TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        CompareYsonUnordered(R"([[[700u];["TableApi"]];[[701u];["TableApiExplicit"]]])",
+            FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StrictSerializable_TableApi_RequiresFeatureFlag) {
+        TKikimrSettings settings;
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (710u, "TableApi");
+        )", TTxControl::BeginTx(TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
+
+        auto beginResult = session.BeginTransaction(TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::BAD_REQUEST, beginResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(StrictSerializable_FailedWrite_NoCommitTimestamp) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (800u, "first");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto failedResult = session.ExecuteQuery(R"(
+            INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (800u, "second");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(failedResult.GetStatus(), EStatus::PRECONDITION_FAILED, failedResult.GetIssues().ToString());
+        UNIT_ASSERT_C(!failedResult.GetCommitTimestamp().has_value(),
+            "Commit timestamp should not be present for failed write");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_Rollback_NoEffects) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto beginResult = session.BeginTransaction(NYdb::NQuery::TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (810u, "ToBeRolledBack");
+        )", NYdb::NQuery::TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto rollbackResult = tx.Rollback().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(rollbackResult.GetStatus(), EStatus::SUCCESS, rollbackResult.GetIssues().ToString());
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 810u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        CompareYson("[]", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StrictSerializable_DefaultTxModePragma) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            PRAGMA ydb.DefaultTxMode="StrictSerializableRW";
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (900u, "DefaultTxMode");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetCommitTimestamp().has_value(),
+            "Commit timestamp should be present for implicit strict serializable tx set via DefaultTxMode pragma");
+        const auto& ts = *result.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts.TxId > 0, "TxId should be nonzero");
+
+        auto selectResult = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 900u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(selectResult.GetStatus(), EStatus::SUCCESS, selectResult.GetIssues().ToString());
+        CompareYson(R"([[[900u];["DefaultTxMode"]]])", FormatResultSetYson(selectResult.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StrictSerializable_DefaultTxModePragma_RequiresFeatureFlag) {
+        TKikimrSettings settings;
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            PRAGMA ydb.DefaultTxMode="StrictSerializableRW";
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (901u, "DefaultTxMode");
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
+    }
 }
 
 } // namespace NKqp

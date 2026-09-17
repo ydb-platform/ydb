@@ -30,6 +30,12 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
+bool AllowPushdownStructSubsetFieldsOverAggregate(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "PushdownStructSubsetFieldsOverAggregate";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
@@ -152,12 +158,14 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         keepMembersList.push_back(ctx.NewAtom(node.Pos(), x));
     }
 
+    // clang-format off
     auto newInput = ctx.Builder(node.Pos())
         .Callable("ExtractMembers")
             .Add(0, node.Input().Ptr())
             .Add(1, ctx.NewList(node.Pos(), std::move(keepMembersList)))
         .Seal()
         .Build();
+    // clang-format on
 
     auto ret = ctx.ChangeChild(node.Ref(), 0, std::move(newInput));
     return ret;
@@ -187,6 +195,7 @@ TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ct
         }
     }
 
+    // clang-format off
     return Build<TCoFlatMapBase>(ctx, node.Pos())
         .CallableName(node.Ref().Content())
         .Input<TCoExtractMembers>()
@@ -204,6 +213,7 @@ TExprNode::TPtr FlatMapSubsetFields(const TCoFlatMapBase& node, TExprContext& ct
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 bool HaveFieldsSubsetLMap(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap) {
@@ -275,6 +285,7 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
         return node.Ptr();
     }
 
+    // clang-format off
     return Build<TCoMapBase>(ctx, node.Pos())
         .CallableName(node.Ref().Content())
         .Input<TCoExtractMembers>()
@@ -292,6 +303,7 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -363,6 +375,7 @@ TExprNode::TPtr SqlCombineInputSubsetFields(const TCoSqlCombineInput& node, TExp
         }
     }
 
+    // clang-format off
     auto builder = Build<TCoSqlCombineInput>(ctx, node.Pos())
         .InitFrom(node)
         .Input<TCoExtractMembers>()
@@ -371,6 +384,7 @@ TExprNode::TPtr SqlCombineInputSubsetFields(const TCoSqlCombineInput& node, TExp
         .Build()
         .KeyExtractUsedColumns(buildUsedColumns(keyExtractFields))
         .ArgMapUsedColumns(buildUsedColumns(argMapFields));
+    // clang-format on
 
     if (presortKeyLambdaNode) {
         builder.PresortUsedColumns(buildUsedColumns(presortKeyFields));
@@ -409,12 +423,15 @@ TExprNode::TPtr NarrowSqlCombineInputArgMap(const TCoSqlCombineInput& input, con
     if (fieldNodes.empty()) {
         newBody = Build<TCoAsStruct>(ctx, input.Pos()).Done();
     } else {
+        // clang-format off
         newBody = Build<TCoFilterMembers>(ctx, input.Pos())
                       .Input(argMapLambda.Body())
                       .Members().Add(fieldNodes)
                   .Build().Done();
+        // clang-format on
     }
 
+    // clang-format off
     const auto newArgMap = Build<TCoLambda>(ctx, input.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
@@ -422,11 +439,14 @@ TExprNode::TPtr NarrowSqlCombineInputArgMap(const TCoSqlCombineInput& input, con
             .With(argMapLambda.Args().Arg(0), "row")
         .Build()
         .Done();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoSqlCombineInput>(ctx, input.Pos())
         .InitFrom(input)
         .ArgMapLambda(newArgMap)
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr SqlCombineSubsetFields(const TCoSqlCombine& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -456,11 +476,13 @@ TExprNode::TPtr SqlCombineSubsetFields(const TCoSqlCombine& node, TExprContext& 
         return node.Ptr();
     }
 
+    // clang-format off
     return Build<TCoSqlCombine>(ctx, node.Pos())
         .InitFrom(node)
         .LeftInput(newLeftInput)
         .RightInput(newRightInput)
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr OptimizeSqlCombine(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -812,6 +834,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
                 part1 = *renamed;
             }
 
+            // clang-format off
             settingsChildren.push_back(ctx.Builder(node->Pos())
                 .List()
                     .Atom(0, "rename")
@@ -819,6 +842,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
                     .Atom(2, TString::Join(labelName, ".", y))
                 .Seal()
                 .Build());
+            // clang-format on
         }
     }
 
@@ -1083,15 +1107,18 @@ TExprNode::TPtr ApplyRenames(const TExprNode::TPtr& input, const TMap<TStringBuf
             continue;
         }
 
+        // clang-format off
         auto member = ctx.Builder(input->Pos())
             .Callable("Member")
                 .Add(0, input)
                 .Atom(1, memberName)
             .Seal()
             .Build();
+        // clang-format on
 
         for (auto& to : targets) {
             asStructArgs.push_back(
+                // clang-format off
                 ctx.Builder(input->Pos())
                     .List()
                         .Atom(0, to)
@@ -1099,6 +1126,7 @@ TExprNode::TPtr ApplyRenames(const TExprNode::TPtr& input, const TMap<TStringBuf
                     .Seal()
                     .Build()
             );
+                // clang-format on
         }
     }
 
@@ -1143,6 +1171,7 @@ TExprNode::TPtr ApplyRenamesToJoinTree(const TExprNode::TPtr& joinTree,
         return joinTree;
     }
 
+    // clang-format off
     return ctx.Builder(joinTree->Pos())
         .List()
             .Add(0, joinTree->ChildPtr(0))
@@ -1153,6 +1182,7 @@ TExprNode::TPtr ApplyRenamesToJoinTree(const TExprNode::TPtr& joinTree,
             .Add(5, joinTree->ChildPtr(5))
         .Seal()
         .Build();
+    // clang-format on
 }
 
 const TTypeAnnotationNode* GetCanaryOutputType(const TStructExprType& outputType, TStringBuf fullCanaryName) {
@@ -1185,22 +1215,27 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
         }
 
         // Select members without stripping the prefixes.
+        // clang-format off
         auto myStruct = ctx.Builder(input.Pos())
             .Callable("SelectMembers")
                 .Add(0, inputArg)
                 .Add(1, ctx.NewList(input.Pos(), std::move(labelsPrefixList)))
             .Seal()
             .Build();
+        // clang-format on
 
+        // clang-format off
         auto lambdaResult = ctx.Builder(input.Pos())
             .ApplyPartial(lambda.Args().Ptr(), std::move(strippedLambdaBody))
                 .With(0, std::move(myStruct))
             .Seal()
             .Build();
+        // clang-format on
 
         TVector<TExprNode::TPtr> args;
         for (const auto& label : labels) {
             TString prefix = TString::Join(label, ".");
+            // clang-format off
             auto arg = ctx.Builder(input.Pos())
                 .List()
                    .Atom(0, prefix)
@@ -1212,6 +1247,7 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
                     .Seal()
                  .Seal()
                  .Build();
+            // clang-format on
             args.push_back(arg);
         }
         return args;
@@ -1228,6 +1264,7 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
 
         auto flatMapInputItem = GetSequenceItemType(flatMap.Input(), /*allowMultiIO=*/false);
 
+        // clang-format off
         auto myStruct = ctx.Builder(input.Pos())
             .Callable("DivePrefixMembers")
                 .Add(0, inputArg)
@@ -1236,10 +1273,12 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if (canaryOutType->GetKind() == ETypeAnnotationKind::Data) {
             YQL_ENSURE(canaryOutType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Bool);
             // our input passed as-is
+            // clang-format off
             auto arg = ctx.Builder(input.Pos())
                 .List()
                     .Atom(0, labelPrefix)
@@ -1248,6 +1287,7 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             return {arg};
         }
@@ -1264,6 +1304,7 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
             }
         }
 
+        // clang-format off
         auto arg = ctx.Builder(input.Pos())
             .List()
                 .Atom(0, labelPrefix)
@@ -1299,6 +1340,7 @@ TVector<TExprNode::TPtr> BuildOutputFlattenMembersArg(const TCoEquiJoinInput& in
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
         return {arg};
     }
 }
@@ -1487,6 +1529,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
 
                 // remove leading flatmap from input and launch canary
                 newEquiJoinArgs.push_back(
+                    // clang-format off
                     ctx.Builder(input.Pos())
                         .List()
                             .Callable(0, flatMap.CallableName())
@@ -1508,9 +1551,11 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
                         .Seal()
                         .Build()
                 );
+                    // clang-format on
             } else {
                 // just remove leading flatmap from input
                 newEquiJoinArgs.push_back(
+                    // clang-format off
                     ctx.Builder(input.Pos())
                         .List()
                             .Add(0, flatMap.Input().Ptr())
@@ -1518,6 +1563,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
                         .Seal()
                         .Build()
                 );
+                    // clang-format on
             }
 
             auto flattenMembersArgsByInput = BuildOutputFlattenMembersArg(input, afterJoinArg, canaryName, *canaryResultType, ctx);
@@ -1525,6 +1571,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
                 flattenMembersArgs.insert(flattenMembersArgs.end(), flattenMembersArgsByInput.begin(), flattenMembersArgsByInput.end());
             }
         } else {
+            // clang-format off
             flattenMembersArgs.push_back(ctx.Builder(input.Pos())
                 .List()
                     .Atom(0, labelPrefix)
@@ -1536,6 +1583,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
                     .Seal()
                 .Seal()
                 .Build());
+            // clang-format on
             newEquiJoinArgs.push_back(input.Ptr());
         }
     }
@@ -1548,11 +1596,13 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
     auto flattenMembers = flattenMembersArgs.empty() ? afterJoinArg :
                           ctx.NewCallable(node->Pos(), "FlattenMembers", std::move(flattenMembersArgs));
 
+    // clang-format off
     auto newLambdaBody = ctx.Builder(node->Pos())
         .Callable("Just")
             .Add(0, ApplyRenames(flattenMembers, renames, *noRenamesResultType, CanaryBaseName, ctx))
         .Seal()
         .Build();
+    // clang-format on
 
     auto newLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { afterJoinArg }), std::move(newLambdaBody));
 
@@ -1652,10 +1702,12 @@ TExprNode::TPtr OptimizeFromFlow(const TExprNode::TPtr& node, TExprContext& ctx,
         node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
         YQL_CLOG(DEBUG, Core) << "Replace  " << node->Content() << " with Iterator";
 
+        // clang-format off
         return Build<TCoIterator>(ctx, node->Pos())
             .List(node->HeadPtr()->HeadPtr())
             .Done()
             .Ptr();
+        // clang-format on
     }
 
     return node;
@@ -2114,6 +2166,202 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     return TExprBase(ctx.NewCallable(node.Pos(), node.Ref().Content(), { newAgg, restLambda }));
 }
 
+TExprNode::TPtr PushdownStructSubsetFieldsOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.ParentsMap);
+    const auto maybeAgg = node.Input().Maybe<TCoAggregate>();
+    if (!maybeAgg) {
+        return nullptr;
+    }
+    const TCoAggregate agg = maybeAgg.Cast();
+    // Bail out on unknown Aggregate settings — only "compact" and "output_columns" are safe.
+    for (const auto& setting : agg.Settings()) {
+        const auto name = setting.Name().Ref().Content();
+        if (name != "compact" && name != "output_columns") {
+            return nullptr;
+        }
+    }
+    const auto arg = node.Lambda().Args().Arg(0).Raw();
+
+    const auto argType = arg->GetTypeAnn();
+    if (argType->GetKind() != ETypeAnnotationKind::Struct) {
+        return nullptr;
+    }
+    const auto outputStructType = argType->Cast<TStructExprType>();
+
+    // Map handler output column name -> (handler tuple, traits, index).
+    struct THandlerEntry {
+        TCoAggregateTuple Tuple;
+        TCoAggregationTraits Traits;
+        ui32 Index = 0;
+    };
+    THashMap<TStringBuf, THandlerEntry> handlersByCol;
+    const auto& handlersNode = *agg.Handlers().Ptr();
+    for (ui32 i = 0; i < handlersNode.ChildrenSize(); ++i) {
+        const auto handler = TCoAggregateTuple(handlersNode.Child(i));
+        auto maybeTraits = handler.Trait().Maybe<TCoAggregationTraits>();
+        if (!maybeTraits) {
+            continue;
+        }
+        if (!handler.ColumnName().Ref().IsAtom()) {
+            continue; // skip multi-column handlers
+        }
+        if (handler.Ref().ChildrenSize() == 3) {
+            continue; // skip distinct aggregations
+        }
+        handlersByCol.emplace(handler.ColumnName().Ref().Content(), THandlerEntry{.Tuple=handler, .Traits=maybeTraits.Cast(), .Index=i});
+    }
+
+    struct TColUsage {
+        TSet<TStringBuf> UsedMembers;
+        bool FullUse = false;
+    };
+    THashMap<TStringBuf, TColUsage> usedFieldsByCol;
+    if (const auto parents = optCtx.ParentsMap->find(arg); parents != optCtx.ParentsMap->cend()) {
+        for (const auto& parent : parents->second) {
+            if (!parent->IsCallable("Member")) {
+                if (IsDependsOnUsage(*parent, *optCtx.ParentsMap)) {
+                    continue;
+                }
+
+                return nullptr;
+            }
+            const auto colName = parent->Tail().Content();
+            if (!handlersByCol.contains(colName)) {
+                continue;
+            }
+            auto& usage = usedFieldsByCol[colName];
+            if (usage.FullUse) {
+                continue;
+            }
+            // 2nd-level ParentsMap: parents of Member(arg, col) -> Member(Member(arg, col), member).
+            if (const auto colParents = optCtx.ParentsMap->find(parent); colParents != optCtx.ParentsMap->cend()) {
+                for (const auto& colParent : colParents->second) {
+                    if (colParent->IsCallable("Member")) {
+                        usage.UsedMembers.insert(colParent->Tail().Content());
+                    } else {
+                        usage.FullUse = true;
+                        break;
+                    }
+                }
+            } else {
+                usage.FullUse = true;
+            }
+        }
+    }
+
+    if (usedFieldsByCol.empty()) {
+        return nullptr;
+    }
+
+    bool rebuildHandlers = false;
+    TExprNodeList newHandlerNodes;
+    newHandlerNodes.reserve(agg.Handlers().Size());
+    for (const auto& handler : agg.Handlers()) {
+        newHandlerNodes.push_back(handler.Ptr());
+    }
+
+    for (const auto& [colName, usage] : usedFieldsByCol) {
+        if (usage.FullUse) {
+            continue;
+        }
+        const auto& entry = handlersByCol.at(colName);
+
+        const auto colType = outputStructType->FindItemType(colName);
+        if (!colType) {
+            continue;
+        }
+        auto finishLambda = entry.Traits.FinishHandler();
+        const auto finishBodyType = finishLambda.Body().Ref().GetTypeAnn();
+        if (!finishBodyType) {
+            continue;
+        }
+        const bool isOptional = finishBodyType->GetKind() == ETypeAnnotationKind::Optional;
+        const auto innerType = isOptional ? finishBodyType->Cast<TOptionalExprType>()->GetItemType() : finishBodyType;
+        if (innerType->GetKind() != ETypeAnnotationKind::Struct) {
+            continue;
+        }
+        const auto handlerStructType = innerType->Cast<TStructExprType>();
+        if (usage.UsedMembers.size() == handlerStructType->GetSize()) {
+            continue;
+        }
+
+        rebuildHandlers = true;
+
+        TExprNode::TPtr newFinishLambda;
+        if (isOptional) {
+            TExprNode::TListType memberAtoms;
+            for (const auto& item : handlerStructType->GetItems()) {
+                if (usage.UsedMembers.contains(item->GetName())) {
+                    memberAtoms.push_back(ctx.NewAtom(finishLambda.Body().Pos(), item->GetName()));
+                }
+            }
+            newFinishLambda = ctx.Builder(finishLambda.Pos())
+                .Lambda()
+                    .Param("arg")
+                    .Callable("ExtractMembers")
+                        .Apply(0, finishLambda.Ref())
+                            .With(0, "arg")
+                        .Seal()
+                        .List(1)
+                            .Do([&](TExprNodeBuilder& b) -> TExprNodeBuilder& {
+                                for (size_t i = 0; i < memberAtoms.size(); ++i) {
+                                    b.Add(i, memberAtoms[i]);
+                                }
+                                return b;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            TVector<const TItemExprType*> subsetItems;
+            for (const auto& item : handlerStructType->GetItems()) {
+                if (usage.UsedMembers.contains(item->GetName())) {
+                    subsetItems.push_back(item);
+                }
+            }
+            auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
+            newFinishLambda = ctx.Builder(finishLambda.Pos())
+                .Lambda()
+                    .Param("arg")
+                    .Callable("CastStruct")
+                        .Apply(0, finishLambda.Ref())
+                            .With(0, "arg")
+                        .Seal()
+                        .Add(1, ExpandType(finishLambda.Body().Pos(), *subsetType, ctx))
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        auto newTraits = Build<TCoAggregationTraits>(ctx, entry.Traits.Pos())
+            .InitFrom(entry.Traits)
+            .FinishHandler(newFinishLambda)
+            .Done()
+            .Ptr();
+
+        auto newTuple = ctx.ChangeChild(entry.Tuple.Ref(), TCoAggregateTuple::idx_Trait, std::move(newTraits));
+        newHandlerNodes[entry.Index] = newTuple;
+    }
+
+    if (!rebuildHandlers) {
+        return nullptr;
+    }
+
+    auto newAgg = Build<TCoAggregate>(ctx, agg.Pos())
+        .InitFrom(agg)
+        .Handlers(ctx.NewList(agg.Pos(), std::move(newHandlerNodes)))
+        .Done();
+
+    YQL_CLOG(DEBUG, Core) << "Pushdown struct subset fields over Aggregate in " << node.Ref().Content();
+    return Build<TCoFlatMapBase>(ctx, node.Pos())
+        .CallableName(node.Ref().Content())
+        .Input(newAgg)
+        .Lambda(node.Lambda())
+        .Done()
+        .Ptr();
+}
+
 bool IsMemberOrJustMember(TExprNode::TPtr node, const TCoArgument& arg, bool& isJust, TStringBuf& memberName) {
     isJust = node->IsCallable("Just");
     if (isJust) {
@@ -2196,12 +2444,14 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
     auto newLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newBody));
 
     YQL_CLOG(DEBUG, Core) << node.CallableName() << " with Just(Member) over FilterNullMembers";
+    // clang-format off
     return ctx.Builder(node.Pos())
         .Callable(node.CallableName())
             .Add(0, ctx.RenameNode(filter.Ref(), "SkipNullMembers"))
             .Add(1, ctx.DeepCopyLambda(*newLambda))
         .Seal()
         .Build();
+    // clang-format on
 }
 
 bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructExprType& inputItemType) {
@@ -2280,6 +2530,7 @@ void ApplyRenamesToCalcs(TExprNodeList& calcs, const TMap<TStringBuf, TStringBuf
                 TVector<const TItemExprType*> typeAfterRenameItems;
                 auto typeBeforeRename = frame.Ptr()->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 auto oldFilterLambda = frame.Ref().ChildPtr(2);
+                // clang-format off
                 auto newFilterLambda = ctx.Builder(oldFilterLambda->Pos())
                     .Lambda()
                         .Param("renamedRow")
@@ -2287,12 +2538,14 @@ void ApplyRenamesToCalcs(TExprNodeList& calcs, const TMap<TStringBuf, TStringBuf
                             .With(0)
                                 .Callable("AsStruct")
                                     .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                                        // clang-format on
                                         for (size_t i = 0; i < typeBeforeRename->GetSize(); ++i) {
                                             auto item = typeBeforeRename->GetItems()[i];
                                             TStringBuf src = item->GetName();
                                             auto it = renames.find(src);
                                             TStringBuf dst = (it == renames.end()) ? src : it->second;
                                             typeAfterRenameItems.push_back(ctx.MakeType<TItemExprType>(dst, item->GetItemType()));
+                                            // clang-format off
                                             builder
                                                 .List(i)
                                                     .Atom(0, src)
@@ -2301,16 +2554,20 @@ void ApplyRenamesToCalcs(TExprNodeList& calcs, const TMap<TStringBuf, TStringBuf
                                                         .Atom(1, dst)
                                                     .Seal()
                                                 .Seal();
+                                            // clang-format on
                                         }
                                         return builder;
+                                    // clang-format off
                                     })
                                 .Seal()
                             .Done()
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
                 auto typeAfterRename = ctx.MakeType<TStructExprType>(typeAfterRenameItems);
                 YQL_ENSURE(typeAfterRename->Validate(frame.Pos(), ctx));
+                // clang-format off
                 newFrames.push_back(ctx.Builder(frame.Pos())
                     .Callable("WinFilter")
                         .Add(0, frame.Ref().HeadPtr())
@@ -2318,6 +2575,7 @@ void ApplyRenamesToCalcs(TExprNodeList& calcs, const TMap<TStringBuf, TStringBuf
                         .Add(2, newFilterLambda)
                     .Seal()
                     .Build());
+                // clang-format on
             } else {
                 TExprNodeList winOnChildren = frame.Ref().ChildrenList();
                 for (size_t i = 1; i < winOnChildren.size(); ++i) {
@@ -2340,11 +2598,13 @@ void ApplyRenamesToCalcs(TExprNodeList& calcs, const TMap<TStringBuf, TStringBuf
             }
         }
 
+        // clang-format off
         c = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
                 .InitFrom(calc)
                 .Frames(ctx.NewList(calc.Frames().Pos(), std::move(newFrames)))
                 .SessionColumns(ctx.NewList(calc.SessionColumns().Pos(), std::move(newSessionColumns)))
                 .Done().Ptr();
+        // clang-format on
     }
 }
 
@@ -2416,6 +2676,7 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
 
     ApplyRenamesToCalcs(parentCalcs, renames, ctx);
     YQL_CLOG(DEBUG, Core) << "Replace payload renaming " << node.CallableName() << " over " << calcNode.CallableName() << " with ExtractMembers";
+    // clang-format off
     return Build<TCoExtractMembers>(ctx, calcNode.Pos())
         .Input<TCoCalcOverWindowGroup>()
             .Input(calcNode.Input())
@@ -2424,6 +2685,7 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
         .Members(ctx.NewList(node.Pos(), std::move(extractMembers)))
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr PushdownFilterOverWindow(const TCoFlatMapBase& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -2485,11 +2747,13 @@ TExprNode::TPtr PushdownFilterOverWindow(const TCoFlatMapBase& node, TExprContex
     auto flatmapLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(flatmapBody));
 
     YQL_CLOG(DEBUG, Core) << "Pushdown Filter over " << node.Input().Ref().Content() << ": pushed " << pushCount << " predicates, left " << restCount << " predicates";
+    // clang-format off
     return Build<TCoFlatMapBase>(ctx, node.Pos())
         .InitFrom(node)
         .Input(newCalc)
         .Lambda(ctx.DeepCopyLambda(*flatmapLambda))
         .Done().Ptr();
+    // clang-format on
 }
 
 TMaybe<TExprNodeList> TryRenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -2568,6 +2832,12 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
 
+            if (AllowPushdownStructSubsetFieldsOverAggregate(optCtx)) {
+                if (auto pushed = PushdownStructSubsetFieldsOverAggregate(self, ctx, optCtx)) {
+                    return pushed;
+                }
+            }
+
             if (const auto maybeGroupingCore = TMaybeNode<TCoGroupingCore>(&SkipCallables(self.Input().Ref(), {"ToFlow"}))) {
                 auto groupingCore = maybeGroupingCore.Cast();
                 const TExprNode* extract = nullptr;
@@ -2587,11 +2857,14 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
                 if (extract) {
                     if (const auto handler = groupingCore.ConvertHandler()) {
+                        // clang-format off
                         auto newBody = Build<TCoCastStruct>(ctx, handler.Cast().Body().Pos())
                             .Struct(handler.Cast().Body())
                             .Type(ExpandType(handler.Cast().Body().Pos(), GetSeqItemType(*extract->GetTypeAnn()), ctx))
                             .Done();
+                        // clang-format on
 
+                        // clang-format off
                         groupingCore = Build<TCoGroupingCore>(ctx, groupingCore.Pos())
                             .InitFrom(groupingCore)
                             .ConvertHandler()
@@ -2602,20 +2875,25 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                                 .Build()
                             .Build()
                             .Done();
+                        // clang-format on
                         TExprBase flatMapInput = groupingCore;
                         if (auto toFlow = self.Input().Maybe<TCoToFlow>()) {
+                            // clang-format off
                             flatMapInput = Build<TCoToFlow>(ctx, self.Input().Pos())
                                 .InitFrom(toFlow.Cast())
                                 .Input(flatMapInput)
                                 .Done();
+                            // clang-format on
                         }
 
                         YQL_CLOG(DEBUG, Core) << "Pull out " << extract->Content() << " from " << node->Content() << " to " << groupingCore.Ref().Content() << " handler";
+                        // clang-format off
                         return Build<TCoFlatMapBase>(ctx, node->Pos())
                             .CallableName(node->Content())
                             .Input(flatMapInput)
                             .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                             .Done().Ptr();
+                        // clang-format on
                     }
 
                     std::map<std::string_view, TExprNode::TPtr> usedFields;
@@ -2636,6 +2914,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                         }
 
                         YQL_CLOG(DEBUG, Core) << "Pull out " << extract->Content() << " from " << node->Content() << " to " << groupingCore.Ref().Content() << " input";
+                        // clang-format off
                         return Build<TCoFlatMapBase>(ctx, node->Pos())
                             .CallableName(node->Content())
                             .Input<TCoGroupingCore>()
@@ -2650,6 +2929,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                             .Build()
                             .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                             .Done().Ptr();
+                        // clang-format on
                     }
                 }
             }
@@ -2676,6 +2956,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     }
 
                     auto newInput = ctx.ChangeChildren(self.Input().Ref(), std::move(filteredInputs));
+                    // clang-format off
                     return ctx.Builder(node->Pos())
                         .Callable(node->Content())
                             .Add(0, newInput)
@@ -2685,6 +2966,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
             }
 
@@ -2745,6 +3027,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoGroupingCore>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -2756,6 +3039,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .KeyExtractor(ctx.DeepCopyLambda(self.KeyExtractor().Ref()))
                 .ConvertHandler(ctx.DeepCopyLambda(self.ConvertHandler().Ref()))
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -2804,6 +3088,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             }
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             newInput = Build<TCoExtractMembers>(ctx, self.Input().Pos())
                 .Input(self.Input())
                 .Members()
@@ -2811,8 +3096,10 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Build()
                 .Done()
                 .Ptr();
+            // clang-format on
         }
 
+        // clang-format off
         return Build<TCoCombineByKey>(ctx, self.Pos())
             .Input(newInput)
             .PreMapLambda(ctx.DeepCopyLambda(self.PreMapLambda().Ref()))
@@ -2822,6 +3109,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             .FinishHandlerLambda(ctx.DeepCopyLambda(self.FinishHandlerLambda().Ref()))
             .Done()
             .Ptr();
+        // clang-format on
     };
 
     map["EquiJoin"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3076,6 +3364,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
 
                 YQL_CLOG(DEBUG, Core) << "Pull out " << extract->Content() << " from " << node->Content();
+                // clang-format off
                 return Build<TCoChopper>(ctx, chopper.Pos())
                     .Input<TCoExtractMembers>()
                         .Input(chopper.Input())
@@ -3085,6 +3374,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     .GroupSwitch(ctx.DeepCopyLambda(chopper.GroupSwitch().Ref()))
                     .Handler(ctx.DeepCopyLambda(chopper.Handler().Ref()))
                     .Done().Ptr();
+                // clang-format on
             }
         }
         return node;
@@ -3108,6 +3398,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
         YQL_CLOG(DEBUG, Core) << "FieldSubset for " << node->Content();
+        // clang-format off
         return ctx.Builder(self.Pos())
             .Callable("WinFilter")
                 .Add(0, self.FrameSpec().Ptr())
@@ -3115,6 +3406,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Add(2, ctx.DeepCopyLambda(self.Predicate().Ref()))
             .Seal()
             .Build();
+        // clang-format on
     };
 
     map["WindowTraits"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3152,6 +3444,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
         YQL_CLOG(DEBUG, Core) << "FieldSubset for WindowTraits";
+        // clang-format off
         return ctx.Builder(node->Pos())
             .Callable("WindowTraits")
                 .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
@@ -3162,6 +3455,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Add(5, node->Child(5)->IsLambda() ? ctx.DeepCopyLambda(*node->Child(5)) : node->ChildPtr(5))
             .Seal()
             .Build();
+        // clang-format on
     };
 
     map[TCoHoppingTraits::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3190,11 +3484,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
         YQL_CLOG(DEBUG, Core) << "FieldSubset for HoppingTraits";
+        // clang-format off
         return Build<TCoHoppingTraits>(ctx, node->Pos())
             .InitFrom(self)
             .ItemType(ExpandType(node->Pos(), *subsetType, ctx))
             .TimeExtractor(ctx.DeepCopyLambda(self.TimeExtractor().Ref()))
             .Done().Ptr();
+        // clang-format on
     };
 
     map["AggregationTraits"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3232,6 +3528,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
         YQL_CLOG(DEBUG, Core) << "FieldSubset for AggregationTraits";
+        // clang-format off
         return ctx.Builder(node->Pos())
             .Callable("AggregationTraits")
                 .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
@@ -3244,6 +3541,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Add(7, node->Child(7)->IsLambda() ? ctx.DeepCopyLambda(*node->Child(7)) : node->ChildPtr(7))
             .Seal()
             .Build();
+        // clang-format on
     };
 
     map["AggApply"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
@@ -3295,18 +3593,22 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             auto subsetType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>()));
             YQL_CLOG(DEBUG, Core) << "FieldSubset for " << node->Content();
             if (node->IsCallable({"NTile","CumeDist"})) {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
                         .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
                         .Add(1, node->TailPtr())
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
                         .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
 
@@ -3349,6 +3651,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         auto subsetType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(subsetItems));
         YQL_CLOG(DEBUG, Core) << "FieldSubset for " << node->Content();
         if (node->IsCallable("SortTraits")) {
+            // clang-format off
             return ctx.Builder(node->Pos())
                 .Callable("SortTraits")
                     .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
@@ -3356,7 +3659,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     .Add(2, ctx.DeepCopyLambda(*node->ChildPtr(2)))
                 .Seal()
                 .Build();
+            // clang-format on
         } else if (node->IsCallable("SessionWindowTraits")) {
+            // clang-format off
             return ctx.Builder(node->Pos())
                 .Callable("SessionWindowTraits")
                     .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
@@ -3366,15 +3671,19 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     .Add(4, ctx.DeepCopyLambda(*node->ChildPtr(4)))
                 .Seal()
             .Build();
+            // clang-format on
         } else {
             if (node->ChildrenSize() == 2) {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
                         .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
                         .Add(1, ctx.DeepCopyLambda(*node->ChildPtr(1)))
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 return ctx.Builder(node->Pos())
                     .Callable(node->Content())
                         .Add(0, ExpandType(node->Pos(), *subsetType, ctx))
@@ -3382,6 +3691,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                         .Add(2, node->ChildPtr(2))
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
     };
@@ -3442,6 +3752,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         auto result = RebuildCalcOverWindowGroup(child->Pos(), input, calcs, ctx);
         if (seenExtractMembers) {
+            // clang-format off
             result = ctx.Builder(result->Pos())
                 .Callable("ExtractMembers")
                     .Add(0, result)
@@ -3457,6 +3768,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         YQL_CLOG(DEBUG, Core) << "Fuse nested " << node->Content() << " and " << child->Content();
@@ -3479,6 +3791,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoCondense>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -3490,6 +3803,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .SwitchHandler(ctx.DeepCopyLambda(self.SwitchHandler().Ref()))
                 .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3512,6 +3826,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoCondense1>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -3523,6 +3838,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .SwitchHandler(ctx.DeepCopyLambda(self.SwitchHandler().Ref()))
                 .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3543,6 +3859,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoChain1Map>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -3553,6 +3870,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
                 .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3573,6 +3891,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoMapNext>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -3582,6 +3901,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Build()
                 .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3602,6 +3922,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoSqueezeToDict>(ctx, node->Pos())
                 .Stream<TCoExtractMembers>()
                     .Input(self.Stream())
@@ -3613,6 +3934,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .PayloadSelector(ctx.DeepCopyLambda(self.PayloadSelector().Ref()))
                 .Settings(self.Settings())
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3635,6 +3957,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 [](std::pair<const std::string_view, TExprNode::TPtr>& item){ return std::move(item.second); });
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoCombineCore>(ctx, node->Pos())
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
@@ -3648,6 +3971,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .FinishHandler(ctx.DeepCopyLambda(self.FinishHandler().Ref()))
                 .MemLimit(self.MemLimit())
                 .Done().Ptr();
+            // clang-format on
         }
         return node;
     };
@@ -3678,6 +4002,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             }
 
             YQL_CLOG(DEBUG, Core) << node->Content() << "SubsetFields";
+            // clang-format off
             return Build<TCoMapJoinCore>(ctx, node->Pos())
                 .InitFrom(self)
                 .LeftInput<TCoExtractMembers>()
@@ -3685,6 +4010,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                     .Members(fields)
                     .Build()
                 .Done().Ptr();
+            // clang-format on
         }
 
         return node;

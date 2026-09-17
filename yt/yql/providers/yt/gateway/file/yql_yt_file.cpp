@@ -170,10 +170,12 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         TLangVersion langver,
-        TRuntimeSettings::TConstPtr runtimeSettings
+        TRuntimeSettings::TConstPtr runtimeSettings,
+        NUdf::EBridgeMode bridgeMode = NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {}
     )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -460,7 +462,8 @@ public:
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
                         MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                        options.BridgeMode(), options.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -793,7 +796,8 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -1382,7 +1386,8 @@ private:
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
             MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+            options.BridgeMode(), options.BridgeBinaryPath());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1464,7 +1469,8 @@ private:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
-                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);

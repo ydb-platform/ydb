@@ -245,7 +245,7 @@ void TestCreateResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGat
 void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {
     TCreateObjectSettings settings("RESOURCE_POOL", poolId, {
         {"concurrent_query_limit", "20"},
-        {"total_memory_limit_percent_per_node", "80.5"}
+        {"total_cpu_limit_percent_per_node", "80.5"}
     }, {
         "queue_size"
     });
@@ -257,7 +257,7 @@ void TestAlterResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
     UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "-1");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80.5");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("total_cpu_limit_percent_per_node"), "80.5");
 }
 
 void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& poolId) {

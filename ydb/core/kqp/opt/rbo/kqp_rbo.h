@@ -36,6 +36,9 @@ class IRule {
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>&) const {
         return true;
     }
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps&) const {
+        return QuickMatch(input);
+    }
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;

@@ -1,4 +1,14 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/statistics/events.h>
+#include <ydb/core/engine/mkql_keys.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
+#include <yql/essentials/minikql/computation/presort.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -10,6 +20,120 @@ TIndexBuildShardStatus::TIndexBuildShardStatus(TSerializedTableRange range, TStr
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
 {}
+
+namespace {
+
+std::optional<TString> PresortKeyToSerializedCellVec(TStringBuf presortKey,
+    const TVector<NScheme::TTypeInfo>& types, const TVector<bool>& isOptional)
+{
+    using namespace NKikimr::NMiniKQL;
+    try {
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        TPresortDecoder decoder;
+        for (size_t i = 0; i < types.size(); ++i) {
+            auto slot = NUdf::FindDataSlot(types[i].GetTypeId());
+            if (!slot) {
+                return std::nullopt;  // e.g. Pg types: not presort-decodable here
+            }
+            decoder.AddType(*slot, isOptional[i], /*isDesc=*/false);
+        }
+        decoder.Start(presortKey);
+
+        TVector<TCell> cells;
+        cells.reserve(types.size());
+        for (size_t i = 0; i < types.size(); ++i) {
+            NUdf::TUnboxedValue value = decoder.Decode();
+            // Cell memory is copied into env's arena (copy=true) and stays valid until Serialize.
+            cells.push_back(value ? MakeCell(types[i], value, env, /*copy=*/true) : TCell());
+        }
+        decoder.Finish();
+
+        return TSerializedCellVec::Serialize(cells);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+} // namespace
+
+std::vector<ui32> TIndexBuildInfo::GetSecondaryIndexKeyTags(TSchemeShard* ss) const {
+    TTableInfo::TPtr mainTable = ss->Tables.at(this->TablePathId);
+    THashMap<TString, ui32> columnTags;
+    for (auto& [tag, column]: mainTable->Columns) {
+        if (!column.IsDropped()) {
+            columnTags[column.Name] = tag;
+        }
+    }
+    std::vector<ui32> tags;
+    for (auto& column: IndexColumns) {
+        tags.push_back(columnTags.at(column));
+        columnTags.erase(column);
+    }
+    for (auto& tag: mainTable->KeyColumnIds) {
+        auto& colName = mainTable->Columns.at(tag).Name;
+        if (columnTags.erase(colName)) {
+            tags.push_back(tag);
+        }
+    }
+    return tags;
+}
+
+void TIndexBuildInfo::FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const {
+    if (!IndexHistogram || !IndexHistogramFields) {
+        return;
+    }
+
+    const auto tableIt = ss->Tables.find(TablePathId);
+    if (tableIt == ss->Tables.end()) {
+        return;
+    }
+    const auto& mainTable = tableIt->second;
+
+    auto tags = GetSecondaryIndexKeyTags(ss);
+    tags.resize(IndexHistogramFields);
+
+    TVector<NScheme::TTypeInfo> types;
+    TVector<bool> isOptional;
+    types.reserve(tags.size());
+    isOptional.reserve(tags.size());
+    for (ui32 tag : tags) {
+        const auto& column = mainTable->Columns.at(tag);
+        types.push_back(column.PType);
+        isOptional.push_back(!column.NotNull);
+    }
+
+    const ui64 buckets = IndexHistogram->GetNumBuckets();
+    const ui64 shardCount = std::min<ui64>(buckets, IndexPartitions);
+    if (shardCount < 2) {
+        return;
+    }
+
+    TVector<TString> boundaries;
+    boundaries.reserve(shardCount - 1);
+    for (ui64 i = 1; i < shardCount; ++i) {
+        const ui64 nb = i * buckets / shardCount;
+        auto serialized = PresortKeyToSerializedCellVec(
+            IndexHistogram->GetBucket(nb).UpperBound, types, isOptional);
+        if (!serialized) {
+            // undecodable
+            return;
+        }
+        boundaries.push_back(std::move(*serialized));
+    }
+
+    for (auto& boundary : boundaries) {
+        implDesc.AddSplitBoundary()->SetSerializedKeyPrefix(std::move(boundary));
+    }
+}
+
+bool TIndexBuildInfo::HasPartitionSettings() const {
+    return ImplTableDescriptions.size() &&
+        (ImplTableDescriptions[0].GetUniformPartitionsCount() ||
+        ImplTableDescriptions[0].SplitBoundarySize() ||
+        ImplTableDescriptions[0].GetPartitionConfig().HasPartitioningPolicy());
+}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
     Y_ENSURE(IsBuildIndex());
@@ -40,6 +164,15 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+            if (IndexHistogram) {
+                if (!index.IndexImplTableDescriptionsSize()) {
+                    FillIndexPresharding(ss, *index.AddIndexImplTableDescriptions());
+                } else if (!index.GetIndexImplTableDescriptions(0).GetUniformPartitionsCount() &&
+                    !index.GetIndexImplTableDescriptions(0).SplitBoundarySize() &&
+                    !index.GetIndexImplTableDescriptions(0).GetPartitionConfig().HasPartitioningPolicy()) {
+                    FillIndexPresharding(ss, *index.MutableIndexImplTableDescriptions(0));
+                }
+            }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
@@ -338,6 +471,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::Applying:
         case EState::Unlocking:
         case EState::AlterSequence:
+        case EState::AlterIndexTable:
         case EState::PrepareValidation:
         case EState::Done:
         case EState::Cancellation_Applying:

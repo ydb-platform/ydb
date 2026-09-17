@@ -9,6 +9,7 @@ namespace NKqp {
 
 struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
     i64 InFlightMemoryLimitPerActorBytes = 64_MB;
+    i64 ColumnShardMaxOperationBytes = 64_MB;
     i64 MaxForwardedSize = 64_MB;
 
     TDuration StartRetryDelay = TDuration::Seconds(1);
@@ -18,6 +19,7 @@ struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
 
     ui64 MaxWriteAttempts = 5;
     ui64 MaxResolveAttempts = 5;
+    ui64 MaxRetryResolvesPerShard = 5; // consecutive re-resolves caused by one shard before UNAVAILABLE
 };
 
 TWriteActorSettings GetWriteActorSettings();

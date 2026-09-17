@@ -639,7 +639,7 @@ private:
                 // Tablet was previously created by Hive but we don't know whether
                 // its TEvNbsLoadTabletAllocateGroups succeeded. Bypass TEvTabletCreationResult
                 // (Hive only sends that on first boot) and try the idempotent
-                // tablet handler directly. Phase 1.2 spec §23.10 case 1.
+                // tablet handler directly.
                 WaitingForTabletCreation = false;
                 LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
                     << " TabletId# " << TabletId);
@@ -1243,6 +1243,9 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         "</div></div></div>" +
                     "</div>" +
                     "<div class='form-group'><div class='checkbox'><label>" +
+                      "<input id='" + p + "enable-checksums' type='checkbox' checked /> Enable checksums" +
+                    "</label></div></div>" +
+                    "<div class='form-group'><div class='checkbox'><label>" +
                       "<input id='" + p + "sequential' type='checkbox' /> Sequential (round-robin address space instead of random)" +
                     "</label></div></div>" +
                     "<div class='form-group'><div class='checkbox'><label>" +
@@ -1389,6 +1392,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         sequential:              ctx.checked("sequential") ? "1" : "0",
                         num_dbg_to_use:          ctx.val("num-dbg") || "0",
                         max_inflight_lsns:       ctx.val("max-inflight-lsns") || "4096",
+                        enable_checksums:        ctx.checked("enable-checksums") ? "1" : "0",
                         disable_replication:     disableRepl ? "1" : "0"
                     };
                     // Route every run (single- and multi-tablet) through the

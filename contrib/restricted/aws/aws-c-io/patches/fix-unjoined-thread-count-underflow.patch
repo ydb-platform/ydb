@@ -1,0 +1,29 @@
+--- contrib/restricted/aws/aws-c-io/source/linux/epoll_event_loop.c	(index)
++++ contrib/restricted/aws/aws-c-io/source/linux/epoll_event_loop.c	(working tree)
+@@ -321,6 +321,12 @@ static int s_stop(struct aws_event_loop *event_loop) {
+ 
+ static int s_wait_for_stop_completion(struct aws_event_loop *event_loop) {
+     struct epoll_loop *epoll_loop = event_loop->impl_data;
++
++    /* s_run() already restores the unjoined-thread count if thread creation fails. */
++    if (aws_thread_get_detach_state(&epoll_loop->thread_created_on) == AWS_THREAD_NOT_CREATED) {
++        return AWS_OP_SUCCESS;
++    }
++
+     int result = aws_thread_join(&epoll_loop->thread_created_on);
+     aws_thread_decrement_unjoined_count();
+     return result;
+--- contrib/restricted/aws/aws-c-io/source/bsd/kqueue_event_loop.c	(index)
++++ contrib/restricted/aws/aws-c-io/source/bsd/kqueue_event_loop.c	(working tree)
+@@ -431,6 +431,11 @@ static int s_wait_for_stop_completion(struct aws_event_loop *event_loop) {
+     aws_mutex_unlock(&impl->cross_thread_data.mutex);
+ #endif
+ 
++    /* s_run() already restores the unjoined-thread count if thread creation fails. */
++    if (aws_thread_get_detach_state(&impl->thread_created_on) == AWS_THREAD_NOT_CREATED) {
++        return AWS_OP_SUCCESS;
++    }
++
+     int err = aws_thread_join(&impl->thread_created_on);
+     aws_thread_decrement_unjoined_count();
+     if (err) {

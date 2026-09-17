@@ -91,6 +91,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptForceOlapPushdownDistinctLimit);
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapPushdownRegexp);
+    REGISTER_SETTING(*this, OptEnableOlapFastAsciiIgnoreCase);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
@@ -109,6 +110,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockHashJoinForCross);
     REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
+    REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -168,11 +170,14 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 return NKqpProto::ISOLATION_LEVEL_READ_STALE;
             } else if (mode == "ReadCommittedRW") {
                 return NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW;
+            } else if (mode == "StrictSerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
             } else {
-                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO, ReadCommittedRW, StrictSerializableRW]";
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
+    REGISTER_SETTING(*this, EnableCsWriteAffinity);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -300,7 +305,7 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     ui64 mask = EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
-    if (!WindowFunctionsV2.Get().GetOrElse(false)) {
+    if (!GetWindowFunctionsV2()) {
         mask &= ~ui64(NYql::NDq::EEnabledSpillingNodes::WideSort);
     }
     return mask;
@@ -324,6 +329,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetEnableOlapPushdownRegexp() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownRegexp.Get()) == EOptionalFlag::Enabled) ||
         TTableServiceConfig::GetEnableOlapPushdownRegexp());
+}
+
+bool TKikimrConfiguration::GetEnableOlapFastAsciiIgnoreCase() const {
+    return GetOptionalFlagValue(OptEnableOlapFastAsciiIgnoreCase.Get()) == EOptionalFlag::Enabled;
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
@@ -394,6 +403,10 @@ bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
 }
 
+bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {
+    return EnableBlockHashJoinEqualNulls.Get().GetOrElse(TTableServiceConfig::GetEnableBlockHashJoinEqualNulls());
+}
+
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
     return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
         TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
@@ -401,6 +414,14 @@ bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
 
 bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
     return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
+}
+
+bool TKikimrConfiguration::GetWindowFunctionsV2() const {
+    return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
+}
+
+bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {
+    return EnableCsWriteAffinity.Get().GetOrElse(false);
 }
 
 } // namespace NYql

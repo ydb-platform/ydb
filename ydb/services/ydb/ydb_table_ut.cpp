@@ -774,6 +774,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(clusterAdminToken);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
         TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
@@ -872,6 +873,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs("root@builtin");
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
         // Make all users except root@builtin non-admins.

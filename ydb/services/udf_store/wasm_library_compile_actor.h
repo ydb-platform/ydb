@@ -21,6 +21,10 @@ private:
         WriteArtifactChunk,
         UpsertArtifact,
         UpdateMetaReady,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
         UpdateMetaFailed,
     };
 
@@ -43,6 +47,7 @@ private:
 
     void ExecuteQuery(const TString& yql, bool readOnly);
     void ReplyError(const TString& message);
+    void ReplyDeferred(const TString& reason);
     void ReplySuccess();
     void HandleQueryResult(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev);
     void HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev);

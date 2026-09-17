@@ -516,6 +516,56 @@ namespace {
                 NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
         }
 
+        Y_UNIT_TEST(OnWriteResponseError_ShouldFailRemainingCookiesOfSameWriter) {
+            Ctx->Runtime->SetDispatchTimeout(TDuration::Seconds(5));
+
+            struct TCapturedWrite {
+                TActorId ProduceActor;
+                ui64 Cookie;
+            };
+            std::vector<TCapturedWrite> writes;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* writeRequest = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    writes.push_back({input->Sender, writeRequest->GetCookie()});
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce({}, 1, 0, 1);
+            SendProduce({}, 1, 0, 2);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writes]() {
+                return writes.size() >= 2;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+            UNIT_ASSERT_VALUES_EQUAL(writes.size(), 2);
+
+            NKikimrClient::TResponse record;
+            record.MutablePartitionResponse()->SetCookie(writes[0].Cookie);
+            auto ev = MakeHolder<TEvPartitionWriter::TEvWriteResponse>(
+                "",
+                "",
+                TEvPartitionWriter::TEvWriteResponse::EErrorCode::InternalError,
+                "test write error",
+                std::move(record));
+            Ctx->Runtime->Send(new IEventHandle(writes[0].ProduceActor, Ctx->Edge, ev.Release()));
+
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(
+                std::dynamic_pointer_cast<NKafka::TProduceResponseData>(first->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
+
+            auto second = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(
+                std::dynamic_pointer_cast<NKafka::TProduceResponseData>(second->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
+        }
+
         Y_UNIT_TEST(OnProduce_TimestampOverflowIsNotAParseError) {
             i32 sequence = 0;
             for (const bool batchingEnabled : {false, true}) {

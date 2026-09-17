@@ -333,6 +333,41 @@ void TKafkaProduceActor::FailPendingWritesForTopic(const TString& path, EKafkaEr
     }
 }
 
+void TKafkaProduceActor::FailPendingWritesForPartition(const TString& path, ui32 partitionId, EKafkaErrors errorCode, TStringBuf errorMessage) {
+    for (auto it = Cookies.begin(); it != Cookies.end();) {
+        const ui64 cookie = it->first;
+        auto& info = it->second;
+        if (info.TopicPath != path || info.PartitionId != partitionId) {
+            ++it;
+            continue;
+        }
+
+        auto& result = info.Request->Results[info.Position];
+        result.ErrorCode = errorCode;
+        result.ErrorMessage = TString{errorMessage};
+        info.Request->WaitAcceptingCookies.erase(cookie);
+        info.Request->WaitResultCookies.erase(cookie);
+        it = Cookies.erase(it);
+    }
+}
+
+void TKafkaProduceActor::DropPartitionWriter(const TString& topicPath, ui32 partitionId) {
+    auto wit = NonTransactionalWriters.find(topicPath);
+    if (wit != NonTransactionalWriters.end()) {
+        auto pit = wit->second.find(partitionId);
+        if (pit != wit->second.end()) {
+            CleanWriter({topicPath, partitionId}, pit->second.ActorId);
+            wit->second.erase(pit);
+        }
+    }
+
+    auto txnIt = TransactionalWriters.find({topicPath, partitionId});
+    if (txnIt != TransactionalWriters.end()) {
+        CleanWriter(txnIt->first, txnIt->second.ActorId);
+        TransactionalWriters.erase(txnIt);
+    }
+}
+
 void TKafkaProduceActor::InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx) {
     const auto error = deleted
         ? EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION
@@ -788,28 +823,12 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
         return false;
     }
 
-    for (auto it = Cookies.begin(); it != Cookies.end();) {
-        auto cookie = it->first;
-        auto& info = it->second;
-
-        if (info.TopicPath == topicPath && info.PartitionId == partitionId) {
-            info.Request->Results[info.Position].ErrorCode = errorCode;
-            info.Request->Results[info.Position].ErrorMessage = errorMessage;
-            info.Request->WaitAcceptingCookies.erase(cookie);
-            info.Request->WaitResultCookies.erase(cookie);
-
-            if (info.Request->WaitResultCookies.empty()) {
-                SendResults(ActorContext());
-            }
-
-            it = Cookies.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
+    FailPendingWritesForPartition(topicPath, partitionId, errorCode, errorMessage);
+    SendResults(ActorContext());
     return true;
 }
+
+EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value);
 
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx) {
     auto r = request->Get();
@@ -826,43 +845,40 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         return;
     }
     auto& cookieInfo = it->second;
+    auto pendingRequest = cookieInfo.Request;
+    const TString topicPath = cookieInfo.TopicPath;
+    const ui32 partitionId = cookieInfo.PartitionId;
+    const size_t position = cookieInfo.Position;
 
     // Missing supportive partition means that we wrote in transaction and that transaction ended, thus suppprtive partition was deleted
     // it means that we are writing in a new transaction and need to create a new partition writer (cause only partition writer in init state properly creates supportive partition)
     if (r->Record.GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION) {
         RecreatePartitionWriterAndRetry(cookie, ctx);
         return;
-    } else if (!r->IsSuccess()) {
-        auto wit = NonTransactionalWriters.find(cookieInfo.TopicPath);
-        if (wit != NonTransactionalWriters.end()) {
-            auto& partitions = wit->second;
-            auto pit = partitions.find(cookieInfo.PartitionId);
-            if (pit != partitions.end()) {
-                Send(pit->second.ActorId, new TEvents::TEvPoison());
-                partitions.erase(pit);
-            }
-        }
-        auto txnIt = TransactionalWriters.find({cookieInfo.TopicPath, cookieInfo.PartitionId});
-        if (txnIt != TransactionalWriters.end()) {
-            Send(txnIt->second.ActorId, new TEvents::TEvPoison());
-            TransactionalWriters.erase(txnIt);
-        }
     }
 
-    auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
+    auto& partitionResult = pendingRequest->Results[position];
     partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
     partitionResult.Value = request;
-    cookieInfo.Request->WaitResultCookies.erase(cookie);
+    pendingRequest->WaitResultCookies.erase(cookie);
+    pendingRequest->WaitAcceptingCookies.erase(cookie);
+    Cookies.erase(cookie);
 
-    if (cookieInfo.Request->WaitResultCookies.empty()) {
+    if (!r->IsSuccess()) {
+        // Close remaining cookies before dropping the writer. Poisoning first
+        // makes WriterDied miss the maps, leaving WaitResultCookies stuck
+        // until the 30s produce timeout (HOL).
+        FailPendingWritesForPartition(topicPath, partitionId, Convert(r->GetError().Code), r->GetError().Reason);
+        DropPartitionWriter(topicPath, partitionId);
+    }
+
+    if (pendingRequest->WaitResultCookies.empty()) {
         SendResults(ctx);
     } else {
         YDB_LOG_TRACE("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse",
             {LogPrefix()},
-            {"waitResultCookies", JoinSeq(", ", cookieInfo.Request->WaitResultCookies)});
+            {"waitResultCookies", JoinSeq(", ", pendingRequest->WaitResultCookies)});
     }
-
-    Cookies.erase(cookie);
 }
 
 EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {

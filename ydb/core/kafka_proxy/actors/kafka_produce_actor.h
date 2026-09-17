@@ -64,6 +64,8 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
     void FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage);
+    void FailPendingWritesForPartition(const TString& path, ui32 partitionId, EKafkaErrors errorCode, TStringBuf errorMessage);
+    void DropPartitionWriter(const TString& topicPath, ui32 partitionId);
     void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
 
     // StateInit - describe topics

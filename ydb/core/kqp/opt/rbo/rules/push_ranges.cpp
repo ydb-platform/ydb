@@ -609,7 +609,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                                                 std::move(rangeInfo), std::nullopt, ESortDir::None, read->Props, read->Pos);
 
         auto indexFilter = MakeIntrusive<TOpFilter>(indexRead, filter->Pos, filter->Props,
-                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props));
+                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props), true);
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
         const size_t renameCount = std::min(read->Columns.size(), read->OutputIUs.size());
         for (size_t i = 0; i < renameCount; ++i) {
@@ -664,6 +664,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
-    return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props));
+    return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
 }
 } // namespace NKikimr::NKqp

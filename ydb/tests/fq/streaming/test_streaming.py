@@ -1978,6 +1978,89 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_shared_reading_pushdown(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"shared_pushdown{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+            shared=True,
+        )
+
+        # YQ-5708
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT * FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        str1 String,
+                        str2 String,
+                        ev String
+                    )
+                )
+                WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
+                  AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
+                    OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
+                ;
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
+            END DO;'''
+
+        query_name = f"test_shared_pushdown_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"{kikimr.get_database_name()}/{query_name}"
+        self.wait_completed_checkpoints(kikimr, query_name)
+
+        # Check that streaming.query.tasks.count metric exists
+        self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
+
+        data = [
+            '{"str1":null,"str2":"DONE","ev":"skipped"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep"}',
+            '{"str1":null,"str2":null,"ev":"xap"}',
+            '{"str1":"xep","str2":"xip","ev":"xup"}',
+        ]
+        expected_data = [
+            '{"ev":"xep","str1":"xop","str2":"DONE"}',
+            '{"ev":"xap","str1":null,"str2":null}',
+            '{"ev":"xup","str1":"xep","str2":"xip"}',
+        ]
+
+        self.write_stream(data, endpoint=endpoint)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+
+        def collect_plan_nodes(plan, nodeType):
+            if plan.get("Node Type", None) == nodeType:
+                yield plan
+            for sub_plan in plan.get("Plans", []):
+                yield from collect_plan_nodes(sub_plan, nodeType)
+
+        # verify pushdown in query
+        pushdown_key = "Filter (shared reading)"
+        result_sets = kikimr.ydb_client.query(
+            f"""SELECT Plan FROM `.sys/streaming_queries` WHERE Path = "{path}";"""
+        )
+        assert len(result_sets) == 1
+        assert len(result_sets[0].rows) == 1
+
+        sources = 0
+        for source in collect_plan_nodes(json.loads(result_sets[0].rows[0]["Plan"])["Plan"], "Source"):
+            for operator in source.get("Operators", []):
+                if operator.get("SourceType", None) == "pq":
+                    assert pushdown_key in operator
+                    filter = operator[pushdown_key]
+                    logger.debug(filter)
+                    assert "`str1`" in filter
+                    assert "`str2`" in filter
+                    sources += 1
+        assert sources > 0
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name))
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
     def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)

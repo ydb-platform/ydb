@@ -104,14 +104,14 @@ void CheckGeneratedColumnRejected(const std::string& createTable, const TString&
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
 }
 
-std::string GeneratedColumnDDL(const std::string& expr, const std::string& prefix = "") {
+std::string GeneratedColumnDDL(const std::string& expr, const std::string& prefix = "", const std::string& modifier = "STORED") {
     return prefix + R"(
         CREATE TABLE TestTable (
             k Int32 NOT NULL,
             a Int32,
             s String,
             v Int32 GENERATED ALWAYS AS ()" +
-           expr + R"() STORED,
+           expr + ") " + modifier + R"(,
             PRIMARY KEY (k)
         );
     )";
@@ -173,10 +173,8 @@ void CheckGeneratedColumnPersisted(const std::string& createTable, bool expectSt
         UNIT_ASSERT_VALUES_EQUAL(generated.GetStored(), expectStored);
 
         UNIT_ASSERT_VALUES_EQUAL(generated.GetExprText(), "k + 1");
-        UNIT_ASSERT(generated.HasContext());
 
         Cout << "EXPR:" << Endl << generated.GetExprText() << Endl;
-        Cout << "CONTEXT:" << Endl << generated.GetContext() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(generated.DependencyColumnNamesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(generated.GetDependencyColumnNames(0), "k");
@@ -1065,15 +1063,10 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
         const auto originSt = generatedOf("st");
         const auto originVt = generatedOf("vt");
-        UNIT_ASSERT_VALUES_EQUAL(originSt.GetContext(), originVt.GetContext());
-        UNIT_ASSERT_STRING_CONTAINS(originSt.GetContext(), "PRAGMA classic_division");
 
         const std::string ddl = GetShowCreateTable(session, "/Root/Origin");
-        const auto contextPos = ddl.find("PRAGMA classic_division = '0';");
-        const auto createTablePos = ddl.find("CREATE TABLE");
-        UNIT_ASSERT_C(contextPos != std::string::npos, ddl.c_str());
-        UNIT_ASSERT_C(createTablePos != std::string::npos, ddl.c_str());
-        UNIT_ASSERT_C(contextPos < createTablePos, ddl.c_str());
+        UNIT_ASSERT_C(ddl.find("CREATE TABLE") == 0, ddl.c_str());
+        UNIT_ASSERT_C(ddl.find("PRAGMA") == std::string::npos, ddl.c_str());
 
         // Replay the printed statement over the dropped original: it must recreate it as it was.
         {
@@ -1091,14 +1084,12 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetStored(), originSt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetExprText(), originSt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedSt.DependencyColumnNamesSize(), originSt.DependencyColumnNamesSize());
-        UNIT_ASSERT_VALUES_EQUAL(replayedSt.GetContext(), "PRAGMA classic_division = '0';\n");
 
         const auto replayedVt = generatedOf("vt");
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), false);
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetStored(), originVt.GetStored());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetExprText(), originVt.GetExprText());
         UNIT_ASSERT_VALUES_EQUAL(replayedVt.DependencyColumnNamesSize(), originVt.DependencyColumnNamesSize());
-        UNIT_ASSERT_VALUES_EQUAL(replayedVt.GetContext(), replayedSt.GetContext());
     }
 
     Y_UNIT_TEST(AlterRejected) {
@@ -1234,7 +1225,7 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(NamedExpressionWithReadRejected) {
         CheckGeneratedColumnsRejected({
-            {GeneratedColumnDDL("k + $x", "$x = SELECT MAX(a) FROM OtherTable;\n"), "subquery"},
+            {GeneratedColumnDDL("k + $x", "$x = SELECT MAX(a) FROM OtherTable;\n"), "Unknown name: $x"},
             {GeneratedColumnDDL("k + (SELECT COUNT(*) FROM $s())",
                 "DEFINE SUBQUERY $s() AS SELECT * FROM OtherTable; END DEFINE;\n"),
                 "Failed to compile the expression of generated column v"},
@@ -1349,10 +1340,10 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
 
     Y_UNIT_TEST(NamedExpressionSubqueryVariantsRejected) {
         CheckGeneratedColumnsRejected({
-            {GeneratedColumnDDL("IF(k IN $ids, 1, 0)", "$ids = SELECT a FROM OtherTable;\n"), "subquery"},
+            {GeneratedColumnDDL("IF(k IN $ids, 1, 0)", "$ids = SELECT a FROM OtherTable;\n"), "Unknown name: $ids"},
             {GeneratedColumnDDL("k + $doubled",
                  "$base = SELECT MAX(a) FROM OtherTable;\n$doubled = $base * 2;\n"),
-                "subquery"},
+                "Unknown name: $doubled"},
         });
     }
 
@@ -1364,12 +1355,18 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         });
     }
 
+    Y_UNIT_TEST(NamedExpressionRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("k + $c", "$c = 5;\n"), "Unknown name: $c"},
+            {GeneratedColumnDDL("k + $c", "$c = 5;\n", "VIRTUAL"), "Unknown name: $c"},
+        });
+    }
+
     Y_UNIT_TEST(SingleRowExpressionsAccepted) {
         CheckGeneratedColumnsAccepted({
             {"k + 1", ""},
             {"CASE WHEN k > 0 THEN COALESCE(a, 0) ELSE -1 END", ""},
             {"CAST(ListLength(ListMap(AsList(k, k + 1), ($e) -> { RETURN $e * 2 })) AS Int32)", ""},
-            {"k + $c", "$c = 5;\n"},
             {"CAST(Unicode::ToLower(CAST(s AS Utf8)) AS Int32)", ""},
             {"k + 1", "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n"},
             {"k + 1", "$unused = SELECT MAX(a) FROM OtherTable;\n"},

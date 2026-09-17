@@ -12,19 +12,19 @@ class TRBOContext;
 
 class TPhysicalQueryBuilder : public NNonCopyable::TNonCopyable {
 public:
-    TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<ui32, NYql::TExprNode::TPtr>&& stages, THashMap<ui32, TVector<NYql::TExprNode::TPtr>>&& stageArgs,
-                          THashMap<ui32, NYql::TPositionHandle>&& stagePos, TRBOContext& rboCtx);
+    TPhysicalQueryBuilder(TVector<TIntrusivePtr<TOpRoot>> roots, TVector<TStageGraph>&& graph, TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stages, TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>>&& stageArgs,
+                          TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos, TRBOContext& rboCtx);
 
     NYql::TExprNode::TPtr BuildPhysicalQuery();
     TPhysicalQueryBuilder() = delete;
     ~TPhysicalQueryBuilder() = default;
 
 private:
-    TVector<NYql::TExprNode::TPtr> BuildPhysicalStageGraph();
+    TVector<NYql::TExprNode::TPtr> BuildPhysicalStageGraph(int rootIdx);
     TVector<NYql::TExprNode::TPtr> LowerPhysicalStageCompatibility(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     TVector<NYql::TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     TVector<NYql::TExprNode::TPtr> PreparePhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages, bool enableWideChannels);
-    NYql::TExprNode::TPtr BuildPhysicalQuery(TVector<NYql::TExprNode::TPtr>&& physicalStages);
+    NYql::TExprNode::TPtr BuildPhysicalQuery(TVector<TVector<NYql::TExprNode::TPtr>>&& physicalStages);
     NYql::TExprNode::TPtr PeepHoleOptimize(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType) const;
     bool CanApplyPeepHole(NYql::TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const;
     NYql::TExprNode::TPtr BuildDqPhyStage(const TVector<NYql::TExprNode::TPtr>& inputs, const TVector<NYql::TExprNode::TPtr>& args, NYql::TExprNode::TPtr physicalStageBody,
@@ -43,20 +43,20 @@ private:
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
-    bool NeedFinalNarrowing();
-    NYql::TExprNode::TPtr BuildFinalNarrowStage(const NYql::TExprNode::TPtr& stage) const;
-    TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(const TVector<NYql::TExprNode::TPtr>& physicalStages);
-    NYql::TExprNode::TPtr BuildMaterialize(NYql::TExprNode::TPtr ranges);
+    bool NeedFinalNarrowing(TOpRoot& root);
+    NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;
+    TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(int rootIdx, const TVector<NYql::TExprNode::TPtr>& physicalStages);
+    NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr ranges);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 
-    TOpRoot& Root;
-    TStageGraph Graph;
-    THashMap<ui32, NYql::TExprNode::TPtr> Stages;
-    THashMap<ui32, TVector<NYql::TExprNode::TPtr>> StageArgs;
-    THashMap<ui32, NYql::TPositionHandle> StagePos;
+    TVector<TIntrusivePtr<TOpRoot>> Roots;
+    TVector<TStageGraph> Graphs;
+    TVector<THashMap<ui32, NYql::TExprNode::TPtr>> Stages;
+    TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>> StageArgs;
+    TVector<THashMap<ui32, NYql::TPositionHandle>> StagePos;
     ui32 UniqueParamsId{0};
     // Param and PhysicalTx
-    TVector<std::pair<NYql::TExprNode::TPtr, NYql::TExprNode::TPtr>> Materialize;
+    TVector<TVector<std::pair<NYql::TExprNode::TPtr, NYql::TExprNode::TPtr>>> Materialize;
     TRBOContext& RBOCtx;
     static constexpr TStringBuf ParamBindingName = "%kqp_physical_tx_param_binding_";
 };

@@ -4120,7 +4120,7 @@ const document={querySelector:selector=>{
   return buttons.get(selector)
 }};
 const enc=encodeURIComponent,esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;');
-const sectionTabs=()=>'<nav>Summary YAML</nav>',bindSectionTabs=()=>{};
+const sectionTabs=()=>'<nav>Summary YAML</nav>',bindSectionTabs=()=>{},mountMetricsExport=()=>{};
 const clearRefresh=()=>{},profileGroups=()=>({'local-ydb/one':[{}]}),
   parseLocalYdbProfileSelection=()=>({profile:'',view:''}),breadcrumbs=()=>'',status=value=>value,
   humanTime=()=>'',duration=()=>'',runHref=(id,kind)=>'/'+id+'/'+kind,shell=(_,body)=>body,

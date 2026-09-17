@@ -642,8 +642,9 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
     , FilterExpr(filterExpr) {
 }
 
-TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr)
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown)
     : IUnaryOperator(EOperator::Filter, pos, props, input)
+    , PartiallyPushedDown(partiallyPushedDown)
     , FilterExpr(filterExpr) {
 }
 
@@ -1776,9 +1777,10 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
  * OpRoot operator methods
  */
 
-TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder)
+TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder, const TVector<TString>& queryColumns)
     : IUnaryOperator(EOperator::Root, pos, input)
-    , ColumnOrder(columnOrder) {
+    , ColumnOrder(columnOrder)
+    , QueryColumns(queryColumns) {
 }
 
 // Recompute output ius for now

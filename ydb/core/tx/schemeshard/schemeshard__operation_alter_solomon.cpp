@@ -6,35 +6,29 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/public/config.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterSolomon TConfigureParts"
-            << ", operationId: " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at tablet# " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -66,30 +60,25 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterSolomon TPropose"
-            << ", operationId: " << OperationId;
-    }
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(),
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if(!txState) {
@@ -119,11 +108,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -135,6 +120,10 @@ public:
 };
 
 class TAlterSolomon: public TSubOperation {
+public:
+    virtual const char* Name() const override final { return "TAlterSolomon"; }
+
+private:
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -181,12 +170,10 @@ public:
         const TString& name = alter.GetName();
         const ui32 channelProfileId = alter.GetChannelProfileId();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterSolomon Propose"
-                         << ", path: "<< parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", channelProfileId: " << channelProfileId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"channelProfileId", channelProfileId},
+        );
 
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
@@ -341,11 +328,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterSolomon AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSolomon AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -365,3 +352,5 @@ ISubOperation::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

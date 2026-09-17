@@ -3,11 +3,9 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/library/actors/core/log.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -43,21 +41,17 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TDropParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropReplication TDropParts"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TDropParts"; }
 
 public:
     explicit TDropParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -78,9 +72,10 @@ public:
             ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
 
-            LOG_D(DebugHint() << "Send TEvDropReplication to controller"
-                << ": tabletId# " << tabletId
-                << ", ev# " << ev->ToString());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvDropReplication to controller",
+                {"tabletId", tabletId},
+                {"ev", ev->ToString()},
+            );
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
 
             txState->ShardsInProgress.insert(shard.Idx);
@@ -90,7 +85,9 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvDropReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"ev", ev->Get()->ToString()},
+        );
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -100,9 +97,10 @@ public:
         case NKikimrReplication::TEvDropReplicationResult::NOT_FOUND:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvDropReplicationResult"
-                << " tabletId# " << tabletId
-                << " status# " << static_cast<int>(status));
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvDropReplicationResult",
+                {"tabletId", tabletId},
+                {"status", static_cast<int>(status)},
+            );
             return false;
         }
 
@@ -113,7 +111,7 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvDropReplicationResult");
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvDropReplicationResult");
             return false;
         }
 
@@ -140,30 +138,26 @@ public:
     explicit TDeleteParts(const TOperationId& id)
         : ::NKikimr::NSchemeShard::TDeleteParts(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             NReplication::TEvController::TEvDropReplicationResult::EventType,
         });
     }
 };
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropReplication TPropose"
-            << " opId# " << OperationId << " ";
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     explicit TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
+        IgnoreMessages({
             NReplication::TEvController::TEvDropReplicationResult::EventType,
         });
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -176,8 +170,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -224,6 +219,8 @@ private:
 }; // TPropose
 
 class TDropReplication: public TSubOperation {
+    virtual const char* Name() const override final { return "TDropReplication"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::DropParts;
     }
@@ -277,9 +274,9 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& name = op.GetName();
 
-        LOG_N("TDropReplication Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", JoinPath({workingDir, name})},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -410,3 +407,5 @@ ISubOperation::TPtr CreateDropTransfer(TOperationId id, TTxState::ETxState state
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

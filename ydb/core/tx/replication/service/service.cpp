@@ -440,6 +440,7 @@ public:
         if (!Workers.contains(id)) {
             return;
         }
+
         id.Serialize(*ev->Get()->Record.MutableWorker());
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
@@ -854,6 +855,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         if (!session || !session->HasWorker(ev->Sender)) {
             return;
         }
+
         session->Handle(this, ev);
     }
 
@@ -865,6 +867,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         if (!record.HasWorker() || !record.HasController()) {
             return;
         }
+
         const auto& controller = record.GetController();
         const auto session = Sessions.find(controller.GetTabletId());
         if (session != Sessions.end() && session->second.GetGeneration() == controller.GetGeneration()) {

@@ -13,6 +13,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/threading/future/future.h>
@@ -58,16 +59,9 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
         "%s Become StateDelete",
         LogTitle.GetWithTime().c_str());
 
-    // A request already accepted by BSC can still allocate after our
-    // deallocate (residual leak, follow-up).
-    if (AddHostInFlight) {
-        NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
-    if (RemoveHostInFlight) {
-        NTabletPipe::CloseClient(ctx, RemoveHostInFlight->BSPipeClient);
-        RemoveHostInFlight.reset();
-    }
+    StopBscProxy(ctx);
+    AddHostInFlight.reset();
+    RemoveHostInFlight.reset();
 
     // Idempotent: no-op when the endpoint was never started.
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
@@ -145,7 +139,7 @@ void TPartitionActor::StartCleanupActor(
         .DDiskPoolName = StorageConfig->GetDDiskPoolName(),
         .PersistentBufferDDiskPoolName =
             StorageConfig->GetPersistentBufferDDiskPoolName(),
-        .DirectBlockGroupsCount = DirectBlockGroupsCount,
+        .DirectBlockGroupsCount = DefaultVolumeDirectBlockGroupCount,
     }));
 }
 
@@ -224,16 +218,6 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
         "%s Ignore AllocateDDiskBlockGroupResult during delete: %s",
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.ShortDebugString().c_str());
-
-    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
-    if (AddHostInFlight) {
-        NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
-        AddHostInFlight.reset();
-    }
-    if (RemoveHostInFlight) {
-        NTabletPipe::CloseClient(ctx, RemoveHostInFlight->BSPipeClient);
-        RemoveHostInFlight.reset();
-    }
 }
 
 // Ignore update volume config during delete
@@ -399,6 +383,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvAddHostToDBG,
             HandleAddHostToDBGDuringDelete);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPersistHostHealth,
+            HandlePersistHostHealthDuringDelete);
         HFunc(
             TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
             HandleRemoveHostFromDBGDuringDelete);

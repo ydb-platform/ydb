@@ -162,7 +162,7 @@
 #include <ydb/services/view/grpc_service.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
-#include <ydb/services/nbs/classic_grpc_service.h>
+#include <ydb/services/nbs/classic_grpc_service_factory.h>
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -782,6 +782,9 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
+    const auto& appConfig = runConfig.AppConfig;
+    EnabledGrpcService = appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy();
+
     if (!GRpcServersWrapper) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
@@ -1234,7 +1237,6 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().GetStartGRpcProxy()) {
         const auto& grpcConfig = appConfig.GetGRpcConfig();
 
-        EnabledGrpcService = true;
         NYdbGrpc::TServerOptions opts;
         opts.SetHost(grpcConfig.GetHost());
         opts.SetPort(grpcConfig.GetPort());
@@ -1334,7 +1336,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
             if (auto blockStore = NYdb::NBS::NBlockStore::GetNbsFrontendBlockStore()) {
-                server.AddService(new NGRpcService::TClassicNbsGrpcService(
+                server.AddService(NGRpcService::CreateClassicNbsGrpcService(
                     std::move(blockStore)));
             }
 #endif
@@ -1492,7 +1494,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || NeedToUseAutoConfig(cfg.GetActorSystemConfig());
-    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
+    bool useSharedThreads = useAutoConfig && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
 

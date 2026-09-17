@@ -463,6 +463,7 @@ public:
                 ) {
                     const auto& viewMetadata = *res.Metadata;
                     auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    viewInfo->SetTableName(viewMetadata.Name);
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
                     pathId->SetTableId(viewMetadata.PathId.TableId());

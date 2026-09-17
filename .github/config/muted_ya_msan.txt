@@ -3,6 +3,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAll
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/driver_lib/run/ut unittest.[*/*] chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
+ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -15,6 +17,8 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
+ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/core/wrappers/ut unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
@@ -49,7 +53,6 @@ ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grp
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[30]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[64]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test

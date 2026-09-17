@@ -296,7 +296,8 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Cluster", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "OriginalPath", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "OriginalPath", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "CtasShardingColumns", "Type": "TCoAtomList", "Optional": true}
             ]
         },
         {

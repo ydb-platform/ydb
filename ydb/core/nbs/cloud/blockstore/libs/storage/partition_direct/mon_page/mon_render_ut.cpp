@@ -18,16 +18,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
                 {.TabletId = 42,
                  .Generation = 7,
                  .BlockSize = 4096,
-                 .BlockCount = 1024,
-                 .VChunkBlockCount = 256,
-                 .RegionBlockCount = 1024 * 1024,
+                 .BlockCount = 16384,
+                 .VChunkSize = 1_MB,
+                 .VolumeDirectBlockGroupCount = 32,
                  .DiskId = "vol-1",
                  .State = "WORK"},
-            .FastPathServiceInfo =
-                TFastPathServiceInfo{
-                    .LsnCounter = 100,
-                    .TotalVChunks = 7,
-                    .DbgCount = 3},
+            .FastPathServiceInfo = TFastPathServiceInfo{.LsnCounter = 100},
         };
     }
 
@@ -86,20 +82,27 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunkcounters");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=latency");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=memory");
-        UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
-        UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
-        UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
-        UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
-        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 1024 = 4.00 MiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
-        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 256 = 1.00 MiB");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
-        UNIT_ASSERT_STRING_CONTAINS(html, "4.00 KiB * 1048576 = 4.00 GiB");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Volume DirectBlockGroup Count");
         UNIT_ASSERT_STRING_CONTAINS(
             html,
-            "Region count</td><td>1</td></tr><tr><td>DirectBlockGroups");
+            "Volume DirectBlockGroup Count</td><td>32</td>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
+        UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunk size</td><td>1.00 MiB = 4.00 KiB * 256(block)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Region size</td><td>32.00 MiB = 1.00 MiB * 32(vpr) = "
+            "4.00 KiB * 8192(block)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "VChunk count</td><td>64 = 2(region) * 32(vpr)");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "Disk size</td><td>64.00 MiB = 4.00 KiB * 16384(block) = "
+            "1.00 MiB * 64(vchunk) = 32.00 MiB * 2(region)");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Regions</td><td>2</td>");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

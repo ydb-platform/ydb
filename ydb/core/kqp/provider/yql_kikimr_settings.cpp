@@ -110,6 +110,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockHashJoinForCross);
     REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
+    REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -176,6 +177,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
+    REGISTER_SETTING(*this, EnableCsWriteAffinity);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -401,6 +403,10 @@ bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
 }
 
+bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {
+    return EnableBlockHashJoinEqualNulls.Get().GetOrElse(TTableServiceConfig::GetEnableBlockHashJoinEqualNulls());
+}
+
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {
     return EnableNewRBOPhysicalStagePeephole.Get().GetOrElse(
         TTableServiceConfig::GetEnableNewRBOPhysicalStagePeephole());
@@ -412,6 +418,10 @@ bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
 
 bool TKikimrConfiguration::GetWindowFunctionsV2() const {
     return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
+}
+
+bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {
+    return EnableCsWriteAffinity.Get().GetOrElse(false);
 }
 
 } // namespace NYql

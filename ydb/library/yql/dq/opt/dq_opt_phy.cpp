@@ -2536,7 +2536,7 @@ TExprBase DqBuildStageWithParallelConnectionForDqPureExpr(TExprBase node, TExprC
  * is needed for handling UNION ALL case, which generates top-level Extend where some arguments
  * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
  */
-TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections) {
+TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParallelUnionAllConnections, bool keepMerge) {
     if (!node.Maybe<TCoExtendBase>()) {
         return node;
     }
@@ -2544,7 +2544,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParal
     auto extend = node.Cast<TCoExtendBase>();
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputConns;
-    TVector<TExprBase> extendArgs;
+    TExprNode::TListType extendArgs;
     ui32 originalDqConnectionCount = 0;
 
     for (const auto& arg: extend) {
@@ -2566,7 +2566,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParal
 
             inputConns.push_back(dqConnection);
             inputArgs.push_back(programArg);
-            extendArgs.push_back(programArg);
+            extendArgs.push_back(programArg.Ptr());
             ++originalDqConnectionCount;
         } else if (IsDqCompletePureExpr(arg)) {
             auto newFlowArg = Build<TCoToFlow>(ctx, node.Pos())
@@ -2579,12 +2579,12 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParal
                 .Done();
 
                 inputArgs.push_back(newArg);
-                extendArgs.push_back(newArg);
+                extendArgs.push_back(newArg.Ptr());
 
                 // Create a `ParallelUnionAll` connection for pure expr.
                 inputConns.push_back(DqBuildStageWithParallelConnectionForDqPureExpr(newFlowArg, ctx));
             } else {
-                extendArgs.push_back(newFlowArg);
+                extendArgs.push_back(newFlowArg.Ptr());
             }
         } else {
             return node;
@@ -2596,15 +2596,16 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx, bool enableParal
         return node;
     }
 
+    // Keep original callable name to preserve constraints if any
+    auto newExtend = ctx.NewCallable(extend.Pos(), keepMerge && extend.Maybe<TCoMerge>() ? TCoMerge::CallableName() : TCoExtend::CallableName(), std::move(extendArgs));
+
     auto stage = Build<TDqStage>(ctx, node.Pos())
         .Inputs()
             .Add(inputConns)
             .Build()
         .Program()
             .Args(inputArgs)
-            .Body<TCoExtend>()
-                .Add(extendArgs)
-                .Build()
+            .Body(newExtend)
             .Build()
         .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
         .Done();
@@ -3118,7 +3119,8 @@ TExprBase DqBuildJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool enableBlockHashJoinEqualNulls
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -3167,7 +3169,17 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, typeCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
+        return DqBuildHashJoin(
+            join,
+            hashJoin,
+            ctx,
+            optCtx,
+            typeCtx,
+            shuffleElimination,
+            shuffleEliminationWithMap,
+            useBlockHashJoin,
+            blockHashJoinBuildSideLeft,
+            enableBlockHashJoinEqualNulls);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

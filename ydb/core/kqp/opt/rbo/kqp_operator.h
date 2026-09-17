@@ -746,7 +746,7 @@ protected:
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
-    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
@@ -766,6 +766,8 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     const TExpression& GetFilterExpression() const { return FilterExpr; }
     void SetFilterExpression(TExpression filterExpr);
+
+    bool PartiallyPushedDown = false;
 
 protected:
     void ComputeOutputIUs() override;
@@ -1357,7 +1359,7 @@ private:
 
 class TOpRoot: public IUnaryOperator {
 public:
-    TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder);
+    TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder, const TVector<TString>& queryColumns = {});
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "Root"; }
 
@@ -1396,7 +1398,9 @@ public:
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
-    TVector<TString> ColumnOrder;
+    const TVector<TString> ColumnOrder;
+    const TVector<TString> QueryColumns;
+
 
 protected:
     void ComputeOutputIUs() override;

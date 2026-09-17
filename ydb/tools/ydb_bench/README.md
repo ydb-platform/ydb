@@ -253,6 +253,35 @@ per node. The attempt view retains at most 300 samples / 2 MiB and reports
 truncation; the full saved file can be downloaded. Historical runs without the
 artifact show an empty metrics page.
 
+Alongside the chart projection, local and distributed measurements archive full
+YDB dynamic-counter snapshots every five seconds in `ydb-counters/*.jsonl.gz`.
+Each record identifies the host, node role/index, monitoring port, timestamp and
+attempt/repetition context. `/counters/json?@private=1` includes public and private
+counter groups, labels and histograms without the chart counter whitelist.
+These archives do not add charts. No uncompressed snapshot files are retained.
+The versioned `ydb-counters-delta-v1` format uses a per-part metric dictionary
+(`definitions`: ID and labels/type) and per-node `changes` (ID and new value or
+histogram, not arithmetic differences). `present`, emitted initially and when
+membership/order changes, lists the complete ordered set of metric IDs. Newly
+present scalar metrics default to integer zero; later transitions to zero are
+explicit changes. Missing IDs in a new `present` list cease to exist. Failed
+polls contain an error and do not change the last successful state. Duplicate
+label sets retain separate IDs; negative gauges and histograms are preserved.
+Each node's first successful record in a part is a checkpoint; subsequent parts
+never depend on earlier files. A sequence number detects missing/reordered records.
+`gzip -dc` exposes the encoded records; `read_counters_archive(path)` in
+`ydb/tools/ydb_bench/lib/ydb_telemetry.py` reconstructs complete snapshots and
+also accepts legacy full-snapshot gzip files. The reader supports concatenated
+gzip members. Archives rotate around 16 MiB compressed, or when dictionary/value
+JSON state reaches 32 MiB (not a strict Python heap limit), and are copied with distributed results.
+They are excluded from the 128 MiB aggregate workload-transfer budget, while the
+32 MiB per-file and 1000-file transfer safety limits still apply. Portable ZIP
+export retains its separate archive-size limit.
+Collection is best-effort: individual requests have a 16 MiB response bound and
+network deadlines; failed samples contain an explicit error instead of counters.
+Slow sampling cycles do not overlap. Disk errors stop collection and are logged;
+collected archive parts are retained rather than discarded.
+
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
 The web profile page shows the same live phase with elapsed time and a countdown
@@ -292,6 +321,32 @@ The initial draft uses the `kv` upsert workload, one thread per CLI, 4 vCPU
 per static/dynamic node, and no verification repetition. These are editable
 starting values, not recommendations for a particular machine.
 
+In the **Physical** view, select a static node and use **Add disk** to configure
+individual SectorMap, file, block-device or PARTLABEL entries. Each entry specifies
+SSD/HDD media; SectorMap and file entries also specify size in GiB. Paths belong
+to the node's host; PARTLABEL stores a partition label, not a device path.
+Saving a template never creates files or opens/formats devices. Legacy SectorMap
+count/size settings migrate to an explicit disk list. Identical paths on one host
+are rejected, including PARTLABEL and its explicit `/dev/disk/by-partlabel/` path.
+Other aliases require host-side device identity checks and are not resolved by
+template validation. Execution supports all four sources with SSD or HDD media.
+Temporary files use `temporary: true` without a path; each generation creates its
+own files in `file-disks/<session-id>/` next to the history database and removes
+them after processes stop, including cancellation and recovery cleanup.
+Persistent files use `name` and reside directly in `file-disks/`; they remain after
+cleanup. Existing files must have the configured size. Existing files and block
+devices require the run-level `reset-disks: true` permission: YDB metadata is
+cleared before each cluster start, including search repetitions. Use only dedicated
+benchmark disks; their previous data is lost. New files need no reset permission.
+Workers reject mounted devices, active holders, duplicate device identities and
+overlapping disk/partition assignments, and hold generation-scoped disk locks.
+This does not replace reserving the devices against unrelated external workloads.
+Disks appear inside their storage node in Physical. Drag a disk onto another
+static node to reassign it within the same physical host.
+Individual disk cross-host moves are rejected. Whole nodes may move between hosts
+when all their disks are SectorMap or temporary files: configuration moves, not data. Empty
+storage nodes may be saved while editing; execution requires at least one disk.
+
 The legacy single-generator format uses the YAML editor. Its
 `cluster-template` field contains the complete placement snapshot, and `tenant`
 selects a database from that snapshot. `workload`, `actor-system`, `client`,
@@ -300,7 +355,7 @@ Actor-system vCPU is independent of affinity. Binary selection, node counts,
 logical locations, tenant assignments and CPU masks come from the template;
 there is no separate run-level geometry or affinity override.
 
-Supported legacy scope is SectorMap SSD storage with erasure `NONE`, one CLI
+Supported legacy scope is storage with erasure `NONE`, one CLI
 generator, at least one static node, and a target tenant with dynamic nodes.
 Other tenant definitions are allowed, but only the selected tenant receives
 the workload. Geometry is fixed during search and verification. This is not a
@@ -550,7 +605,75 @@ returns to the first page. Pages are a live view, not an immutable snapshot:
 changing durations or timestamps may move active runs between pages.
 The legacy `/api/runs` list response is retained for older clients.
 
-The offline UI has four persistent navigation sections:
+The gear icon opens **Settings → Monitoring**. Monitoring settings are stored
+separately from host availability. Each server maintains a shared in-memory peer
+availability state, checked in the background every 10 seconds after each check
+cycle. Failed network requests mark peers unavailable immediately; federation and
+UI proxy requests skip them until a successful authenticated identity probe.
+Partial run pages retain an error and do not advance their cursor. A notification
+appears once per transition to unavailable (also on initial observation of an
+unavailable peer), while the results retain their incomplete-data warning.
+
+Monitoring settings are stored
+separately from run configurations in `.monitoring-settings.json`. The initial
+owner is selected by host ID and remains the owner after synchronization;
+all peers must be reachable for initialization. Later edits use optimistic
+revision checks and are forwarded to that owner. Peers pull updates every 30
+seconds. Unavailable peers remain pending; conflicting independent owners are
+reported rather than silently overwriting configuration. Keep the owner in the
+host directory; automatic owner failover is not supported.
+
+The Prometheus URL must be reachable from benchmark hosts; an empty URL disables
+the integration. An optional bearer token is stored in the server-side settings
+file and synchronized with peers. The browser receives a token-presence flag and
+a mask with four asterisks and the last four characters (short tokens are fully masked);
+an empty token input preserves the saved token, with a separate removal control.
+Peer transport must be trusted (use HTTPS outside a trusted network).
+Legacy import-service URLs are not reused as Prometheus URLs during migration.
+The Grafana URL must be reachable from the user's browser.
+Finished runs and attempts offer **Export metrics to Prometheus** when the URL
+is configured. Export runs on the owning benchmark server in the background,
+decodes archived counters without modifying them and sends Remote Write 1.0 to
+`PROMETHEUS_URL/api/v1/write`. Enable `--web.enable-remote-write-receiver` and
+configure `storage.tsdb.out_of_order_time_window` to cover historical samples.
+Original timestamps, zero values and histogram bucket counts are preserved;
+no histogram sum is invented. Series include `bench_host`, `bench_run`,
+`bench_benchmark`, `bench_profile`, `bench_attempt`, and `bench_repetition`.
+Exports require a finished run so archives remain stable. One export runs per
+server; temporary SQLite staging is limited to 2 GiB. Progress is stored under
+`.metrics-exports`. Every new or retried export checks raw Prometheus samples
+over the archived time interval: identical labels, timestamps and values are
+skipped; missing samples are sent; conflicting values stop the export.
+Query failures do not fall back to blind writes. A changed archive fingerprint
+prevents unsafe retries. Changing the Prometheus URL or token invalidates saved
+export statuses across hosts after settings synchronization, even when changing
+back to an earlier URL. Grafana-only changes leave statuses intact.
+An interrupted request can be replayed with identical timestamps and values.
+Partial failure does not roll back samples already accepted by Prometheus.
+
+Attempt pages also offer **Open in Grafana** when a Grafana URL and recorded
+counter timestamps are available. The chooser lists existing Grafana dashboards
+and bundled benchmark versions of the YDB dashboards. Links carry
+the attempt time range and host/run/profile/attempt variables. Bundled panels
+use those variables in every metric selector; existing third-party dashboards
+must implement the variables themselves to isolate a benchmark attempt.
+
+Configure `grafana_url` as the browser-facing base URL and `grafana_api_url`
+as the base URL reachable from the monitoring settings owner (empty means use
+`grafana_url`). All hosts forward Grafana operations to that owner, so Grafana
+can remain on its loopback listener. The optional `grafana_token` is a separate
+Grafana service-account token, stored and redacted like the Prometheus token.
+Its permissions must allow reading dashboards/datasources and creating dashboards.
+`grafana_datasource_uid` selects the default Prometheus datasource in the chooser.
+The user can choose another datasource before opening or installing a dashboard.
+The binary bundles all JSON dashboards in `ydb/deploy/helm/ydb-prometheus/dashboards/`.
+New files are discovered automatically during the next build; deployed binaries
+do not fetch new templates at runtime. Dashboard names come from their JSON titles.
+**Install and open** uses a separate versioned UID and `overwrite=false`;
+existing dashboards are never overwritten. Installation
+does not export metrics. Export counters separately before viewing archived data.
+
+The offline UI has the following persistent navigation sections:
 
 - **Runs** is the local/imported run journal. It filters by status, benchmark,
   profile, source, and period; provides YAML, `run.json`, and portable archive

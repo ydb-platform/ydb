@@ -526,6 +526,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         UNIT_ASSERT(!report->Get()->Record.GetApplied());
         auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
+        release->Record.SetOffset(42);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));
 
         report = runtime.GrabEdgeEventRethrow<TEvService::TEvSchemaChangeReport>(edge);
@@ -534,6 +535,7 @@ Y_UNIT_TEST_SUITE(Worker) {
 
         auto applied = MakeHolder<TEvService::TEvSchemaChangeResult>();
         applied->Record.MutableSchema()->CopyFrom(schema);
+        applied->Record.SetOffset(42);
         applied->Record.SetApplied(true);
         runtime.Send(new IEventHandle(worker, edge, applied.Release()));
 

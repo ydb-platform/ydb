@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -750,8 +752,10 @@ public:
                 }
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG("Restored index build",
+            {"buildId", indexInfo->Id},
+            {"indexInfo", *indexInfo},
+        );
     }
 
     template<class TRow>
@@ -768,8 +772,10 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG("AddShardStatus",
+            {"buildId", Id},
+            {"shardIdx", shardIdx},
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
@@ -1155,3 +1161,5 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
 
     o << "}";
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

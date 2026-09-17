@@ -207,6 +207,7 @@ class RemoteWorkloadLifecycle:
                 telemetry[host]["artifacts"],
                 "telemetry/" + sample_id,
                 destination,
+                telemetry=True,
             )
             hosts[host] = json.loads((destination / "cpu-samples.json").read_text())
             artifacts[host] = destination.relative_to(directory).as_posix()
@@ -272,6 +273,7 @@ class DistributedRuntime:
             self.call,
             self.cancelled,
             progress,
+            reset_disks=self.profile["distributed"].get("reset_disks", False),
         )
         with self.service._lock:
             if self.cancelled.is_set():

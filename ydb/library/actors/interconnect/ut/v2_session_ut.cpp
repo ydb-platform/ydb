@@ -4,6 +4,7 @@
 #include <ydb/library/actors/interconnect/uring_context.h>
 #include <ydb/library/actors/interconnect/v2_probes.h>
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/testing/common/scope.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/generic/map.h>
@@ -923,6 +924,9 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             Cerr << "io_uring not available; skipping" << Endl;
             return;
         }
+        // This test has one connection per node. Extra SQPOLL threads compete for the
+        // test's four CPUs and can exhaust its deadline without stopping traffic.
+        NTesting::TScopedEnvironment shards("YDB_IC_V2_SHARDS", "1");
         TLoadTrace trace;
         auto cluster = MakeV2Cluster(/*tcpSocketBufferSize=*/8192);
         TTraceOnFailure traceOnFailure(&trace, "LoadLikeRoundTripWithBackpressure");

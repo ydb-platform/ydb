@@ -12,6 +12,7 @@ GLOBAL_SRCS(
     tcmalloc/cpu_cache.cc
     tcmalloc/deallocation_profiler.cc
     tcmalloc/experimental_pow2_size_class.cc
+    tcmalloc/generation_allocator.cc
     tcmalloc/global_stats.cc
     tcmalloc/guarded_page_allocator.cc
     tcmalloc/huge_address_map.cc
@@ -66,3 +67,7 @@ PEERDIR(
 
 NO_UTIL()
 NO_COMPILER_WARNINGS()
+
+IF (TCMALLOC_GENERATION_DISABLED)
+    CFLAGS(-DTCMALLOC_GENERATION_DISABLED)
+ENDIF()

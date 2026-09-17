@@ -1,46 +1,112 @@
-# Diagnostic free quarantine
+# Offset-generation diagnostic allocator
 
-This branch enables a bounded quarantine in `FreeSmall` for all tcmalloc
-variants built from `common.inc`. No runtime switch or application changes are
-required. Rebuild the target application from this branch.
+This branch replaces user allocations with persistent aligned slots. It is an
+experimental diagnostic allocator, not a production performance replacement.
+Rebuild the application from this branch; no application API changes are needed.
 
-The quarantine holds at most 4096 small allocations with size-class capacity
-at most 32 KiB (up to 128 MiB retained in the table, plus metadata and transient
-evictions). Each pointer hashes to one slot protected by a kernel-only spinlock.
-A hash collision verifies and evicts the previous object. Actual deallocation
-happens after unlocking. The allocator's existing fork support also locks this
-table when fork support is enabled.
+## Layout and lifetime
 
-On free, the first and last 64 bytes are filled with an address/offset-dependent
-pattern. Eviction checks this pattern. A mismatch aborts with
-`Free check: write after free`, pointer, offset and capacity. A repeated free of
-an object still in its slot aborts with `Free check: double free` and its pointer.
-The crash stack is the detecting free, not necessarily the corrupting access or
-original free. No allocation/free stack history is collected.
+A pool has a fixed power-of-two slot size S and alignment A. Each slot starts
+with a 48-byte header on the supported 64-bit targets. Its user capacity is S/2.
+The first pointer is `base + align_up(sizeof(Header), A)`. Successive allocations
+advance the offset by A, independently of changes in requested size. The last
+position is at offset S/2. The minimum slot size is 256 bytes, and pool geometry
+always permits at least two positions.
 
-## Coverage and limits
+On free, the allocator finds an immutable registered range before touching the
+header, masks the address to obtain the slot base, validates the header checksum,
+state and current offset, and changes state under the owning pool's spinlock.
+A stale pointer to a currently allocated slot fails with STALE_GENERATION_FREE.
+Repeated free of a free slot fails with DOUBLE_FREE. Any free of a quarantined
+slot fails with FREE_DURING_QUARANTINE. Interior pointers fail offset validation.
+The header checksum detects accidental corruption; it is not a security boundary.
 
-- Covers ordinary small `free`, sized/aligned delete and realloc's old-object
-  release when they reach `FreeSmall`.
-- Large, sampled and SelSan-tagged allocations keep their existing behavior.
-- Only writes to the checked bytes are detected; reads, writes to the middle of
-  larger objects, and writes that restore the same pattern are invisible.
-- Detection ends on eviction. There is no minimum retention time, no periodic
-  scan, and no exit-time flush. An object left in the table may never be checked.
-- Repeated free after eviction or after address reuse is not reliably detected.
-  This is a diagnostic aid, not a complete memory-safety checker.
-- Extra work is one hashed slot lock and bounded poison/verify accesses per
-  eligible free. Allocation has no new checks. CPU overhead has not been measured;
-  the retained-memory bound does not imply negligible RSS or latency impact.
-- Poison checking changes timing and reuse, so it can change bug reproducibility.
+After the last position is freed, the whole slot enters a FIFO quarantine with a
+monotonic deadline. A subsequent allocation from that pool drains at most eight
+expired entries. Expiration resets the offset. No slot returns early to satisfy
+memory pressure. The allocator obtains new backing within its budget or applies
+the existing malloc/new OOM policy. Zero quarantine time is permitted explicitly.
 
-## Validation
+Pools are sharded eight ways by allocating thread ID. Cross-thread free uses the
+slot's original pool. Backing comes from unsampled tcmalloc page allocations;
+registry metadata uses mmap. Slots larger than 2 MiB over-reserve backing
+to align the slot within it; the padding is also charged to the budget. Backing ranges, their class and registry entries
+remain alive for the process lifetime. They are never handed to ordinary object
+free lists or reassigned to another class. This avoids erasing generation history
+and allows lock-free lookup of immutable registered ranges. Fork support includes
+population and pool locks when the existing allocator fork support is enabled.
 
-Run on Linux through the project's remote build tooling:
+## Startup settings
+
+Read once before the first allocation; changing the environment later has no effect.
+All values are unsigned decimal integers. Invalid values abort startup.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TCMALLOC_GENERATION_BUDGET_BYTES` | 17179869184 (16 GiB) | Bound on reserved slot backing plus mapped range-registry storage |
+| `TCMALLOC_GENERATION_QUARANTINE_MS` | 1000 | Minimum time before reuse after a complete offset cycle |
+| `TCMALLOC_GENERATION_POISON` | 0 | Nonzero enables first/last 64-byte poison checks for the last request when entering/leaving quarantine |
+
+The budget is not an RSS cap: static tables, ordinary tcmalloc metadata and page
+allocator overhead are additional. Empty pool backing is retained, so class and
+alignment diversity increases the high-water mark. A 16-byte request occupies a
+256-byte slot; memory overhead is substantial even with poison disabled.
+
+Read-only numeric properties are `tcmalloc.generation.reserved_bytes`,
+`tcmalloc.generation.live_requested_bytes`, and
+`tcmalloc.generation.quarantined_bytes`. Their concurrent snapshot is approximate.
+Existing generic tcmalloc statistics describe backing allocations, not live slot
+requests. Querying live bytes locks pools in turn; do not poll it on a hot path.
+
+## Diagnostics and coverage
+
+Failure writes a fixed-size, allocation-free message to stderr, then aborts.
+The record includes reason, pointer, slot base, expected pointer, slot size,
+current offset, requested size and numeric state (free=0, allocated=1,
+quarantined=2). A corrupt header is not trusted for the remaining fields.
+The detection stack is available in a core dump when enabled by the environment.
+Allocation and original-free stacks are not recorded.
+
+The integration covers malloc/new, calloc, aligned allocation, sized/aligned
+free/delete, realloc, usable-size/size-returning APIs, nallocx and heap ownership.
+Realloc always allocate-copies-frees; failure preserves the old allocation.
+
+Known limits:
+
+- The original pointer is numerically valid again after a full cycle and its
+  quarantine. An older dangling pointer cannot then be distinguished.
+- Reads and writes through stale pointers are not instrumented. Offset ranges
+  overlap, so a stale write can corrupt the current allocation.
+- Optional poisoning detects only changes to the checked parts of the final
+  request while in quarantine, at drain time. No background/exit scan exists.
+- Heap/allocation/lifetime profiles return unavailable in this mode; object-range
+  tracing returns Unimplemented. GWP-ASan sampling is bypassed. SelSan builds are
+  rejected unless generation mode is disabled.
+- Hot/cold hints are not honored, and slots do not preserve per-request NUMA
+  placement. This diagnostic backend uses the backing allocation's placement.
+- Normal free checks do not additionally validate a caller-provided sized-delete
+  size or alignment. Actual geometry comes from the registry.
+- Extended stack-history mode and releasing empty backing ranges are not implemented.
+
+## Build, tests and comparison
+
+Remote validation:
 
 ```
-ssh_ya_pool ya make --build relwithdebinfo -tA library/cpp/malloc/tcmalloc/free_check_ut
+ssh_ya_pool ya make --build relwithdebinfo -tA library/cpp/malloc/tcmalloc/free_check_ut library/cpp/malloc/tcmalloc/free_check_ut_percpu
+ssh_ya_pool ya make --build relwithdebinfo library/cpp/malloc/tcmalloc/generation_bench
 ```
 
-The tests exercise double free (including sized free), head/tail corruption,
-concurrent legitimate churn, and fork with allocator fork support enabled.
+The test allocator has an injected clock and independent pools; tests do not
+sleep or rely on chance address reuse. Death tests require SIGABRT and the exact
+reason rather than accepting any crash. Existing YDB actor utility tests provide an
+additional compatibility check, not a production workload benchmark.
+
+Build the benchmark again with `-DTCMALLOC_GENERATION_DISABLED=yes` for the ordinary
+tcmalloc baseline. This is a build-time choice for the whole linked allocator;
+there is no runtime format switch. The benchmark reports elapsed time per
+malloc/free pair, sampled p99 latency, maximum RSS and diagnostic reserved bytes.
+
+The CPU-capable benchmark variant is selected with `-DGENERATION_BENCH_PERCPU=yes`.
+Measured results and validation scope are recorded in
+`library/cpp/malloc/tcmalloc/generation_bench/VALIDATION.md`.

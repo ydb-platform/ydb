@@ -9,6 +9,7 @@ https://github.com/google/tcmalloc/archive/{{self.version().strip()}}.tar.gz
 {% block current_date %}2025-01-30{% endblock %}
 
 {% block keep_sources %}
+FREE_CHECK.md
 common.inc
 default/ya.make
 dynamic/ya.make
@@ -67,6 +68,6 @@ done
 
 {% block move_to_output %}
 {{super()}}
-cp -R tcmalloc common.inc ${OUTPUT}
+cp -R tcmalloc common.inc FREE_CHECK.md ${OUTPUT}
 cp no_percpu_cache/aligned_alloc.c ${OUTPUT}/no_percpu_cache/
 {% endblock %}

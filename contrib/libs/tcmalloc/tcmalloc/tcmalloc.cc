@@ -56,6 +56,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -88,6 +89,10 @@
 #include "tcmalloc/deallocation_profiler.h"
 #include "tcmalloc/experiment.h"
 #include "tcmalloc/global_stats.h"
+#include "tcmalloc/generation_allocator.h"
+#if defined(TCMALLOC_INTERNAL_SELSAN) && !defined(TCMALLOC_GENERATION_DISABLED)
+#error "Generation allocator cannot be combined with SelSan"
+#endif
 #include "tcmalloc/guarded_allocations.h"
 #include "tcmalloc/guarded_page_allocator.h"
 #include "tcmalloc/internal/allocation_guard.h"
@@ -251,6 +256,9 @@ extern "C" size_t TCMalloc_Internal_GetStats(char* buffer,
 
 extern "C" const ProfileBase* MallocExtension_Internal_SnapshotCurrent(
     ProfileType type) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return nullptr;  // User allocations bypass the ordinary sampler.
+#endif
   switch (type) {
     case ProfileType::kHeap:
       return DumpHeapProfile(tc_globals).release();
@@ -265,16 +273,26 @@ extern "C" const ProfileBase* MallocExtension_Internal_SnapshotCurrent(
 
 extern "C" AllocationProfilingTokenBase*
 MallocExtension_Internal_StartAllocationProfiling() {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return nullptr;  // Unsupported in generation mode.
+#endif
   return new AllocationSample(&tc_globals.allocation_samples, absl::Now());
 }
 
 extern "C" tcmalloc_internal::AllocationProfilingTokenBase*
 MallocExtension_Internal_StartLifetimeProfiling() {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return nullptr;  // Unsupported in generation mode.
+#endif
   return new deallocationz::DeallocationSample(
       &tc_globals.deallocation_samples);
 }
 
 MallocExtension::Ownership GetOwnership(const void* ptr) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return GenerationGlobal().Owns(ptr) ? MallocExtension::Ownership::kOwned
+                                     : MallocExtension::Ownership::kNotOwned;
+#endif
   const PageId p = PageIdContainingTagged(ptr);
   return tc_globals.pagemap().GetDescriptor(p)
              ? MallocExtension::Ownership::kOwned
@@ -283,6 +301,17 @@ MallocExtension::Ownership GetOwnership(const void* ptr) {
 
 extern "C" bool MallocExtension_Internal_GetNumericProperty(
     const char* name_data, size_t name_size, size_t* value) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  const absl::string_view name(name_data, name_size);
+  if (name == "tcmalloc.generation.reserved_bytes" ||
+      name == "tcmalloc.generation.live_requested_bytes" ||
+      name == "tcmalloc.generation.quarantined_bytes") {
+    const auto stats = GenerationGlobal().GetStats();
+    *value = name == "tcmalloc.generation.reserved_bytes" ? stats.reserved :
+        name == "tcmalloc.generation.live_requested_bytes" ? stats.live : stats.quarantined;
+    return true;
+  }
+#endif
   return GetNumericProperty(name_data, name_size, value);
 }
 
@@ -339,74 +368,6 @@ extern "C" size_t MallocExtension_Internal_ReleaseMemoryToSystem(
                           /*reason=*/PageReleaseReason::kReleaseMemoryToSystem);
 }
 
-// Diagnostic branch: bounded, allocation-free quarantine for small objects.
-// Hash collisions evict entries; this is deliberately best-effort detection.
-namespace {
-constexpr size_t kFreeCheckSlots = 4096;
-constexpr size_t kFreeCheckMaxSize = 32 * 1024;
-constexpr size_t kFreeCheckBytes = 64;
-struct FreeCheckSlot {
-  absl::base_internal::SpinLock lock{
-      absl::kConstInit, absl::base_internal::SCHEDULE_KERNEL_ONLY};
-  void* ptr = nullptr;
-  size_t size_class = 0;
-};
-ABSL_CONST_INIT FreeCheckSlot free_check_slots[kFreeCheckSlots];
-
-size_t FreeCheckIndex(void* ptr) {
-  uintptr_t value = reinterpret_cast<uintptr_t>(ptr) >> 3;
-  value ^= value >> 17;
-  value *= uintptr_t{0x9e3779b97f4a7c15ULL};
-  return (value >> 32) & (kFreeCheckSlots - 1);
-}
-
-void FreeCheckPoison(void* ptr, size_t size, bool verify) {
-  // Volatile accesses ensure the verification reloads potentially stale memory.
-  auto* words = static_cast<volatile uintptr_t*>(ptr);
-  // Small size classes are aligned and sized in multiples of a machine word.
-  const size_t length = size / sizeof(uintptr_t);
-  const size_t count = std::min(length, kFreeCheckBytes / sizeof(uintptr_t));
-  for (size_t i = 0; i < count; ++i) {
-    const size_t offsets[] = {i, length - 1 - i};
-    for (size_t offset : offsets) {
-      const uintptr_t expected = uintptr_t{0xa5a5a5a5a5a5a5a5ULL} ^
-          reinterpret_cast<uintptr_t>(ptr) ^
-          (offset * uintptr_t{0x9e3779b97f4a7c15ULL});
-      if (verify) {
-        if (words[offset] != expected) {
-          TC_BUG("Free check: write after free at %p, offset=%zu, size=%zu",
-                 ptr, offset * sizeof(uintptr_t), size);
-        }
-      } else {
-        words[offset] = expected;
-      }
-    }
-  }
-}
-
-// Returns an evicted object for actual deallocation, or nullptr if none.
-void* FreeCheckQuarantine(void* ptr, size_t* size_class) {
-  const size_t size = tc_globals.sizemap().class_to_size(*size_class);
-  if (size > kFreeCheckMaxSize || IsSelSanMemory(ptr)) return ptr;
-  FreeCheckSlot& slot = free_check_slots[FreeCheckIndex(ptr)];
-  absl::base_internal::SpinLockHolder holder(&slot.lock);
-  if (slot.ptr == ptr) {
-    TC_BUG("Free check: double free of %p, size=%zu", ptr, size);
-  }
-  void* evicted = slot.ptr;
-  const size_t evicted_class = slot.size_class;
-  if (evicted != nullptr) {
-    FreeCheckPoison(evicted,
-                    tc_globals.sizemap().class_to_size(evicted_class), true);
-  }
-  FreeCheckPoison(ptr, size, false);
-  slot.ptr = ptr;
-  slot.size_class = *size_class;
-  *size_class = evicted_class;
-  return evicted;
-}
-}  // namespace
-
 extern "C" void MallocExtension_EnableForkSupport() {
   Static::EnableForkSupport();
 }
@@ -416,7 +377,9 @@ void TCMallocPreFork() {
     return;
   }
 
-  for (auto& slot : free_check_slots) slot.lock.Lock();
+#ifndef TCMALLOC_GENERATION_DISABLED
+  GenerationGlobal().LockAll();
+#endif
   if (Static::CpuCacheActive()) {
     Static::cpu_cache().AcquireInternalLocks();
   }
@@ -461,7 +424,9 @@ void TCMallocPostFork() {
   }
   ThreadCache::ReleaseInternalLocks();
   Static::sampled_allocation_recorder().ReleaseInternalLocks();
-  for (auto& slot : free_check_slots) slot.lock.Unlock();
+#ifndef TCMALLOC_GENERATION_DISABLED
+  GenerationGlobal().UnlockAll();
+#endif
 }
 
 extern "C" void MallocExtension_SetSampleUserDataCallbacks(
@@ -497,6 +462,11 @@ static ABSL_ATTRIBUTE_NOINLINE size_t nallocx_slow(size_t size, int flags) {
 // nallocx is a malloc extension originally implemented by jemalloc:
 // http://www.unix.com/man-page/freebsd/3/nallocx/
 extern "C" size_t nallocx(size_t size, int flags) noexcept {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  const size_t generation_alignment = flags == 0 ? alignof(std::max_align_t) :
+      size_t{1} << (flags & 0x3f);
+  return GenerationAllocator::Capacity(size, generation_alignment);
+#endif
   if (ABSL_PREDICT_FALSE(!tc_globals.IsInited() || flags != 0)) {
     return nallocx_slow(size, flags);
   }
@@ -641,6 +611,9 @@ inline size_t GetLargeSize(const void* ptr, const PageId p) {
 }
 
 inline size_t GetSize(const void* ptr) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return GenerationGlobal().Size(ptr);
+#endif
   if (ptr == nullptr) return 0;
   const PageId p = PageIdContainingTagged(ptr);
   size_t size_class = tc_globals.pagemap().sizeclass(p);
@@ -686,8 +659,6 @@ FreeSmallSlow(void* ptr, size_t size_class) {
 
 static inline ABSL_ATTRIBUTE_ALWAYS_INLINE void FreeSmall(void* ptr,
                                                           size_t size_class) {
-  ptr = FreeCheckQuarantine(ptr, &size_class);
-  if (ptr == nullptr) return;
   if (!IsExpandedSizeClass(size_class)) {
     TC_ASSERT(IsNormalMemory(ptr) || IsSelSanMemory(ptr), "ptr=%p", ptr);
   } else {
@@ -826,6 +797,10 @@ static void InvokeHooksAndFreePages(void* ptr, std::optional<size_t> size) {
 // "have_size_class-case" and others are "!have_size_class-case". But we
 // certainly don't have such compiler. See also do_free_with_size below.
 inline ABSL_ATTRIBUTE_ALWAYS_INLINE void do_free(void* ptr) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  GenerationGlobal().Free(ptr);
+  return;
+#endif
   if (!kSelSanPresent || ABSL_PREDICT_FALSE(!IsNormalMemory(ptr))) {
     if (ABSL_PREDICT_FALSE(ptr == nullptr)) {
       return;
@@ -884,6 +859,10 @@ template <typename AlignPolicy>
 inline ABSL_ATTRIBUTE_ALWAYS_INLINE void do_free_with_size(void* ptr,
                                                            size_t size,
                                                            AlignPolicy align) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  GenerationGlobal().Free(ptr);
+  return;
+#endif
   TC_ASSERT(
       CorrectAlignment(ptr, static_cast<std::align_val_t>(align.align())));
 
@@ -1116,6 +1095,11 @@ slow_alloc_small(size_t size, uint32_t size_class, Policy policy) {
   return Policy::to_pointer(res, size_class);
 }
 
+void* GenerationBackingAllocate(size_t size, size_t alignment) {
+  tc_globals.InitIfNecessary();
+  return do_malloc_pages(size, 0, MallocPolicy().AlignAs(alignment)).p;
+}
+
 template <typename Policy>
 ABSL_ATTRIBUTE_NOINLINE static typename Policy::pointer_type slow_alloc_large(
     size_t size, Policy policy) {
@@ -1131,6 +1115,14 @@ ABSL_ATTRIBUTE_NOINLINE static typename Policy::pointer_type slow_alloc_large(
 template <typename Policy, typename Pointer = typename Policy::pointer_type>
 static inline Pointer ABSL_ATTRIBUTE_ALWAYS_INLINE fast_alloc(size_t size,
                                                               Policy policy) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  // Preserve the API alignment, including default new alignment.
+  const size_t alignment = policy.align() == 1 ? alignof(std::max_align_t) : policy.align();
+  static thread_local size_t shard = static_cast<size_t>(syscall(SYS_gettid));
+  auto result = GenerationGlobal().Allocate(size, alignment, shard);
+  if (!result.ptr) return policy.handle_oom(size);
+  return Policy::as_pointer(result.ptr, result.capacity);
+#endif
   // If size is larger than kMaxSize, it's not fast-path anymore. In
   // such case, GetSizeClass will return false, and we'll delegate to the slow
   // path. If malloc is not yet initialized, we may end up with size_class == 0
@@ -1195,6 +1187,9 @@ extern "C" void MallocExtension_Internal_MarkThreadBusy() {
 
 absl::StatusOr<tcmalloc::malloc_tracing_extension::AllocatedAddressRanges>
 MallocTracingExtension_Internal_GetAllocatedAddressRanges() {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  return absl::UnimplementedError("Object tracing is unavailable with generation slots");
+#endif
   tcmalloc::malloc_tracing_extension::AllocatedAddressRanges
       allocated_address_ranges;
   constexpr float kAllocatedSpansSizeReserveFactor = 1.2;
@@ -1333,6 +1328,14 @@ extern "C" ABSL_CACHELINE_ALIGNED void* TCMallocInternalCalloc(
 
 static inline ABSL_ATTRIBUTE_ALWAYS_INLINE void* do_realloc(void* old_ptr,
                                                             size_t new_size) {
+#ifndef TCMALLOC_GENERATION_DISABLED
+  const size_t capacity = GetSize(old_ptr);
+  void* replacement = fast_alloc(new_size, MallocPolicy());
+  if (!replacement) return nullptr;
+  memcpy(replacement, old_ptr, std::min(capacity, new_size));
+  do_free(old_ptr);
+  return replacement;
+#endif
   tc_globals.InitIfNecessary();
   // Get the size of the old entry
   const size_t old_size = GetSize(old_ptr);

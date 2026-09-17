@@ -1,5 +1,7 @@
 ## v3.23.0
 
+* Added OIDC/OAuth authentication via `CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
+
 * Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.

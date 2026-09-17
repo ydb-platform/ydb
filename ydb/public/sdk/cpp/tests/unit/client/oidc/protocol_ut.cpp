@@ -307,4 +307,44 @@ Y_UNIT_TEST(CancellationInterruptsPendingHttpRequest) {
     UNIT_ASSERT(completed);
     UNIT_ASSERT_EXCEPTION(result.get(), std::exception);
 }
+Y_UNIT_TEST(DiscoveryIssuerComparisonPreservesTrailingSlash) {
+    TOidcTestServer server;
+    auto config = server.ClientConfig();
+    config.Issuer += "/";
+    NThreading::TCancellationTokenSource cancellation;
+    TProtocol protocol(config, cancellation.Token());
+    UNIT_ASSERT_EXCEPTION_CONTAINS(protocol.ClientGrant(), TError, "issuer mismatch");
+    UNIT_ASSERT(server.Requests().empty());
+}
+
+Y_UNIT_TEST(DeviceAcceptsOpaqueTokenWithoutLifetime) {
+    TOidcTestServer server;
+    server.Enqueue(NJson::WriteJson(DeviceResponse(server), false), HTTP_OK);
+    server.Enqueue(R"({"access_token":"opaque","token_type":"Bearer","refresh_token":"refresh"})", HTTP_OK);
+    const auto config = DeviceConfig(server);
+    NThreading::TCancellationTokenSource cancellation;
+    TProtocol protocol(config, cancellation.Token());
+    const auto result = protocol.DeviceGrant([](TDuration) { return true; });
+    UNIT_ASSERT_VALUES_EQUAL(result.AccessToken.Token, "opaque");
+    UNIT_ASSERT(!result.AccessToken.ExpiresAt);
+    UNIT_ASSERT(result.RefreshToken);
+    UNIT_ASSERT_VALUES_EQUAL(result.RefreshToken->Token, "refresh");
+}
+
+Y_UNIT_TEST(DeviceDoesNotPollAfterWaitOvershootsExpiry) {
+    TOidcTestServer server;
+    auto response = DeviceResponse(server);
+    response["expires_in"] = 1;
+    server.Enqueue(NJson::WriteJson(response, false), HTTP_OK);
+    auto acceptor = std::make_shared<TTestAcceptor>();
+    const auto config = DeviceConfig(server).Acceptor(acceptor);
+    NThreading::TCancellationTokenSource cancellation;
+    TProtocol protocol(config, cancellation.Token());
+    UNIT_ASSERT_EXCEPTION_CONTAINS(protocol.DeviceGrant([&](TDuration) {
+        NThreading::NewPromise<void>().GetFuture().Wait(acceptor->Wait().ExpiresAt + TDuration::MilliSeconds(1));
+        return true;
+    }), TError, "device authorization expired");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+}
+
 }

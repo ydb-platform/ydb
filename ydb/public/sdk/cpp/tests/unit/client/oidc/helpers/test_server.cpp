@@ -203,6 +203,18 @@ std::vector<TOidcTestServer::TRequestInfo> TOidcTestServer::Requests() const {
     }
 }
 
+void TOidcTestServer::BlockTlsHandshakeUntil(NThreading::TFuture<void> released) {
+    with_lock (Mutex) {
+        TlsHandshakeGate = std::move(released);
+    }
+}
+
+bool TOidcTestServer::WaitForTlsHandshake() {
+    with_lock (Mutex) {
+        return Changed.wait_for(Mutex, std::chrono::seconds(10), [&] { return TlsHandshakeStarted; });
+    }
+}
+
 size_t TOidcTestServer::DiscoveryCount() const {
     with_lock (Mutex) {
         return Discoveries;
@@ -270,5 +282,14 @@ TClientRequest* TOidcTestServer::CreateClient() {
 }
 
 THolder<THttpServerConn> TOidcTestServer::TRequest::CreateHttpConnection(const TSocket& socket, size_t outputBuffer) {
+    NThreading::TFuture<void> gate;
+    with_lock (Server.Mutex) {
+        gate = Server.TlsHandshakeGate;
+        Server.TlsHandshakeStarted = true;
+    }
+    Server.Changed.notify_all();
+    if (gate.Initialized()) {
+        gate.Wait();
+    }
     return MakeHolder<THttpServerConn>(MakeHolder<TTlsStreams>(socket), outputBuffer);
 }

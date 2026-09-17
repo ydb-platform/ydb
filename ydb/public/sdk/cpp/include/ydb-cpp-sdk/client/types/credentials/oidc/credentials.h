@@ -15,6 +15,7 @@ namespace NYdb::inline Dev {
 
 struct TOAuthToken {
     std::string Token;
+    // An absent expiry means the lifetime is unknown; automatic refresh cannot be scheduled.
     std::optional<TInstant> ExpiresAt;
 
     bool IsValid(TInstant now) const;
@@ -28,6 +29,8 @@ struct TTokenCache {
 class ITokenCacher {
 public:
     virtual ~ITokenCacher();
+    // Providers may share a cacher across worker threads. Read() and Write()
+    // must be thread-safe; interprocess synchronization is not required.
     virtual std::optional<TTokenCache> Read() const = 0;
     virtual void Write(const TTokenCache& cache) = 0;
 };
@@ -53,11 +56,13 @@ struct TStaticOidcConfig {
 struct TClientOidcConfig {
     std::string ClientId;
     std::string ClientSecret;
+    // The provider adds "openid" if it is not listed, including for client credentials.
     std::vector<std::string> Scopes;
 };
 
 struct TDeviceOidcConfig {
     std::string ClientId;
+    // The provider adds "openid" if it is not listed.
     std::vector<std::string> Scopes;
 };
 
@@ -66,6 +71,7 @@ using TFlowConfig = std::variant<TStaticOidcConfig, TClientOidcConfig, TDeviceOi
 struct TOidcConfig {
     using TSelf = TOidcConfig;
 
+    // Must exactly match the issuer advertised by OpenID Discovery, including a trailing slash.
     std::string Issuer;
     TFlowConfig FlowConfig;
 

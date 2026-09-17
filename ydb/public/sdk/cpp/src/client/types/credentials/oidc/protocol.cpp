@@ -119,7 +119,13 @@ bool THttpJob::Ready() const {
 
 THttpJob::~THttpJob() {
     Cancellation.Cancel();
-    Worker.join();
+    if (Ready()) {
+        Worker.join();
+    } else {
+        // DNS/connect/TLS setup does not observe cancellation. The worker owns
+        // all request data, so it can finish without keeping the provider alive.
+        Worker.detach();
+    }
 }
 
 TProtocol::TProtocol(const TOidcConfig& config, NThreading::TCancellationToken cancellation)
@@ -219,6 +225,8 @@ void TProtocol::Discover() {
         discovery.pop_back();
     }
     const auto metadata = Request(discovery + "/.well-known/openid-configuration", nullptr, false, TInstant::Max());
+    // Only the discovery request path is normalized; the issuer identifier
+    // must match exactly (OpenID Connect Discovery 1.0, sections 4.1 and 4.3).
     if (String(metadata, "issuer", true) != Config.Issuer) {
         throw TError("discovery issuer mismatch", false, {});
     }
@@ -253,6 +261,8 @@ TTokenCache TProtocol::TokenRequest(TCgiParameters form, const std::optional<TOA
     Discover();
     const auto now = TInstant::Now();
     const auto response = Request(TokenEndpoint, &form, true, deadline);
+    // A ready HTTP future can race with the deadline check inside Request().
+    // Keep the entire device grant bounded, including response processing.
     if (TInstant::Now() >= deadline) {
         throw TError("device authorization expired", false, "expired_token");
     }
@@ -267,8 +277,8 @@ TTokenCache TProtocol::TokenRequest(TCgiParameters form, const std::optional<TOA
     } else {
         result.AccessToken.ExpiresAt = JwtExpiry(result.AccessToken.Token);
     }
-    if (!result.AccessToken.ExpiresAt || !result.AccessToken.IsValid(TInstant::Now())) {
-        throw TError("missing or expired access token lifetime", false, {});
+    if (!result.AccessToken.IsValid(TInstant::Now())) {
+        throw TError("access token expired", false, {});
     }
     const auto refreshToken = String(response, "refresh_token", false);
     if (!refreshToken.empty()) {
@@ -343,6 +353,8 @@ TTokenCache TProtocol::DeviceGrant(const std::function<bool(TDuration)>& wait) {
         if (!wait(polling.NextDelay(TInstant::Now()))) {
             throw TError("provider stopped", false, {});
         }
+        // Do not start another token request if the wait overshot the device
+        // deadline. This also preserves expired_token instead of an HTTP timeout.
         polling.NextDelay(TInstant::Now());
         try {
             return TokenRequest(tokenForm, std::nullopt, polling.Deadline);

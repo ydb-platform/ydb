@@ -15,7 +15,6 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.functional.udf_store.lib.constants import (
     UDF_TABLE_MODULES_PATH,
-    UDF_TABLE_MODULE_CHUNKS_PATH,
     UDF_KV_BINARIES_PATH,
 )
 
@@ -426,6 +425,7 @@ def test_ydb_udf_rpc_validation_and_pagination():
             first = upload([header(manifest()), data], StatusIds.SUCCESS)
             assert first.md5 == hashlib.md5(body).hexdigest()
             assert first.compile_status == udf.PENDING
+
             def describe():
                 response = stub.DescribeModule(udf.DescribeModuleRequest(name=first.name), metadata=metadata, timeout=60)
                 assert response.operation.status == StatusIds.SUCCESS, response

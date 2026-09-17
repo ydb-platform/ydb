@@ -129,7 +129,7 @@ Logical connections to the database that store the context needed for executing 
 
 **Client-side timeout** — a time limit that an application or {{ ydb-short-name }} SDK waits for a database operation to complete (for example, executing a query or receiving a response via a gRPC call). After this time expires, the client usually aborts the wait: closes the connection or data stream, receives a transport or SDK error — even before the server has returned an explicit response (see {{ ydb-short-name }} server [response codes](../reference/ydb-sdk/ydb-status-codes.md)).
 
-If the client-side timeout is shorter than the query execution time on the {{ ydb-short-name }} side, then due to the specifics of query processing in the cluster, a query interrupted on the client side may continue to execute on the server for some time. If this situation occurs on a large scale, the server becomes overloaded with queries for which the client is not waiting for a response. Therefore, frequent retries of the same query immediately after a timeout can exacerbate the overload. For more details, see the articles [{#T}](../troubleshooting/performance/queries/retry-cascade.md) and [{#T}](../troubleshooting/performance/queries/overloaded-errors.md); retry policies in the SDK are described in the section [{#T}](../reference/ydb-sdk/error_handling.md).
+If the client-side timeout is shorter than the query execution time on the {{ ydb-short-name }} side, then due to the specifics of query processing in the cluster, a query interrupted on the client side may continue to execute on the server for some time. If this situation occurs on a large scale, the server becomes overloaded with queries for which the client is not waiting for a response. Therefore, frequent retries of the same query immediately after a timeout can exacerbate the overload. Retry policies in the SDK are described in the section [{#T}](../reference/ydb-sdk/error_handling.md).
 
 ### Implicit transactions {#implicit-transactions}
 
@@ -256,8 +256,6 @@ Views can be user-defined or system.
 
 **User-defined views** are created by the user using the [{#T}](../yql/reference/syntax/create-view.md) command. They are described in more detail in [{#T}](../concepts/datamodel/view.md).
 
-{% endif %}
-
 #### System views {#system-view}
 
 **System views** are special views automatically created by the system for monitoring the state of the database and cluster. They are located in a special directory `.sys` in the root folder of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for the cluster and access management issues are described in [{#T}](../devops/observability/system-views.md).
@@ -326,8 +324,6 @@ For more information, see [{#T}](datamodel/backup-collection.md).
 #### Replica object {#replica-object}
 
 **Replica object** is a mirror copy of the replicated object, automatically created by the async replication instance. Typically, it is read-only.
-
-{% endif %}
 
 {% if feature_transfer == true %}
 

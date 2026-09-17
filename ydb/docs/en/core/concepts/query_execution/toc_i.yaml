@@ -11,8 +11,6 @@ items:
     href: vector_search.md
   - name: Fulltext search
     href: fulltext_search.md
-  - name: Hybrid search
-    href: hybrid_search.md
   - name: JSON Search
     href: json_search.md
   - name: Local indexes
@@ -25,7 +23,5 @@ items:
     href: spilling.md
   - name: Scan queries
     href: scan_query.md
-  - name: Query Execution Process
-    href: execution_process.md
   - name: YQL queries to topics
     href: topics.md

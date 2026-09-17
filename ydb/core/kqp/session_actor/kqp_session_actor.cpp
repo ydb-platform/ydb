@@ -2737,7 +2737,7 @@ public:
                         return item.Id == victimQuerySpanId;
                     });
                 if (it == end(allQueries)) {
-                    allQueries.push_back({victimQuerySpanId, "COMMIT"});
+                    allQueries.push_back({QueryState->GetQuerySpanId(), "COMMIT"});
                 }
             }
             NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{

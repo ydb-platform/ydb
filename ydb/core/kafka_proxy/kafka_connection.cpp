@@ -1013,9 +1013,10 @@ protected:
                         [[fallthrough]];
 
                     case INFLIGHT_CHECK:
-                        if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
-                            // Allow only one message to be processed at a time for non-authenticated users
-                            YDB_LOG_ERROR("DoRead: failed inflight check: there are pending requests and user is not authnicated. Only one paraller request is allowed for a non-authenticated user",
+                        // Apache Kafka: one in-flight request per connection. Mute until the previous
+                        // request is answered. Clients may still pipeline into the OS socket buffer.
+                        if (!PendingRequestsQueue.empty()) {
+                            YDB_LOG_TRACE("DoRead: connection muted until previous request is answered",
                                 {LogPrefix()},
                                 {"pendingRequestsQueue", PendingRequestsQueue.size()});
                             return true;

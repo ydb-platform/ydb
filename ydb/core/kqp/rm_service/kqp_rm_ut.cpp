@@ -453,6 +453,7 @@ public:
         UNIT_TEST(ArenaMixesExternalMemoryAndUnits);
         UNIT_TEST(ArenaAbsorbsChurn);
         UNIT_TEST(ArenaReleasesIdleReservation);
+        UNIT_TEST(ArenaShrinksWhenNodeTotalDrops);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -514,6 +515,7 @@ public:
     void ArenaMixesExternalMemoryAndUnits();
     void ArenaAbsorbsChurn();
     void ArenaReleasesIdleReservation();
+    void ArenaShrinksWhenNodeTotalDrops();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -2362,6 +2364,53 @@ void KqpRm::ArenaAbsorbsChurn() {
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
     AssertArenaSensors(0, 0, 0);
     AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// A node total that drops below what the arena holds takes effect on the arena too: the surplus it is no longer
+// entitled to is given back, down to the demand it still backs
+void KqpRm::ArenaShrinksWhenNodeTotalDrops() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    // the resource broker queue config as the resource manager receives it, as in TotalLimitReconfigure
+    auto setTotal = [&](ui64 memory) {
+        auto response = MakeHolder<TEvResourceBroker::TEvConfigResponse>();
+        response->QueueConfig.ConstructInPlace();
+        response->QueueConfig->MutableLimit()->SetMemory(memory);
+        Runtime->Send(new IEventHandle(ResourceManagers.front(), Runtime->AllocateEdgeActor(), response.Release()));
+        Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    };
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 150}));
+        AssertResourceBrokerSensors(0, 350, 0, 0, 1); // 150 plus the headroom of 200
+        AssertResourceManagerStats(rm, 650, 100);
+        AssertArenaSensors(350, 150, 0);
+
+        // still room for all of it
+        setTotal(500);
+        AssertResourceBrokerSensors(0, 350, 0, 0, 1);
+        AssertResourceManagerStats(rm, 150, 100);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+
+        // 350 no longer fits: the arena gives back what it is not entitled to and keeps backing its 150
+        setTotal(250);
+        AssertResourceBrokerSensors(0, 250, 0, 0, 1);
+        AssertArenaSensors(250, 150, 0);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 150});
+    }
+
+    // and the whole of it once the demand is gone
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 250, 100);
 }
 
 // The resource broker admits a task larger than its own total limit only while nothing at all is running, so an

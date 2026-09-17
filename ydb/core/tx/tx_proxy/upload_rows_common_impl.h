@@ -141,6 +141,7 @@ private:
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     bool IsIndexImplTable = false;
+    bool HasSuccessfulShardReply = false;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
@@ -1278,6 +1279,8 @@ private:
 
             SetError(
                 TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
+        } else {
+            HasSuccessfulShardReply = true;
         }
 
         // Notify the cache that we are done with the pipe
@@ -1324,6 +1327,17 @@ private:
         if (!ShardRepliesLeft.empty()) {
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
             return;
+        }
+
+        // If we have success response from at least one shard we can't reply
+        // with retryeble status
+        if (HasSuccessfulShardReply &&
+            (Status.GetCode() == Ydb::StatusIds::UNAVAILABLE ||
+             Status.GetCode() == Ydb::StatusIds::OVERLOADED ||
+             Status.GetCode() == Ydb::StatusIds::TIMEOUT)) {
+            SetError(TUploadStatus(Ydb::StatusIds::UNDETERMINED,
+                TStringBuilder() << "Some rows were successfully written before a retriable error occurred: "
+                                 << Status.GetErrorMessage().value_or(Status.GetCodeString())));
         }
 
         if (Status.GetErrorMessage()) {

@@ -212,7 +212,7 @@ class TDefaultNodeBrokerClient
             const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, CanonizePath(TString(settings.DomainPath_)).c_str(), nodeRegistrationToken);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);

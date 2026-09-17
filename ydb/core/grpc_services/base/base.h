@@ -1066,6 +1066,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName_ = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1202,6 +1203,7 @@ public:
 
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
+    TMaybe<TString> DatabaseName_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager_;
@@ -1397,6 +1399,7 @@ public:
     }
 
     void UseDatabase(const TString& database) override {
+        DatabaseName = database;
         Ctx_->UseDatabase(database);
     }
 
@@ -1649,6 +1652,7 @@ protected:
     NWilson::TSpan Span_;
 private:
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
+    TMaybe<TString> DatabaseName;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
     NYql::TIssueManager IssueManager;

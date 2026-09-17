@@ -1724,7 +1724,7 @@ namespace Tests {
             protoConfig.MutableCommon()->SetIdsPrefix("id");
 
             TString endpoint = TStringBuilder() << "localhost:" << Settings->GrpcPort;
-            TString prefix = "Root/yq";
+            TString prefix = "/Root/yq";
             auto port = Runtime->GetPortManager().GetPort();
             TString ydbMvpEndpoint = TStringBuilder()
                 << "http://localhost:"
@@ -1769,7 +1769,7 @@ namespace Tests {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
                 privateApiConfig.SetTaskServiceEndpoint(endpoint);
-                privateApiConfig.SetTaskServiceDatabase("Root");
+                privateApiConfig.SetTaskServiceDatabase("/Root");
             }
 
             {

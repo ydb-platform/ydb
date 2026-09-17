@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         auto d = testCase.DescribeTransfer();
         UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetState(), TTransferDescription::EState::Error);
-        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "local/" << testCase.TopicName);
+        UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetSrcPath(), TStringBuilder() << "/local/" << testCase.TopicName);
         UNIT_ASSERT_VALUES_EQUAL(d.GetTransferDescription().GetDstPath(), TStringBuilder() << "/local/" << testCase.TableName);
 
         testCase.DropTransfer();

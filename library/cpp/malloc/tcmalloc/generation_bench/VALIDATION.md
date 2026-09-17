@@ -26,6 +26,16 @@ large slots, with padding charged to the budget and an explicit regression test.
 
 No production YDB workload, TSAN run, non-x86 target or full ydbd build was validated.
 
+## Expanded error tests: 2026-09-17
+
+After the original validation, the two allocator test targets were rerun with
+15 additional test groups (350 child scenarios per variant): **66 GOOD**,
+33 per allocator. All six fatal reasons and complete diagnostic fields are
+covered; the matrices include zero quarantine delay and detection-limit controls.
+See `../free_check_ut/ERROR_COVERAGE.md`. Production sources are unchanged, so
+the fingerprints and earlier benchmark results below still describe the allocator.
+The actor utility and malloc API suites were not rerun for this tests-only change.
+
 ## Microbenchmark
 
 Fresh process per run, three runs per case, 200,000 allocation/free pairs per

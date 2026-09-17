@@ -766,8 +766,11 @@ public:
     }
 
     ui64 ArenaTargetLocked(ui64 used) const {
-        if (!EnableMemoryArena.load() || (used == 0 && Arena.Size == 0)) {
-            return 0; // a node that never ran a query reserves nothing
+        // An arena backing nothing is given back rather than kept for the next query: its task would otherwise
+        // hold the resource broker's count of running tasks above zero for good, and the broker admits work that
+        // exceeds its own total limit only while nothing is running at all.
+        if (!EnableMemoryArena.load() || used == 0) {
+            return 0;
         }
         const i64 minFree = MemoryArenaMinFreeSize.load();
         const i64 maxFree = MemoryArenaMaxFreeSize.load();
@@ -775,7 +778,7 @@ public:
         if (free < minFree || free > maxFree) {
             return used + static_cast<ui64>((minFree + maxFree) / 2);
         }
-        // in band: an idle arena keeps its task, so a trickle of small queries costs no resource broker call
+        // in band: a trickle of small queries costs no resource broker call
         return Arena.Size;
     }
 

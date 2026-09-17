@@ -41,19 +41,20 @@ ui64 Seconds(const NJson::TJsonValue& value, const std::string& field, bool allo
 }
 
 NUri::TUri ParseUrl(const std::string& value, bool issuer) {
+    const std::string role = issuer ? "issuer" : "endpoint";
     NUri::TUri url;
     if (value.empty() ||
         std::any_of(value.begin(), value.end(), [](unsigned char c) { return c <= 0x20 || c == 0x7f; }) ||
         url.Parse(value, NUri::TFeature::FeaturesAll) != NUri::TUri::TState::EParsed::ParsedOK ||
         url.GetHost().empty() || !url.IsNull(NUri::TUri::FieldUser) || !url.IsNull(NUri::TUri::FieldPass) ||
         !url.IsNull(NUri::TUri::FieldFrag) || (issuer && !url.IsNull(NUri::TUri::FieldQuery))) {
-        throw std::invalid_argument("OIDC credentials: invalid endpoint URL");
+        throw std::invalid_argument("OIDC credentials: invalid " + role + " URL");
     }
     if (url.GetScheme() != NUri::TScheme::SchemeHTTPS) {
-        throw std::invalid_argument("OIDC credentials: endpoint requires HTTPS");
+        throw std::invalid_argument("OIDC credentials: " + role + " requires HTTPS");
     }
     if (!url.GetPort()) {
-        throw std::invalid_argument("OIDC credentials: invalid endpoint port");
+        throw std::invalid_argument("OIDC credentials: invalid " + role + " port");
     }
     return url;
 }
@@ -74,7 +75,17 @@ std::optional<TInstant> JwtExpiry(const std::string& token) {
         return std::nullopt;
     }
     if (const auto* expiry = Field(payload, "exp"); expiry != nullptr) {
-        return TInstant::Seconds(Seconds(*expiry, "exp", true));
+        // A negative NumericDate is in the past, not an unknown lifetime.
+        if (expiry->IsInteger() && expiry->GetInteger() < 0) {
+            return TInstant::Zero();
+        }
+        try {
+            return TInstant::Seconds(Seconds(*expiry, "exp", true));
+        } catch (const TError&) {
+            // JWT decoding is only a scheduling hint; token validation belongs
+            // to the server, just as it does for opaque access tokens.
+            return std::nullopt;
+        }
     }
     return std::nullopt;
 }

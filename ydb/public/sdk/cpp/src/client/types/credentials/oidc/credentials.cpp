@@ -47,7 +47,9 @@ TFactory::TFactory(TOidcConfig config)
     : Config(std::move(config))
     , Identity(GetOidcClientIdentity(Config))
 {
-    if (std::holds_alternative<TDeviceOidcConfig>(Config.FlowConfig)) {
+    // Do not deduplicate user sessions or silently replace custom hooks with
+    // another factory's hooks when the driver reuses a database state.
+    if (std::holds_alternative<TDeviceOidcConfig>(Config.FlowConfig) || Config.Cacher_ || Config.Acceptor_) {
         Identity += ":" + std::string(CreateGuidAsString());
     }
 }

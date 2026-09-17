@@ -23,6 +23,38 @@ void TThrowingOidcFacility::PostToResponseQueue(TPostTaskCb&&) {
     throw std::runtime_error("response queue unavailable");
 }
 
+class TFailingOidcCacher: public TMemoryTokenCacher {
+public:
+    TFailingOidcCacher(bool failRead, bool failWrite);
+
+    std::optional<TTokenCache> Read() const override;
+    void Write(const TTokenCache& cache) override;
+
+private:
+    const bool FailRead;
+    const bool FailWrite;
+};
+
+TFailingOidcCacher::TFailingOidcCacher(bool failRead, bool failWrite)
+    : FailRead(failRead)
+    , FailWrite(failWrite)
+{
+}
+
+std::optional<TTokenCache> TFailingOidcCacher::Read() const {
+    if (FailRead) {
+        throw std::runtime_error("cache read failed: private-token");
+    }
+    return TMemoryTokenCacher::Read();
+}
+
+void TFailingOidcCacher::Write(const TTokenCache& cache) {
+    if (FailWrite) {
+        throw std::runtime_error("cache write failed: private-token");
+    }
+    TMemoryTokenCacher::Write(cache);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCredentials) {
@@ -94,6 +126,113 @@ Y_UNIT_TEST(ThrowingDiscardSubscriberDoesNotTerminateWorker) {
     UNIT_ASSERT(reentered.GetFuture().Wait(TDuration::Seconds(1)));
     UNIT_ASSERT(pending.Wait(TDuration::Seconds(1)));
     UNIT_ASSERT_EXCEPTION(pending.GetValueSync(), std::exception);
+}
+
+Y_UNIT_TEST(ThrowingSuccessSubscriberDoesNotInterruptResponseQueue) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(cache);
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    pending.Subscribe([](const auto&) {
+        throw std::runtime_error("subscriber failure");
+    });
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(facility->WaitForTask());
+    bool nextTaskRan = false;
+    facility->PostToResponseQueue([&nextTaskRan] { nextTaskRan = true; });
+    UNIT_ASSERT_NO_EXCEPTION(facility->RunTasks());
+    UNIT_ASSERT(nextTaskRan);
+    UNIT_ASSERT_VALUES_EQUAL(pending.GetValueSync(), "Bearer opaque");
+}
+
+Y_UNIT_TEST(CacheFailuresDoNotPreventClientAuthentication) {
+    for (const bool failRead : {false, true}) {
+        for (const bool failWrite : {false, true}) {
+            TOidcTestServer server;
+            server.Enqueue(R"({"access_token":"access","token_type":"Bearer","expires_in":600})", HTTP_OK);
+            auto cache = std::make_shared<TFailingOidcCacher>(failRead, failWrite);
+            auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+            UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer access");
+            UNIT_ASSERT(provider->IsValid());
+            UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+            if (!failRead && !failWrite) {
+                UNIT_ASSERT_VALUES_EQUAL(cache->Read()->AccessToken.Token, "access");
+            }
+        }
+    }
+}
+
+Y_UNIT_TEST(CacheWriteFailureDoesNotPreventStaticAuthentication) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(std::make_shared<TFailingOidcCacher>(true, true));
+    auto provider = CreateOidcProviderFactory(config)->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer opaque");
+}
+
+Y_UNIT_TEST(CacheFailuresDoNotDiscardDeviceAuthorization) {
+    TOidcTestServer server;
+    server.Enqueue(TString("{\"device_code\":\"private-device\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
+        server.Issuer() + "/verify\",\"expires_in\":60,\"interval\":1}", HTTP_OK);
+    server.Enqueue(R"({"access_token":"user-access","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto acceptor = std::make_shared<TTestAcceptor>();
+    auto config = server.ClientConfig().Acceptor(acceptor).Cacher(std::make_shared<TFailingOidcCacher>(true, true));
+    config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
+    auto provider = CreateOidcProviderFactory(config)->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer user-access");
+    UNIT_ASSERT_VALUES_EQUAL(acceptor->Wait().UserCode, "ABCD");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 2);
+}
+
+Y_UNIT_TEST(MalformedJwtExpiryDoesNotRejectAccessToken) {
+    const auto token = "e30." + std::string(Base64EncodeUrl(R"({"exp":"unknown"})")) + ".signature";
+    for (const bool useStatic : {false, true}) {
+        TOidcTestServer server;
+        auto config = server.ClientConfig();
+        if (useStatic) {
+            config.FlowConfig = TStaticOidcConfig{.AccessToken = token};
+        } else {
+            server.Enqueue(TString("{\"access_token\":\"") + token + "\",\"token_type\":\"Bearer\"}", HTTP_OK);
+        }
+        auto provider = CreateOidcProviderFactory(config)->CreateProvider();
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer " + token);
+        UNIT_ASSERT(provider->IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), useStatic ? 0 : 1);
+    }
+}
+
+Y_UNIT_TEST(CustomHooksIsolateFactoryIdentity) {
+    for (const TFlowConfig& flow : {
+             TFlowConfig{TStaticOidcConfig{.AccessToken = "opaque"}},
+             TFlowConfig{TClientOidcConfig{"client", "secret", {}}}}) {
+        TOidcConfig config;
+        config.Issuer = "https://issuer.example";
+        config.FlowConfig = flow;
+        const auto identity = GetOidcClientIdentity(config);
+        UNIT_ASSERT_VALUES_EQUAL(CreateOidcProviderFactory(config)->GetClientIdentity(),
+            CreateOidcProviderFactory(config)->GetClientIdentity());
+        for (const bool useCacher : {false, true}) {
+            auto first = config;
+            auto second = config;
+            if (useCacher) {
+                first.Cacher(std::make_shared<TMemoryTokenCacher>());
+                second.Cacher(std::make_shared<TMemoryTokenCacher>());
+            } else {
+                first.Acceptor(std::make_shared<TTestAcceptor>());
+                second.Acceptor(std::make_shared<TTestAcceptor>());
+            }
+            const auto firstFactory = CreateOidcProviderFactory(first);
+            const auto firstIdentity = firstFactory->GetClientIdentity();
+            UNIT_ASSERT(firstIdentity != CreateOidcProviderFactory(second)->GetClientIdentity());
+            UNIT_ASSERT_VALUES_EQUAL(firstIdentity, firstFactory->GetClientIdentity());
+            UNIT_ASSERT_VALUES_EQUAL(GetOidcClientIdentity(first), identity);
+        }
+    }
 }
 
 Y_UNIT_TEST(ClientRetriesTransientError) {

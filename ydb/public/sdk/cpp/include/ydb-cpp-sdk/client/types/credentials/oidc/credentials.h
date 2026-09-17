@@ -31,6 +31,9 @@ public:
     virtual ~ITokenCacher();
     // Providers may share a cacher across worker threads. Read() and Write()
     // must be thread-safe; interprocess synchronization is not required.
+    // Calls are synchronous on the provider worker and must return promptly.
+    // Read failures are treated as cache misses; Write failures leave the token
+    // usable in memory. Implementations should report persistence errors themselves.
     virtual std::optional<TTokenCache> Read() const = 0;
     virtual void Write(const TTokenCache& cache) = 0;
 };
@@ -45,6 +48,10 @@ struct TDeviceAuthInfo {
 class IAuthAcceptor {
 public:
     virtual ~IAuthAcceptor();
+    // Called synchronously on a provider worker. Return promptly so polling and
+    // provider destruction can proceed; do not wait for the user to finish sign-in.
+    // Copy info before handing it to another thread. A shared acceptor may receive
+    // concurrent calls from different providers. Exceptions fail authentication.
     virtual void Accept(const TDeviceAuthInfo& info) = 0;
 };
 
@@ -61,6 +68,8 @@ struct TClientOidcConfig {
 };
 
 struct TDeviceOidcConfig {
+    // Expiry or denial ends the current sign-in attempt. To try again after user
+    // interaction, create a new provider (a new factory for parameterless CreateProvider()).
     std::string ClientId;
     // The provider adds "openid" if it is not listed.
     std::vector<std::string> Scopes;
@@ -81,8 +90,22 @@ struct TOidcConfig {
 
 void ValidateOidcConfig(const TOidcConfig& config);
 
+// Deterministic credential fingerprint; excludes cacher/acceptor instances.
 std::string GetOidcClientIdentity(const TOidcConfig& config);
 
+// Device factories and factories with custom hooks have distinct client identities.
+// Reuse a factory to retain its identity. Parameterless CreateProvider() reuses one
+// provider; CreateProvider(facility) creates an independent provider for each call.
+// Each device provider can prompt if no usable cached credentials exist. Sharing a
+// cacher reuses stored tokens but does not coalesce concurrent authorization flows.
+//
+// GetAuthInfo() blocks until credentials or an error are available; prefer
+// GetAuthInfoAsync() when waiting for interactive sign-in.
+//
+// Destruction cancels requests but does not wait for blocked DNS/connect/TLS setup.
+// An HTTP worker may outlive its provider until the underlying operation returns;
+// the socket/connect timeouts do not bound DNS resolution. Destruction therefore
+// does not guarantee HTTP quiescence for SDK/TLS unloading or static runtime teardown.
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config);
 
 } // namespace NYdb::inline Dev

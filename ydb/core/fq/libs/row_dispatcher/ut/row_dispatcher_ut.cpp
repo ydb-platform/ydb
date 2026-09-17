@@ -297,8 +297,6 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
-<<<<<<< HEAD
-=======
 
     Y_UNIT_TEST_TWIN_F(IgnoreEventsFromReplacedConsumer, SharedSession, TFixture) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
@@ -385,55 +383,6 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         }, TDuration::Seconds(10));
     }
 
-    Y_UNIT_TEST_F(ShutdownStopsOwnedActors, TFixture) {
-        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
-        const auto firstSession = ExpectRegisterTopicSession();
-        const auto secondSession = ExpectRegisterTopicSession();
-        ExpectStartSessionAck(ReadActorId1);
-        ExpectStartSession(firstSession);
-        ExpectStartSession(secondSession);
-
-        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
-            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 1)));
-        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
-
-        TSet<TActorId> children;
-        auto observer = Runtime.AddObserver<NActors::TEvents::TEvPoison>([&](auto& ev) {
-            if (ev->Sender == RowDispatcher) {
-                children.insert(ev->Recipient);
-            }
-        });
-        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NActors::TEvents::TEvPoison()));
-        ExpectPoisonPill(firstSession);
-        ExpectPoisonPill(secondSession);
-        Runtime.WaitFor("row dispatcher children stopped", [&] { return children.size() == 3; }, TDuration::Seconds(10));
-        UNIT_ASSERT(!children.contains(Coordinator1));
-
-        children.insert(RowDispatcher);
-        for (const auto& actorId : children) {
-            Runtime.Send(new IEventHandle(actorId, EdgeActor, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery));
-            auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvUndelivered>(EdgeActor);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, actorId);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Reason, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
-        }
-    }
-
-    Y_UNIT_TEST_F(FirstCoordinatorChangeWithTracing, TFixture) {
-        NLWTrace::TProbeRegistry registry;
-        registry.AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
-        NLWTrace::TManager manager(registry, true);
-        NLWTrace::TQuery query;
-        auto* block = query.AddBlocks();
-        block->MutableProbeDesc()->SetName("CoordinatorChanged");
-        block->MutableProbeDesc()->SetProvider("FQ_ROW_DISPATCHER_PROVIDER");
-        block->AddAction()->MutableLogAction();
-        manager.New("first_coordinator", query);
-        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
-            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 0)));
-        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
-    }
-
->>>>>>> a0b094a2a5a (YQ-5709 fixed row dispatcher messages generation check (#53304))
     Y_UNIT_TEST_F(OneClientOneSession, TFixture) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();

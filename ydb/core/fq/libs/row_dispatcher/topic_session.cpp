@@ -139,11 +139,7 @@ private:
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
             , UseActorSystemThreads(ev->Get()->Record.GetSource().GetUseActorSystemThreadsInTopicClient())
             , ReadActorId(ev->Sender)
-<<<<<<< HEAD
-=======
             , Generation(ev->Cookie)
-            , InFlightMemory(self.Config.GetMemoryQuotaManager(), "InFlightMemory", GetReadGroupSubgroup(counters, self.TopicPath, readGroup, &ev->Get()->Record.GetSource()))
->>>>>>> a0b094a2a5a (YQ-5709 fixed row dispatcher messages generation check (#53304))
             , Counters(counters)
         {
             if (offset) {
@@ -205,13 +201,7 @@ private:
         }
 
         void OnClientError(TStatus status) override {
-<<<<<<< HEAD
-            Self.SendSessionError(ReadActorId, status, false);
-=======
-            if (Self) {
-                Self->SendSessionError(ReadActorId, status, false, Generation);
-            }
->>>>>>> a0b094a2a5a (YQ-5709 fixed row dispatcher messages generation check (#53304))
+            Self.SendSessionError(ReadActorId, status, false, Generation);
         }
 
         void StartClientSession() override {
@@ -896,7 +886,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
             {"logPrefix", LogPrefix},
             {"readActorId", info.ReadActorId},
             {"messagesSize", event->Record.MessagesSize()});
-        Send(RowDispatcherActorId, event.release());
+        Send(RowDispatcherActorId, event.release(), 0, info.Generation);
     } while(!buffer.empty());
 
     QueuedBytes -= info.QueuedBytes;
@@ -905,25 +895,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
     info.QueuedBytes = 0;
     info.Watermark.Clear();
 
-<<<<<<< HEAD
     info.FilteredStat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
     info.ProcessedNextMessageOffset = *info.NextMessageOffset;
-=======
-    if (!hasMoreData) {
-        event->Record.SetNextMessageOffset(*info.NextMessageOffset);
-        info.Watermark.Clear();
-    }
-    YDB_LOG_TRACE("SendData to read actor",
-        {"logPrefix", LogPrefix},
-        {"readActorId", info.ReadActorId},
-        {"messagesSize", event->Record.MessagesSize()});
-    info.ProcessedNextMessageOffset = event->Record.GetNextMessageOffset();
-    Send(RowDispatcherActorId, event.release(), 0, info.Generation);
-    info.FilteredStat.Add(queuedBytes, eventsSize);
-    info.FilteredDataRate->Add(queuedBytes);
-    SendDataArrived(info);
->>>>>>> a0b094a2a5a (YQ-5709 fixed row dispatcher messages generation check (#53304))
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {

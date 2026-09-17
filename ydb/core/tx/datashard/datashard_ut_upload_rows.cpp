@@ -165,7 +165,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         THolder<IEventHandle> blockedResponse;
         auto observer = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
             [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
-                if (blockedResponse || ev->Get()->Record.GetStatus() != NKikimrTxDataShard::TError::OK) {
+                if (blockedResponse || ev->Get()->Record.GetStatus() !=
+                    static_cast<ui32>(NKikimrTxDataShard::TError::OK)) {
                     return;
                 }
 

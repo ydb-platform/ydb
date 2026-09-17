@@ -1330,7 +1330,7 @@ private:
         }
 
         // If we have success response from at least one shard we can't reply
-        // with retryeble status
+        // with retriable status
         if (HasSuccessfulShardReply &&
             (Status.GetCode() == Ydb::StatusIds::UNAVAILABLE ||
              Status.GetCode() == Ydb::StatusIds::OVERLOADED ||

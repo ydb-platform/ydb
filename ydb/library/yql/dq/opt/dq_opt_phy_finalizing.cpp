@@ -460,6 +460,22 @@ bool GatherConsumers(const TExprNode& root, TParentsMultiMap& consumers) {
     return GatherConsumersImpl(root, consumers, visited);
 }
 
+using TStageOutputConsumers = TNodeMap<THashMap<ui32, TNodeMultiSet>>;
+
+TStageOutputConsumers GatherStageOutputConsumers(const TExprNode::TPtr& root) {
+    TStageOutputConsumers consumers;
+
+    VisitExpr(root, [&consumers](const TExprNode::TPtr& node) {
+        if (auto connection = TMaybeNode<TDqConnection>(node)) {
+            const auto output = connection.Cast().Output();
+            consumers[output.Stage().Raw()][FromString<ui32>(output.Index().Value())].insert(connection.Raw());
+        }
+        return true;
+    });
+
+    return consumers;
+}
+
 } // anonymous namespace
 
 IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TExprNode::TPtr& output,
@@ -474,6 +490,7 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
     if (!GatherConsumers(*input, consumersMap)) {
         return IGraphTransformer::TStatus::Ok;
     }
+    const auto stageOutputConsumers = GatherStageOutputConsumers(input);
 
     // rewrite only 1 (any of) multi-used connection at a time
     std::optional<TMultiUsedConnection> multiUsedConnection;
@@ -524,6 +541,14 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
                         return false;
                     }
                     auto output = connection.Output();
+                    const auto outputIndex = FromString<ui32>(output.Index().Value());
+                    const auto& equivalentOutputConsumers = stageOutputConsumers.at(output.Stage().Raw()).at(outputIndex);
+                    if (equivalentOutputConsumers.size() > 1) {
+                        // same stage output can be referenced by different TDqOutput nodes
+                        multiUsedConnection.emplace(connection, consumers);
+                        multiUsedConnection->Output.ConstructInPlace(output, equivalentOutputConsumers);
+                        return false;
+                    }
                     const auto& outputConsumers = GetConsumers(output, consumersMap);
                     if (outputConsumers.size() > 1) {
                         // connection has single consumer, but it's output has multiple ones

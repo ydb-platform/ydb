@@ -107,14 +107,14 @@ class LogbrokerFederation(object):
         return {name: f"localhost:{port}" for name, port in self.__cluster_ports.items()}
 
     def stop_cluster(self, name):
-        # Stop processes without releasing ports or deleting cluster data.
+        # Keep static nodes running to preserve in-memory storage.
         cluster = self.__clusters[name]
-        for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
+        for node in list(cluster.slots.values()):
             node.stop()
 
     def start_cluster(self, name):
         cluster = self.__clusters[name]
-        for node in list(cluster.nodes.values()) + list(cluster.slots.values()):
+        for node in list(cluster.slots.values()):
             node.start()
 
     @staticmethod

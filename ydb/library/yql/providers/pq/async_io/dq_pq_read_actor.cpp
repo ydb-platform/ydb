@@ -191,30 +191,34 @@ struct TEvPrivate {
 
 class TReadSessionRetryPolicy : public NYdb::NTopic::IRetryPolicy {
 public:
-    TReadSessionRetryPolicy(TPtr policy, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex)
+    TReadSessionRetryPolicy(TPtr policy, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex, bool isLogbrocker)
         : Policy(std::move(policy))
         , ActorSystem(actorSystem)
         , ActorId(actorId)
         , ClusterIndex(clusterIndex)
+        , IsLogbrocker(isLogbrocker)
     {}
 
     IRetryState::TPtr CreateRetryState() const override {
-        return std::make_unique<TRetryState>(Policy->CreateRetryState(), ActorSystem, ActorId, ClusterIndex);
+        return std::make_unique<TRetryState>(Policy->CreateRetryState(), ActorSystem, ActorId, ClusterIndex, IsLogbrocker);
     }
 
 private:
     class TRetryState : public IRetryState {
     public:
-        TRetryState(IRetryState::TPtr state, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex)
+        TRetryState(IRetryState::TPtr state, TActorSystem* actorSystem, TActorId actorId, ui32 clusterIndex, bool isLogbrocker)
             : State(std::move(state))
             , ActorSystem(actorSystem)
             , ActorId(actorId)
             , ClusterIndex(clusterIndex)
+            , IsLogbrocker(isLogbrocker)
         {}
 
         TMaybe<TDuration> GetNextRetryDelay(NYdb::EStatus status) override {
             const auto delay = State->GetNextRetryDelay(status);
-            ActorSystem->Send(ActorId, new TEvPrivate::TEvReadSessionRetry(ClusterIndex, status, ++CallNumber, delay));
+            if (IsLogbrocker) {
+                ActorSystem->Send(ActorId, new TEvPrivate::TEvReadSessionRetry(ClusterIndex, status, ++CallNumber, delay));
+            }
             return delay;
         }
 
@@ -224,12 +228,14 @@ private:
         const TActorId ActorId;
         const ui32 ClusterIndex;
         ui64 CallNumber = 0;
+        bool IsLogbrocker;
     };
 
     const TPtr Policy;
     TActorSystem* const ActorSystem;
     const TActorId ActorId;
     const ui32 ClusterIndex;
+    const bool IsLogbrocker;
 };
 
 } // anonymous namespace
@@ -273,6 +279,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
             AsyncInputDataRate = Task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = Task->GetCounter("ReconnectRate", true);
             DataRate = Task->GetCounter("DataRate", true);
+            AvaliableClusters = Source->GetCounter("AvaliableClusters");
             WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
@@ -292,6 +299,7 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
         ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AvaliableClusters;
         NMonitoring::THistogramPtr WaitEventTimeMs;
     };
 
@@ -311,7 +319,6 @@ class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInterna
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
-        // Availability is a heuristic: data received or no retry notifications for RetryMaxTime.
         bool Available = true;
         TInstant LastRetryTime;
         TDuration RetryMaxTime;
@@ -448,6 +455,7 @@ public:
         TDqPqReadActorBase::LoadState(state);
 
         Clusters.clear();
+        UpdateAvailableClustersMetric();
         AsyncInit = {};
         StartClusterDiscovery();
     }
@@ -563,12 +571,34 @@ private:
         hFunc(TEvents::TEvWakeup, Handle);
     )
 
+    void UpdateAvailableClustersMetric() {
+        Metrics.AvaliableClusters->Set(CountIf(Clusters, [](const TClusterState& cluster) {
+            return cluster.Available;
+        }));
+    }
+
     void Handle(TEvPrivate::TEvReadSessionRetry::TPtr& ev) {
         const auto& event = *ev->Get();
         if (event.ClusterIndex < Clusters.size()) {
             auto& cluster = Clusters[event.ClusterIndex];
             cluster.Available = false;
             cluster.LastRetryTime = TInstant::Now();
+            UpdateAvailableClustersMetric();
+            std::vector<std::string> unavailableClusters;
+            for (const auto& state : Clusters) {
+                if (!state.Available) {
+                    unavailableClusters.push_back(state.Info.Name);
+                }
+            }
+            if (unavailableClusters.size() >= 2) {
+                TStringBuilder message;
+                message << "Failed to read topic \"" << SourceParams.GetTopicPath()
+                    << "\": " << unavailableClusters.size() << " clusters are unavailable simultaneously: "
+                    << JoinSeq(", ", unavailableClusters);
+                SRC_LOG_E(message);
+                Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::UNAVAILABLE));
+                return;
+            }
             if (!ClusterAvailabilityCheckScheduled) {
                 ClusterAvailabilityCheckScheduled = true;
                 Schedule(cluster.RetryMaxTime, new TEvPrivate::TEvCheckClusterAvailability());
@@ -598,6 +628,7 @@ private:
                 nextCheckDelay = cluster.RetryMaxTime;
             }
         }
+        UpdateAvailableClustersMetric();
         if (nextCheckDelay) {
             ClusterAvailabilityCheckScheduled = true;
             Schedule(*nextCheckDelay, new TEvPrivate::TEvCheckClusterAvailability());
@@ -704,6 +735,7 @@ private:
                 }
             }
 
+            UpdateAvailableClustersMetric();
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
             SchedulePartitionCountTimer();
             return;
@@ -777,6 +809,7 @@ private:
 
             index++;
         }
+        UpdateAvailableClustersMetric();
     }
 
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
@@ -995,13 +1028,15 @@ private:
 
         }
 
+        const bool isLogbroker =  Clusters.size() > 2;
+
         clusterState.RetryMaxTime = TDuration::MilliSeconds(maxTimeMs);
         auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
             /* minDelay           */ TDuration::MilliSeconds(500),
             /* minLongRetryDelay  */ TDuration::Seconds(5),
             /* maxDelay           */ TDuration::Seconds(10),
             /* maxRetries         */ 100,
-            /* maxTime            */ Clusters.size() > 2 ? TDuration::Max() : clusterState.RetryMaxTime,
+            /* maxTime            */ isLogbroker ? TDuration::Max() : clusterState.RetryMaxTime,
             /* scaleFactor        */ 2.0,
             /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
@@ -1018,7 +1053,7 @@ private:
             .ReadFromTimestamp(StartingMessageTimestamp)
             .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets())     // In table mode the query will not fail query by TEndPartitionSessionEvent.
             .RetryPolicy(std::make_shared<TReadSessionRetryPolicy>(
-                std::move(retryPolicy), TActivationContext::ActorSystem(), SelfId(), clusterState.Index));
+                std::move(retryPolicy), TActivationContext::ActorSystem(), SelfId(), clusterState.Index, isLogbroker));
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -1214,7 +1249,10 @@ private:
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-            ClusterState.Available = true;
+            if (!ClusterState.Available) {
+                ClusterState.Available = true;
+                Self.UpdateAvailableClustersMetric();
+            }
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             auto& partitionInfo = Self.Partitions[partitionKey];
 

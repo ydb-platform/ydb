@@ -1,10 +1,11 @@
+import logging
 import time
 from contextlib import ExitStack
 from itertools import cycle
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, YdbClient, counter_nodes, get_sensors
 
 
 def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
@@ -95,6 +96,7 @@ class TestLogbroker(StreamingTestBase):
         cleanup.callback(kikimr.ydb_client.query, "DROP EXTERNAL DATA SOURCE `logbroker`;")
 
     def start_query(self, kikimr, cleanup):
+        logging.info("Starting streaming query %s", self.query_name)
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{self.query_name}` AS DO BEGIN
                 INSERT INTO `logbroker`.`{self.output_topic}`
@@ -102,7 +104,9 @@ class TestLogbroker(StreamingTestBase):
             END DO;
         """)
         cleanup.callback(kikimr.ydb_client.query, f"DROP STREAMING QUERY `{self.query_name}`;")
+        logging.info("Waiting for completed checkpoints for query %s", self.query_name)
         self.wait_completed_checkpoints(kikimr, self.query_name)
+        logging.info("Streaming query %s started and completed checkpoints", self.query_name)
 
     def test_read_write(self, kikimr, logbroker_federation):
         with ExitStack() as cleanup:
@@ -129,47 +133,92 @@ class TestLogbroker(StreamingTestBase):
                     actual.extend(self.logbrokers_client[cluster_name].topic_read(self.output_topic, self.consumer, count))
             assert sorted(actual) == sorted(messages), counts
 
+    def wait_available_clusters(self, kikimr, expected_count, timeout=120):
+        path = f"{kikimr.get_database_name()}/{self.query_name}"
+        logging.info("Waiting for query %s AvaliableClusters=%s", path, expected_count)
+        deadline = time.monotonic() + timeout
+        previous_values = None
+        while True:
+            values = {}
+            for node_id in counter_nodes(kikimr.cluster):
+                value = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor({
+                    "subsystem": "DqSourceTracker",
+                    "source": "PqRead",
+                    "tx_id": path,
+                    "sensor": "AvaliableClusters",
+                })
+                if value is not None:
+                    values[node_id] = value
+            if values != previous_values:
+                logging.info("Query %s AvaliableClusters per node: %s", path, values)
+                previous_values = values
+            if values and all(value == expected_count for value in values.values()):
+                logging.info("Query %s reached AvaliableClusters=%s", path, expected_count)
+                return
+            assert time.monotonic() < deadline, (
+                f"Expected AvaliableClusters={expected_count}; per-node values: {values}"
+            )
+            time.sleep(1)
+
     def test_stop_cluster(self, kikimr, logbroker_federation):
         with ExitStack() as cleanup:
             self.init(kikimr, logbroker_federation, cleanup, query_name="stop_cluster")
             self.start_query(kikimr, cleanup)
+            self.wait_available_clusters(kikimr, 3)
 
-            path = f"{kikimr.get_database_name()}/{self.query_name}"
-
-            def get_query_state():
-                result_sets = kikimr.ydb_client.query(f"""
-                    SELECT Status, RetryCount, Issues
-                    FROM `.sys/streaming_queries`
-                    WHERE Path = "{path}";
-                """, timeout=10)
-                assert len(result_sets) == 1, result_sets
-                assert len(result_sets[0].rows) == 1, result_sets[0].rows
-                return result_sets[0].rows[0]
-
-            initial_state = get_query_state()
+            initial_state = self.get_query_state(kikimr, self.query_name)
             assert initial_state.Status == "RUNNING", initial_state
             retry_count = initial_state.RetryCount
+            logging.info("Query %s initial status=%s, RetryCount=%s", self.query_name, initial_state.Status, retry_count)
 
             cluster_names = list(logbroker_federation.ydb_cluster_endpoints)
             assert len(cluster_names) == 3, cluster_names
-            # The first cluster hosts CM metadata; stop a data cluster instead.
-            stopped_cluster = cluster_names[-1]
-            cleanup.callback(logbroker_federation.start_cluster, stopped_cluster)
-            logbroker_federation.stop_cluster(stopped_cluster)
+            cluster2 = cluster_names[-2]
+            logging.info("Stopping cluster %s", cluster2)
+            logbroker_federation.stop_cluster(cluster2)
+            logging.info("Cluster %s stopped; checking that query %s stays running without retries for 20 seconds", cluster2, self.query_name)
 
             deadline = time.monotonic() + 20
             while True:
-                state = get_query_state()
+                state = self.get_query_state(kikimr, self.query_name)
                 assert state.RetryCount == retry_count, (
-                    f"Query retried after stopping {stopped_cluster}: "
+                    f"Query retried after stopping {cluster2}: "
                     f"RetryCount {retry_count} -> {state.RetryCount}; issues: {state.Issues}"
                 )
                 assert state.Status == "RUNNING", (
-                    f"Query stopped running after stopping {stopped_cluster}: "
+                    f"Query stopped running after stopping {cluster2}: "
                     f"status: {state.Status}; issues: {state.Issues}"
                 )
                 if time.monotonic() >= deadline:
                     break
                 time.sleep(1)
-            logbroker_federation.start_cluster(stopped_cluster)
-            time.sleep(30)
+
+            self.wait_available_clusters(kikimr, 2)
+            logging.info("Starting cluster %s", cluster2)
+            logbroker_federation.start_cluster(cluster2)
+            logging.info("Cluster %s started; waiting for availability to recover", cluster2)
+            self.wait_available_clusters(kikimr, 3)
+            cleanup.callback(logbroker_federation.start_cluster, cluster2)
+            logging.info("Stopping cluster %s again", cluster2)
+            logbroker_federation.stop_cluster(cluster2)
+            logging.info("Cluster %s stopped", cluster2)
+
+            cluster3 = cluster_names[-1]
+            cleanup.callback(logbroker_federation.start_cluster, cluster3)
+            logging.info("Stopping cluster %s while cluster %s is already stopped", cluster3, cluster2)
+            logbroker_federation.stop_cluster(cluster3)
+            logging.info("Cluster %s stopped; waiting for query %s to retry", cluster3, self.query_name)
+
+            deadline = time.monotonic() + 120
+            while True:
+                state = self.get_query_state(kikimr, self.query_name)
+                logging.debug("Query %s status=%s, RetryCount=%s, issues=%s", self.query_name, state.Status, state.RetryCount, state.Issues)
+                if state.RetryCount > retry_count:
+                    logging.info("Query %s retried: RetryCount %s -> %s; issues=%s", self.query_name, retry_count, state.RetryCount, state.Issues)
+                    break
+                assert time.monotonic() < deadline, (
+                    f"Query did not retry after stopping {cluster3} with {cluster2} already stopped: "
+                    f"RetryCount {retry_count} -> {state.RetryCount}; "
+                    f"status: {state.Status}; issues: {state.Issues}"
+                )
+                time.sleep(1)

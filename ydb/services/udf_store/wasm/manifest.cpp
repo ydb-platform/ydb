@@ -19,6 +19,10 @@ namespace NKikimr::NUdfStore::NWasm {
 namespace {
 
 constexpr ui32 MaxManifestTypeDepth = 32;
+// Keep malformed input from making the recursive YQL parser recurse too deeply.
+// This is deliberately much larger than the semantic type depth: parentheses
+// used by callables and Decimal parameters do not contribute to this limit.
+constexpr ui32 MaxManifestLexicalNesting = 256;
 
 using namespace NYql;
 
@@ -33,6 +37,28 @@ struct TParsedType {
     TWasmTypeNodePtr Node;
     const TTypeAnnotationNode* Annotation;
 };
+
+void ValidateTypeLexicalNesting(TStringBuf type) {
+    ui32 nesting = 0;
+    bool quoted = false;
+    for (size_t i = 0; i < type.size(); ++i) {
+        const char c = type[i];
+        if (quoted) {
+            if (c == '\\' && i + 1 < type.size()) {
+                ++i;
+            } else if (c == '\'') {
+                quoted = false;
+            }
+        } else if (c == '\'') {
+            quoted = true;
+        } else if (c == '<') {
+            Y_ENSURE(++nesting <= MaxManifestLexicalNesting,
+                "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
+        } else if (c == '>' && nesting) {
+            --nesting;
+        }
+    }
+}
 
 TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) {
     Y_ENSURE(depth <= MaxManifestTypeDepth, "Type nesting exceeds 32 levels");
@@ -147,6 +173,7 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
 TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& value, TStringBuf where) {
     try {
         Y_ENSURE(value.IsString() && !Strip(value.GetString()).empty(), "Expected a non-empty YQL type string");
+        ValidateTypeLexicalNesting(value.GetString());
         TMemoryPool pool(4096);
         TIssues issues;
         auto* ast = NYql::ParseType(value.GetString(), pool, issues, {1, 1});

@@ -50,6 +50,8 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
         UNIT_ASSERT(Type("Tuple<String, Int64>")->Members[0].Type->Leaf == EUdfValueType::String);
         UNIT_ASSERT(Type("Struct<>")->Members.empty());
         UNIT_ASSERT_VALUES_EQUAL(Type("Resource<'a b'>")->Tag, "a b");
+        UNIT_ASSERT_VALUES_EQUAL(Type("Resource<'a\\'<>b'>")->Tag, "a'<>b");
+        UNIT_ASSERT(Type("Struct<'a<>': Optional<List<Int64>>>")->Members[0].Type->Kind == TWasmTypeNode::EKind::Optional);
         const auto callable = Type("(String, Int64?)->Bool");
         UNIT_ASSERT(callable->Kind == TWasmTypeNode::EKind::Callable);
         UNIT_ASSERT_VALUES_EQUAL(callable->Members.size(), 2);
@@ -94,6 +96,9 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
         UNIT_ASSERT(Type("Int64" + TString(32, '?')));
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("Int64" + TString(33, '?')), yexception, "Type nesting exceeds");
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("(" + nested + ")->Int64"), yexception, "Type nesting exceeds");
+        TString hostile;
+        for (size_t i = 0; i < 10000; ++i) { hostile += "List<"; }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Type(hostile), yexception, "Type lexical nesting exceeds");
     }
     Y_UNIT_TEST(ErrorsNameFunctionFieldAndPosition) {
         const TString manifest = R"({"module_type":"module","module_kind":"wasm","module_name":"Test",

@@ -76,8 +76,8 @@ Knn::FloatFromBinaryString(String{Flags:AutoMap})->List<Float>?
   `1` — `Float` (4 байта на элемент);  
   `2` — `Uint8` (1 байт на элемент);
   `3` — `Int8` (1 байт на элемент);
-  `4` — `Float16` (2 байта на элемент, IEEE-754 binary16);
-  `5` — `BFloat16` (2 байта на элемент, bfloat16);
+  `4` — `Float16` (2 байта на элемент, [IEEE-754 binary16](https://en.wikipedia.org/wiki/Half-precision_floating-point_format));
+  `5` — `BFloat16` (2 байта на элемент, [bfloat16](https://en.wikipedia.org/wiki/Bfloat16_floating-point_format));
   `10` — `Bit` (1 бит на элемент).  
 
 Например, вектор из 5 элементов типа `Float` сериализуется в строку длиной 21 байт: 4 байта × 5 элементов (основная часть) + 1 байт (тип) = 21 байт.

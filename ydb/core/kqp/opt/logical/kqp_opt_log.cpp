@@ -297,7 +297,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, true);
+        TExprBase output = DqExpandWindowFunctions(node, ctx, TypesCtx, !KqpCtx.Config->GetWindowFunctionsV2());
         DumpAppliedRule("ExpandWindowFunctions", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

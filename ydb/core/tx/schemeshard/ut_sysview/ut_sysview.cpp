@@ -34,6 +34,25 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
+    Y_UNIT_TEST(RejectUnknownSysViewType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        for (bool hasUnknownField : {false, true}) {
+            THolder<TEvTx> request(CreateSysViewRequest(++txId, "/MyRoot/.sys", R"(
+                Name: "future_view"
+            )"));
+            auto* view = request->Record.MutableTransaction(0)->MutableCreateSysView();
+            if (hasUnknownField) {
+                view->GetReflection()->MutableUnknownFields(view)->AddVarint(
+                    NKikimrSchemeOp::TSysViewDescription::kTypeFieldNumber, 1000000);
+            }
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request.Release());
+            TestModificationResults(runtime, txId, {{EStatus::StatusSchemeError}});
+            TestLs(runtime, "/MyRoot/.sys/future_view", false, NLs::PathNotExist);
+        }
+    }
+
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -355,6 +374,60 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
             ExpectEqualSysViewDescription(describeResult, "query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute,
                                           describedPathId);
         }
+    }
+
+    Y_UNIT_TEST(PreserveUnknownSysViewType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        const TString path = "/MyRoot/.sys/partition_stats";
+        const auto original = DescribePath(runtime, path);
+        const auto pathId = original.GetPathDescription().GetSelf().GetPathId();
+        constexpr ui32 futureType = 1000000;
+        UNIT_ASSERT(!NKikimrSysView::ESysViewType_IsValid(futureType));
+
+        auto writeType = [&](ui32 type) {
+            const TString query = Sprintf(R"((
+                (let key '('('PathId (Uint64 '%lu))))
+                (let row '('('SysViewType (Uint32 '%u))))
+                (return (AsList (UpdateRow 'SysView key row)))
+            ))", pathId, type);
+            NKikimrMiniKQL::TResult result;
+            TString error;
+            const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, query, result, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+        };
+
+        // Emulate a view persisted by a newer binary, then boot the older reader.
+        writeType(futureType);
+        for (ui64 txId : {100, 101}) {
+            // Force a roster update and wait for its completion before asserting
+            // that the unknown view was not classified as obsolete and deleted.
+            TestDropSysView(runtime, txId, "/MyRoot/.sys", "ds_pdisks");
+            env.TestWaitNotification(runtime, txId);
+            env.AddSysViewsRosterUpdateObserver(runtime);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            env.WaitForSysViewsRosterUpdate(runtime);
+
+            const auto description = DescribePath(runtime, path);
+            TestDescribeResult(description, {NLs::Finished, NLs::IsSysView});
+            const auto& self = description.GetPathDescription().GetSelf();
+            UNIT_ASSERT_VALUES_EQUAL(self.GetPathId(), pathId);
+            UNIT_ASSERT_VALUES_EQUAL(self.GetACL(), original.GetPathDescription().GetSelf().GetACL());
+            const auto& view = description.GetPathDescription().GetSysViewDescription();
+            UNIT_ASSERT(!view.HasType());
+            const auto& unknown = view.GetReflection()->GetUnknownFields(view);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field(0).number(), static_cast<int>(NKikimrSchemeOp::TSysViewDescription::kTypeFieldNumber));
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field(0).varint(), futureType);
+        }
+
+        // Emulate returning to a binary that understands this stored view.
+        writeType(ESysViewType::EPartitionStats);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto restored = DescribePath(runtime, path);
+        TestDescribeResult(restored, {NLs::Finished, NLs::IsSysView});
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetPathDescription().GetSelf().GetPathId(), pathId);
+        UNIT_ASSERT(restored.GetPathDescription().GetSysViewDescription().GetType() == ESysViewType::EPartitionStats);
     }
 
     Y_UNIT_TEST(RestoreAbsentSysViews) {

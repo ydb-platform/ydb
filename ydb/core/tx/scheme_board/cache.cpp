@@ -925,6 +925,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+            if (!pathDesc.GetSysViewDescription().HasType()) {
+                // Unknown proto2 enum values are retained as unknown fields;
+                // GetType() alone would incorrectly return EPartitionStats.
+                return;
+            }
             if (auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
                 Columns = std::move(schema->Columns);
                 KeyColumnTypes = std::move(schema->KeyColumnTypes);
@@ -1980,7 +1985,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             if (isSysView && !Columns) {
-                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+                // The materialized path exists but this binary cannot interpret
+                // it. PathErrorUnknown would enable virtual-sysview fallback and
+                // could substitute a different schema based only on the name.
+                return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
 
             if (!entry.ShowPrivatePath && IsPrivatePath) {
@@ -2255,6 +2263,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             const bool isSysView = Kind == TNavigate::KindSysView;
+            if (isSysView && !Columns) {
+                return SetError(context, entry, TResolve::EStatus::PathErrorUnknown, TKeyDesc::EStatus::NotExists);
+            }
             if (keyDesc.GetPartitions().empty() && !isSysView) {
                 entry.Status = TResolve::EStatus::TypeCheckError;
                 keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;

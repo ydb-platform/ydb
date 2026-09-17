@@ -475,16 +475,6 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     }
 
     auto finished = data.Finished;
-    if (finished && EarlyFinished.load() && Storage) {
-        // The peer reads no more: the data in the storage is never wanted and must not hold back the
-        // control chunks behind it - the checkpoints, and the finish the peer waits for to let the
-        // channel go, this one or the one of the producer already in the storage.
-        std::lock_guard lock(FlowControlMutex);
-        DropSpilledData();
-        DrainLoadingQueue(nodeState, self);
-        ReloadSpilled(nodeState, self);
-    }
-
     if (FinishPushed.load() && !data.ConfirmFinish &&
         !data.Checkpoint // Checkpoint traffic should be handled after finish
     ) {
@@ -545,6 +535,20 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
 
     if (!spilled) {
         nodeState->PushDataChunk(std::move(data), self);
+    }
+}
+
+// The peer reads no more: the data in the storage is never wanted and must not hold back the control
+// chunks behind it - the checkpoints, and the finish the peer waits for to let the channel go. The flag
+// and the drop go together under FlowControlMutex: ReloadSpilled reads the flag as leave to pass the
+// window, and a wake-up of the storage in between would reload the whole backlog
+void TOutputDescriptor::HandleEarlyFinish(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    std::lock_guard lock(FlowControlMutex);
+    EarlyFinished.store(true);
+    if (Storage) {
+        DropSpilledData();
+        DrainLoadingQueue(nodeState, self);
+        ReloadSpilled(nodeState, self);
     }
 }
 
@@ -775,7 +779,7 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
         // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
         UpdateMemoryPressure(memoryPressure, nodeState);
         if (earlyFinish) {
-            EarlyFinished.store(true);
+            HandleEarlyFinish(nodeState, self);
             PushDataChunk(TDataChunk(true), nodeState, self);
         }
         if (popBytes) {

@@ -3617,16 +3617,20 @@ void TPersQueue::SendReadyPlanStepAcks(const TActorContext& ctx)
 
 void TPersQueue::MarkPlanStepAcksReadyForTx(ui64 txId)
 {
-    // Full scan, no early exit: matches are not a prefix (unknown and other
-    // knowns interleave; several senders/retransmits share LastTxId). Must mark
-    // every WaitTxExecuted with this TxId — after EXECUTED the tx leaves Txs
-    // and there is no second notification.
-    for (auto& entry : PlanStepAckQueue) {
-        if (entry.State == TPlanStepAckEntry::EState::WaitTxExecuted &&
-            entry.LastTxId.Defined() && *entry.LastTxId == txId) {
-            entry.State = TPlanStepAckEntry::EState::Ready;
-        }
+    // Matches are not a prefix (unknown and other knowns interleave; several
+    // senders/retransmits share LastTxId). After EXECUTED the tx leaves Txs
+    // and there is no second notification, so mark every waiter now.
+    auto it = PlanStepAckByTxId.find(txId);
+    if (it == PlanStepAckByTxId.end()) {
+        return;
     }
+    for (TPlanStepAckEntry* entry : it->second) {
+        PQ_ENSURE(entry);
+        PQ_ENSURE(entry->State == TPlanStepAckEntry::EState::WaitTxExecuted);
+        PQ_ENSURE(entry->LastTxId.Defined() && *entry->LastTxId == txId);
+        entry->State = TPlanStepAckEntry::EState::Ready;
+    }
+    PlanStepAckByTxId.erase(it);
 }
 
 bool TPersQueue::HasWaitWriteTxPlanStepAck() const
@@ -3999,6 +4003,9 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             .State = state,
             .LastTxId = lastPlannedTxId,
         });
+        if (state == TPlanStepAckEntry::EState::WaitTxExecuted) {
+            PlanStepAckByTxId[*lastPlannedTxId].push_back(&PlanStepAckQueue.back());
+        }
         SendReadyPlanStepAcks(ctx);
     } else {
         // All-unknown: WaitWriteTx. Piggyback on the in-flight WRITE_TX if any,

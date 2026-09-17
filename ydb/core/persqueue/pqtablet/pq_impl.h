@@ -649,7 +649,7 @@ private:
     // EState is one phase per entry (not independent Ready/FenceInFlight flags):
     //
     //   WaitTxExecuted — known LastTxId, not yet EXECUTED.
-    //       CheckTxState(EXECUTED of LastTxId) → Ready.
+    //       CheckTxState(EXECUTED of LastTxId) → Ready via PlanStepAckByTxId.
     //       Already EXECUTED at enqueue → Ready immediately.
     //   WaitWriteTx — all-unknown (incl. empty Transactions). Does not advance
     //       PlanStep/PlanTxId. Leadership fence: a WRITE_TX of current _txinfo
@@ -688,6 +688,10 @@ private:
         ui64 EnqueuedAtFenceEpoch = 0;
     };
     TDeque<TPlanStepAckEntry> PlanStepAckQueue;
+    // WaitTxExecuted entries by LastTxId. Pointers into PlanStepAckQueue (stable
+    // under push_back / pop_front of other elements). Cleared at EXECUTED
+    // before those entries are sent and popped — not deque iterators.
+    THashMap<ui64, TVector<TPlanStepAckEntry*>> PlanStepAckByTxId;
 
     // Successful WRITE_TX cycles in this incarnation. Not persisted.
     ui64 WriteTxFenceEpoch = 0;

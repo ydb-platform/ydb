@@ -695,9 +695,9 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     }
 
     TIncrementalRestoreState state;
-    if (const auto* admitted = IncrementalRestoreStates.FindPtr(ui64(operationId.GetTxId())); admitted && admitted->Uid) {
+    if (const auto* admitted = IncrementalRestoreStates.FindPtr(ui64(operationId.GetTxId()))) {
         if (!admitted->AwaitingInitialRestore) {
-            return; // A duplicate activation must not reset an existing UID's progress.
+            return; // A duplicate activation must not reset an existing restore's progress.
         }
         state.Uid = admitted->Uid;
         state.OriginalDdl = admitted->OriginalDdl;

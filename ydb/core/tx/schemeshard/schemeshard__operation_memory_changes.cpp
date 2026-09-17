@@ -157,6 +157,7 @@ void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
     Y_ABORT_UNLESS(!ss->LongIncrementalRestoreOps.contains(opId));
+    Y_ABORT_UNLESS(!ss->IncrementalRestoreStates.contains(ui64(opId.GetTxId())));
     LongIncrementalRestoreOps.emplace(opId, std::nullopt);
 }
 
@@ -381,6 +382,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->LongIncrementalRestoreOps[id] = elem.value();
         } else {
             ss->LongIncrementalRestoreOps.erase(id);
+            ss->IncrementalRestoreStates.erase(ui64(id.GetTxId()));
         }
         LongIncrementalRestoreOps.pop();
     }
@@ -397,9 +399,6 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (SchemeOperationUidKeys) {
         const auto& key = SchemeOperationUidKeys.top();
-        if (key.first == EOperationUidKind::Restore) {
-            ss->IncrementalRestoreStates.erase(ss->OperationsByUid.at(key));
-        }
         ss->OperationsByUid.erase(key);
         SchemeOperationUidKeys.pop();
     }

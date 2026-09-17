@@ -2277,18 +2277,18 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         const ui64 startTxId = txId;
         TestModificationResult(runtime, startTxId, NKikimrScheme::StatusAccepted);
 
-        // Wait until the restore appears in the registry.
+        // Admission is visible before scanning starts; wait for the retry stage.
         TInstant deadline = runtime.GetCurrentTime() + TDuration::Seconds(60);
         ui64 restoreId = 0;
         while (runtime.GetCurrentTime() < deadline) {
             auto list = TestListBackupCollectionRestores(runtime, "/MyRoot");
-            if (!list.GetEntries().empty()) {
+            if (!list.GetEntries().empty() && failuresInjected.load() > 0) {
                 restoreId = list.GetEntries().rbegin()->GetId();
                 break;
             }
             env.SimulateSleep(runtime, TDuration::MilliSeconds(200));
         }
-        UNIT_ASSERT_C(restoreId != 0, "Restore did not register within timeout");
+        UNIT_ASSERT_C(restoreId != 0, "Restore did not reach incremental scanning within timeout");
 
         // While the orchestrator is still in Running with the long op active,
         // Forget must be denied.

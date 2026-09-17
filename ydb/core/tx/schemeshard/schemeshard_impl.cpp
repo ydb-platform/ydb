@@ -5291,6 +5291,15 @@ void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NK
         .Key(op.GetTxId())
         .Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
+
+    const auto& state = IncrementalRestoreStates.at(op.GetTxId());
+    using T = Schema::IncrementalRestoreState;
+    db.Table<T>().Key(op.GetTxId()).Update(
+        NIceDb::TUpdate<T::BackupCollectionPathOwnerId>(state.BackupCollectionPathId.OwnerId),
+        NIceDb::TUpdate<T::BackupCollectionPathId>(state.BackupCollectionPathId.LocalPathId),
+        NIceDb::TUpdate<T::State>(static_cast<ui32>(state.State)),
+        NIceDb::TUpdate<T::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
+        NIceDb::TUpdate<T::AwaitingInitialRestore>(state.AwaitingInitialRestore));
 }
 
 TTabletId TSchemeShard::GetGlobalHive() const {

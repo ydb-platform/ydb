@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             const TString encoded = EncodeLengths(values);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui8>(encoded[0]), width);
             UNIT_ASSERT_VALUES_EQUAL(encoded.size(), 1u + width * values.size());
-            const TVector<ui8> encodedBytes(encoded.begin(), encoded.end());
+            const TConstArrayRef<ui8> encodedBytes(reinterpret_cast<const ui8*>(encoded.data()), encoded.size());
             const TVector<ui32> decoded = DecodeLengths(encodedBytes, values.size());
             UNIT_ASSERT_VALUES_EQUAL(decoded.size(), values.size());
             for (size_t i = 0; i < values.size(); ++i) {
@@ -172,6 +172,22 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         const std::vector<std::optional<ui8>> indexes = { 2, std::nullopt, 0, 3, std::nullopt, 1 };
         for (const auto& codec : { ZstdCodec(), RawCodec() }) {
             CheckIndicesRoundTrip(indexes, codec);
+        }
+    }
+
+    Y_UNIT_TEST(WideIndicesWithoutNullsRoundTrip) {
+        arrow::UInt16Builder builder;
+        UNIT_ASSERT(builder.Append(257).ok());
+        UNIT_ASSERT(builder.Append(1).ok());
+        UNIT_ASSERT(builder.Append(42).ok());
+        std::shared_ptr<arrow::UInt16Array> positions;
+        UNIT_ASSERT(builder.Finish(&positions).ok());
+        const auto indexType = std::make_shared<arrow::UInt16Type>();
+        for (const auto& codec : { ZstdCodec(), RawCodec() }) {
+            const TString blob = SerializeIndices(positions, indexType, codec);
+            const auto restored = DeserializeIndices(blob, positions->length(), indexType, codec);
+            UNIT_ASSERT(restored->Equals(*positions));
+            UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(restored->data()->buffers[1]->data()) % alignof(ui16), 0u);
         }
     }
 

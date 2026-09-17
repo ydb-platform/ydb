@@ -227,7 +227,15 @@ std::shared_ptr<arrow::Buffer> DecodeDenseValues(
     const std::shared_ptr<arrow::Buffer>& raw, const TParsedPrefix& prefix, const ui32 recordsCount, const ui32 width) {
     const TStringBuf encoded(reinterpret_cast<const char*>(raw->data()) + prefix.Position, raw->size() - prefix.Position);
     if (!prefix.NullBitmap) {
-        return arrow::SliceBuffer(raw, prefix.Position, encoded.size());
+        if (width == sizeof(ui8)) {
+            return arrow::SliceBuffer(raw, prefix.Position, encoded.size());
+        }
+        // Wider index values require proper alignment, so copy to arrow-allocated buffer.
+        auto values = TStatusValidator::GetValid(arrow::AllocateBuffer(encoded.size()));
+        if (encoded.size()) {
+            memcpy(values->mutable_data(), encoded.data(), encoded.size());
+        }
+        return values;
     }
     const size_t valuesSize = static_cast<size_t>(recordsCount) * width;
     auto values = TStatusValidator::GetValid(arrow::AllocateBuffer(valuesSize));
@@ -297,9 +305,9 @@ TString SerializeBinaryLikeArray(const arrow::BinaryArray& array, const std::sha
     const i64 valuesLength = array.total_values_length();
     AFL_VERIFY(presentValuesLength <= valuesLength)("present", presentValuesLength)("total", valuesLength);
     TString values;
-    TStringBuf valuesData;
-    // Arrow does not guarantee that values are stored contiguously, but it should be so in case of using ArrayBuilder.
-    // Check this by comparing sum of individual lengths with total length.
+    TStringBuf valuesData(values);
+    // Null entries may have physical bytes in buffer. Borrow the values range only when it does not have any.
+    // Check this by comparing sum of individual non-null  lengths with total length.
     if (presentValuesLength == valuesLength) {
         if (valuesLength) {
             const auto valueData = array.value_data();

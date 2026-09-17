@@ -1223,9 +1223,12 @@ private:
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
         const auto err = ev->Get()->NotDelivered ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNDETERMINED;
+        const auto errorMessage = ev->Get()->NotDelivered
+            ? Sprintf("Failed to deliver request to shard %" PRIu64, ev->Get()->TabletId)
+            : Sprintf("Request state is unknown after losing connection to shard %" PRIu64, ev->Get()->TabletId);
 
         SetError(TUploadStatus(err, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
-            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
+            errorMessage));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);

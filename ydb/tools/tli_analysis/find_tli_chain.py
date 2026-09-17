@@ -346,7 +346,7 @@ def main():
         # Keep the line with the most queries in BreakerQueryTexts (prefer Commit over deferred)
         if ("had broken other locks" in line) and ("component=SessionActor" in line):
             bid = extract_breaker_tx_id(line)
-            if bid==breaker_id:
+            if bid == breaker_id:
                 line_query_id = extract_field(line, "querySpanId")
                 line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
                 if line_query_id and line_query_text:

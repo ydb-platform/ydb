@@ -775,6 +775,17 @@ void TOutputDescriptor::UpdateMemoryPressure(bool memoryPressure, TNodeState* no
 }
 
 void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
+    // The receiver reports Finishing with every pop after the finish chunk, the confirmation goes once -
+    // and before Finished is set, here or by the flush of UpdatePopBytes: the output actor it wakes up
+    // sees the channel complete, the confirmation counted with the rest
+    if (finishing && !ConfirmFinishSent.exchange(true)) {
+        TDataChunk data;
+        data.ConfirmFinish = true;
+        PushDataChunk(std::move(data), nodeState, self);
+        LOG_T(nodeState->LogPrefix << "SEND CONFIRM, ChannelId=" << Info.ChannelId
+            << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
+            << ", EarlyFinished=" << EarlyFinished.load());
+    }
     if (!IsTerminatedOrAborted()) {
         // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
         UpdateMemoryPressure(memoryPressure, nodeState);
@@ -789,16 +800,6 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
     if (finishing) {
         Finished.store(true);
         ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
-        // the receiver reports Finishing with every pop after the finish chunk, the confirmation goes once
-        if (!ConfirmFinishSent.exchange(true)) {
-            TDataChunk data;
-            data.ConfirmFinish = true;
-            PushDataChunk(std::move(data), nodeState, self);
-            LOG_T(nodeState->LogPrefix << "SEND CONFIRM, ChannelId=" << Info.ChannelId
-                << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
-                << ", EarlyFinished=" << EarlyFinished.load()
-                << ", Finished=" << Finished.load());
-        }
     }
 }
 

@@ -138,6 +138,9 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("fnx Bool"));
         UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
+        UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("CREATE TABLE IF NOT EXISTS"));
+        UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains(versions));
+        UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("version Int64"));
         UNIT_ASSERT(MakeBackfillFnxQuery(cluster).Contains("fnx IS NULL"));
     }
 
@@ -165,7 +168,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
 
         UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Versions`"));
         UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
-        UNIT_ASSERT(!IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Member not found: fnx"));
     }

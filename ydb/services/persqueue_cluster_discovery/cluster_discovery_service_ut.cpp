@@ -833,7 +833,9 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         for (size_t i = 0; i < 40; ++i) {
             auto clusterTable = server.PQClient().TryRunYqlDataQuery(
                 "SELECT name, balancer, local, enabled, weight, fnx FROM `/Root/PQ/Config/V2/Cluster`;");
-            if (clusterTable.Defined()) {
+            auto versionsTable = server.PQClient().TryRunYqlDataQuery(
+                "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
+            if (clusterTable.Defined() && versionsTable.Defined()) {
                 UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
 
                 server.PQClient().InitDCs();
@@ -848,7 +850,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             }
             Sleep(TDuration::MilliSeconds(100));
         }
-        UNIT_FAIL("Cluster table was not created");
+        UNIT_FAIL("Cluster or Versions table was not created");
     }
 
     Y_UNIT_TEST(TestTrackerMigratesOldClusterSchema) {
@@ -1166,6 +1168,29 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             Sleep(TDuration::MilliSeconds(100));
         }
         UNIT_FAIL("Cluster table was not recreated after DROP TABLE");
+    }
+
+    Y_UNIT_TEST(TestDroppedVersionsTableIsRecreated) {
+        TPQCDServer server;
+        server.SetNetDataViaFile("::1/128\tdc1");
+        server.Run();
+
+        server.PQClient().InitRoot();
+        server.PQClient().InitDCs();
+        server.WaitUntilHealthy();
+
+        server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Versions`;");
+
+        for (size_t i = 0; i < 40; ++i) {
+            auto versionsTable = server.PQClient().TryRunYqlDataQuery(
+                "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
+            if (versionsTable.Defined()) {
+                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Versions table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestAllFnxClustersHiddenWithoutBalancer) {

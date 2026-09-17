@@ -19,6 +19,7 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath);
 TString MakeAlterAddFnxQuery(TStringBuf clusterTablePath);
 TString MakeCreateBalancerQuery(TStringBuf balancerTablePath);
+TString MakeCreateVersionsQuery(TStringBuf versionTablePath);
 TString MakeBackfillFnxQuery(TStringBuf clusterTablePath);
 
 bool IssuesLookLikeAlreadyExists(TStringBuf issues);

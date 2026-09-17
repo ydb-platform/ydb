@@ -40,6 +40,7 @@ private:
         MigrateCreateCluster,
         MigrateAddFnx,
         MigrateCreateBalancer,
+        MigrateCreateVersions,
         MigrateBackfillFnx,
         ListClusters,
         ListBalancers,
@@ -258,6 +259,18 @@ private:
             case EQueryKind::MigrateCreateBalancer:
                 if (!SchemaChangeOk(success, issues)) {
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to CREATE TABLE Balancer",
+                        {"record", record});
+                    FailAndRetry();
+                    return;
+                }
+                QueryInFlight = true;
+                CurrentQuery = EQueryKind::MigrateCreateVersions;
+                SendDdl(MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                return;
+
+            case EQueryKind::MigrateCreateVersions:
+                if (!SchemaChangeOk(success, issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to CREATE TABLE Versions",
                         {"record", record});
                     FailAndRetry();
                     return;

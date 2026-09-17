@@ -149,6 +149,18 @@ TString MakeCreateBalancerQuery(TStringBuf balancerTablePath) {
             )", TString(balancerTablePath).c_str());
 }
 
+TString MakeCreateVersionsQuery(TStringBuf versionTablePath) {
+    return Sprintf(
+        R"(
+               --!syntax_v1
+               CREATE TABLE IF NOT EXISTS `%s` (
+                   name Utf8,
+                   version Int64,
+                   PRIMARY KEY (name)
+               );
+            )", TString(versionTablePath).c_str());
+}
+
 TString MakeBackfillFnxQuery(TStringBuf clusterTablePath) {
     return Sprintf(
         R"(
@@ -184,9 +196,6 @@ bool IssuesLookLikeMissingVersionsTable(TStringBuf issues) {
 }
 
 bool IssuesLookLikeClusterSchemaGone(TStringBuf issues) {
-    if (IssuesLookLikeMissingVersionsTable(issues)) {
-        return false;
-    }
     return IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues);
 }
 

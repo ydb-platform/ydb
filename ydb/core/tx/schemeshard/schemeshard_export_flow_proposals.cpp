@@ -306,8 +306,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
-            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql && item.ParentIdx == Max<ui32>());
-
             auto& backupSettings = *task.MutableS3Settings();
             backupSettings.SetEndpoint(exportSettings.endpoint());
             backupSettings.SetBucket(exportSettings.bucket());
@@ -355,9 +353,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
-            if (task.GetEnableTableBackupAsSql()) {
-                backupSettings.SetSourceTablePath(item.SourcePathName);
-            }
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }
@@ -368,8 +363,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
             task.SetNumberOfRetries(exportSettings.number_of_retries());
-            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql && item.ParentIdx == Max<ui32>());
-
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
@@ -382,9 +375,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
-            if (task.GetEnableTableBackupAsSql()) {
-                backupSettings.SetSourceTablePath(item.SourcePathName);
-            }
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }

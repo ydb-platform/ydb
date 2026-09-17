@@ -148,8 +148,11 @@ private:
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     bool IsIndexImplTable = false;
     THashSet<TTabletId> ShardRepliesLeft;
+    // Unlike ShardRepliesLeft, excludes shards waiting for TEvOverloadReady
+    // after a response that guarantees the write was rejected.
+    THashSet<TTabletId> PendingWriteShards;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
-    TUploadStatus Status;
+    bool MayHaveWrittenRows = false;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
@@ -223,7 +226,6 @@ public:
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
-        , Status(Ydb::StatusIds::SUCCESS)
         , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Rows(std::move(rows))
@@ -1116,7 +1118,7 @@ private:
         if (Rows->empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
-            return ReplyIfDone(ctx);
+            return RetryOrReplySuccessIfDone(ctx);
         }
 
         Y_ABORT_UNLESS(ResolveNamesResult);
@@ -1212,7 +1214,8 @@ private:
         ev->Record.SetOverloadSubscribe(seqNo);
         state->SentOverloadSeqNo = seqNo;
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
+        PendingWriteShards.insert(shardId);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, shardId, Span.GetTraceId());
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
@@ -1305,7 +1308,8 @@ private:
             ev->Record.SetOverloadSubscribe(seqNo);
             uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
 
-            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
+            PendingWriteShards.insert(shardId);
+            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery, shardId, Span.GetTraceId());
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
@@ -1323,16 +1327,30 @@ private:
             {"shards", shardRequestCount});
 
         // Sanity check: don't break when we don't have any shards for some reason
-        return ReplyIfDone(ctx);
+        return RetryOrReplySuccessIfDone(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
+        if (ev->Get()->SourceType == TEvPipeCache::TEvForward::EventType && !ev->Get()->Unsure) {
+            // The cookie identifies the request that never reached the pipe cache.
+            PendingWriteShards.erase(ev->Cookie);
+        }
         ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly", ctx);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
+        if (!ShardRepliesLeft.contains(ev->Get()->TabletId)) {
+            return;
+        }
+
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
+
+        const bool pendingWrite = PendingWriteShards.erase(ev->Get()->TabletId);
+        if (pendingWrite && !ev->Get()->NotDelivered) {
+            // The shard may have committed the rows before the connection was lost.
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNDETERMINED, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+                Sprintf("Upload result is unknown for shard %" PRIu64, ev->Get()->TabletId)), ctx);
+        }
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Failed to connect to shard",
             {"selfId", ctx.SelfID},
@@ -1345,7 +1363,7 @@ private:
 
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
-        return ReplyIfDone(ctx);
+        return RetryOrReplySuccessIfDone(ctx);
     }
 
     STFUNC(StateWaitResults) {
@@ -1366,6 +1384,7 @@ private:
         const auto& shardResponse = ev->Get()->Record;
 
         ui64 shardId = shardResponse.GetTabletID();
+        PendingWriteShards.erase(shardId);
 
         Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
 
@@ -1373,6 +1392,10 @@ private:
             {"status", NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())},
             {"tabletId", shardResponse.GetTabletID()},
             {"error", shardResponse.GetErrorDescription()});
+
+        if (ev->Get()->MayHaveWritten()) {
+            MayHaveWrittenRows = true;
+        }
 
         if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::OK) {
             ShardUploadRetryStates.erase(shardId);
@@ -1403,7 +1426,7 @@ private:
 
         ShardRepliesLeft.erase(shardId);
 
-        return ReplyIfDone(ctx);
+        return RetryOrReplySuccessIfDone(ctx);
     }
 
     void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
@@ -1466,15 +1489,7 @@ private:
         ResolveShards(ctx);
     }
 
-    void SetError(const TUploadStatus& status) {
-        if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
-            return;
-        }
-
-        Status = status;
-    }
-
-    void ReplyIfDone(const NActors::TActorContext& ctx) {
+    void RetryOrReplySuccessIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for shards replies",
                 {"shardRepliesLeft", ShardRepliesLeft.size()});
@@ -1485,19 +1500,31 @@ private:
             return DoRetry(ctx);
         }
 
-        if (Status.GetErrorMessage()) {
-            RaiseIssue(NYql::TIssue(LogPrefix() << *Status.GetErrorMessage()));
-        }
-
-        return ReplyWithResult(Status, ctx);
+        return ReplyWithResult(Ydb::StatusIds::SUCCESS, ctx);
     }
 
     void ReplyWithError(const Ydb::StatusIds::StatusCode code, const TString& errorMessage, const TActorContext& ctx) {
         return ReplyWithError(TUploadStatus(code, errorMessage), ctx);
     }
 
-    void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
-        AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
+    void ReplyWithError(TUploadStatus status, const TActorContext& ctx) {
+        using S = Ydb::StatusIds;
+
+        S::StatusCode statusCode = status.GetCode();
+
+        AFL_VERIFY(statusCode != S::SUCCESS);
+
+        bool mightHaveChanges = MayHaveWrittenRows || !PendingWriteShards.empty();
+        bool unavailableOrOverloaded = statusCode == S::UNAVAILABLE || statusCode == S::OVERLOADED;
+
+        if (unavailableOrOverloaded && mightHaveChanges) {
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Writes may have occurred, changing status to UNDETERMINED",
+                {"logPrefix", LogPrefix()},
+                {"fromStatus", statusCode});
+            statusCode = S::UNDETERMINED;
+            status = status.WithCode(statusCode);
+        }
+
         YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::RPC_REQUEST, "Error",
             {"logPrefix", LogPrefix()},
             {"error", status.GetErrorMessage()});

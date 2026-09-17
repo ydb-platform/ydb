@@ -276,6 +276,7 @@ SRCS(
     schemeshard_domain_links.h
     schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
+    schemeshard_export_table_scheme.h
     schemeshard_scheme_builders.cpp
     schemeshard_scheme_builders.h
     schemeshard_export.cpp
@@ -390,6 +391,7 @@ PEERDIR(
     ydb/core/statistics
     ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats
+    ydb/core/sys_view/show_create/formatters
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/test_tablet

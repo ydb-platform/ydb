@@ -195,28 +195,68 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
-void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return;
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    const TPath& sourcePath,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+) {
+    error.clear();
+    context.SourcePath.clear();
+    context.PathDescription.Clear();
+    context.ChangefeedUnderlyingTopics.Clear();
+
+    if (!sourcePath.IsResolved()) {
+        error = "Source table path is not resolved";
+        return false;
+    }
+    if (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved()) {
+        error = "Export table path is not resolved";
+        return false;
     }
 
+    context.SourcePath = sourcePathName;
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
+
     if (sourceDescription.HasTable()) {
-        FillSetValForSequences(
-            ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        FillSetValForSequences(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+            auto cdcPathDesc = GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+
             for (const auto& child : cdcPathDesc.GetChildren()) {
                 if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                    *task.AddChangefeedUnderlyingTopics() =
+                    *context.ChangefeedUnderlyingTopics.AddChangefeedUnderlyingTopics() =
                         GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
                 }
             }
         }
     }
 
-    task.MutableTable()->CopyFrom(sourceDescription);
+    context.PathDescription.Swap(&sourceDescription);
+    return true;
+}
+
+void FillBackupTaskTableDescription(
+    TSchemeShard* ss,
+    NKikimrSchemeOp::TBackupTask& task,
+    const TString& sourcePathName,
+    const TPath& sourcePath,
+    const TPath& exportItemPath
+) {
+    TExportTableSchemeContext context;
+    TString error;
+    if (!PrepareExportTableSchemeContext(ss, sourcePathName, sourcePath, exportItemPath, context, error)) {
+        return;
+    }
+
+    task.MutableTable()->CopyFrom(context.PathDescription);
+    for (const auto& topic : context.ChangefeedUnderlyingTopics.GetChangefeedUnderlyingTopics()) {
+        *task.AddChangefeedUnderlyingTopics() = topic;
+    }
 }
 
 template <typename TSettings>
@@ -258,7 +298,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        FillBackupTaskTableDescription(ss, task, item.SourcePathName,
+            TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -275,7 +316,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(parentPath.PathString());
         task.SetTableName(childName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
+        FillBackupTaskTableDescription(ss, task, item.SourcePathName,
+            TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));

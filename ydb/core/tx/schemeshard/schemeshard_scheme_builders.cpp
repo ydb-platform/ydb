@@ -1,8 +1,11 @@
 #include "schemeshard_scheme_builders.h"
 #include "schemeshard_export_helpers.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/sys_view/show_create/formatters/create_table_formatter.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
@@ -21,9 +24,85 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <exception>
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
+namespace {
+
+NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& context) {
+    const auto& pathDescription = context.PathDescription;
+    const auto& tableName = pathDescription.GetSelf().GetName();
+    Y_ENSURE(tableName && context.SourcePath, "Missing original table path for SQL backup");
+
+    NSysView::TCreateTableFormatter formatter;
+    if (pathDescription.HasColumnTableDescription()) {
+        const auto& description = pathDescription.GetColumnTableDescription();
+        Y_ENSURE(description.GetSchema().ColumnsSize(), "Column table description has no columns");
+        return formatter.Format(tableName, context.SourcePath, description, false,
+            AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject());
+    }
+
+    Y_ENSURE(pathDescription.HasTable(), "Missing table description for SQL backup");
+    const auto& description = pathDescription.GetTable();
+    const auto& topics = context.ChangefeedUnderlyingTopics.GetChangefeedUnderlyingTopics();
+    Y_ENSURE(description.GetCdcStreams().size() == topics.size(),
+        "Number of changefeeds does not match backup topic descriptions");
+
+    THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>> persQueues;
+    for (int i = 0; i < description.GetCdcStreams().size(); ++i) {
+        const auto topicPath = JoinPath({tableName, description.GetCdcStreams(i).GetName(), "streamImpl"});
+        persQueues.emplace(topicPath,
+            MakeHolder<NKikimrSchemeOp::TPersQueueGroupDescription>(topics.Get(i).GetPersQueueGroup()));
+    }
+
+    THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>> sequences;
+    for (const auto& sequence : description.GetSequences()) {
+        const auto pathId = TPathId::FromProto(sequence.GetPathId());
+        auto result = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>(pathId);
+        result->StartValue = sequence.GetStartValue();
+        result->Increment = sequence.GetIncrement();
+        result->NextValue = sequence.HasSetVal() ? sequence.GetSetVal().GetNextValue() : sequence.GetStartValue();
+        result->NextUsed = sequence.GetSetVal().GetNextUsed();
+        sequences.emplace(pathId, std::move(result));
+    }
+
+    return formatter.Format(tableName, context.SourcePath, description, false, persQueues, sequences);
+}
+
+} // namespace
+
+bool BuildCreateTableScheme(
+    const TExportTableSchemeContext& context,
+    TString& scheme,
+    TString& error)
+{
+    scheme.clear();
+    error.clear();
+
+    try {
+        auto result = FormatCreateTable(context);
+        if (!result.IsSuccess()) {
+            error = result.GetError();
+            return false;
+        }
+
+        scheme = result.ExtractOut();
+        if (!scheme) {
+            error = "CREATE TABLE query is empty";
+            return false;
+        }
+
+        return true;
+    } catch (const NSysView::TFormatFail& exception) {
+        error = exception.Error;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+    }
+
+    return false;
+}
 
 bool BuildViewScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,

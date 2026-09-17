@@ -1,5 +1,7 @@
 import os
 
+from .common_config import merge_config_sources
+
 try:
     import ymakeyaml as yaml
 except Exception:
@@ -21,11 +23,15 @@ class PnpmWorkspace(object):
         self.path = path
         # NOTE: pnpm requires relative workspace paths.
         self.packages = set()
+        self.catalogs = {}
+        self.common_config_sources = {}
 
     def read(self):
         with open(self.path) as f:
             parsed = yaml.load(f, Loader=yaml.CSafeLoader) or {}
             self.packages = set(parsed.get("packages", []))
+            self.catalogs = parsed.get("catalogs", {})
+            self.common_config_sources = parsed.get("notsCommonConfigSources", {})
 
     def write(self, path=None):
         if not path:
@@ -33,8 +39,12 @@ class PnpmWorkspace(object):
 
         with open(path, "w") as f:
             data = {
-                "packages": list(self.packages),
+                "packages": sorted(self.packages),
             }
+            if self.catalogs:
+                data["catalogs"] = self.catalogs
+            if self.common_config_sources:
+                data["notsCommonConfigSources"] = self.common_config_sources
             yaml.dump(data, f, Dumper=yaml.CSafeDumper)
 
     def get_paths(self, base_path=None, ignore_self=False):
@@ -80,6 +90,12 @@ class PnpmWorkspace(object):
         """
         dir_path = os.path.dirname(self.path)
         ws_dir_path = os.path.dirname(ws.path)
+
+        merge_config_sources(self.common_config_sources, ws.common_config_sources)
+        for group, entries in ws.catalogs.items():
+            if group in self.catalogs and self.catalogs[group] != entries:
+                raise ValueError("Conflicting catalog group: {}".format(group))
+            self.catalogs[group] = entries
 
         for p_rel_path in ws.packages:
             p_path = os.path.normpath(os.path.join(ws_dir_path, p_rel_path))

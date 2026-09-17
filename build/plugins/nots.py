@@ -881,10 +881,16 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
+    from lib.nots.package_manager.common_config import load_common_config
+    from lib.nots.package_manager.utils import s_rooted
+
+    common_config_path, _ = load_common_config(pj, pm.sources_root, pm.inject_peers)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    if common_config_path:
+        ins.append(s_rooted(common_config_path))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants

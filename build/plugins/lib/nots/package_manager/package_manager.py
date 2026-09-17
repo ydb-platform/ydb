@@ -22,6 +22,7 @@ from .utils import (
     s_rooted,
 )
 from .pnpm_workspace import PnpmWorkspace
+from .common_config import load_common_config
 from .timeit import timeit
 from .package_json import PackageJson
 
@@ -581,6 +582,10 @@ class PackageManager(object):
 
         ws = PnpmWorkspace(build_ws_config_path(self.build_path))
         ws.set_from_package_json(pj)
+        source_pj = self.load_package_json_from_dir(self.sources_path)
+        config_path, ws.catalogs = load_common_config(source_pj, self.sources_root, self.inject_peers)
+        if config_path:
+            ws.common_config_sources[config_path] = sorted(ws.catalogs)
 
         dep_paths = ws.get_paths(ignore_self=True)
         self._build_merged_workspace_config(ws, dep_paths)
@@ -663,7 +668,11 @@ class PackageManager(object):
         for dep_path in dep_paths:
             ws_config_path = build_ws_config_path(dep_path)
             if os.path.isfile(ws_config_path):
-                ws.merge(PnpmWorkspace.load(ws_config_path))
+                peer_ws = PnpmWorkspace.load(ws_config_path)
+                if not self.inject_peers:
+                    peer_ws.catalogs = {}
+                    peer_ws.common_config_sources = {}
+                ws.merge(peer_ws)
 
         ws.write()
 

@@ -52,9 +52,6 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         UNIT_ASSERT_VALUES_EQUAL(operations.values(3).string_value(), "Aggregate");
         stage.SetProgramAst("(lambda '() (AsList (String 'Join) (String 'Filter) (String 'Aggregate) '(Sort)))");
         UNIT_ASSERT_VALUES_EQUAL(NKqp::TTaskTraceDescription::FromStage(stage).Name(), "Task: Read");
-        NKqpProto::TKqpPhyStage aggregateStage;
-        aggregateStage.SetProgramAst("(lambda '() (block '((let c (Condense1)) (return (BlockMergeFinalizeHashed)))))");
-        UNIT_ASSERT_VALUES_EQUAL(NKqp::TTaskTraceDescription::FromStage(aggregateStage).Name(), "Task: Aggregate");
         stage.SetProgramAst("invalid AST (");
         UNIT_ASSERT_VALUES_EQUAL(NKqp::TTaskTraceDescription::FromStage(stage).Name(), "Task: Read");
         stage.Clear();

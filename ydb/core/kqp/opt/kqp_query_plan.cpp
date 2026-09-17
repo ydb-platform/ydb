@@ -4,7 +4,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/common/simple/kqp_operation_classifier.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
@@ -1473,12 +1472,12 @@ private:
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
             operatorId = Visit(maybeBlockCombine.Cast(), planNode);
-        } else if (maybeCallable && IsKqpAggregateFinalizer(maybeCallable.Cast().CallableName())) {
+        } else if (maybeCallable && (maybeCallable.Cast().CallableName() == "BlockMergeFinalizeHashed" || maybeCallable.Cast().CallableName() == "BlockMergeManyFinalizeHashed")) {
             TOperator op;
-            op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+            op.Properties["Name"] = "Aggregate";
             op.Properties["Blocks"] = "True";
             op.Properties["Phase"] = "Final";
-            operatorId = AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+            operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
@@ -1542,13 +1541,13 @@ private:
                     auto kqpOlapAggregation = TExprBase(maybeKqpOlapAggregation).Cast<TKqpOlapAgg>();
 
                     TOperator op;
-                    op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+                    op.Properties["Name"] = "Aggregate";
                     op.Properties["Phase"] = "Intermediate";
                     op.Properties["Pushdown"] = "True";
                     op.Properties["Blocks"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapAggregation);
-                    currentOperatorId = AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+                    currentOperatorId = AddOperator(planNode, "Aggregate", std::move(op));
                     operatorId = currentOperatorId;
                 }
 
@@ -1577,13 +1576,13 @@ private:
                     auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
-                    op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Filter);
+                    op.Properties["Name"] = "Filter";
                     op.Properties["Predicate"] = NOpt::FormatOlapFilter(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
                     op.Properties["Blocks"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
-                    auto filterOperatorId = AddOperator(planNode, KqpOperationName(EKqpOperationKind::Filter), std::move(op));
+                    auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
 
                     if (operatorId) {
                         planNode.Operators[currentOperatorId].Inputs.push_back(filterOperatorId);
@@ -1668,28 +1667,28 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+        op.Properties["Name"] = "Aggregate";
         op.Properties["Phase"] = "Intermediate";
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+        op.Properties["Name"] = "Aggregate";
         op.Properties["Phase"] = "Final";
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoCombineCore& combiner, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+        op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
         op.Properties["Phase"] = "Intermediate";
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoBlockCombineHashed& blockCombine, TQueryPlanNode& planNode) {
@@ -1704,7 +1703,7 @@ private:
         };
 
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+        op.Properties["Name"] = "Aggregate";
         op.Properties["Blocks"] = "True";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(blockCombine.Keys());
 
@@ -1725,25 +1724,25 @@ private:
         }
         op.Properties["Phase"] = "Intermediate";
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoWideCombiner& /* combiner */, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Aggregate);
+        op.Properties["Name"] = "Aggregate";
         // op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         // op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
         // op.Properties["Finish"] = NPlanUtils::PrettyExprStr(combiner.FinishHandler());
         op.Properties["Phase"] = "Final";
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoSort& sort, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Sort);
+        op.Properties["Name"] = "Sort";
         op.Properties["SortBy"] = NPlanUtils::PrettyExprStr(sort.KeySelectorLambda());
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Sort), std::move(op));
+        return AddOperator(planNode, "Sort", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
@@ -1911,7 +1910,7 @@ private:
             op.Properties["Input"] = inputValue;
         }
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Aggregate), std::move(op));
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     TString MakeJoinConditionString(const TCoAtomList& leftKeys, const TCoAtomList& rightKeys) {
@@ -2090,7 +2089,7 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
-        op.Properties["Name"] = KqpOperationName(EKqpOperationKind::Filter);
+        op.Properties["Name"] = "Filter";
         try {
             auto pred = NPlanUtils::ExtractPredicate(filter.Lambda());
             op.Properties["Predicate"] = pred.Body;
@@ -2104,7 +2103,7 @@ private:
             op.Properties["Limit"] = NPlanUtils::PrettyExprStr(filter.Limit().Cast());
         }
 
-        return AddOperator(planNode, KqpOperationName(EKqpOperationKind::Filter), std::move(op));
+        return AddOperator(planNode, "Filter", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TKqlLookupTableBase& lookup, TQueryPlanNode& planNode) {

@@ -35,7 +35,7 @@
 /ydb/core/tx/schemeshard @ydb-platform/core
 /ydb/core/util @ydb-platform/core
 /ydb/core/client @ydb-platform/core
-/ydb/core/engine @ydb-platform/core
+/ydb/core/engine @ydb-platform/qp
 /ydb/tests/functional/hive @ydb-platform/core
 /ydb/core/tx/scheme_board @ydb-platform/core
 /ydb/core/tx/scheme_cache @ydb-platform/core

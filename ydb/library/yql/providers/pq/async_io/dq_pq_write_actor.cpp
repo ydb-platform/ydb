@@ -891,7 +891,7 @@ private:
             /* minLongRetryDelay  */ TDuration::Seconds(5),
             /* maxDelay           */ TDuration::Seconds(20),
             /* maxRetries         */ 100,
-            /* maxTime            */ TDuration::Seconds(180),
+            /* maxTime            */ TDuration::Seconds(120),
             /* scaleFactor        */ 2.0,
             /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {

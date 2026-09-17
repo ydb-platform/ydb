@@ -168,9 +168,11 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
         }
     }
 
-    ++MoveDataBlobsMoved;
-    TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
-    TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
+    if (result == TEvKeyValue::TEvBlobCopied::EResult::OK) {
+        ++MoveDataBlobsMoved;
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+        TabletCounters->Cumulative()[COUNTER_MOVE_DATA_BYTES_MOVED].Increment(blobId.BlobSize());
+    }
 
     if (MoveDataRecordTouched) {
         // ignore the blob we just copied, advance again from the start of the record

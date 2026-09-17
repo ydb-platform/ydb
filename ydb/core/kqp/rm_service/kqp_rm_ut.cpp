@@ -37,6 +37,8 @@ namespace {
 
 constexpr ui64 KQP_QUEUE_MEMORY_LIMIT = 50'000;
 constexpr ui64 TOTAL_MEMORY_LIMIT = 100'000;
+// what the resource broker estimates a kqp_query task to take before it has measured any
+const TDuration KQP_TASK_DEFAULT_DURATION = TDuration::Seconds(5);
 
 TTenantTestConfig MakeTenantTestConfig() {
     TTenantTestConfig cfg = {
@@ -99,7 +101,7 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     task = config.AddTasks();
     task->SetName(NLocalDb::KqpResourceManagerTaskName);
     task->SetQueueName("queue_kqp_resource_manager");
-    task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
+    task->SetDefaultDuration(KQP_TASK_DEFAULT_DURATION.GetValue());
 
     config.MutableResourceLimit()->AddResource(10);
     config.MutableResourceLimit()->AddResource(TOTAL_MEMORY_LIMIT);
@@ -313,6 +315,17 @@ public:
         return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "pool", memoryPoolPercent, "db", false);
     }
 
+    TString RenderBrokerState(ui32 nodeInd = 0) {
+        TMockMonRequest request;
+        auto edge = Runtime->AllocateEdgeActor(nodeInd);
+        Runtime->Send(new IEventHandle(ResourceBrokers[nodeInd], edge, new NMon::TEvHttpInfo(request)), nodeInd, true);
+
+        TAutoPtr<IEventHandle> handle;
+        auto* response = Runtime->GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(response);
+        return response->Answer;
+    }
+
     TString RenderRmMonPage() {
         TMockMonRequest request;
         auto edge = Runtime->AllocateEdgeActor();
@@ -455,6 +468,7 @@ public:
         UNIT_TEST(ArenaReleasesIdleReservation);
         UNIT_TEST(ArenaShrinksWhenNodeTotalDrops);
         UNIT_TEST(ArenaReclaimsSurplusWhileGrowthIsWanted);
+        UNIT_TEST(ArenaLifetimeIsNotAQueryDuration);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -518,6 +532,7 @@ public:
     void ArenaReleasesIdleReservation();
     void ArenaShrinksWhenNodeTotalDrops();
     void ArenaReclaimsSurplusWhileGrowthIsWanted();
+    void ArenaLifetimeIsNotAQueryDuration();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -2371,6 +2386,41 @@ void KqpRm::ArenaAbsorbsChurn() {
     AssertResourceBrokerSensors(0, 0, 0, 1, 0);
     AssertArenaSensors(0, 0, 0);
     AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The arena task outlives the queries it backs, so the resource broker must not take its lifetime for the
+// execution time of a query. That average is what the broker estimates a task's finish time from, and the
+// estimate is what a queue's planned resource usage, and so its turn to be scheduled, is built on
+void KqpRm::ArenaLifetimeIsNotAQueryDuration() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        // one growth, and no merge with it: the arena task is the first the queue has seen
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+
+        // long enough that the resource broker would visibly raise its estimate if it took this for a query:
+        // one sample of a minute in a window of twenty would carry the average from 5 seconds to nearly 8
+        Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::Minutes(1));
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    }
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+
+    // the minute the arena lasted left the estimate where it started
+    const TInstant probeAt = Runtime->GetCurrentTime();
+    auto broker = GetInstantBroker();
+    const TActorId client = Runtime->AllocateEdgeActor();
+    UNIT_ASSERT(broker->SubmitTaskInstant(TEvResourceBroker::TEvSubmitTask(
+        1'000, "probe", {0, 1}, NLocalDb::KqpResourceManagerTaskName, 0, {}), client));
+    UNIT_ASSERT_STRING_CONTAINS(RenderBrokerState(),
+        "FinishTime: " + (probeAt + KQP_TASK_DEFAULT_DURATION).ToStringLocalUpToSeconds());
+
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1'000, /* cancel */ true), client));
 }
 
 // A node total that drops below what the arena holds takes effect on the arena too: the surplus it is no longer

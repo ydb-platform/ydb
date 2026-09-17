@@ -919,7 +919,7 @@ public:
             if (stopped) {
                 if (taskId) {
                     // created or adopted after the actor died, so not dropped with the others
-                    broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId), SelfId);
+                    broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
                 }
                 break;
             }
@@ -982,7 +982,10 @@ public:
     void ShrinkArena(IResourceBroker& broker, ui64& taskId, ui64& size, ui64 by, bool& taskLost) {
         bool ok = false;
         if (by >= size) {
-            ok = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId), SelfId);
+            // cancelled, not finished: the arena task outlives the queries it backs, so the resource broker must
+            // not take its lifetime for the execution time of a kqp_query task. That average is what the broker
+            // estimates a task's finish time from, and the estimate drives the queue's planned resource usage.
+            ok = broker.FinishTaskInstant(TEvResourceBroker::TEvFinishTask(taskId, /* cancel */ true), SelfId);
             by = size;
         } else {
             ok = broker.ReduceTaskResourcesInstant(taskId, {0, by}, SelfId);

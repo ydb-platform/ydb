@@ -1,7 +1,9 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -29,6 +31,7 @@ enum class EMonPage
     VChunk,           // State of one vchunk.
     VChunkCounters,   // Vchunk operation counters.
     Latency,          // Per-node and per-slot latency.
+    Memory,           // Memory usage by direct block group.
 };
 
 // How much per-vchunk detail GatherVChunkStats should collect.
@@ -56,18 +59,22 @@ struct TTabletInfo
     ui64 TabletId = 0;
     ui32 Generation = 0;
     ui32 BlockSize = 0;
+    ui64 BlockCount = 0;
+    ui64 VChunkSize = 0;
+    ui32 VolumeDirectBlockGroupCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
+};
+
+struct TArenaMemoryUsage
+{
+    TArenaAllocatorStats Slots;
 };
 
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
-    // Minimum safe barrier across all DBGs from the last finished cleanup
-    // round; 0 until the first round finishes.
-    ui64 LastSafeBarrier = 0;
-    size_t TotalVChunks = 0;
-    size_t DbgCount = 0;
+    TArenaMemoryUsage ArenaMemoryUsage;
 };
 
 struct TConnectionSnapshot
@@ -87,6 +94,9 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
+    TArenaPoolStats MemoryStats;
+    TArenaAllocatorStats DetailedMemoryStats;
+    TDirtyMapStats DirtyMapStats;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };

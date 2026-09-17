@@ -814,6 +814,10 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
+    if (!RunOptions_.UdfBridgePath.empty()) {
+        factory.SetUdfBridgeBinaryPath(RunOptions_.UdfBridgePath);
+    }
+
     int result = DoRun(factory);
     if (result == 0 && EQPlayerMode::Capture == RunOptions_.QPlayerMode) {
         RunOptions_.QPlayerContext.GetWriter()->Commit().GetValueSync();
@@ -842,7 +846,6 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
-    program->SetBridgeBinaryPath(RunOptions_.UdfBridgePath);
     if (RunOptions_.EnableLineage) {
         program->SetEnableLineage();
     }

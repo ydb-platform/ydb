@@ -39,8 +39,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/services/sqs_topic/statuses.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
@@ -55,7 +53,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
     class TGetQueueUrlActor
         : public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>
-        , public TCdcStreamCompatible
     {
     protected:
         using TBase = TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>;
@@ -86,49 +83,31 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
-            SendDescribeProposeRequest(ctx);
-            Become(&TGetQueueUrlActor::StateWork);
+            DescribeTopic(NACLib::DescribeSchema);
+            Become(&TGetQueueUrlActor::TBase::StateWork);
         }
 
-        void StateWork(TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                default:
-                    TBase::StateWork(ev);
-            }
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", this->TopicPath);
-            const auto& response = result->ResultSet.front();
-            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                    if (ProcessCdc(response)) {
-                        return;
-                    }
-                }
-                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
-                    return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
-                }
-                // ok
-            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
-            } else {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
-            }
-            AFL_ENSURE(response.PQGroupInfo)("path", this->TopicPath);
-            PQGroup = response.PQGroupInfo->Description;
-            SelfInfo = response.Self->Info;
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo& topicInfo) {
+            AFL_ENSURE(topicInfo.Info)("path", this->TopicPath);
+            AFL_ENSURE(topicInfo.Self)("path", this->TopicPath);
+            PQGroup = topicInfo.Info->Description;
+            SelfInfo = topicInfo.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());
             if (!ConsumerConfig) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", ConsumerName.c_str())));
+                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", ConsumerName.c_str())));
             }
             if (ConsumerConfig.Defined() && ConsumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-                return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", ConsumerName.c_str())));
+                return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer \"{}\" is not a shared consumer)", ConsumerName.c_str())));
             }
-            ReplyAndDie(ActorContext());
+            this->ChargeRequestUnits(ActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            ReplyAndDie(ctx);
         }
 
         void ReplyAndDie(const TActorContext& ctx) {

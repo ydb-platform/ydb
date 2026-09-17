@@ -804,6 +804,10 @@ private:
         DependsOn(LatePolicy_);
     }
 
+    bool IsSuitableForCache() const final {
+        return false;
+    }
+
     IComputationNode* const Stream_;
 
     IComputationExternalNode* const Item_;

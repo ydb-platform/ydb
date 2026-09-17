@@ -13,6 +13,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -160,8 +161,8 @@ protected:
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
-        auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
-        if (hopSetting) {
+
+        if (const auto& hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping"); hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {
                 return node;
@@ -184,12 +185,19 @@ protected:
                 defaultLatePolicy
             );
         } else {
+            if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Ref().Pos()), "Aggregation of streaming input without windows is not supported"));
+                return nullptr;
+            }
+
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
         }
+
         if (output) {
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
         }
+
         return output;
     }
 
@@ -211,9 +219,35 @@ protected:
         return output;
     }
 
+    static TExprNode::TPtr DqLookupSourceFromKqlReadTableRanges(const TExprBase& node, TExprContext& ctx) {
+        auto maybeRanges = node.Maybe<TKqlReadTableRanges>();
+        if (!maybeRanges) {
+            return {};
+        }
+        auto ranges = maybeRanges.Cast();
+        if (!ranges.Ranges().Maybe<TCoVoid>()) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Right-side predicate pushdown blocks mandatory streamlookup rewrite"));
+            return {};
+        }
+        const auto inputSeqType = node.Raw()->GetTypeAnn();
+        return Build<TDqLookupSourceWrap>(ctx, node.Pos())
+            .Input<TKqpReadRangesSourceSettings>()
+                .Table(ranges.Table())
+                .Columns(ranges.Columns())
+                .Settings(ranges.Settings())
+                .RangesExpr<TCoVoid>().Build()
+            .Build()
+            .DataSource<TCoDataSource>()
+                .Category<TCoAtom>().Value(NYql::KikimrProviderName).Build()
+                .Build()
+            .RowType(ExpandType(ranges.Pos(), *GetSeqItemType(inputSeqType), ctx))
+            .Settings<TCoAtomList>().Add(ranges.Table().Path()).Build()
+        .Done().Ptr();
+    }
+
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
         // First step of stream lookup join with DQ external sources (not kqp tables)
-        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx, DqLookupSourceFromKqlReadTableRanges);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

@@ -1,6 +1,7 @@
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
 
@@ -82,6 +83,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     }
     if (page == "latency") {
         return EMonPage::Latency;
+    }
+    if (page == "memory") {
+        return EMonPage::Memory;
     }
     return EMonPage::Overview;
 }
@@ -201,10 +205,14 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
 
 TTabletInfo TPartitionActor::MakeMonTabletInfo() const
 {
+    const ui32 blockSize = VolumeConfig.GetBlockSize();
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
-        .BlockSize = VolumeConfig.GetBlockSize(),
+        .BlockSize = blockSize,
+        .BlockCount = VolumeConfig.GetPartitions(0).GetBlockCount(),
+        .VChunkSize = StorageConfig->GetVChunkSize(),
+        .VolumeDirectBlockGroupCount = DefaultVolumeDirectBlockGroupCount,
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };
@@ -355,7 +363,11 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                 LogTitle.GetWithTime().c_str(),
                 *data.SelectedDbg);
 
-            FastPathService->QueryAddHost(*data.SelectedDbg, 0);
+            FastPathService->QueryAddHost(
+                *data.SelectedDbg,
+                DirectBlockGroupsConnections
+                    .GetDirectBlockGroupConnections(*data.SelectedDbg)
+                    .GetDBGConnectionsConfigGeneration());
             reply << "<p>Add host requested for "
                   << PrintDbgId(*data.SelectedDbg) << ".</p>";
         } else {
@@ -386,7 +398,10 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    if (page == EMonPage::Latency) {
+    if (page == EMonPage::Latency || page == EMonPage::Memory) {
+        if (page == EMonPage::Memory) {
+            data.FastPathServiceInfo = FastPathService->GetMonInfo();
+        }
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),

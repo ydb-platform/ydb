@@ -178,7 +178,6 @@ pqconfig:
   clusters_update_timeout_sec: 1
   # NOTE(shmel1k@): KIKIMR-14221
   enabled: true
-  meta_cache_timeout_sec: 1
   topics_are_first_class_citizen: {ydb_pq_topics_are_first_class_citizen}
   check_acl: false
   require_credentials_in_new_protocol: false

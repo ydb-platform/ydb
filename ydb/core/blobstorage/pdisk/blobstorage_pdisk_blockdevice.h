@@ -11,6 +11,9 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 #include <util/system/file.h>
 
@@ -74,10 +77,12 @@ IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon,
         ui64 reorderingCycles, ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags,
         ui32 maxQueuedCompletionActions, ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap,
         ui64 pDiskBufferSize = 512ull << 10,
-        TPDisk * const pdisk = nullptr, bool readOnly = false, bool useBytesFlightControl = false);
+        TPDisk * const pdisk = nullptr, bool readOnly = false, bool useBytesFlightControl = false,
+        std::optional<TCpuMask> threadAffinity = std::nullopt);
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
         TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk = nullptr,
-        bool readOnly = false, bool useBytesFlightControl = false);
+        bool readOnly = false, bool useBytesFlightControl = false,
+        std::optional<TCpuMask> threadAffinity = std::nullopt);
 
 } // NPDisk
 } // NKikimr

@@ -2,8 +2,13 @@
 
 #include <util/generic/yexception.h>
 #include <util/network/address.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NNet {
+
+    TString ExtractFirstForwardedForAddress(TStringBuf forwardedFor) {
+        return TString(StripString(forwardedFor.Before(',')));
+    }
 
     TString FormatSourceAddress(const sockaddr* addr) {
         if (!addr) {

@@ -180,6 +180,9 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+bool IsVirtualGeneratedIndexColumn(const NSchemeShard::TTableInfo::TPtr& tableInfo, const TString& columnName);
+bool IsVirtualGeneratedIndexColumn(const NKikimrSchemeOp::TTableDescription& tableDesc, const TString& columnName);
+
 void FillIndexTableColumns(
     const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     std::span<const TString> keys,
@@ -279,6 +282,24 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         return false;
     }
 
+    for (const auto& columnName : indexKeys.KeyColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index key";
+            return false;
+        }
+    }
+
+    for (const auto& columnName : indexKeys.DataColumns) {
+        if (IsVirtualGeneratedIndexColumn(tableDesc, columnName)) {
+            status = NKikimrScheme::EStatus::StatusInvalidParameter;
+            error = TStringBuilder() << "VIRTUAL generated column '" << columnName
+                                     << "' cannot be used as an index data column";
+            return false;
+        }
+    }
+
     if (!IsCompatibleIndex(GetIndexType(indexDesc), baseTableColumns, indexKeys, error)) {
         status = NKikimrScheme::EStatus::StatusInvalidParameter;
         return false;
@@ -317,14 +338,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             }
 
             const THashSet<TString> pkColumns{baseTableColumns.Keys.begin(), baseTableColumns.Keys.end()};
+            size_t pkIncluded = 0;
             for (size_t i = 0; i < indexKeys.KeyColumns.size()-1; ++i) {
                 const auto& col = indexKeys.KeyColumns[i];
-                // Prefix columns must be disjoint from the primary key (doc-id) columns
                 if (pkColumns.contains(col)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder() << typeName << " index prefix column '"
-                        << col << "' must not be a primary key column";
-                    return false;
+                    pkIncluded++;
                 }
                 // Prefix columns must have types allowed for the primary key
                 Y_ABORT_UNLESS(baseColumnTypes.contains(col));
@@ -335,6 +353,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                         << " has wrong key type " << NScheme::TypeName(typeInfo);
                     return false;
                 }
+            }
+            if (pkIncluded >= pkColumns.size()) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << typeName << " index prefix must not contain all primary key columns";
+                return false;
             }
         }
 

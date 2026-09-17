@@ -1,5 +1,6 @@
 #include "actors.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/testlib/grpc_request/grpc_request.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
@@ -125,7 +126,7 @@ Y_UNIT_TEST(SharedConsumer) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     const auto* consumer = NPQ::GetConsumer(config, "test_consumer");
@@ -173,11 +174,36 @@ Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     const auto& partitionConfig = topic.Info->Description.GetPQTabletConfig().GetPartitionConfig();
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetWriteSpeedInMessagesPerSecond(), 777);
     UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetBurstSizeInMessages(), 777);
+}
+
+Y_UNIT_TEST(RejectsTooManyPartitions) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root/test_db/topic_too_many_parts");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(static_cast<i32>(NPQ::MAX_TOPIC_PARTITIONS + 1));
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        "/Root/test_db/topic_too_many_parts"
+    );
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::BAD_REQUEST, result->Issues.ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result->Issues.ToString(), "less than");
 }
 
 Y_UNIT_TEST(CreateTopicWithNameEqDB) {
@@ -225,7 +251,7 @@ Y_UNIT_TEST(ContentBasedDeduplication) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
     auto topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
 
     auto config = topic.Info->Description.GetPQTabletConfig();
     UNIT_ASSERT_VALUES_EQUAL(config.GetContentBasedDeduplication(), true);

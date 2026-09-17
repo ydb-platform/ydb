@@ -5,7 +5,6 @@
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
-#include <ydb/core/base/backtrace.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
@@ -33,6 +32,7 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include "mock_lookup_factory.h"
 
@@ -247,7 +247,7 @@ private:
         State->OnCommitState(SelfId());
     }
 
-    void LoadState(const TSinkState&) override {
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {
     }
 
     void PassAway() override {
@@ -388,7 +388,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         , IsWide(isWide)
         , TransportVersion(transportVersion)
     {
-        NKikimr::EnableYDBBacktraceFormat();
+        EnableKikimrBacktraceFormat();
 
         auto keyType = TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv);
         auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);

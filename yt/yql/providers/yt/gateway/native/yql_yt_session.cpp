@@ -12,9 +12,15 @@ namespace NYql {
 namespace NNative {
 
 TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
-    : TSessionBase(options.SessionId_, std::move(options.UserName()), std::move(options.RandomProvider()), std::move(options.TimeProvider()),
-    std::move(options.OperationOptions()), std::move(options.ProgressWriter()), std::move(options.UseSecureTmp())
-)
+    : TSessionBase(
+        options.SessionId_,
+        std::move(options.UserName()),
+        std::move(options.RandomProvider()),
+        std::move(options.TimeProvider()),
+        std::move(options.OperationOptions()),
+        std::move(options.Credentials()),
+        std::move(options.ProgressWriter()),
+        std::move(options.UseSecureTmp()))
     , StatWriter_(std::move(options.StatWriter()))
     , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     , OperationSemaphore(nullptr)

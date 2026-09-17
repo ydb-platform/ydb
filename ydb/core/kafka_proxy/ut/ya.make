@@ -12,22 +12,16 @@ ELSE()
 ENDIF()
 
 SRCS(
-    kafka_test_client.cpp
-    kafka_test_client.h
-    test_server.cpp
-    ut_auth.cpp
-    ut_kafka_functions.cpp
-    ut_protocol.cpp
-    ut_serialization.cpp
+    actors_ut.cpp
     metarequest_ut.cpp
     topic_location_actor_ut.cpp
     topic_offsets_actor_ut.cpp
-    ut_transaction_coordinator.cpp
-    ut_transaction_actor.cpp
-    ut_produce_actor.cpp
-    actors_ut.cpp
     ut_consumer_protocol.cpp
-    ut_authz.cpp
+    ut_kafka_functions.cpp
+    ut_produce_actor.cpp
+    ut_serialization.cpp
+    ut_transaction_actor.cpp
+    ut_transaction_coordinator.cpp
 )
 
 PEERDIR(
@@ -48,3 +42,7 @@ YQL_LAST_ABI_VERSION()
 ENV(INSIDE_YDB="1")
 
 END()
+
+RECURSE_FOR_TESTS(
+    protocol
+)

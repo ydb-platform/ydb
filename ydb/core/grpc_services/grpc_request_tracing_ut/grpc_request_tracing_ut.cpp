@@ -1,6 +1,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
@@ -84,11 +85,12 @@ struct TEvRuntimeRequestPassed : public TEventLocal<TEvRuntimeRequestPassed, Eve
 
 class TTestProxyRuntimeEvent : public NGRpcService::TEvProxyRuntimeEvent {
 public:
-    TTestProxyRuntimeEvent(TString database, TMaybe<TString> token, TActorId replyTo)
+    TTestProxyRuntimeEvent(TString database, TMaybe<TString> token, TString traceId, TActorId replyTo)
         : Database_(std::move(database))
         , Token_(std::move(token))
         , ReplyTo_(replyTo)
         , AuthState_(true)
+        , TraceId_(std::move(traceId))
     {}
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -179,7 +181,7 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return {};
+        return TraceId_;
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
@@ -247,12 +249,17 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     NGRpcService::IGRpcProxyCounters::TPtr Counters_;
     TMaybe<NRpcService::TRlPath> RlPath_;
+    TString TraceId_;
     ui32 FinishSpanCalls_ = 0;
     inline static const TString EmptySerializedToken_;
 };
 
 class TTestGrpcRequestContext : public NYdbGrpc::IRequestContextBase {
 public:
+    explicit TTestGrpcRequestContext(TMaybe<TString> traceId)
+        : TraceId_(std::move(traceId))
+    {}
+
     const NProtoBuf::Message* GetRequest() const override {
         return &Request_;
     }
@@ -285,7 +292,10 @@ public:
         return {};
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_TRACE_ID_HEADER && TraceId_) {
+            return {*TraceId_};
+        }
         return {};
     }
 
@@ -353,12 +363,17 @@ private:
     Ydb::Operations::CancelOperationRequest Request_;
     NYdbGrpc::TAuthState AuthState_{true};
     google::protobuf::Arena Arena_;
+    TMaybe<TString> TraceId_;
 };
 
 class TTestBiStreamContext
     : public NGRpcServer::IGRpcStreamingContext<Draft::Dummy::PingRequest, Draft::Dummy::PingResponse>
 {
 public:
+    explicit TTestBiStreamContext(TMaybe<TString> traceId)
+        : TraceId_(std::move(traceId))
+    {}
+
     void Cancel() override {
     }
 
@@ -383,7 +398,10 @@ public:
         return "127.0.0.1";
     }
 
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf) const override {
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
+        if (key == NYdb::YDB_TRACE_ID_HEADER && TraceId_) {
+            return {*TraceId_};
+        }
         return {};
     }
 
@@ -420,6 +438,7 @@ public:
 
 private:
     mutable NYdbGrpc::TAuthState AuthState_{true};
+    TMaybe<TString> TraceId_;
 };
 
 using TTestGrpcRequest = NGRpcService::TGrpcRequestNoOperationCall<
@@ -434,6 +453,24 @@ public:
         error = "invalid request";
         return false;
     }
+};
+
+class TRefreshTokenInvokerActor : public TActorBootstrapped<TRefreshTokenInvokerActor> {
+public:
+    TRefreshTokenInvokerActor(TIntrusivePtr<TTestBiStreamContext> ctx, TActorId replyTo)
+        : Ctx_(std::move(ctx))
+        , ReplyTo_(replyTo)
+    {}
+
+    void Bootstrap() {
+        NGRpcService::TEvBiStreamPingRequest request(Ctx_);
+        request.RefreshToken("token", TActivationContext::AsActorContext(), ReplyTo_);
+        PassAway();
+    }
+
+private:
+    TIntrusivePtr<TTestBiStreamContext> Ctx_;
+    TActorId ReplyTo_;
 };
 
 class TPublicProxyHandleMethods : public NGRpcService::TGRpcRequestProxyHandleMethods {
@@ -551,6 +588,7 @@ Y_UNIT_TEST(DoesNotFinishGrpcRequestProxySpanBeforeRuntimeEventPass) {
     std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent> ev = std::make_unique<TTestProxyRuntimeEvent>(
         setup.DbPath,
         Nothing(),
+        "runtime-event-trace-id",
         setup.FakeMonActor);
 
     setup.RequestCheckActor(std::move(ev));
@@ -570,7 +608,8 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckRequest) {
         Nothing(),
         setup.FakeMonActor,
         NGRpcService::TAuditMode::NonModifying(),
-        "192.168.0.101");
+        "192.168.0.101",
+        "grpc-tracing-test-request-id");
     ev->StartTracing(MakeGrpcRequestProxySpan(*setup.GetRuntime()));
     AssertGrpcRequestProxySpanNotSent(*uploader);
 
@@ -594,7 +633,8 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
         Nothing(),
         setup.FakeMonActor,
         NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-        "192.168.0.101");
+        "192.168.0.101",
+        "grpc-tracing-error-test-request-id");
     ev->StartTracing(MakeGrpcRequestProxySpan(*setup.GetRuntime()));
     AssertGrpcRequestProxySpanNotSent(*uploader);
 
@@ -615,11 +655,29 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
+Y_UNIT_TEST(GeneratesTraceIdForEmptyUnaryTraceHeader) {
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(TMaybe<TString>(TString()));
+    TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+
+    const TMaybe<TString> traceId = request.GetTraceId();
+    UNIT_ASSERT(traceId);
+    UNIT_ASSERT(!traceId->empty());
+}
+
+Y_UNIT_TEST(GeneratesTraceIdForEmptyBidiTraceHeader) {
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(TMaybe<TString>(TString()));
+    NGRpcService::TEvBiStreamPingRequest request(ctx);
+
+    const TMaybe<TString> traceId = request.GetTraceId();
+    UNIT_ASSERT(traceId);
+    UNIT_ASSERT(!traceId->empty());
+}
+
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnFinalReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -634,7 +692,7 @@ Y_UNIT_TEST(SecondFinishSpanDoesNotEmitAnotherWilsonSpan) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -655,7 +713,7 @@ Y_UNIT_TEST(ManualFinishSpanEmitsGrpcRequestProxySpan) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -670,7 +728,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnRpcStatusError) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -685,7 +743,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnUnauthenticatedReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -700,7 +758,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnGrpcError) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -715,7 +773,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnUnarySerializedResult) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -730,7 +788,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnUnarySerializedRopeResult) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -745,7 +803,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnFinishStream) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -760,7 +818,7 @@ Y_UNIT_TEST(RespHookDelaysGrpcRequestProxySpanUntilPass) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestGrpcRequestContext>();
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing());
     TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
 
     NGRpcService::TRespHookCtx::TPtr delayedReply;
@@ -790,11 +848,27 @@ Y_UNIT_TEST(RespHookDelaysGrpcRequestProxySpanUntilPass) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBiStreamTracing) {
 
+Y_UNIT_TEST(RefreshTokenPreservesBidiTraceId) {
+    TTestActorRuntime runtime;
+    runtime.Initialize(TAppPrepare().Unwrap());
+    const TString traceId = "bidi-refresh-token-trace-id";
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(TMaybe<TString>(traceId));
+    const TActorId refreshTokenReceiver = runtime.AllocateEdgeActor();
+    runtime.RegisterService(NGRpcService::CreateGRpcRequestProxyId(), refreshTokenReceiver);
+
+    runtime.Register(new TRefreshTokenInvokerActor(ctx, runtime.AllocateEdgeActor()));
+
+    TAutoPtr<IEventHandle> handle;
+    auto* refreshToken = runtime.GrabEdgeEvent<NGRpcService::TRefreshTokenGenericRequest>(handle);
+    UNIT_ASSERT(refreshToken);
+    UNIT_ASSERT_VALUES_EQUAL(refreshToken->GetTraceId(), TMaybe<TString>(traceId));
+}
+
 Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnValidationErrorReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestBiStreamContext>();
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing());
     TInvalidBiStreamPingRequest request(ctx);
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -812,7 +886,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnUnauthenticatedReply) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestBiStreamContext>();
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing());
     NGRpcService::TEvBiStreamPingRequest request(ctx);
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -827,7 +901,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnFinish) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestBiStreamContext>();
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing());
     NGRpcService::TEvBiStreamPingRequest request(ctx);
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -842,7 +916,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnWriteAndFinish) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestBiStreamContext>();
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing());
     NGRpcService::TEvBiStreamPingRequest request(ctx);
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));
@@ -857,7 +931,7 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanOnWriteAndFinishWithOptions) {
     TTestActorRuntime runtime;
     runtime.Initialize(TAppPrepare().Unwrap());
     auto* uploader = SetupFakeWilsonUploader(runtime);
-    auto ctx = MakeIntrusive<TTestBiStreamContext>();
+    auto ctx = MakeIntrusive<TTestBiStreamContext>(Nothing());
     NGRpcService::TEvBiStreamPingRequest request(ctx);
 
     request.StartTracing(MakeGrpcRequestProxySpan(runtime));

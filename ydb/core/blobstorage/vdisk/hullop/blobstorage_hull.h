@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     class TLsnMngr;
@@ -157,7 +159,7 @@ namespace NKikimr {
                 ui64 tabletID,
                 ui32 gen,
                 ui64 issuerGuid,
-                ui32 version,
+                std::optional<ui32> version,
                 TWriteSource writeSource,
                 ui32 *actGen,
                 TLsnSeg *seg,
@@ -222,6 +224,8 @@ namespace NKikimr {
         ui64 GetLogoBlobSyncDataSizeInFlight() const { return LogoBlobSyncDataSizeInFlight; }
         ui64 GetBlockSyncDataSizeInFlight() const { return BlockSyncDataSizeInFlight; }
         ui64 GetBarrierSyncDataSizeInFlight() const { return BarrierSyncDataSizeInFlight; }
+
+        TFreshSpaceDebt GetFreshSpaceDebt() const;
 
         ///////////////// STATUS REQUEST ////////////////////////////////////////////
         void StatusRequest(const TActorContext &ctx, TEvLocalStatusResult *result);

@@ -17,6 +17,9 @@ constexpr ui32 INTERNAL_WIDTH = 16;
 constexpr ui32 INTERNAL_TEXT_HEIGHT = 8;
 constexpr ui32 TIME_SERIES_RANGES = 32;
 constexpr ui32 CONN_ARROW = 4;
+// The column-title strip at the very top of the document. It is drawn once for
+// the whole document, however many plans it holds, and the plans start below it.
+constexpr ui32 COLUMN_HEADER_HEIGHT = INTERNAL_HEIGHT + INTERNAL_GAP_Y * 2;
 
 // Every renderer that draws one kind of thing - a data flow, memory, CPU - wants
 // the same shades of one color, so they travel together instead of being passed
@@ -36,6 +39,7 @@ struct TColorPalette {
     TStringBuf StageText          = "var(--stage-text, #262626)";
     TStringBuf StageTextHighlight = "var(--stage-texthl, #FC2824)";
     TStringBuf StageGrid          = "var(--stage-grid, #B2B2B2)";
+    TStringBuf ColumnHeader       = "var(--column-header, #D9D9D9)";
 
     TColorTriple Ingress = {"var(--ingress-medium, #466364)", "var(--ingress-light, #5A8183)", "var(--ingress-dark, #384F50)"};
     TColorTriple Input   = {"var(--input-medium, #5A8183)",   "var(--input-light, #7CA3A5)",   "var(--input-dark, #466364)"};

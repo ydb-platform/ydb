@@ -29,6 +29,27 @@ namespace NKikimr::NDDisk {
             + (hasPayloadChecksums ? dataSectorsCnt * sizeof(ui64) : 0);
     }
 
+    ui64 TDDiskActor::TPersistentBufferRegistrationToken::Generate(TMonotonic now) {
+        // Shared across PB incarnations in this process. A process restart invalidates
+        // the connection credentials required to obtain and use registration tokens.
+        static std::atomic<ui64> lastToken{0};
+        ui64 previous = lastToken.load(std::memory_order_relaxed);
+        for (;;) {
+            const ui64 token = Max(now.MicroSeconds(), previous + 1);
+            if (lastToken.compare_exchange_weak(previous, token, std::memory_order_relaxed)) {
+                return token;
+            }
+        }
+    }
+
+    TDDiskActor::TPersistentBufferRegistrationToken::TPersistentBufferRegistrationToken(
+            TMonotonic now, const TQueryCredentials& creds)
+        : Token(Generate(now))
+        , IssuedAt(now)
+        , Key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)}
+        , Generation(creds.Generation)
+    {}
+
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
         if (!IssuePersistentBufferChunkAllocationInflight) {
@@ -43,6 +64,9 @@ namespace NKikimr::NDDisk {
         }
     }
     void TDDiskActor::ProcessDeallocatePersistentBufferChunk(bool forceToNextChunk) {
+        if (Stopping) {
+            return;
+        }
         Y_ABORT_UNLESS(IsPersistentBufferActor);
         ui64 freeSpace = PersistentBufferSpaceAllocator.GetFreeSpace();
         ui64 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
@@ -164,6 +188,10 @@ namespace NKikimr::NDDisk {
     ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
         Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
+        if (begin.Valid() && begin.ContiguousSize() >= numBytes) {
+            return XXH3_64bits(begin.ContiguousData(), numBytes) ^ PersistentBufferUniqueId;
+        }
+
         // XXH3_64bits_reset() does not zero the whole state (buffer, customSecret, reserved64,
         // trailing alignment padding — see XXH3_reset_internal). Digest then reads those fields,
         // which MSAN reports as use-of-uninitialized-value. xxHash documents value-init / memset
@@ -175,13 +203,13 @@ namespace NKikimr::NDDisk {
             XXH3_64bits_update(&state, it.ContiguousData(), n);
             numBytes -= n;
         }
-        XXH3_64bits_update(&state, &PersistentBufferUniqueId, sizeof(PersistentBufferUniqueId));
-        return XXH3_64bits_digest(&state);
+        Y_ABORT_UNLESS(numBytes == 0);
+        return XXH3_64bits_digest(&state) ^ PersistentBufferUniqueId;
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
-        if (PersistentBufferReady) {
+        if (Stopping || IsBroken() || PersistentBufferReady) {
             return;
         }
 
@@ -199,6 +227,7 @@ namespace NKikimr::NDDisk {
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
+            ProcessPersistentBufferQueue();
             return;
         }
         for (ui32 pos = 0; pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight; pos++) {
@@ -248,35 +277,37 @@ namespace NKikimr::NDDisk {
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(
         ui64 tabletId, ui32 generation, ui64 vchunkIndex, ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes,
         TRcBuf&& payloadWithHeader, std::vector<TPersistentBufferSectorInfo>& sectors,
-        const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex)
+        const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex, ui64 headerUniqueId)
     {
         TRope fullData(std::move(payloadWithHeader));
+        Y_ABORT_UNLESS(payloadChecksums.empty() || payloadChecksums.size() == sectors.size() - 1);
 
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
         // it via HasSignatureCorrection (JoinData restores the original byte on disk read-back). This mutates
-        // payload bytes that, on the interconnect fast path, share their backend with the payload-only rope
-        // that becomes the in-memory cache entry (pr.Data). ContiguousDataMut() routes to TRcBuf::GetDataMut(),
-        // which copies-on-write once when the backend is shared, forking fullData into a private buffer so the
-        // cached copy keeps the original bytes. This pass MUST run before the header pointer is captured below:
-        // the COW relocates fullData's backend, so a pointer taken earlier would dangle at the orphaned buffer
-        // and every subsequent header write (Locations, Header.Checksum) would miss the buffer that is actually
-        // written to disk. Do NOT switch to UnsafeContiguousDataMut(): it would mutate the shared backend in
-        // place and silently corrupt the in-memory cache. The copy is rare (only when a data sector starts with
-        // the signature byte) and fires at most once per write (fullData is private afterwards).
+        // payload bytes that may share their backend both with the payload-only rope retained for the in-memory
+        // cache and with writes sent to other DDisk replicas. ContiguousDataMut() must preserve those owners by
+        // copying on write: disk I/O is asynchronous, so changing the shared backend in place and restoring it
+        // on completion would expose the temporary on-disk representation to the other replicas. This pass MUST
+        // run before the header pointer is captured below because COW may relocate fullData's backend.
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto it = fullData.Begin() + SectorSize * i;
+            auto& sector = sectors[i];
+            if (!PersistentBufferFormat.EnableChecksums) {
+                ui64 originalPrefix;
+                memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
+                sector.ChecksumOrData = originalPrefix;
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(ui64));
+            }
             if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                sectors[i].HasSignatureCorrection = true;
+                sector.HasSignatureCorrection = true;
                 *it.ContiguousDataMut() = 0;
             }
         }
 
-        // Phase 2: fullData's backend is now final (private if Phase 1 copied it), so this header pointer stays
-        // valid for every write below. The header sector occupies reserved headroom that is not part of any
-        // payload view, so writing it through UnsafeContiguousDataMut() never needs (or triggers) a copy.
+        // Phase 2: the header sector occupies reserved headroom that is not part of any payload view, so writing
+        // it through UnsafeContiguousDataMut() does not affect the payload retained for the in-memory cache.
         auto* header = reinterpret_cast<TPersistentBufferHeader*>(fullData.Begin().UnsafeContiguousDataMut());
-
         memset(header, 0, SectorSize);
         memcpy(
             header->Signature,
@@ -288,8 +319,10 @@ namespace NKikimr::NDDisk {
         header->SlotId = BaseInfo.VDiskSlotId;
         header->RecordLsn = 0;
         header->RecordIdx = 0;
-        header->Flags = 0;
+        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
+            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
         header->BatchSize = 1;
+        header->HeaderUniqueId = headerUniqueId;
 
         auto* lsnRecordHeader = reinterpret_cast<TPersistentBufferLsnRecordHeader*>(fullData.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader));
 
@@ -311,10 +344,15 @@ namespace NKikimr::NDDisk {
 
         for (ui32 i = 1; i < sectors.size(); ++i) {
             auto& loc = locations[i - 1];
-            loc = sectors[i]; // carries HasSignatureCorrection set in Phase 1
-            auto it = fullData.Begin() + SectorSize * i;
-            loc.Checksum = CalculateChecksum(it);
-            sectors[i].Checksum = loc.Checksum;
+            loc = sectors[i]; // carries signature correction and first 8 bytes of data from Phase 1
+            if (PersistentBufferFormat.EnableChecksums) {
+                // Sender checksums cover the original bytes. Signature correction changes
+                // the on-disk sector, so only unchanged sectors can reuse them.
+                loc.ChecksumOrData = hasPayloadChecksums && !loc.HasSignatureCorrection
+                    ? payloadChecksums[i - 1] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(fullData.Begin() + SectorSize * i);
+                sectors[i].ChecksumOrData = loc.ChecksumOrData;
+            }
         }
 
         ui32 headerDataSize = sizeof(TPersistentBufferHeader)
@@ -335,8 +373,9 @@ namespace NKikimr::NDDisk {
         // Only the meaningful prefix of the header sector is checksummed - the rest is unused
         // padding, never read back, so hashing it would waste CPU with no integrity benefit.
         header->HeaderDataSize = headerDataSize;
-        header->Checksum = CalculateChecksum(fullData.Begin(), headerDataSize);
-
+        if (PersistentBufferFormat.EnableChecksums) {
+            header->Checksum = CalculateChecksum(fullData.Begin(), headerDataSize);
+        }
         // Slice fullData ([header | payload], a single contiguous, SectorSize-aligned buffer) into one part
         // per run of physically adjacent on-disk sectors. This is zero-copy: TRope::ExtractFront moves whole
         // chunks and turns the partial tail into a shared TRcBuf::Piece (no memcpy), so every part is a single
@@ -360,7 +399,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ProcessPersistentBufferQueue() {
-        if (PendingPersistentBufferEvents.empty() || !PersistentBufferReady) {
+        if (Stopping || IsBroken() || PendingPersistentBufferEvents.empty() || !PersistentBufferReady) {
             return;
         }
 
@@ -429,18 +468,38 @@ namespace NKikimr::NDDisk {
 
         auto checkIsSameRequest = [&](auto &data) {
             bool dataEqual = data.Size == selector.Size;
+            if (dataEqual && data.ChecksumsDisabled && !data.PayloadChecksums.empty()) {
+                const auto& checksums = record.GetChecksums();
+                dataEqual = data.PayloadChecksums.size() == static_cast<size_t>(checksums.size())
+                    && std::equal(data.PayloadChecksums.begin(), data.PayloadChecksums.end(), checksums.begin());
+            }
             if (dataEqual) {
                 const TWriteInstruction instr(record.GetInstruction());
                 Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer without a payload");
                 TRope payload = ev.Get()->GetPayload(*instr.PayloadId);
+                const auto& incomingChecksums = record.GetChecksums();
+                const bool hasIncomingPayloadChecksums = incomingChecksums.size() > 0;
                 for (ui32 i = 0; i < selector.Size / SectorSize; ++i) {
                     auto it = payload.Position(SectorSize * i);
+                    bool signatureCorrected = false;
                     if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                        signatureCorrected = true;
                         *it.ContiguousDataMut() = 0;
                     }
-                    if (data.Sectors[i + 1].Checksum != CalculateChecksum(it)) {
-                        dataEqual = false;
-                        break;
+                    if (!data.ChecksumsDisabled) {
+                        // Mirror the write path: an unmodified sector may have reused the
+                        // sender-supplied checksum verbatim (never locally verified against the
+                        // bytes), so compare against that same value here instead of a freshly
+                        // computed hash. Only signature-corrected sectors, whose on-disk bytes
+                        // differ from what the sender originally hashed, are compared against a
+                        // checksum computed from the (corrected) bytes.
+                        const ui64 expected = hasIncomingPayloadChecksums && !signatureCorrected
+                            ? incomingChecksums[i] ^ PersistentBufferUniqueId
+                            : CalculateChecksum(it);
+                        if (data.Sectors[i + 1].ChecksumOrData != expected) {
+                            dataEqual = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -567,7 +626,6 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::RestorePersistentBufferChunk(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
         ui32 chunkIdx = ev->Get()->PartCookie;
         auto& data = ev->Get()->Data;
-        PersistentBufferRestoreChunksInflight--;
         Y_ABORT_UNLESS(data.size() == ChunkSize);
         for (ui32 sectorIdx = 0; sectorIdx < SectorInChunk; sectorIdx++) {
             auto dataPos = data.Position(sectorIdx * SectorSize);
@@ -577,13 +635,14 @@ namespace NKikimr::NDDisk {
             if (memcmp(headerData.GetDataMut(), TPersistentBufferHeader::PersistentBufferHeaderSignature, 16) == 0) {
                 TRope headerRope(std::move(headerData));
                 TPersistentBufferHeader* header = reinterpret_cast<TPersistentBufferHeader*>(headerRope.Begin().ContiguousDataMut());
+                const bool checksumsDisabled = header->Flags & TPersistentBufferHeader::CHECKSUMS_DISABLED;
                 ui64 headerChecksum = header->Checksum;
                 header->Checksum = 0;
                 // HeaderDataSize comes from disk and is not yet trusted at this point - clamp it to
                 // the sector size so a corrupted value can never cause an out-of-bounds hash read.
                 // A bogus (but in-range) value simply fails the checksum comparison below.
                 const ui32 headerDataSize = Min<ui32>(header->HeaderDataSize, SectorSize);
-                ui64 sectorChecksum = CalculateChecksum(headerRope.Begin(), headerDataSize);
+                ui64 sectorChecksum = checksumsDisabled ? 0 : CalculateChecksum(headerRope.Begin(), headerDataSize);
                 if (headerChecksum != sectorChecksum || header->PersistentBufferUniqueId != PersistentBufferUniqueId
                     || (header->NodeId != BaseInfo.PDiskActorID.NodeId()) || header->PDiskId != BaseInfo.PDiskId
                     || header->SlotId != BaseInfo.VDiskSlotId) {
@@ -601,6 +660,9 @@ namespace NKikimr::NDDisk {
                         {"headerSlotId", header->SlotId},
                         {"VDiskSlotId", BaseInfo.VDiskSlotId});
                     continue;
+                }
+                if (checksumsDisabled) {
+                    NextPersistentBufferHeaderUniqueId = Max(NextPersistentBufferHeaderUniqueId, header->HeaderUniqueId + 1);
                 }
                 if (PersistentBufferBarriersManager.AddBarrier(header, chunkIdx, sectorIdx)) {
                     continue;
@@ -629,7 +691,9 @@ namespace NKikimr::NDDisk {
                         .OffsetInBytes = recordHeader->OffsetInBytes,
                         .Size = recordHeader->Size,
                         .VChunkIndex = recordHeader->VChunkIndex,
-                        .Timestamp = TInstant::Now()
+                        .Timestamp = TInstant::Now(),
+                        .ChecksumsDisabled = checksumsDisabled,
+                        .HeaderUniqueId = header->HeaderUniqueId,
                     };
                     ui32 sectorsCnt = recordHeader->Size / SectorSize;
                     Y_ABORT_UNLESS(sectorsCnt <= TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord);
@@ -652,7 +716,9 @@ namespace NKikimr::NDDisk {
                     }
                 }
             } else {
-                PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = CalculateChecksum(dataPos);
+                auto& dataSectorInfo = PersistentBufferDataSectorsInfo[chunkIdx][sectorIdx];
+                dataSectorInfo.Checksum = CalculateChecksum(dataPos);
+                memcpy(&dataSectorInfo.HeaderUniqueId, dataPos.ContiguousData(), sizeof(dataSectorInfo.HeaderUniqueId));
             }
         }
 
@@ -660,8 +726,24 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferRestoreChunksInflight == 0) {
             for (auto& [_, pb] : PersistentBuffers) {
                 std::erase_if(pb.Records, [this](const auto& pair) {
-                    for (auto sector : pair.second.Sectors) {
-                        if (PersistentBufferSectorsChecksum[sector.ChunkIdx][sector.SectorIdx] != sector.Checksum) {
+                    // Sectors[0] is the header sector itself (see the push_back at chunk restore
+                    // time above), not a payload data sector - it is never populated in
+                    // PersistentBufferDataSectorsInfo (that map is only filled for sectors that do
+                    // NOT match the header signature). Validation below only applies to the actual
+                    // payload sectors, i.e. indices [1, Sectors.size()).
+                    for (size_t i = 1; i < pair.second.Sectors.size(); ++i) {
+                        const auto& sector = pair.second.Sectors[i];
+                        if (pair.second.ChecksumsDisabled) {
+                            ui64 headerUniqueId = PersistentBufferDataSectorsInfo[sector.ChunkIdx][sector.SectorIdx].HeaderUniqueId;
+                            ui64 expectedId = pair.second.HeaderUniqueId;
+                            if (sector.HasSignatureCorrection) {
+                                reinterpret_cast<ui8*>(&headerUniqueId)[0] = 0;
+                                reinterpret_cast<ui8*>(&expectedId)[0] = 0;
+                            }
+                            if (headerUniqueId != expectedId) {
+                                return true;
+                            }
+                        } else if (PersistentBufferDataSectorsInfo[sector.ChunkIdx][sector.SectorIdx].Checksum != sector.ChecksumOrData) {
                             return true;
                         }
                     }
@@ -672,10 +754,25 @@ namespace NKikimr::NDDisk {
                 }
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
-            PersistentBufferSectorsChecksum.clear();
+            PersistentBufferDataSectorsInfo.clear();
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
+            // Without an ownership marker, remnants of a retired registration are not live data.
+            std::erase_if(PersistentBuffers, [this](const auto& item) {
+                return !PersistentBufferBarriersManager.HasBarrier(item.first.TabletId, item.first.DirectBlockGroupIndex);
+            });
             PersistentBufferBarriersManager.RestoreErases(PersistentBuffers, PersistentBufferSpaceAllocator);
+            for (const auto& [key, location] : PersistentBufferBarriersManager.PersistentBufferBarriersLocation) {
+                const auto barrier = PersistentBufferBarriersManager.GetBarrier(key.TabletId, key.DirectBlockGroupIndex);
+                if (barrier.Generation == Max<ui32>() && barrier.Lsn == Max<ui64>()) {
+                    auto& removal = PersistentBufferRemovals[key];
+                    removal.Stage = TPersistentBufferRemoval::EStage::Wait;
+                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
+                    // A restart starts a fresh grace interval; no pre-restart request may revive it.
+                    removal.Deadline = TActivationContext::Now() + delay;
+                    Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
+                }
+            }
 
             // When BatchSize > 1, multiple records share the same header sector (Sectors[0]).
             // MarkOccupied must be called for that sector only once; subsequent records in the
@@ -710,6 +807,15 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TDDiskActor::TEvPrivate::TEvReadPersistentBufferPart::TPtr ev) {
         if (ev->Get()->IsRestore) {
+            Y_ABORT_UNLESS(PersistentBufferRestoreChunksInflight);
+            --PersistentBufferRestoreChunksInflight;
+            if (Stopping || IsBroken()) {
+                return;
+            }
+            if (ev->Get()->Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+                EnterBroken(TStringBuilder() << "PersistentBuffer restore failed: " << ev->Get()->ErrorMessage);
+                return;
+            }
             RestorePersistentBufferChunk(ev);
             return;
         }
@@ -745,10 +851,39 @@ namespace NKikimr::NDDisk {
                 if (inflight.OperationCookies.empty()) {
                     if (inflightRecord.PartsCount == 0 || inflightRecord.DataParts.size() != inflightRecord.PartsCount
                         || inflight.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-                        inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
+                        if (inflight.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH) {
+                            inflight.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD;
+                        }
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     } else {
-                        pr.Data = std::move(inflightRecord.JoinData(SectorSize));
+                        TRope reconstructed = std::move(inflightRecord.JoinData(SectorSize));
+                        if (Config.EnableChecksums && Config.CheckChecksumWhenRead
+                                && !pr.PayloadChecksums.empty())
+                        {
+                            if (const auto result = ValidatePayloadChecksums(pr.PayloadChecksums, reconstructed)) {
+                                inflight.Status = result->Status;
+                                inflight.ErrorMessage = result->ErrorReason;
+                                if (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED) {
+                                    Counters.Checksums.ChecksumMismatch->Inc();
+                                }
+                                YDB_LOG_ERROR_COMP(NKikimrServices::BS_PERSISTENT_BUFFER,
+                                    (result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED
+                                        ? "TDDiskActor::Handle(TEvReadPersistentBufferPart) checksum mismatch"
+                                        : "TDDiskActor::Handle(TEvReadPersistentBufferPart) checksum count mismatch"),
+                                    {"marker", "BSPB"},
+                                    {"PBufferId", SelfId()},
+                                    {"tabletId", inflightRecord.TabletId},
+                                    {"generation", inflightRecord.Generation},
+                                    {"lsn", inflightRecord.Lsn},
+                                    {"checksumCount", result->ChecksumCount},
+                                    {"payloadSize", reconstructed.size()},
+                                    {"blockIdx", result->MismatchedBlockIdx
+                                        ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                                ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
+                                return;
+                            }
+                        }
+                        pr.Data = std::move(reconstructed);
                         PersistentBufferInMemoryCacheSize += pr.Size;
                         *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
 
@@ -771,89 +906,97 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(eraseCnt == 1);
 
         if (inflight.OperationCookies.empty()) {
-            Counters.PersistentBuffer.WriteBatchSize->Collect(inflight.Records.size());
-            if (!inflight.ErrorMessage) {
-                for (auto& record : inflight.Records) {
-                    auto& buffer = PersistentBuffers[{record.TabletId, record.Generation, record.DirectBlockGroupIndex}];
-                    auto [it, inserted] = buffer.Records.try_emplace(record.Lsn);
-                    TPersistentBuffer::TRecord& pr = it->second;
-                    Y_ABORT_UNLESS(record.DataParts.size() == 1 && record.PartsCount == 1);
-                    Y_ABORT_UNLESS(inserted);
-                    pr = {
-                        .OffsetInBytes = record.OffsetInBytes,
-                        .Size = (ui32)record.Size,
-                        .Sectors = std::move(record.Sectors),
-                        .VChunkIndex = record.VChunkIndex,
-                        .Timestamp = TInstant::Now(),
-                        .PayloadChecksums = std::move(record.PayloadChecksums),
-                    };
+            FinishPersistentBufferWrite(opCookie);
+        }
+    }
 
-                    auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
-                    pbh.insert({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
-
-                    buffer.Size += pr.Size;
-                    pr.Data = std::move(record.DataParts.begin()->second);
-                    PersistentBufferInMemoryCacheSize += pr.Size;
-                    *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
-                    auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex);
-                    Y_ABORT_UNLESS(inserted2);
-                }
-                SanitizePersistentBufferInMemoryCache();
-            } else {
-                PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
-            }
-
-            auto status = inflight.Status;
-            auto errorMessage = inflight.ErrorMessage;
-
-            // process duplicated write requests and clear PersistentBufferWriteInflightsByRecord
+    void TDDiskActor::FinishPersistentBufferWrite(ui64 opCookie) {
+        auto& inflight = PersistentBufferDiskOperationInflight.at(opCookie);
+        Y_ABORT_UNLESS(inflight.OperationCookies.empty());
+        Counters.PersistentBuffer.WriteBatchSize->Collect(inflight.Records.size());
+        if (!inflight.ErrorMessage) {
             for (auto& record : inflight.Records) {
-                auto it = PersistentBufferWriteInflightsByRecord.find({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
-                Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
-                Y_ABORT_UNLESS(!it->second.empty());
-                for (auto [replyCookie, pos] : it->second) {
-                    if (replyCookie == opCookie) {
-                        continue;
-                    }
+                auto& buffer = PersistentBuffers[{record.TabletId, record.Generation, record.DirectBlockGroupIndex}];
+                auto [it, inserted] = buffer.Records.try_emplace(record.Lsn);
+                TPersistentBuffer::TRecord& pr = it->second;
+                Y_ABORT_UNLESS(record.DataParts.size() == 1 && record.PartsCount == 1);
+                Y_ABORT_UNLESS(inserted);
+                pr = {
+                    .OffsetInBytes = record.OffsetInBytes,
+                    .Size = (ui32)record.Size,
+                    .Sectors = std::move(record.Sectors),
+                    .VChunkIndex = record.VChunkIndex,
+                    .Timestamp = TInstant::Now(),
+                    .PayloadChecksums = std::move(record.PayloadChecksums),
+                    .ChecksumsDisabled = record.ChecksumsDisabled,
+                    .HeaderUniqueId = record.HeaderUniqueId,
+                };
 
-                    auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
-                    Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
-                    auto& replyInflight = replyIt->second;
+                auto& pbh = PersistentBufferHeaders[{pr.Sectors[0].ChunkIdx, pr.Sectors[0].SectorIdx}];
+                pbh.insert({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
 
-                    // duplicated write requests can not be batched
-                    Y_ABORT_UNLESS(replyInflight.Records.size() == 1);
-                    auto& record2 = replyInflight.Records[0];
-                    auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
-                        status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-                    auto h = std::make_unique<IEventHandle>(record2.Sender, SelfId(), replyEv.release(), 0, record2.Cookie);
-                    if (record2.Session) {
-                        h->Rewrite(TEvInterconnect::EvForward, record2.Session);
-                    }
-                    TActivationContext::Send(h.release());
-                    record2.Span.End();
-                    PersistentBufferDiskOperationInflight.erase(replyIt);
-                }
-                PersistentBufferWriteInflightsByRecord.erase(it);
+                buffer.Size += pr.Size;
+                pr.Data = std::move(record.DataParts.begin()->second);
+                PersistentBufferInMemoryCacheSize += pr.Size;
+                *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
+                auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex);
+                Y_ABORT_UNLESS(inserted2);
             }
+            SanitizePersistentBufferInMemoryCache();
+        } else {
+            PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
+        }
 
-            // process current write requests
-            for (auto& record : inflight.Records) {
-                Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, record.Size,
-                    HPMilliSecondsFloat(HPNow() - inflight.StartTs));
+        auto status = inflight.Status;
+        auto errorMessage = inflight.ErrorMessage;
+
+        // process duplicated write requests and clear PersistentBufferWriteInflightsByRecord
+        for (auto& record : inflight.Records) {
+            auto it = PersistentBufferWriteInflightsByRecord.find({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
+            Y_ABORT_UNLESS(it != PersistentBufferWriteInflightsByRecord.end());
+            Y_ABORT_UNLESS(!it->second.empty());
+            for (auto [replyCookie, pos] : it->second) {
+                if (replyCookie == opCookie) {
+                    continue;
+                }
+
+                auto replyIt = PersistentBufferDiskOperationInflight.find(replyCookie);
+                Y_ABORT_UNLESS(replyIt != PersistentBufferDiskOperationInflight.end());
+                auto& replyInflight = replyIt->second;
+
+                // duplicated write requests can not be batched
+                Y_ABORT_UNLESS(replyInflight.Records.size() == 1);
+                auto& record2 = replyInflight.Records[0];
                 auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
                     status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-                auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
-                if (record.Session) {
-                    h->Rewrite(TEvInterconnect::EvForward, record.Session);
+                auto h = std::make_unique<IEventHandle>(record2.Sender, SelfId(), replyEv.release(), 0, record2.Cookie);
+                if (record2.Session) {
+                    h->Rewrite(TEvInterconnect::EvForward, record2.Session);
                 }
                 TActivationContext::Send(h.release());
-                record.Span.End();
+                record2.Span.End();
+                PersistentBufferDiskOperationInflight.erase(replyIt);
             }
-            PersistentBufferDiskOperationInflight.erase(opCookie);
-
-            *Counters.PersistentBuffer.TotalBytes =
-                (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
+            PersistentBufferWriteInflightsByRecord.erase(it);
         }
+
+        // process current write requests
+        for (auto& record : inflight.Records) {
+            Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, record.Size,
+                HPMilliSecondsFloat(HPNow() - inflight.StartTs));
+            auto replyEv = std::make_unique<TEvWritePersistentBufferResult>(
+                status, errorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
+            auto h = std::make_unique<IEventHandle>(record.Sender, SelfId(), replyEv.release(), 0, record.Cookie);
+            if (record.Session) {
+                h->Rewrite(TEvInterconnect::EvForward, record.Session);
+            }
+            TActivationContext::Send(h.release());
+            record.Span.End();
+        }
+        PersistentBufferDiskOperationInflight.erase(opCookie);
+
+        *Counters.PersistentBuffer.TotalBytes =
+            (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
     }
 
     void TDDiskActor::HandleErasePart(TPersistentBufferDiskOperationInFlight& inflight, ui64 opCookie, ui64 partCookie, bool resultStatus) {
@@ -869,21 +1012,58 @@ namespace NKikimr::NDDisk {
             Counters.Interface.ErasePersistentBuffer.Reply(!inflight.ErrorMessage, inflightRecord.Size,
                 HPMilliSecondsFloat(HPNow() - inflight.StartTs));
 
-            if (!inflight.ErrorMessage) {
+            if (inflight.BarrierOperation != TPersistentBufferDiskOperationInFlight::EBarrierOperation::None) {
+                CompletePersistentBufferBarrierWrite(inflight);
+            } else if (!inflight.ErrorMessage) {
                 PersistentBufferSpaceAllocator.Free(inflightRecord.Sectors);
             } else {
                 PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
             }
 
-            auto replyEv = std::make_unique<TEvErasePersistentBufferResult>(
-                inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
-            auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
-            if (inflightRecord.Session) {
-                h->Rewrite(TEvInterconnect::EvForward, inflightRecord.Session);
+            using EOperation = TPersistentBufferDiskOperationInFlight::EBarrierOperation;
+            const auto operation = inflight.BarrierOperation;
+            const TPersistentBufferTabletKey key{inflightRecord.TabletId, inflightRecord.DirectBlockGroupIndex};
+            const bool success = inflight.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+            std::unique_ptr<IEventBase> replyEv;
+            if (operation == EOperation::Register) {
+                PersistentBufferRegistrations.erase(key);
+                replyEv = std::make_unique<TEvRegisterPersistentBufferResult>(inflight.Status, inflight.ErrorMessage);
+            } else if (operation == EOperation::Close || operation == EOperation::Remove) {
+                auto& removal = PersistentBufferRemovals.at(key);
+                if (success && operation == EOperation::Close) {
+                    removal.Stage = TPersistentBufferRemoval::EStage::Wait;
+                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
+                    removal.Deadline = TActivationContext::Now() + delay;
+                    Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
+                } else {
+                    if (removal.Request) {
+                        SendReply(*removal.Request, std::make_unique<TEvUnregisterPersistentBufferResult>(inflight.Status, inflight.ErrorMessage));
+                    }
+                    PersistentBufferRemovals.erase(key);
+                }
+            } else {
+                replyEv = std::make_unique<TEvErasePersistentBufferResult>(
+                    inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
             }
-            TActivationContext::Send(h.release());
+            if (replyEv) {
+                auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
+                if (inflightRecord.Session) {
+                    h->Rewrite(TEvInterconnect::EvForward, inflightRecord.Session);
+                }
+                TActivationContext::Send(h.release());
+            }
             inflightRecord.Span.End();
             PersistentBufferDiskOperationInflight.erase(opCookie);
+            if (!success && operation != EOperation::None) {
+                // A failed metadata write can have reached disk. Do not admit work using
+                // speculative in-memory barriers; recovery decides which copy is durable.
+                // This applies to every barrier operation, including plain Erase:
+                // BarrierErasePersistentBuffer speculatively calls MoveBarrier/RemoveBarrier
+                // before the write completes, so on failure the in-memory and on-disk states
+                // may diverge (see PersistentBufferPartialEraseSuccess for the expected
+                // behavior: a failed barrier write breaks the disk until recovery).
+                EnterBroken("persistent buffer barrier write failed");
+            }
 
             *Counters.PersistentBuffer.TotalBytes =
                 (PersistentBufferSpaceAllocator.OwnedChunks.size() * SectorInChunk - PersistentBufferSpaceAllocator.GetFreeSpace()) * SectorSize;
@@ -1025,10 +1205,14 @@ namespace NKikimr::NDDisk {
         // selector.Size, so a payload is always present here; slicing relies on this (sectorsCnt > 1).
         Y_ABORT_UNLESS(instr.PayloadId, "WritePersistentBuffer reached slicing without a payload");
         TRcBuf payloadWithHeader = ev->Get()->GetPayloadWithHeader(*instr.PayloadId);
-
+        ui64 persistentBufferHeaderUniqueId = 0;
+        if (!PersistentBufferFormat.EnableChecksums) {
+            persistentBufferHeaderUniqueId = NextPersistentBufferHeaderUniqueId++;
+        }
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors,
-            payloadChecksums, static_cast<ui8>(creds.DirectBlockGroupIndex));
+            payloadChecksums, static_cast<ui8>(creds.DirectBlockGroupIndex),
+            persistentBufferHeaderUniqueId);
 
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
@@ -1055,6 +1239,8 @@ namespace NKikimr::NDDisk {
             // move into the inflight record now that this is its last use.
             .PayloadChecksums = std::move(payloadChecksums),
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = !PersistentBufferFormat.EnableChecksums,
+            .HeaderUniqueId = persistentBufferHeaderUniqueId,
         });
         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn, static_cast<ui8>(creds.DirectBlockGroupIndex)}].emplace_back(
             opCookie,
@@ -1152,7 +1338,9 @@ namespace NKikimr::NDDisk {
             .Attribute("lsn", static_cast<i64>(lsn));
 
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
-
+        ui64 headerUniqueId = PersistentBufferFormat.EnableChecksums ? 0
+            : inflight.Records.size() ? inflight.Records.back().HeaderUniqueId
+            : NextPersistentBufferHeaderUniqueId++;
         inflight.Records.push_back({
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
@@ -1168,6 +1356,8 @@ namespace NKikimr::NDDisk {
             .PartsCount = 1,
             .PayloadChecksums = std::move(payloadChecksums),
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = !PersistentBufferFormat.EnableChecksums,
+            .HeaderUniqueId = headerUniqueId,
         });
 
         auto& r = inflight.Records.back();
@@ -1178,13 +1368,28 @@ namespace NKikimr::NDDisk {
         inflight.DataToWrite.Insert(inflight.DataToWrite.End(), std::move(payload));
         for (ui32 i = 0; i < sectorsCnt; ++i) {
             auto it = inflight.DataToWrite.End() - r.Size + SectorSize * i;
-            if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
-                r.Sectors[i + 1].HasSignatureCorrection = true;
-                sectorsIt->HasSignatureCorrection = true;
-                *it.ContiguousDataMut() = 0;
+            if (PersistentBufferFormat.EnableChecksums) {
+                if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                    r.Sectors[i + 1].HasSignatureCorrection = true;
+                    sectorsIt->HasSignatureCorrection = true;
+                    *it.ContiguousDataMut() = 0;
+                }
+                r.Sectors[i + 1].ChecksumOrData = !r.PayloadChecksums.empty() && !r.Sectors[i + 1].HasSignatureCorrection
+                    ? r.PayloadChecksums[i] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(it);
+                sectorsIt->ChecksumOrData = r.Sectors[i + 1].ChecksumOrData;
+            } else {
+                ui64 originalPrefix;
+                memcpy(&originalPrefix, it.ContiguousData(), sizeof(originalPrefix));
+                r.Sectors[i + 1].ChecksumOrData = originalPrefix;
+                *sectorsIt = r.Sectors[i + 1];
+                memcpy(it.ContiguousDataMut(), &headerUniqueId, sizeof(headerUniqueId));
+                if ((ui8)it.ContiguousData()[0] == TPersistentBufferHeader::PersistentBufferHeaderSignature[0]) {
+                    r.Sectors[i + 1].HasSignatureCorrection = true;
+                    sectorsIt->HasSignatureCorrection = true;
+                    *it.ContiguousDataMut() = 0;
+                }
             }
-            r.Sectors[i + 1].Checksum = CalculateChecksum(it);
-            sectorsIt->Checksum = r.Sectors[i + 1].Checksum;
             ++sectorsIt;
         }
         PersistentBufferWriteInflightsByRecord[TPersistentBufferRecordId{creds.TabletId, creds.Generation, lsn, static_cast<ui8>(creds.DirectBlockGroupIndex)}].emplace_back(
@@ -1220,8 +1425,10 @@ namespace NKikimr::NDDisk {
         header->SlotId = BaseInfo.VDiskSlotId;
         header->RecordLsn = 0;
         header->RecordIdx = 0;
-        header->Flags = 0;
+        header->Flags = PersistentBufferFormat.EnableChecksums ? TPersistentBufferHeader::NONE
+            : TPersistentBufferHeader::CHECKSUMS_DISABLED;
         header->BatchSize = inflight.Records.size();
+        header->HeaderUniqueId = inflight.Records[0].HeaderUniqueId;
 
         bool anyPayloadChecksums = false;
         auto* pos = inflight.DataToWrite.Begin().UnsafeContiguousDataMut() + sizeof(TPersistentBufferHeader);
@@ -1261,7 +1468,10 @@ namespace NKikimr::NDDisk {
         // Only the meaningful prefix of the header sector is checksummed - the rest is unused
         // padding, never read back, so hashing it would waste CPU with no integrity benefit.
         header->HeaderDataSize = headerDataSize;
-        header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), headerDataSize);
+
+        if (PersistentBufferFormat.EnableChecksums) {
+            header->Checksum = CalculateChecksum(inflight.DataToWrite.Begin(), headerDataSize);
+        }
 
         auto parts = SlicePersistentBufferData(inflight.DataToWrite, inflight.OccupiedSectors);
         for(auto& [chunkIdx, offset, data] : parts) {
@@ -1324,7 +1534,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        if (Config.EnableChecksums) {
+        if (Config.EnableChecksums && Config.CheckChecksumBeforeWrite) {
             // Checksums are validated here, before any sector allocation or disk I/O.
             const TWriteInstruction instr(record.GetInstruction());
             Y_ABORT_UNLESS(instr.PayloadId, "TEvWritePersistentBuffer without a payload, but with checksums");
@@ -1490,7 +1700,9 @@ namespace NKikimr::NDDisk {
             .OffsetInBytes = selector.OffsetInBytes,
             .Size = selector.Size,
             .PartsCount = 0,
+            .Sectors = pr.Sectors,
             .DirectBlockGroupIndex = static_cast<ui8>(creds.DirectBlockGroupIndex),
+            .ChecksumsDisabled = pr.ChecksumsDisabled,
         });
         pr.ReadInflight.insert(operationCookie);
         if (pr.ReadInflight.size() > 1) {
@@ -1655,14 +1867,268 @@ namespace NKikimr::NDDisk {
         PartsCount = 1;
         auto& payload = DataParts.begin()->second;
         for (ui32 i = 1; i < Sectors.size(); i++) {
-            if (Sectors[i].HasSignatureCorrection) {
-                *payload.Position(sectorSize * (i - 1)).ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
+            auto pos = payload.Position(sectorSize * (i - 1));
+            if (ChecksumsDisabled) {
+                const ui64 originalPrefix = Sectors[i].ChecksumOrData;
+                memcpy(pos.ContiguousDataMut(), &originalPrefix, sizeof(originalPrefix));
+            } else if (Sectors[i].HasSignatureCorrection) {
+                *pos.ContiguousDataMut() = TPersistentBufferHeader::PersistentBufferHeaderSignature[0];
             }
         }
         return DataParts.begin()->second;
     }
 
-    void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn) {
+    void TDDiskActor::ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector) {
+        const auto it = PersistentBufferBarrierWrites.find({sector.ChunkIdx, sector.SectorIdx});
+        if (it != PersistentBufferBarrierWrites.end()) {
+            Y_ABORT_UNLESS(!it->second);
+            it->second = true;
+        } else {
+            PersistentBufferSpaceAllocator.Free(std::span(&sector, 1));
+        }
+    }
+
+    void TDDiskActor::CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight) {
+        Y_ABORT_UNLESS(inflight.OccupiedSectors.size() == 1);
+        const auto& sector = inflight.OccupiedSectors.front();
+        const auto it = PersistentBufferBarrierWrites.find({sector.ChunkIdx, sector.SectorIdx});
+        Y_ABORT_UNLESS(it != PersistentBufferBarrierWrites.end());
+        const bool reclaim = it->second;
+        PersistentBufferBarrierWrites.erase(it);
+        if (reclaim) {
+            // A newer version is already durable, and this write has now retired.
+            PersistentBufferSpaceAllocator.Free(inflight.OccupiedSectors);
+        }
+        if (inflight.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            for (const auto& previous : inflight.Records.front().Sectors) {
+                ReleasePersistentBufferBarrierSector(previous);
+            }
+        }
+        // On failure, keep sectors not superseded by a successful write occupied.
+        // PB enters Broken; recovery determines which metadata actually reached disk.
+    }
+
+    NKikimrBlobStorage::NDDisk::TReplyStatus::E TDDiskActor::CheckPersistentBufferOwnership(const TQueryCredentials& creds) const {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            return TStatus::INCORRECT_REQUEST;
+        }
+        const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
+        if (PersistentBufferRemovals.contains(key)) {
+            return TStatus::OUTDATED;
+        }
+        if (PersistentBufferRegistrations.contains(key)) {
+            return TStatus::BUSY;
+        }
+        if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)) {
+            return TStatus::INCORRECT_REQUEST;
+        }
+        const auto barrier = PersistentBufferBarriersManager.GetBarrier(key.TabletId, key.DirectBlockGroupIndex);
+        if (barrier.Generation == Max<ui32>() && barrier.Lsn == Max<ui64>()) {
+            return TStatus::OUTDATED;
+        }
+        return TStatus::OK;
+    }
+
+    void TDDiskActor::Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        auto& counters = Counters.Interface.GetPersistentBufferRegistrationToken;
+        if (!CheckQuery(*ev, &counters)) {
+            return;
+        }
+        counters.Request();
+        auto reply = [&](TStatus::E status, const TString& reason = {}, ui64 token = 0) {
+            counters.Reply(status == TStatus::OK);
+            auto result = std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(status, reason);
+            result->Record.SetToken(token);
+            SendReply(*ev, std::move(result));
+        };
+        const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            reply(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration");
+            return;
+        }
+        if (PersistentBufferRegistrationTokens.size() >= PersistentBufferFormat.MaxRegistrationTokens) {
+            reply(TStatus::OVERLOADED, "registration token limit reached");
+            return;
+        }
+        const auto& token = PersistentBufferRegistrationTokens.emplace_back(TActivationContext::Monotonic(), creds);
+        // Consumed tokens free their slots immediately, without accumulating expiry timers.
+        if (!PersistentBufferRegistrationTokenExpiryScheduled) {
+            PersistentBufferRegistrationTokenExpiryScheduled = true;
+            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
+                new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
+        reply(TStatus::OK, {}, token.Token);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr) {
+        const auto now = TActivationContext::Monotonic();
+        const auto timeout = TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds);
+        const auto firstLive = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), now,
+            [timeout](const TPersistentBufferRegistrationToken& token, TMonotonic deadline) {
+                return token.IssuedAt + timeout <= deadline;
+            });
+        PersistentBufferRegistrationTokens.erase(PersistentBufferRegistrationTokens.begin(), firstLive);
+        PersistentBufferRegistrationTokenExpiryScheduled = !PersistentBufferRegistrationTokens.empty();
+        if (PersistentBufferRegistrationTokenExpiryScheduled) {
+            const auto nextExpiry = PersistentBufferRegistrationTokens.front().IssuedAt + timeout;
+            Schedule(nextExpiry - now, new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
+    }
+
+    void TDDiskActor::Handle(TEvRegisterPersistentBuffer::TPtr ev) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        if (!CheckQuery(*ev, nullptr)) {
+            return;
+        }
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            return;
+        }
+        const auto tokenIt = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), record.GetToken(),
+            [](const TPersistentBufferRegistrationToken& token, ui64 value) { return token.Token < value; });
+        const bool found = tokenIt != PersistentBufferRegistrationTokens.end() && tokenIt->Token == record.GetToken();
+        if (!found || TActivationContext::Monotonic() - tokenIt->IssuedAt
+                >= TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
+            if (found) {
+                PersistentBufferRegistrationTokens.erase(tokenIt);
+            }
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::OUTDATED, "registration token is unknown, expired or already used"));
+            return;
+        }
+        const auto& token = *tokenIt;
+        if (token.Key.TabletId != creds.TabletId || token.Key.DirectBlockGroupIndex != creds.DirectBlockGroupIndex
+                || token.Generation != creds.Generation) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
+                TStatus::INCORRECT_REQUEST, "registration token belongs to another tablet, generation or DBG"));
+            return;
+        }
+        if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::OVERLOADED, "pending queue overfill"));
+            } else {
+                PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferRegistration");
+                Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+            }
+            return;
+        }
+        // Do not consume while queued: readiness replays this request and checks expiry again.
+        PersistentBufferRegistrationTokens.erase(tokenIt);
+        const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
+        if (PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
+                || PersistentBufferRemovals.contains(key)) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "persistent buffer already registered or closed"));
+            return;
+        }
+        if (PersistentBufferSpaceAllocator.GetFreeSpace() < 2
+                || !PersistentBufferBarriersManager.CanMoveBarrier(key.TabletId, PersistentBufferFormat.MaxBarriersLimit, key.DirectBlockGroupIndex)) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::OVERFILL, "no space for registration barrier"));
+            return;
+        }
+        PersistentBufferRegistrations.insert(key);
+        auto barrierCreds = creds;
+        barrierCreds.Generation = 0;
+        BarrierErasePersistentBuffer(*ev, barrierCreds, {}, 0, TPersistentBufferDiskOperationInFlight::EBarrierOperation::Register);
+    }
+
+    void TDDiskActor::Handle(TEvUnregisterPersistentBuffer::TPtr ev) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        if (!CheckQuery(*ev, nullptr)) {
+            return;
+        }
+        const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            return;
+        }
+        if (!PersistentBufferReady) {
+            if (PendingPersistentBufferEvents.size() >= PersistentBufferFormat.MaxPendingEventsQueueSize) {
+                SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::OVERLOADED, "pending queue overfill"));
+            } else {
+                PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferRemoval");
+                Counters.PersistentBuffer.PendingEventsQueueSize->Inc();
+            }
+            return;
+        }
+        const TPersistentBufferTabletKey key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)};
+        if (auto it = PersistentBufferRemovals.find(key); it != PersistentBufferRemovals.end()) {
+            if (it->second.Request) {
+                SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::BUSY, "registration removal in progress"));
+            } else {
+                it->second.Request.Reset(ev.Release());
+            }
+            return;
+        }
+        if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)) {
+            SendReply(*ev, std::make_unique<TEvUnregisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "registration is not found"));
+            return;
+        }
+        auto& removal = PersistentBufferRemovals[key];
+        removal.Request.Reset(ev.Release());
+        ProcessPersistentBufferRemoval(key);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvProcessPersistentBufferRemoval::TPtr ev) {
+        ProcessPersistentBufferRemoval(ev->Get()->Key);
+    }
+
+    void TDDiskActor::ProcessPersistentBufferRemoval(TPersistentBufferTabletKey key) {
+        using EStage = TPersistentBufferRemoval::EStage;
+        using EOperation = TPersistentBufferDiskOperationInFlight::EBarrierOperation;
+        const auto it = PersistentBufferRemovals.find(key);
+        if (it == PersistentBufferRemovals.end()) {
+            return;
+        }
+        auto& removal = it->second;
+        if (IsBroken()) {
+            if (removal.Request) {
+                SendReply(*removal.Request, std::make_unique<TEvUnregisterPersistentBufferResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason()));
+            }
+            PersistentBufferRemovals.erase(it);
+            return;
+        }
+        if (removal.Stage == EStage::Close || removal.Stage == EStage::Remove) {
+            return;
+        }
+        const auto now = TActivationContext::Now();
+        if (removal.Stage == EStage::Wait && now < removal.Deadline) {
+            Schedule(removal.Deadline - now, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
+            return;
+        }
+        if (HasPersistentBufferInflightForTablet(key.TabletId)
+                || PersistentBufferSpaceAllocator.GetFreeSpace() < 1) {
+            Schedule(TDuration::MilliSeconds(10), new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
+            return;
+        }
+        auto creds = TQueryCredentials::ForInternal(key.TabletId, Max<ui32>(), std::nullopt, key.DirectBlockGroupIndex);
+        auto synthetic = std::make_unique<IEventHandle>(SelfId(), SelfId(), new TEvUnregisterPersistentBuffer(creds));
+        IEventHandle& request = removal.Request ? *removal.Request : *synthetic;
+        if (removal.Stage == EStage::Wait) {
+            removal.Stage = EStage::Remove;
+            BarrierErasePersistentBuffer(request, creds, {}, 0, EOperation::Remove);
+        } else {
+            std::vector<TEraseLsnId> erases;
+            for (const auto& [id, buffer] : PersistentBuffers) {
+                if (id.TabletId == key.TabletId && id.DirectBlockGroupIndex == key.DirectBlockGroupIndex) {
+                    for (const auto& [lsn, record] : buffer.Records) {
+                        erases.push_back({id.Generation, lsn});
+                    }
+                }
+            }
+            removal.Stage = EStage::Close;
+            BarrierErasePersistentBuffer(request, creds, erases, Max<ui64>(), EOperation::Close);
+        }
+    }
+
+    void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn,
+            TPersistentBufferDiskOperationInFlight::EBarrierOperation operation) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
         YDB_LOG_TRACE_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::BarrierErasePersistentBuffer",
             {"marker", "BSPB"},
@@ -1675,6 +2141,7 @@ namespace NKikimr::NDDisk {
         const ui64 barrierEraseCookie = NextCookie++;
         auto [inflightRecord, inserted] = PersistentBufferDiskOperationInflight.try_emplace(barrierEraseCookie, TPersistentBufferDiskOperationInFlight{
             .StartTs = HPNow(),
+            .BarrierOperation = operation,
         });
         Y_ABORT_UNLESS(inserted);
         inflightRecord->second.Records.push_back({
@@ -1688,7 +2155,9 @@ namespace NKikimr::NDDisk {
 
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(1);
         Y_ABORT_UNLESS(sectors.size() == 1);
-        auto [oldChunkIdx, oldSectorIdx, barrier] = PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex));
+        auto [oldChunkIdx, oldSectorIdx, barrier] = operation == TPersistentBufferDiskOperationInFlight::EBarrierOperation::Remove
+            ? PersistentBufferBarriersManager.RemoveBarrier(creds.TabletId, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex))
+            : PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex));
 
         if (oldChunkIdx != Max<ui32>()) {
             inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});
@@ -1706,9 +2175,18 @@ namespace NKikimr::NDDisk {
         memcpy(headerData.GetDataMut(), &barrier.Header, sizeof(TPersistentBufferBarriers));
         memset(headerData.GetDataMut() + sizeof(TPersistentBufferBarriers), 0, SectorSize - sizeof(TPersistentBufferBarriers));
         TRope headerRope(std::move(headerData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
-            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferBarriers));
+
+        if (PersistentBufferFormat.EnableChecksums) {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+                CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferBarriers));
+        } else {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Flags |= TPersistentBufferHeader::CHECKSUMS_DISABLED;
+        }
+
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{barrier.ChunkIdx, barrier.SectorIdx, 0, 0, 0});
+        const bool writeInserted = PersistentBufferBarrierWrites.emplace(
+            TPersistentBufferLocation{barrier.ChunkIdx, barrier.SectorIdx}, false).second;
+        Y_ABORT_UNLESS(writeInserted);
 
         auto chunkOffset = barrier.SectorIdx * SectorSize;
         auto diskOffset = DiskFormat->Offset(barrier.ChunkIdx, 0, chunkOffset);
@@ -1832,8 +2310,12 @@ namespace NKikimr::NDDisk {
         memcpy(fastEraseData.GetDataMut(), &fastErase.Header, sizeof(TPersistentBufferFastErases));
         memset(fastEraseData.GetDataMut() + sizeof(TPersistentBufferFastErases), 0, SectorSize - sizeof(TPersistentBufferFastErases));
         TRope headerRope(std::move(fastEraseData));
-        ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
-            CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferFastErases));
+        if (PersistentBufferFormat.EnableChecksums) {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Checksum =
+                CalculateChecksum(headerRope.Begin(), sizeof(TPersistentBufferFastErases));
+        } else {
+            ((TPersistentBufferHeader*)headerRope.Begin().ContiguousDataMut())->Flags |= TPersistentBufferHeader::CHECKSUMS_DISABLED;
+        }
 
         inflightRecord->second.OccupiedSectors.emplace_back(TPersistentBufferSectorInfo{fastErase.ChunkIdx, fastErase.SectorIdx, 0, 0, 0});
         auto chunkOffset = fastErase.SectorIdx * SectorSize;
@@ -2235,6 +2717,9 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ProcessListPersistentBuffer(TAutoPtr<TEventHandle<TEvListPersistentBuffer>> ev, ui32 retriesLeft) {
+        if (!CheckQuery(*ev, &Counters.Interface.ListPersistentBuffer)) {
+            return;
+        }
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
@@ -2296,6 +2781,10 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvRetryListPersistentBuffer::TPtr ev) {
+        if (IsBroken()) {
+            RejectQuery(*ev->Get()->Ev, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
+            return;
+        }
         ProcessListPersistentBuffer(ev->Get()->Ev, ev->Get()->RetriesLeft);
     }
 

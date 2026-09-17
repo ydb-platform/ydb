@@ -304,13 +304,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
 
         blockShardStats.Unblock();
         blockShardStats.Stop();
-        // Give SchemeShard time to process shard stats updates
-        runtime.SimulateSleep(TDuration::Seconds(1));
 
-        // Check that after all shard updates reached SchemeShard,
-        // statistics service reports correct row count.
-        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
-        WaitForStatsPropagate(runtime, nodeIdx);
+        // SendBaseStatsToSA may still emit a previously scheduled incomplete
+        // blob; wait until StatService actually has the full row count.
+        WaitForRowCount(runtime, nodeIdx, pathId, expectedRowCount);
 
         // Block updates from one of the shards again and reboot SchemeShard
         TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStatsAgain(
@@ -384,7 +381,8 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
             return describe.GetPathDescription().GetTableStats().GetRowCount();
         };
 
-        runtime.SimulateSleep(TDuration::Seconds(100));
+        WaitForSchemeShardStatsUpdate(runtime, ssTabletId, /*requireFull=*/true);
+        WaitForRowCount(runtime, nodeIdx, pathId1, 1000, /*timeoutSec=*/30);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
         UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
 
@@ -396,7 +394,9 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         PrepareColumnTable(env, dbName, table2, 4);
         auto pathId2 = ResolvePathId(runtime, path2, nullptr, &saTabletId);
 
-        runtime.SimulateSleep(TDuration::Seconds(100));
+        WaitForSchemeShardStatsUpdate(runtime, ssTabletId, /*requireFull=*/true);
+        WaitForRowCount(runtime, nodeIdx, pathId1, 1000, /*timeoutSec=*/30);
+        WaitForRowCount(runtime, nodeIdx, pathId2, 1000, /*timeoutSec=*/30);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
         UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
@@ -407,7 +407,10 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         PrepareColumnTable(env, dbName, table3, 4);
         auto pathId3 = ResolvePathId(runtime, path3, nullptr, &saTabletId);
 
-        runtime.SimulateSleep(TDuration::Seconds(140));
+        WaitForSchemeShardStatsUpdate(runtime, ssTabletId, /*requireFull=*/true);
+        WaitForRowCount(runtime, nodeIdx, pathId1, 1000, /*timeoutSec=*/30);
+        WaitForRowCount(runtime, nodeIdx, pathId2, 1000, /*timeoutSec=*/30);
+        WaitForRowCount(runtime, nodeIdx, pathId3, 1000, /*timeoutSec=*/30);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path3), 1000);
@@ -442,8 +445,9 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
     Y_UNIT_TEST(ServerlessTimeIntervals) {
         // Test that time intervals set in config for the serverless environment are honored.
         auto modifyConfig = [](Tests::TServerSettings& settings) {
-            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(30);
-            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(30);
+            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsSendInitialDelaySeconds(5);
+            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(5);
+            settings.AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(5);
         };
         TTestEnv env(1, 1, false, modifyConfig);
 
@@ -453,25 +457,15 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateTable(env, "Serverless1", "Table1", 5);
         CreateTable(env, "Serverless2", "Table2", 6);
 
-        // Wait until reported row counts are correct.
         auto& runtime = *env.GetServer().GetRuntime();
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
-        ValidateRowCount(runtime, 1, pathId1, 5);
-        ValidateRowCount(runtime, 1, pathId2, 6);
 
-        // Subsequent events renewing base statistics should not be sent out for a long time.
-
-        size_t sendCount = 0;
+        THashMap<ui64, TVector<TInstant>> sendTimesBySs;
         auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev){
-            // Count only events from serverless schemeshards.
-            NKikimrStat::TSchemeShardStats stats;
-            UNIT_ASSERT(stats.ParseFromString(ev->Get()->Record.GetStats()));
-            if (stats.GetEntries().size() == 1) {
-                auto ownerId = stats.GetEntries()[0].GetPathId().GetOwnerId();
-                if (ownerId == pathId1.OwnerId || ownerId == pathId2.OwnerId) {
-                    ++sendCount;
-                }
+            auto ssId = ev->Get()->Record.GetSchemeShardId();
+            if (ssId == pathId1.OwnerId || ssId == pathId2.OwnerId) {
+                sendTimesBySs[ssId].push_back(runtime.GetCurrentTime());
             }
         });
 
@@ -480,13 +474,37 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
             ++propagateCount;
         });
 
-        runtime.SimulateSleep(TDuration::Seconds(15));
-        UNIT_ASSERT_VALUES_EQUAL(sendCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(propagateCount, 0);
+        ValidateRowCount(runtime, 1, pathId1, 5);
+        ValidateRowCount(runtime, 1, pathId2, 6);
 
-        runtime.SimulateSleep(TDuration::Seconds(20));
-        UNIT_ASSERT_VALUES_EQUAL(sendCount, 2); // events from 2 serverless schemeshards
-        UNIT_ASSERT_VALUES_EQUAL(propagateCount, 2); // SA -> node1 and node1 -> node2
+        auto enoughSamples = [&] {
+            if (sendTimesBySs.size() != 2) {
+                return false;
+            }
+            for (const auto& [_, times] : sendTimesBySs) {
+                if (times.size() < 2) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (int i = 0; i < 20 && !enoughSamples(); ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(sendTimesBySs.size(), 2);
+        for (const auto& [ssId, times] : sendTimesBySs) {
+            UNIT_ASSERT_C(times.size() >= 2,
+                "schemeshard " << ssId << " sent only " << times.size() << " time(s)");
+            for (size_t i = 1; i < times.size(); ++i) {
+                const auto gap = times[i] - times[i - 1];
+                UNIT_ASSERT_C(gap >= TDuration::Seconds(3),
+                    "schemeshard " << ssId << " gap " << gap << " is below serverless min jitter");
+                UNIT_ASSERT_C(gap <= TDuration::Seconds(7),
+                    "schemeshard " << ssId << " gap " << gap << " is above serverless max interval");
+            }
+        }
+        UNIT_ASSERT_GE(propagateCount, 2);
     }
 
     Y_UNIT_TEST(PersistenceWithStorageFailuresAndReboots) {

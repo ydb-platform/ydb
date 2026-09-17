@@ -134,6 +134,7 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui32, StaticPerCluster> QLFilterDepthLimit;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 
@@ -193,6 +194,7 @@ public:
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
     NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
+    NCommon::TConfSetting<bool, Static> _ReplaceEmptyOpWithTouch;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

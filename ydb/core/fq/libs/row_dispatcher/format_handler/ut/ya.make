@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/fq/libs/row_dispatcher/format_handler)
 
 SRCS(
     format_handler_ut.cpp
+    memory_quota_ut.cpp
     topic_filter_ut.cpp
     topic_parser_ut.cpp
 )

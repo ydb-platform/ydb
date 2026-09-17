@@ -229,10 +229,6 @@ protected:
     bool StoreSecretSettingEntry(const TIdentifier& id, const TRule_secret_setting_value& value, TSecretParameters& secretParams);
     bool StoreSecretInheritPermissions(const TRule_secret_setting_value& value, const TString& key, TSecretParameters& secretParams);
     bool StoreSecretValue(const TRule_secret_setting_value& value, const TString& key, TSecretParameters& secretParams);
-    bool StoreResourcePoolSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool StoreResourcePoolSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
-    bool StoreResourcePoolClassifierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool StoreResourcePoolClassifierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
 
     bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
@@ -302,10 +298,6 @@ protected:
                         const NSQLv1Generated::TToken& afterToken,
                         const TString& service,
                         const TDeferredAtom& cluster);
-    bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
-    bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
-    bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
-    bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result);
     bool HashParameter(const TRule_hash_option& hashOption, TUserParameters& result);
@@ -314,23 +306,6 @@ protected:
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
-    bool StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
-    bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
-    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
-    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
-    bool ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables);
-    bool ParseBackupCollectionEntry(
-        bool& addDatabase,
-        bool& removeDatabase,
-        TVector<TDeferredAtom>& addTables,
-        TVector<TDeferredAtom>& removeTables,
-        const TRule_alter_backup_collection_entry& entry);
-    bool ParseBackupCollectionEntries(
-        bool& addDatabase,
-        bool& removeDatabase,
-        TVector<TDeferredAtom>& addTables,
-        TVector<TDeferredAtom>& removeTables,
-        const TRule_alter_backup_collection_entries& entries);
     bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
@@ -380,6 +355,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
 
 bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
+bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {});
 
 template <typename TChar>
 struct TPatternComponent {

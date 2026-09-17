@@ -74,7 +74,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
 
-    THolder<TThread> FormattingThread;
+    THolder<TPDiskFunctionThread> FormattingThread;
     bool IsFormattingNow = false;
     std::function<void(bool, TString&)> PendingRestartResponse;
 
@@ -433,7 +433,7 @@ public:
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
         using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
-        FormattingThread.Reset(new TThread(
+        FormattingThread.Reset(new TPDiskFunctionThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
                     auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
@@ -464,12 +464,19 @@ public:
                         options.PlainDataChunks = cfg->PlainDataChunks;
                         options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
                         options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
+                        if (cfg->PhysicalChunkSize) {
+                            options.PhysicalChunkSizeBytes = cfg->PhysicalChunkSize;
+                        }
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
+                            // Keep the configured mode, only shrink the chunk to fit a small disk.
+                            if (options.PhysicalChunkSizeBytes) {
+                                options.PhysicalChunkSizeBytes = NPDisk::SmallDiskMaximumChunkSize;
+                            }
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
@@ -483,7 +490,8 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata)),
+                Cfg->BlobStorageExecutorPoolAffinity));
 
         FormattingThread->Start();
     }
@@ -499,7 +507,7 @@ public:
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
         using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, std::shared_ptr<TPDiskCtx>>;
-        FormattingThread.Reset(new TThread(
+        FormattingThread.Reset(new TPDiskFunctionThread(
             [] (void *cookie) -> void* {
                 std::unique_ptr<TCookieType> params(static_cast<TCookieType*>(cookie));
                 TDiskFormat format = std::get<0>(*params);
@@ -536,7 +544,8 @@ public:
                 }
                 return nullptr;
             },
-            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx)
+            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx),
+            PDisk->Cfg->BlobStorageExecutorPoolAffinity
         ));
         FormattingThread->Start();
     }
@@ -988,7 +997,7 @@ public:
     // the block device thread is doing concurrently.
     void Handle(NPDisk::TEvDeviceOverestimationSamples::TPtr &ev) {
         for (const auto& sample : ev->Get()->Samples) {
-            PDisk->Mon.DeviceOverestimationMerged.Push(sample);
+            PDisk->Mon.DeviceOverestimationMerged->Push(sample);
         }
     }
 
@@ -1690,9 +1699,19 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 
-void TRealPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
-        const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId) {
-    CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, cfg, mainKey, pDiskID, poolId, nodeId);
+namespace {
+    class TPDiskSubsystem final : public IPDiskSubsystem {
+    public:
+        void Start(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& config,
+                const NPDisk::TMainKey& mainKey, ui32 poolId, ui32 nodeId) override {
+            CreatePDiskActor(ctx.ExecutorThread, AppData(ctx)->Counters, config, mainKey, pdiskId, poolId, nodeId);
+        }
+    };
 }
+
+std::unique_ptr<IPDiskSubsystem> CreatePDiskSubsystem() {
+    return std::make_unique<TPDiskSubsystem>();
+}
+
 
 } // NKikimr

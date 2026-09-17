@@ -382,14 +382,13 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
 
     const NArrow::TColumnFilter& columnFilter =
         GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
-    const auto portionState = GetContext()->GetPortionStateAtScanStart(*Portion);
     const auto readContext = std::static_pointer_cast<TSpecialReadContext>(GetContext());
     const bool hasChunks = GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size();
     const auto accessorType = GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType();
     // Dictionary-only accessors are indexed by dictionary entries, not portion rows: only when no row-level filter
     // (PK range, duplicates, deletions) has to be applied to this portion.
     const bool dictionaryOnlyAllowed = addr.GetUseDictionaryOnly() && hasChunks && UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
-                                       !portionState.Conflicting && readContext->GetDuplicateFilterPortionCount() <= 1 &&
+                                       !IsConflicting() && readContext->GetDuplicateFilterPortionCount() <= 1 &&
                                        NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (dictionaryOnlyAllowed && accessorType == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
@@ -421,10 +420,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
         const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        auto state = GetContext()->GetPortionStateAtScanStart(*portion);
-        if (state.Committed) {
-            ss = state.MaxRecordSnapshot;
-        } else if (state.IsMyUncommitted()) {
+        if (portion->HasCommitSnapshot()) {
+            ss = portion->GetCommitSnapshotVerified();
+        } else if (!IsConflicting()) {
+            // if a portion is not committed, and not conflicting, it is a portion written by the current tx
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -452,15 +451,15 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
     return true;
 }
 
-TPortionDataSource::TPortionDataSource(
-    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::SimplePortion, sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
+TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
+    const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting)
+    : TBase(EType::SimplePortion, sourceIdx, context, isConflicting, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount(), portion->GetPortionId())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
-    , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
-    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+    , Start(TReplaceKeyAdapter::BuildStart(*portion, context->GetReadMetadata()->GetRequestSorting()))
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, context->GetReadMetadata()->GetRequestSorting()))
 {
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
@@ -519,16 +518,23 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 }
 
 bool TPortionDataSource::DoAddTxConflict() {
-    auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
-    if (state.Committed) {
-        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
+    auto& info = GetPortionInfo();
+    if (info.IsCommitted()) {
+        // conflicting portion got aborted, so it doesn't conflict with us anymore
+        // but we return true here anyway because it is what the caller expects for a
+        // portion we don't want to read
+        if (info.IsAborted()) {
+            return true;
+        }
+        // conflicting portion is already committed, we don't have a chance to commit anymore
+        GetContext()->GetReadMetadata()->BreakLock();
         return true;
-    } else if (!state.IsMyUncommitted()) {
+    } else {
+        // conflicting portion is not committed yet, remember it
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
         GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
-    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

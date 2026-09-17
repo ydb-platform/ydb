@@ -80,12 +80,12 @@ def collect_tablets_state(client, tablet_ids=()):
     return tablets_info
 
 
-def collect_inactive_tablets(client, tablet_ids=()):
+def collect_inactive_tablets(client, tablet_ids=(), active_states=(TabletStates.Active,)):
     tablets_info = collect_tablets_state(client, tablet_ids)
     non_active_tablets = list()
 
     for tablet_id, state in tablets_info.items():
-        if state != TabletStates.Active:
+        if state not in active_states:
             non_active_tablets.append(
                 (
                     tablet_id,
@@ -104,13 +104,14 @@ def pretty_tablet_info(info):
     )
 
 
-def wait_tablets_are_active(client, tablet_ids=(), timeout_seconds=120, cluster=None, details=None):
+def wait_tablets_are_active(client, tablet_ids=(), timeout_seconds=120, cluster=None, details=None,
+                            active_states=(TabletStates.Active,)):
 
     start_time = time.time()
     logger.info("Waiting tablets to become active")
 
     def predicate(raise_error=False):
-        inactive_tablets = collect_inactive_tablets(client, tablet_ids)
+        inactive_tablets = collect_inactive_tablets(client, tablet_ids, active_states)
         if inactive_tablets:
             inactive_tablets_count = len(inactive_tablets)
             if len(inactive_tablets) > 10:

@@ -53,8 +53,22 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     Settings->AddStoragePoolType("hdd1");
     Settings->AddStoragePoolType("hdd2");
     Settings->SetColumnShardAlterObjectEnabled(true);
-    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
-    Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
+    auto* stats = Settings->AppConfig->MutableStatisticsConfig();
+    stats->SetBaseStatsSendInitialDelaySeconds(1);
+    stats->SetBaseStatsSendIntervalSecondsDedicated(1);
+    stats->SetBaseStatsSendIntervalSecondsServerless(1);
+    stats->SetBaseStatsPropagateIntervalSecondsDedicated(1);
+    stats->SetBaseStatsPropagateIntervalSecondsServerless(1);
+
+    // Speed up datashard partition stats reporting (default 10s) so that
+    // schemeshard gets full stats faster, especially after reboots.
+    Settings->AppConfig->MutableDataShardConfig()->SetStatsReportIntervalSeconds(1);
+
+    // Speed up columnshard periodic stats reporting (default 60s) so that
+    // schemeshard gets full stats faster, especially after reboots.
+    auto* columnShardStats = Settings->AppConfig->MutableColumnShardConfig()->MutableStatistics();
+    columnShardStats->SetReportBaseStatisticsPeriodMs(1000);
+    columnShardStats->SetReportExecutorStatisticsPeriodMs(1000);
 
     // With LLVM enabled, scan queries calculating column statistics are very slow for some reason
     // (10s of seconds), so we disable it.
@@ -495,7 +509,6 @@ void InsertDataIntoTable(
     UNIT_ASSERT_VALUES_EQUAL_C(
         response.operation().status(), Ydb::StatusIds::SUCCESS,
         GetIssuesString(response.operation()));
-    env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
 TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
@@ -518,24 +531,22 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Key']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
                     `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,
                     `COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":0}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Value']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    runtime.SimulateSleep(TDuration::MilliSeconds(200));
 
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
-
-    env.GetController()->WaitActualization(TDuration::Seconds(1));
 
     return info;
 }
@@ -966,16 +977,7 @@ void CheckEqHeightHistogram(
     }
 }
 
-ui64 CountStatisticsV2Rows(
-        TTestEnv& env, const TString& databaseName, const TPathId& pathId,
-        EStatType statType, const TString& columnTags) {
-    TStringBuilder script;
-    script << "SELECT COUNT(*) FROM `/Root/" << databaseName << "/.metadata/statistics_v2` "
-        << "WHERE owner_id = " << pathId.OwnerId
-        << " AND local_path_id = " << pathId.LocalPathId
-        << " AND stat_type = " << static_cast<ui32>(statType)
-        << " AND column_tags = \"" << columnTags << "\";";
-
+Ydb::ResultSet ExecuteYqlScriptWithResult(TTestEnv& env, const TString& script) {
     auto& runtime = *env.GetServer().GetRuntime();
     using TEvExecuteYqlRequest = NGRpcService::TGrpcRequestOperationCall<
         Ydb::Scripting::ExecuteYqlRequest,
@@ -996,7 +998,18 @@ ui64 CountStatisticsV2Rows(
     Ydb::Scripting::ExecuteYqlResult result;
     UNIT_ASSERT(response.operation().result().UnpackTo(&result));
     UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
-    const auto& resultSet = result.result_sets(0);
+    return std::move(*result.mutable_result_sets(0));
+}
+
+ui64 CountStatisticsV2Rows(
+        TTestEnv& env, const TString& databaseName, const TPathId& pathId,
+        EStatType statType, const TString& columnTags) {
+    const auto resultSet = ExecuteYqlScriptWithResult(env, TStringBuilder()
+        << "SELECT COUNT(*) FROM `/Root/" << databaseName << "/.metadata/statistics_v2` "
+        << "WHERE owner_id = " << pathId.OwnerId
+        << " AND local_path_id = " << pathId.LocalPathId
+        << " AND stat_type = " << static_cast<ui32>(statType)
+        << " AND column_tags = \"" << columnTags << "\";");
     UNIT_ASSERT_VALUES_EQUAL(resultSet.rows_size(), 1);
     const auto& cell = resultSet.rows(0).items(0);
     if (cell.has_uint64_value()) {
@@ -1008,28 +1021,7 @@ ui64 CountStatisticsV2Rows(
 }
 
 static TString ExecuteYqlScriptFetchBytes(TTestEnv& env, const TString& script) {
-    auto& runtime = *env.GetServer().GetRuntime();
-
-    using TEvExecuteYqlRequest = NGRpcService::TGrpcRequestOperationCall<
-        Ydb::Scripting::ExecuteYqlRequest,
-        Ydb::Scripting::ExecuteYqlResponse>;
-
-    Ydb::Scripting::ExecuteYqlRequest request;
-    request.set_script(script);
-
-    auto future = NRpcService::DoLocalRpc<TEvExecuteYqlRequest>(
-        std::move(request), "", "", runtime.GetActorSystem(0));
-    auto response = runtime.WaitFuture(std::move(future));
-
-    UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL_C(
-        response.operation().status(), Ydb::StatusIds::SUCCESS,
-        GetIssuesString(response.operation()));
-
-    Ydb::Scripting::ExecuteYqlResult result;
-    UNIT_ASSERT(response.operation().result().UnpackTo(&result));
-    UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
-    const auto& resultSet = result.result_sets(0);
+    const auto resultSet = ExecuteYqlScriptWithResult(env, script);
     UNIT_ASSERT_VALUES_EQUAL(resultSet.rows_size(), 1);
     return resultSet.rows(0).items(0).bytes_value();
 }

@@ -27,6 +27,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/ptr.h>
+
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -54,11 +56,15 @@ private:
     TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-    NActors::TActorId BSControllerPipeClient;
+
+    NActors::TActorId BscProxy;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    TString FrontendRegistrationId;
+    // A queued Ready event must not republish metadata after backend shutdown.
+    bool FrontendRegistrationClosed = false;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -74,12 +80,24 @@ private:
     struct TAddHostInFlight
     {
         size_t DirectBlockGroupId = 0;
-        THostIndex NewHostIndex = InvalidHostIndex;
-        NActors::TActorId BSPipeClient;
+        ui32 LiveHostCount = 0;
+        ui32 DBGConnectionsConfigGeneration = 0;
     };
 
     // At most one add-host runs at a time across the whole partition.
     std::optional<TAddHostInFlight> AddHostInFlight;
+
+    struct TRemoveHostInFlight
+    {
+        size_t DirectBlockGroupId = 0;
+        NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
+        NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
+        ui32 DBGConnectionsConfigGeneration = 0;
+    };
+
+    // At most one remove-host runs at a time; mutually exclusive with
+    // AddHostInFlight.
+    std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
     // Batch persisting of vchunk configs.
     bool ExecutingUpdateVChunkConfig = false;
@@ -109,6 +127,15 @@ private:
     // Remove tablet and wipe disk
     STFUNC(StateDelete);
 
+    // SendData via the BSC proxy actor (created on first use).
+    void SendToBsc(
+        const NActors::TActorContext& ctx,
+        THolder<NActors::IEventBase> request,
+        ui64 cookie = 0);
+
+    // Poison the BSC proxy and drop the id. No-op if it was never created.
+    void StopBscProxy(const NActors::TActorContext& ctx);
+
     // Common handlers in different states
     void HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev);
 
@@ -129,6 +156,7 @@ private:
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
     void CleanupResources(const NActors::TActorContext& ctx);
+    void UnregisterFrontendVolume(const NActors::TActorContext& ctx);
     void DetachEndpointAddDie(const NActors::TActorContext& ctx);
 
     void HandleConnect(
@@ -150,9 +178,11 @@ private:
 
     void ReportTabletState(const NActors::TActorContext& ctx);
 
-    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
-
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
+
+    [[nodiscard]] std::unique_ptr<
+        NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
+    MakeAllocateDDiskBlockGroupRequest() const;
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
@@ -172,10 +202,28 @@ private:
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Sends the in-flight remove's deletion to BSController.
+    void SendRemoveHostRequest(const NActors::TActorContext& ctx);
+
+    // Applies the deletion response; NOT_FOUND means already applied.
+    void HandleRemoveHostAllocationResult(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleGetLoadActorAdapterActorId(
         const NYdb::NBS::NBlockStore::TEvService::
             TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    // Replies to the volume with the outcome of its UpdateVolumeConfig request.
+    // The volume matches the reply against TxId and Origin; without them it
+    // drops the reply as belonging to an unknown transaction and never
+    // completes the request.
+    void ReplyUpdateVolumeConfig(
+        const NActors::TActorContext& ctx,
+        const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        NKikimrBlockStore::EStatus status);
 
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
@@ -207,6 +255,10 @@ private:
 
     void HandleAddHostToDBG(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandlePersistHostHealth(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleDeletePartition(
@@ -253,6 +305,14 @@ private:
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePersistHostHealthDuringDelete(
+        const TEvPartitionDirectPrivate::TEvPersistHostHealth::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRemoveHostFromDBGDuringDelete(
+        const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void ReplyToDeleteWaiters(
         const NActors::TActorContext& ctx,
         const NProto::TError& error);
@@ -264,15 +324,30 @@ private:
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        ui32 dbgConnectionsConfigGeneration);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
     void SendAllocateDDiskForAddHost(
         const NActors::TActorContext& ctx,
+        size_t dbgId);
+
+    void HandleRemoveHostFromDBG(
+        const TEvPartitionDirectPrivate::TEvRemoveHostFromDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    bool ValidateRemoveHostFromDBGRequest(
+        const NActors::TActorContext& ctx,
         size_t dbgId,
-        THostIndex newHostIndex);
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration);
+
+    void RejectRemoveHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        size_t hostIndex,
+        const TString& message);
 
     // Mon-page related methods.
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
@@ -295,5 +370,23 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TAllocationResponse
+{
+    NProto::TError Error;
+    const NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+        TDirectBlockGroup* Group = nullptr;
+};
+
+[[nodiscard]] TAllocationResponse ValidateAllocationResponse(
+    const NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult&
+        msg,
+    size_t dbgId,
+    size_t expectedHostCount);
+
+// Hosts that are not marked RemovedFromBSC.
+[[nodiscard]] size_t LiveHostCount(
+    const ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupConnections&
+        connections);
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

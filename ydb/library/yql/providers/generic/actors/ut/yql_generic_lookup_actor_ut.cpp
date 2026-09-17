@@ -139,6 +139,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         size_t FullscanLimit;
     };
 
+    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern);
+
     Y_UNIT_TEST_QUAD(Lookup, MultiMatches, Fullscan) {
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
         auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
@@ -256,7 +258,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
             auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
                 std::move(connectorMock),
-                NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
+                CreateMockStructuredTokenCredentialsFactory("token_value", {}),
                 caller,
                 nullptr,
                 alloc,
@@ -698,8 +700,10 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 public:
                 TCredentialsProvider(const std::string yqlToken, const TVector<bool>& pattern)
                     : YqlToken(yqlToken)
+                    , Promise(NThreading::NewPromise<std::string>())
                     , Pattern(pattern)
                 {
+                    Promise.SetValue(YqlToken);
                 }
 
                 std::string GetAuthInfo() const override final {
@@ -709,12 +713,22 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                     throw yexception() << "Uh, oh";
                 }
 
+                NThreading::TFuture<std::string> GetAuthInfoAsync() const override final {
+                    try {
+                        (void)GetAuthInfo();
+                        return Promise.GetFuture();
+                    } catch (...) {
+                        return NThreading::MakeErrorFuture<std::string>(std::current_exception());
+                    }
+                }
+
                 bool IsValid() const override final {
                     return true;
                 }
 
                 private:
                 std::string YqlToken;
+                NThreading::TPromise<std::string> Promise;
                 TVector<bool> Pattern;
 
                 mutable ui32 Invocation = 0;
@@ -727,11 +741,21 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                 }
 
                 std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
+                    if (Pattern.empty()) {
+                        TGuard lock(Mutex);
+                        auto [it, inserted] = SharedProviders.try_emplace(YqlToken);
+                        if (inserted) {
+                            it->second = std::make_shared<TCredentialsProvider>(YqlToken, Pattern);
+                        }
+                        return it->second;
+                    }
                     return std::make_shared<TCredentialsProvider>(YqlToken, Pattern);
                 }
             private:
                 std::string YqlToken;
                 TVector<bool> Pattern;
+                mutable TMutex Mutex;
+                mutable std::unordered_map<std::string, std::shared_ptr<NYdb::ICredentialsProvider>> SharedProviders;
         };
         std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& /*structuredToken*/, bool /*addBearer*/) override {
             return std::make_shared<TCredentialsProviderFactory>(YqlToken, Pattern);

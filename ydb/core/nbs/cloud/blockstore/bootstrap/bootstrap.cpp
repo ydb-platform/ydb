@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_simple.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/vhost.h>
@@ -17,8 +18,6 @@ namespace NYdb::NBS::NBlockStore {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-constexpr ui32 DefaultLogLevel = 5;
 
 TNbsServicePtr NbsService;
 
@@ -44,7 +43,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     , Scheduler(CreateScheduler(Timer))
 {
     TLogSettings logSettings;
-    logSettings.FiltrationLevel = static_cast<ELogPriority>(DefaultLogLevel);
+    logSettings.FiltrationLevel =
+        static_cast<ELogPriority>(Config.GetConsoleLogLevel());
     Logging = CreateLoggingService("console", logSettings);
     Log = Logging->CreateLog("NBS2_SERVICE");
 
@@ -66,18 +66,31 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
         CreateDefaultDeviceHandlerFactory(),
         std::move(vhostServerConfig),
         VhostCallbacks);
+
+    if (Config.GetNbsFrontendConfig().GetEnabled()) {
+        Frontend = std::make_unique<TNbsFrontendRuntime>(
+            Logging->CreateLog("NBS2_FRONTEND"));
+    }
 }
+
+TNbsService::~TNbsService() = default;
 
 void TNbsService::Start()
 {
     STORAGE_INFO("TNbsService start");
     Scheduler->Start();
     VhostServer->Start();
+    if (Frontend) {
+        Frontend->Start();
+    }
 }
 
 void TNbsService::Stop()
 {
     STORAGE_INFO("TNbsService stop");
+    if (Frontend) {
+        Frontend->Stop();
+    }
     VhostServer->Stop();
     Scheduler->Stop();
 }
@@ -109,6 +122,15 @@ void StopNbsService()
     if (NbsService) {
         NbsService->Stop();
     }
+}
+
+NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
+GetNbsFrontendBlockStore()
+{
+    if (!NbsService || !NbsService->Frontend) {
+        return {};
+    }
+    return NbsService->Frontend->GetBlockStore();
 }
 
 TNbsServicePtr GetNbsService()

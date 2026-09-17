@@ -147,9 +147,14 @@ struct TStageGraph {
         }
         NYql::EStorageType StorageType;
     };
+    struct TSinkStageTraits {
+        TSinkStageTraits(const NYql::TExprNode::TPtr& sinkSettings) : SinkSettings(sinkSettings) {}
+        NYql::TExprNode::TPtr SinkSettings;
+    };
 
     TList<ui32> StageIds;
     THashMap<ui32, TSourceStageTraits> SourceStages;
+    THashMap<ui32, TSinkStageTraits> SinkStages;
     THashMap<ui32, TVector<ui32>> StageInputs;
     THashMap<ui32, TVector<ui32>> StageOutputs;
     THashMap<std::pair<ui32, ui32>, TVector<TIntrusivePtr<TConnection>>> Connections;
@@ -162,6 +167,13 @@ struct TStageGraph {
         ui32 res = AddStage();
 
         SourceStages.insert({res, TSourceStageTraits(storageType)});
+        return res;
+    }
+
+    ui32 AddSinkStage(const NYql::TExprNode::TPtr& sinkSettings) {
+        ui32 res = AddStage();
+
+        SinkStages.insert({res, TSinkStageTraits(sinkSettings)});
         return res;
     }
 
@@ -183,6 +195,14 @@ struct TStageGraph {
             return it->second.StorageType;
         }
         return NYql::EStorageType::NA;
+    }
+
+    bool IsSinkStage(const ui32 id) const {
+        return SinkStages.contains(id);
+    }
+
+    NYql::TExprNode::TPtr GetSinkSettings(const ui32 id) const {
+        return SinkStages.at(id).SinkSettings;
     }
 
     void Connect(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {

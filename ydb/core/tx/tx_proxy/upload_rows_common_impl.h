@@ -399,6 +399,7 @@ private:
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
         THashSet<TString> setNotNullInProgressColumnsLeft = entry.SetNotNullInProgressColumns;
         THashSet<TString> defaultColumnsLeft;
+        THashSet<TString> virtualGeneratedColumns;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
@@ -409,7 +410,15 @@ private:
             ui32 id = colInfo.Id;
             auto& name = colInfo.Name;
             auto& type = colInfo.PType;
-            SrcColumns.emplace_back(name, type); // TODO: is it in correct order ?
+            const bool isVirtualGenerated = colInfo.IsDefaultFromExpression() && !colInfo.DefaultExpression->Stored;
+
+            if (isVirtualGenerated) {
+                virtualGeneratedColumns.insert(name);
+                notNullColumnsLeft.erase(name);
+                setNotNullInProgressColumnsLeft.erase(name);
+            } else {
+                SrcColumns.emplace_back(name, type); // TODO: is it in correct order ?
+            }
 
             columnByName[name] = id;
             i32 keyOrder = colInfo.KeyOrder;
@@ -474,6 +483,11 @@ private:
 
             if (ci.IsBuildInProgress && !fillBuildInProgressColumns) {
                 return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
+            }
+
+            if (virtualGeneratedColumns.contains(name)) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Column " << name << " is a virtual generated column and its value cannot be set explicitly");
             }
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);

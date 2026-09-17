@@ -26,6 +26,7 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/comp_nodes/operator_memory_quota/dq_operator_memory_quota.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -385,7 +386,7 @@ protected:
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
-    virtual IDqSchedulerContextPtr GetSchedulerContext() const {
+    virtual IDqSchedulableWorkFactoryPtr GetSchedulableWorkFactory() const {
         return nullptr;
     }
 
@@ -393,7 +394,8 @@ protected:
         Y_ASSERT(!Terminated);
 
         auto guard = BindAllocator();
-        auto* alloc = guard.GetMutex();
+        // memory hungry operators reach the task memory quota through this thread-local binding
+        TDqOperatorMemoryQuotaScope operatorQuotaScope(MemoryQuota ? MemoryQuota->GetOperatorQuota() : nullptr);
 
         if (State == NDqProto::COMPUTE_STATE_FINISHED) {
             if (!DoHandleChannelsAfterFinishImpl()) {
@@ -404,7 +406,7 @@ protected:
         }
 
         if (MemoryQuota) {
-            MemoryQuota->TryShrinkMemory(alloc);
+            MemoryQuota->TryShrinkMemory();
         }
 
         ReportStats();
@@ -494,11 +496,7 @@ protected:
             if (!transform.OutputBuffer || !transform.AsyncOutput) {
                 continue;
             }
-            const auto level = transform.OutputBuffer->GetFillLevel();
-            if (level != EDqFillLevel::NoLimit) {
-                transform.OutputConsumerWasLimited = true;
-            } else if (transform.OutputConsumerWasLimited) {
-                transform.OutputConsumerWasLimited = false;
+            if (transform.OutputBuffer->GetFillLevel() == EDqFillLevel::NoLimit) {
                 transform.AsyncOutput->OnOutputConsumerReady();
             }
         }
@@ -638,6 +636,8 @@ protected:
 
         try {
             if (MemoryQuota) {
+                // everything below dies without an operator quota, maybe under the scope of the current execution
+                MemoryQuota->UnbindOperatorQuota();
                 MemoryQuota->TryReleaseQuota();
             }
 
@@ -938,7 +938,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 protected:
     virtual void DoLoadRunnerState(TString&& blob) = 0;
 
-    void LoadState(TComputeActorState&& state) override final {
+    void LoadState(TComputeActorState&& state, const NDqProto::TCheckpoint& checkpoint) override final {
         CA_LOG_D("Load state");
         TMaybe<TString> error = Nothing();
         const TMiniKqlProgramState& mkqlProgramState = *state.MiniKqlProgram;
@@ -959,7 +959,7 @@ protected:
                 TAsyncOutputInfoBase* sink = SinksMap.FindPtr(sinkState.OutputIndex);
                 YQL_ENSURE(sink, "Failed to load state. Sink with output index " << sinkState.OutputIndex << " was not found");
                 YQL_ENSURE(sink->AsyncOutput, "Sink[" << sinkState.OutputIndex << "] is not created");
-                sink->AsyncOutput->LoadState(sinkState);
+                sink->AsyncOutput->LoadState(sinkState, checkpoint);
             }
         } catch (const std::exception& e) {
             error = e.what();
@@ -1193,7 +1193,6 @@ protected:
 
     struct TAsyncOutputTransformInfo : public TAsyncOutputInfoBase {
         IDqOutputConsumer::TPtr OutputBuffer;
-        bool OutputConsumerWasLimited = false;
     };
 
 protected:
@@ -2096,7 +2095,7 @@ protected:
                         .Arena = Task.GetArena(),
                         .TraceId = ComputeActorSpan.GetTraceId(),
                         .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get(),
-                        .SchedulerContext = GetSchedulerContext(),
+                        .SchedulableWorkFactory = GetSchedulableWorkFactory(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();
@@ -2183,6 +2182,7 @@ protected:
                         .RandomProvider = randomProvider,
                         .TraceId = ComputeActorSpan.GetTraceId(),
                         .TaskCounters = TaskCounters,
+                        .HasCheckpoints = GetTaskCheckpointingMode(Task) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

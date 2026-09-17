@@ -1,4 +1,5 @@
 #include "hullds_sst_it_all_ut.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 
 namespace NKikimr {
 
@@ -327,6 +328,52 @@ namespace NKikimr {
         }
 
         // FIXME: not all cases covered
+    }
+
+    Y_UNIT_TEST_SUITE(TBlobStorageHullSstHeapStripe) {
+        Y_UNIT_TEST(StripeIsDerivedFromChunkOwnership) {
+            TTestContexts ctxs;
+            using TSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+            TIntrusivePtr<TSst> seg(new TSst(ctxs.GetVCtx()));
+            seg->LastPartAddr = TDiskPart(7, 4064, 80);
+            seg->HeapStripe = seg->LastPartAddr;
+            seg->AllChunks = {7};
+
+            // nothing about the stripe is written down; the SST address is the whole record
+            NKikimrVDiskData::TDiskPart pb;
+            seg->SerializeToProto(pb);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetChunkIdx(), 7u);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetOffset(), 4064u);
+            UNIT_ASSERT_VALUES_EQUAL(pb.GetSize(), 80u);
+
+            TSst loaded(ctxs.GetVCtx(), pb);
+            UNIT_ASSERT(loaded.HeapStripe.Empty());
+
+            // a chunk owned by the slot heap leaves the SST unstriped
+            loaded.ResolveHeapStripe(THashSet<TChunkIdx>{9});
+            UNIT_ASSERT(loaded.HeapStripe.Empty());
+
+            loaded.ResolveHeapStripe(THashSet<TChunkIdx>{7});
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.ChunkIdx, 7u);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.Offset, 4064u);
+            UNIT_ASSERT_VALUES_EQUAL(loaded.HeapStripe.Size, 80u);
+
+            TVector<ui32> ids;
+            loaded.FillInChunkIds(ids);
+            UNIT_ASSERT(ids.empty());
+
+            loaded.AllChunks = {7};
+            TSet<TChunkIdx> chunks;
+            loaded.GetOwnedChunks(chunks);
+            UNIT_ASSERT(chunks.contains(7));
+
+            // a second stripe SST in the same chunk is allowed to claim it again
+            TSst other(ctxs.GetVCtx());
+            other.AllChunks = {7};
+            other.HeapStripe = loaded.HeapStripe;
+            other.GetOwnedChunks(chunks);
+            UNIT_ASSERT_VALUES_EQUAL(chunks.size(), 1u);
+        }
     }
 
 } // NKikimr

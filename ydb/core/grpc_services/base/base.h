@@ -496,12 +496,6 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
-    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
-        UserFacingTraceId = std::move(id);
-    }
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId);
-    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -549,9 +543,6 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
-
-private:
-    NWilson::TTraceId UserFacingTraceId;
 };
 
 // Request context
@@ -635,11 +626,12 @@ class TRefreshTokenImpl
     , public TEventLocal<TRefreshTokenImpl<TRpcId>, TRpcId>
 {
 public:
-    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, TActorId from)
+    TRefreshTokenImpl(const TString& token, const TString& database, const TString& peerName, const TString& traceId, TActorId from)
         : Token_(token)
         , Database_(database)
         , PeerName_(peerName)
         , From_(from)
+        , TraceId_(traceId)
         , State_(true)
     { }
 
@@ -774,7 +766,7 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return {};
+        return TraceId_;
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
@@ -833,6 +825,7 @@ private:
     const TString Database_;
     const TString PeerName_;
     const TActorId From_;
+    const TString TraceId_;
     NYdbGrpc::TAuthState State_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
@@ -906,7 +899,7 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
-        if (!TraceId) {
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -1288,7 +1281,7 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
-        if (!TraceId) {
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -1916,13 +1909,20 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName)
+    TEvRequestAuthAndCheck(
+        const TString& database,
+        const TMaybe<TString>& ydbToken,
+        NActors::TActorId sender,
+        TAuditMode auditMode,
+        TString peerName,
+        TString requestId)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
         , AuditMode(auditMode)
         , PeerName(std::move(peerName))
+        , RequestId(std::move(requestId))
     {}
 
     // IRequestProxyCtx
@@ -2047,7 +2047,7 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return {};
+        return RequestId;
     }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
@@ -2129,6 +2129,7 @@ public:
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
     TAuditMode AuditMode;
     TString PeerName;
+    TString RequestId;
 
     inline static const TString EmptySerializedTokenMessage;
 };

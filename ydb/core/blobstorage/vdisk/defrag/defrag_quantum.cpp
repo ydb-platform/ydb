@@ -73,7 +73,7 @@ namespace NKikimr {
                     {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
                     {"actorId", SelfActorId});
 
-                TDefragQuantumFindChunks findChunks(GetSnapshot(), DCtx->HugeBlobCtx);
+                TDefragQuantumFindChunks findChunks(GetSnapshot(), DCtx->HugeBlobCtx, GetStripeChunks());
                 const ui64 endTime = GetCycleCountFast() + DurationToCycles(NDefrag::MaxSnapshotHoldDuration);
                 while (findChunks.Scan(NDefrag::WorkQuantum)) {
                     if (GetCycleCountFast() >= endTime) {
@@ -267,6 +267,13 @@ namespace NKikimr {
                 SelfActorId, nullptr, 0));
             auto res = WaitForSpecificEvent<TEvHugeForbiddenChunks>(&TDefragQuantum::ProcessUnexpectedEvent);
             return res->Get()->ForbiddenChunks;
+        }
+
+        THashSet<TChunkIdx> GetStripeChunks() {
+            TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvHugeQueryStripeChunks, 0, DCtx->HugeKeeperId,
+                SelfActorId, nullptr, 0));
+            auto res = WaitForSpecificEvent<TEvHugeStripeChunks>(&TDefragQuantum::ProcessUnexpectedEvent);
+            return res->Get()->StripeChunks;
         }
 
         void Compact(THashSet<ui64> tablesToCompact, bool needsFreshCompaction) {

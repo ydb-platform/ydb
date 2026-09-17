@@ -9,7 +9,6 @@ bool TPushSimpleJoinFilterRule::QuickMatch(const TIntrusivePtr<IOperator>& input
 }
 
 bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::Join) {
@@ -27,6 +26,13 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         return false;
     }
 
+    // Inner with empty join keys is cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.empty());
+    const bool usingBlockCrossJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin() && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    if (isRealCrossJoin && usingBlockCrossJoin) {
+        join->JoinKind = "Cross";
+    }
+
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
@@ -34,7 +40,7 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     TVector<TExpression> pushRight;
     TVector<TExpression> remainingFilters;
 
-    bool canPushRight = join->JoinKind == "Inner";
+    const bool canPushRight = join->JoinKind == "Inner" || join->JoinKind == "Cross";
 
     for (const auto& filter : join->JoinFilters) {
         if (IUSetDiff(filter.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {

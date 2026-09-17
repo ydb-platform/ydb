@@ -46,6 +46,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
     (ui32)NKikimrConsole::TConfigItem::HiveConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::InterconnectConfigItem,
     (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
@@ -61,7 +62,6 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
-    (ui32)NKikimrConsole::TConfigItem::UserFacingTracingConfigItem,
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
@@ -72,6 +72,8 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::UdfStoreConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -1108,6 +1110,9 @@ try {
             break;
     }
 
+    // Trace only this replay. Reusing the tracer accumulates update history
+    // (including source file names) for the lifetime of the dispatcher.
+    RecordedInitialConfiguratorDeps->ConfigUpdateTracer = MakeDefaultConfigUpdateTracer();
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
     NConfig::TInitialConfigurator initCfg(deps);
 

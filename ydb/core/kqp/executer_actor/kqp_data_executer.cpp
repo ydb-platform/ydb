@@ -659,7 +659,7 @@ private:
             const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                auto& stageInfo = TasksGraph.GetStageInfo(TasksGraph.MakeStageId(txIdx, stageIdx));
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -1266,6 +1266,7 @@ private:
         const auto generation = context->CurrentExecutionGeneration;
         Y_VALIDATE(generation, "Missing current execution generation");
 
+        TasksGraph.GetMeta().AllowCheckpoints = true;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, generation),
             NYql::NDq::MakeCheckpointStorageID(),

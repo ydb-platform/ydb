@@ -693,16 +693,17 @@ class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
 public:
     unsigned WrittenCount{0};
 
-    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
+            std::optional<ui32> maxBatchSize = {})
         : TColumnShardLogWriter(runner, component, TColumnShardLogWriter::TDatabaseSettings {
             .TableName = "olapTable",
-            .StoreName = "olapStore"
+            .StoreName = "olapStore",
+            .MaxBatchSize = maxBatchSize
         }, columns)
     {}
 
-    void Write(const NActors::NStructuredLog::TLogMessage& message) override
-    {
-        TBaseSchematizedLogWriter::Write(message);
+    void Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        TColumnShardLogWriter::Write(message);
         WrittenCount++;
     }
 
@@ -803,7 +804,7 @@ public:
         for(unsigned i=0; WrittenCount < requiredResult.size() && i < 100; i++) {
             Sleep(TDuration::MilliSeconds(100));
         }
-        UNIT_ASSERT(WrittenCount == requiredResult.size());
+        UNIT_ASSERT(WrittenCount >= requiredResult.size()); // WrittenCount can be great in flush tests
 
         // Build query
         auto query = GetFetchQuery();
@@ -854,14 +855,16 @@ struct TEnvironment {
     TKikimrRunner Kikimr;
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
 
-    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns): Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
-        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns);
+    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = {})
+        : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns, maxBatchSize);
         Writer->CreateOrUpdateStorage();
     }
 
     void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
         auto* runtime = Kikimr.GetTestServer().GetRuntime();
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+            runtime->GetLogSettings(i)->FlushSinksTimeout = (Writer->GetDatabaseSettings().MaxBatchSize.has_value())?1000000:0;
             runtime->GetLogSettings(i)->Sinks.push_back(Writer);
         }
         runtime->SetLogPriority(Writer->GetComponent(), NActors::NLog::PRI_TRACE);
@@ -893,10 +896,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:886"])", R"(["3"])",  "[3u]"},
-            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:888"])", R"(["7"])",   "[7u]"},
-            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:890"])", R"(["ace"])", "#"},
-            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:891"])", R"(#)",       "#"}});
+            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:889"])", R"(["3"])",  "[3u]"},
+            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:891"])", R"(["7"])",   "[7u]"},
+            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:893"])", R"(["ace"])", "#"},
+            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:894"])", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -976,6 +979,91 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"1u", "1u"},
             {"2u", "2u"},
             {"3u", "3u"}});
+    }
+
+    Y_UNIT_TEST(ManualFlush) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageNodeIdColumn>()
+        });
+
+        // Write data
+        NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+
+        // First chunk
+        message.NodeId = 1;
+        env.Writer->Write(message);
+        message.NodeId = 2;
+        env.Writer->Write(message);
+        env.Writer->Flush();
+
+        // Check
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"}});
+
+        // Second chunk
+        message.NodeId = 3;
+        env.Writer->Write(message);
+        message.NodeId = 4;
+        env.Writer->Write(message);
+        env.Writer->Flush();
+
+        // Check
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"},
+            {"3u", "3u"},
+            {"4u", "4u"}});
+    }
+
+    Y_UNIT_TEST(AutoFlush) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageNodeIdColumn>()
+        }, 2);
+
+        // Write data
+        NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+
+        // Trigger first auto flush
+        message.NodeId = 1;
+        env.Writer->Write(message);
+        message.NodeId = 2;
+        env.Writer->Write(message);         // auto flush here
+        message.NodeId = 3;
+        env.Writer->Write(message);
+
+        // Check
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"}});
+
+        // Trigger second auto flush
+        message.NodeId = 4;
+        env.Writer->Write(message);         // auto flush here
+        message.NodeId = 5;
+        env.Writer->Write(message);
+
+        // Check
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"},
+            {"3u", "3u"},
+            {"4u", "4u"}});
+
+        // Manual flush and check
+        env.Writer->Flush();
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"},
+            {"3u", "3u"},
+            {"4u", "4u"},
+            {"5u", "5u"}});
     }
 }
 

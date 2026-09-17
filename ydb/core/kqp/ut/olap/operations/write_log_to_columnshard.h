@@ -17,6 +17,7 @@ public:
         TString StoreName{"olapStore"};
         ui32 StoreShardsCount = 4;
         ui32 TableShardsCount = 3;
+        std::optional<ui32> MaxBatchSize;
 
         NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction ShardingMethod =
             NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64;
@@ -28,6 +29,13 @@ public:
     {
     }
 
+    const TDatabaseSettings& GetDatabaseSettings() const {
+        return Settings;
+    }
+
+    void Write(const NActors::NStructuredLog::TLogMessage&) override;
+    void Flush() override;
+
     void CreateOrUpdateStorage() override;
     void DeleteStorageIfExists() override {}
     void CleanupStorageIfExists(TInstant) override {}
@@ -37,6 +45,7 @@ protected:
     TString GetTableDescription();
 
     const TDatabaseSettings Settings;
+    ui32 CurrentBatchSize{0};
 
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);

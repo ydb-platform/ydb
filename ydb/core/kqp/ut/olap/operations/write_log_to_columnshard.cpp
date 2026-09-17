@@ -23,6 +23,19 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
+void TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
+    TBaseSchematizedLogWriter::Write(message);
+    CurrentBatchSize++;
+    if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value() ) {
+        Flush();
+    }
+}
+
+void TColumnShardLogWriter::Flush() {
+    TBaseSchematizedLogWriter::Flush();
+    CurrentBatchSize = 0;
+}
+
 TString TColumnShardLogWriter::GetStoreDescription() {
 
     TStringBuilder sb;

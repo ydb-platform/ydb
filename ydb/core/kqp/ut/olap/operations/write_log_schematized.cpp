@@ -25,6 +25,7 @@ void TBaseSchematizedLogWriter::Flush() {
     }
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
+    WrittenRecordCount = 0;
 }
 
 std::shared_ptr<arrow::Schema> TBaseSchematizedLogWriter::GetArrowSchema() const {

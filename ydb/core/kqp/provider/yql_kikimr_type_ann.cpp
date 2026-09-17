@@ -245,7 +245,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             continue;
         }
 
-        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -762,7 +762,7 @@ namespace {
             }
 
             // Recompile the stored SQL text into (lambda '(row) <expr>)
-            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -919,7 +919,6 @@ namespace {
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-            columnMeta.DefaultExpression->Context = TString(generatedValue.Child(0)->Content());
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
             columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
             columnMeta.SetDefaultFromExpression();

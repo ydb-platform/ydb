@@ -19,9 +19,14 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
-}
+class THistoryCutterWrapper;
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage
 
 namespace NKikimr::NOlap {
+
+namespace NDataSharing {
+class TStorageSharedBlobsManager;
+}   // namespace NDataSharing
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
@@ -180,14 +185,10 @@ private:
 
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+    ~TBlobManager();
 
     // Scans the pending keep/delete queues, not live portions.
     bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
-
-    // True once the first GC round of this incarnation committed a barrier covering every earlier generation.
-    bool HasCollectedBeforeCurrentGeneration() const {
-        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
-    }
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
@@ -249,6 +250,9 @@ public:
     virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
 
+    // Scans BlobsToKeep, BlobsToDelete and BlobsToDeleteDelayed.
+    bool HasNoBlobsInRange(ui32 channel, ui32 fromGen, ui32 nextFromGen) const;
+
     // Non-active history entries of data channels whose group is being decommissioned.
     std::vector<TMoveDataRow> GetDrainedIntervalsForGroups(const THashSet<ui32>& groups) const;
 
@@ -259,7 +263,22 @@ public:
         IBlobManagerDb& db, const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId);
     void AddMoveDataRowOnComplete(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId);
 
+    // True once the first GC round of this incarnation has committed a soft barrier covering all prior groups.
+    bool HasCollectedBeforeCurrentGeneration() const {
+        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
+    }
+
+    // Shared by regular GC and CutHistory barriers alike; pass PerGenerationCounterStepSize().
+    static ui32 AllocateGCPerGenerationCounter(ui32 step);
+
+    NBlobOperations::NBlobStorage::THistoryCutterWrapper* GetHistoryCutter();
+
+    // Takes the owning shared_ptr so the cutter can hold the manager weakly (no raw this).
+    void InitHistoryCutter(const std::shared_ptr<TBlobManager>& self,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, const TActorId& tabletActorId);
+
 private:
+    std::unique_ptr<NBlobOperations::NBlobStorage::THistoryCutterWrapper> HistoryCutter;
     std::vector<TMoveDataRow> MoveDataRows;
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);

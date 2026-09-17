@@ -65,6 +65,16 @@ public:
         return SelfTabletId;
     }
 
+    // Our shared-out blobs in [fromGen, nextFromGen) sit in no GC queue, but a hard barrier would collect them.
+    bool HasSharedBlobsInRange(const ui64 tabletId, const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
+        // Iterate blob keys, not TIterator: the latter revisits a blob once per tablet it is shared with.
+        return AnyOf(SharedBlobIds, [&](const auto& blob) {
+            const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
+            return logoBlobId.TabletID() == tabletId && logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen &&
+                   logoBlobId.Generation() < nextFromGen;
+        });
+    }
+
     TBlobsCategories GetBlobCategories() const {
         TBlobsCategories result(SelfTabletId);
         for (auto&& i : BorrowedBlobIds) {

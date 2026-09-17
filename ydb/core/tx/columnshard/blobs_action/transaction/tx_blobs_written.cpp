@@ -139,7 +139,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     for (auto&& portion : Pack.GetPortions()) {
         // make the portions visible as uncommitted for reads
-        granule.InsertPortionOnComplete(portion.GetPortionInfoPtr(), index);
+        granule.InsertPortionOnComplete(portion.GetPortionInfoPtr());
     }
     if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
         // make the portions visible as committed for reads

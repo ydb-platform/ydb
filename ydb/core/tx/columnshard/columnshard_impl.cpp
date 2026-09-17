@@ -4,6 +4,7 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
+#include "blobs_action/common/const.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -498,6 +499,11 @@ void TColumnShard::RunAlterStore(
     ApplyColumnShardConfig();
 }
 
+// Portions bypass the executor; channels 0 and 1 stay with the executor's cutter.
+bool TColumnShard::HasExternallyWrittenBlobs(ui32 channel) const {
+    return channel >= NOlap::NBlobOperations::TGlobal::FirstDataChannel;
+}
+
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
@@ -524,6 +530,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupMoveDataMetadata();
     SetupTtl();
     SetupGC();
+    SetupCutHistory();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
@@ -1655,7 +1662,12 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
         for (auto&& i : PortionsByPath) {
-            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
+            // The sweep iterates a portion snapshot without a read snapshot: the path may be gone, so skip.
+            const auto granulePtr = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(i.first);
+            if (!granulePtr) {
+                continue;
+            }
+            const auto& granule = *granulePtr;
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
@@ -1970,6 +1982,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvWriteDraft, Handle);
         HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
         HFunc(TEvPrivate::TEvTieringModified, Handle);
+        HFunc(TEvPrivate::TEvCutHistoryNominate, Handle);
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 

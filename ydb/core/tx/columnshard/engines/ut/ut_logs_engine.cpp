@@ -865,6 +865,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
         }
     }
+
+    // Appending an accessor and erasing notify the observer; committing an inserted portion does not.
 }
 
 }   // namespace NKikimr

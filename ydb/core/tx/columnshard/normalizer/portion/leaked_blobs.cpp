@@ -765,21 +765,6 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadBlobsToDelete(NIceDb::TNiceDb& db)
     return TConclusionStatus::Success();
 }
 
-THowToProcessPortion TLeakedBlobsNormalizer::DefineHowToProcessPortion(const TString& portionTier, const ISnapshotSchema::TPtr& schema) const {
-    const TString& effectiveTier = portionTier.empty() ? NBlobOperations::TGlobal::DefaultStorageId : portionTier;
-    const TIndexInfo& indexInfo = schema->GetIndexInfo();
-    if (effectiveTier == NBlobOperations::TGlobal::DefaultStorageId) {
-        return THowToProcessPortion::All;
-    }
-    for (auto&& entityId : indexInfo.GetEntityIds()) {
-        auto entityStorageId = indexInfo.GetEntityStorageId(entityId, effectiveTier);
-        if (entityStorageId == NBlobOperations::TGlobal::DefaultStorageId) {
-            return THowToProcessPortion::OnlyIndices;
-        }
-    }
-    return THowToProcessPortion::Skip;
-}
-
 namespace {
 bool TryParseLogPriority(const TStringBuf value, NActors::NLog::EPriority& out) {
     TString normalized(value);

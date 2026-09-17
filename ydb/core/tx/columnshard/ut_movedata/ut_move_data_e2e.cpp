@@ -575,6 +575,121 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.AssertDrainedSuccess(response);
     }
 
+    // The row is what Success promises; drained queues alone must never produce one.
+    Y_UNIT_TEST(NoRowIsPersistedWhileTheGateIsClosed) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "the first move never drained OldGroup");
+        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT_C(!f.Controller->GetMoveDataRows().empty(), "answered Success without persisting a row");
+
+        // A fresh incarnation reloads empty queues, yet it has collected nothing: that is no proof of an empty range.
+        f.Controller->DisableBackground(EBackground::GC);
+        f.Restart();
+        f.Controller->ClearMoveDataRows();
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(3, 2000, 2001);
+            }
+        }), "answered Success before this incarnation committed a GC barrier");
+        UNIT_ASSERT_C(f.Controller->GetMoveDataRows().empty(), "persisted a row from drained queues alone");
+
+        f.Controller->EnableBackground(EBackground::GC);
+        response = f.DriveGate(200, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(4, 3000, 3001);
+            }
+        });
+        UNIT_ASSERT_C(response, "no Success after the first GC round of the incarnation committed");
+        UNIT_ASSERT_C(!f.Controller->GetMoveDataRows().empty(), "answered Success without a row for the drained interval");
+    }
+
+    // The cut is issued by the incarnation after Success, so the proof has to outlive that restart.
+    Y_UNIT_TEST(RowSurvivesTheRestartAndDrivesTheCut) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Controller->SetCutHistoryEnabled(true);
+        f.Runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        f.Runtime.GetAppData().ColumnShardConfig.SetCutHistoryNominateCadenceSeconds(1);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "the move never drained OldGroup");
+        f.AssertDrainedSuccess(response);
+
+        THashSet<ui32> cutChannels;
+        auto cutObserver = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetFromGeneration() == 0) {
+                cutChannels.insert(ev->Get()->Record.GetChannel());
+            }
+        });
+        // Hive never commits the cut here, so only the persisted row can carry the proof across the restart.
+        f.Restart();
+        // The writes give the new incarnation blobs to collect: the cut waits on its first GC round just as the row did.
+        f.DriveGate(
+            200,
+            [&](const ui32 i) {
+                if (i == 10 || i == 60) {
+                    f.Write(10 + i, 4000 + i, 4001 + i);
+                }
+            },
+            [&] {
+                return !cutChannels.empty();
+            });
+        UNIT_ASSERT_C(!f.Controller->GetNominatedEntries().empty(), "the cutter never nominated the old entry after the restart");
+        UNIT_ASSERT_C(!f.Controller->GetCutEntries().empty(), "the cutter refused to cut: the persisted row did not survive the restart");
+        UNIT_ASSERT_C(!cutChannels.empty(), "the cut was decided but never reached the launcher");
+    }
+
+    // A target Hive adds while the proof is committing is not covered by it, so Success must wait.
+    Y_UNIT_TEST(SuccessWaitsForTargetsAddedDuringTheProof) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        // The widening lands between Execute and Complete: the log commit costs a round trip the tablet keeps serving.
+        bool widened = false;
+        const TActorId sender = f.Sender;
+        f.Controller->SetOnMoveDataRowsWritten([&] {
+            if (widened) {
+                return;
+            }
+            widened = true;
+            const auto* shard = f.Controller->GetTheOnlyShard();
+            NActors::TActivationContext::Send(
+                new IEventHandle(shard->SelfId(), sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup, NewGroup })));
+        });
+
+        f.StartMove();
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(widened, "the proof never committed, so the widening was never exercised");
+        UNIT_ASSERT_C(!response, "answered Success for a target added after the proof was captured");
+    }
+
     // MoveData must rewrite index blobs (InheritPortionStorage=false) left in BlobStorage by a tiered portion.
     Y_UNIT_TEST(MoveDataMovesIndexBlobsOfTieredPortion) {
         // TWaitCompactionController must be registered before the runtime is set up.
@@ -705,77 +820,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             "table is empty after MoveData");
 
         (void)tabletActorId;
-    }
-
-    // The row is what Success promises; drained queues alone must never produce one.
-    Y_UNIT_TEST(NoRowIsPersistedWhileTheGateIsClosed) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
-
-        f.StartMove();
-        auto response = f.DriveGate(150, [&](const ui32 i) {
-            if (i == 25) {
-                f.Write(2, 1000, 1001);
-            }
-        });
-        UNIT_ASSERT_C(response, "the first move never drained OldGroup");
-        f.AssertDrainedSuccess(response);
-        UNIT_ASSERT_C(!f.Controller->GetMoveDataRows().empty(), "answered Success without persisting a row");
-
-        // A fresh incarnation reloads empty queues, yet it has collected nothing: that is no proof of an empty range.
-        f.Controller->DisableBackground(EBackground::GC);
-        f.Restart();
-        f.Controller->ClearMoveDataRows();
-        f.StartMove();
-        UNIT_ASSERT_C(!f.DriveGate(150, [&](const ui32 i) {
-            if (i == 25) {
-                f.Write(3, 2000, 2001);
-            }
-        }), "answered Success before this incarnation committed a GC barrier");
-        UNIT_ASSERT_C(f.Controller->GetMoveDataRows().empty(), "persisted a row from drained queues alone");
-
-        f.Controller->EnableBackground(EBackground::GC);
-        response = f.DriveGate(200, [&](const ui32 i) {
-            if (i == 25) {
-                f.Write(4, 3000, 3001);
-            }
-        });
-        UNIT_ASSERT_C(response, "no Success after the first GC round of the incarnation committed");
-        UNIT_ASSERT_C(!f.Controller->GetMoveDataRows().empty(), "answered Success without a row for the drained interval");
-    }
-
-    // A target Hive adds while the proof is committing is not covered by it, so Success must wait.
-    Y_UNIT_TEST(SuccessWaitsForTargetsAddedDuringTheProof) {
-        TMoveDataFixture f;
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.ReassignPastWrittenData();
-
-        // The widening lands between Execute and Complete: the log commit costs a round trip the tablet keeps serving.
-        bool widened = false;
-        const TActorId sender = f.Sender;
-        f.Controller->SetOnMoveDataRowsWritten([&] {
-            if (widened) {
-                return;
-            }
-            widened = true;
-            const auto* shard = f.Controller->GetTheOnlyShard();
-            NActors::TActivationContext::Send(
-                new IEventHandle(shard->SelfId(), sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup, NewGroup })));
-        });
-
-        f.StartMove();
-        const auto response = f.DriveGate(150, [&](const ui32 i) {
-            if (i == 25) {
-                f.Write(2, 1000, 1001);
-            }
-        });
-        UNIT_ASSERT_C(widened, "the proof never committed, so the widening was never exercised");
-        UNIT_ASSERT_C(!response, "answered Success for a target added after the proof was captured");
     }
 }
 

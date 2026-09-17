@@ -83,6 +83,7 @@ public:
     [[nodiscard]] bool LoadMoveDataRows(std::vector<TMoveDataRow>& rows) override;
     void AddMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) override;
     void EraseMoveDataRow(const ui32 channel, const ui32 fromGeneration) override;
+
     void AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
 

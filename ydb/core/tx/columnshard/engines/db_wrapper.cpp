@@ -4,6 +4,8 @@
 #include "portions/constructor_portion.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
@@ -51,6 +53,64 @@ std::pair<std::unique_ptr<NOlap::TPortionInfoConstructor>, NKikimrTxColumnShard:
     portion->SetRemoveSnapshot(rowset.template GetValue<IndexPortions::XPlanStep>(), rowset.template GetValue<IndexPortions::XTxId>());
     return std::make_pair(std::move(portion), std::move(metaProto));
 }
+
+class TRawRowAdapter {
+public:
+    TRawRowAdapter(const NTable::TRowState& row, NTable::TTagsRef tags)
+        : Row_(row)
+        , Tags_(tags)
+    {
+    }
+
+    bool IsReady() const {
+        return true;
+    }
+
+    bool EndOfSet() const {
+        return false;
+    }
+
+    template <typename ColumnType>
+    typename ColumnType::Type GetValue() const {
+        return CellValue<ColumnType>(Row_.Get(FindIdx(ColumnType::ColumnId)));
+    }
+
+    template <typename ColumnType>
+    typename ColumnType::Type GetValueOrDefault(typename ColumnType::Type defaultValue = {}) const {
+        const auto& cell = Row_.Get(FindIdx(ColumnType::ColumnId));
+        if (cell.IsNull()) {
+            return defaultValue;
+        }
+        return CellValue<ColumnType>(cell);
+    }
+
+    template <typename ColumnType>
+    bool HaveValue() const {
+        return !Row_.Get(FindIdx(ColumnType::ColumnId)).IsNull();
+    }
+
+private:
+    size_t FindIdx(NTable::TTag tag) const {
+        for (size_t i = 0; i < Tags_.size(); ++i) {
+            if (Tags_[i] == tag) {
+                return i;
+            }
+        }
+        Y_ABORT("tag %u not in row adapter", (unsigned)tag);
+    }
+
+    template <typename ColumnType>
+    static typename ColumnType::Type CellValue(const TCell& cell) {
+        if constexpr (std::is_same_v<typename ColumnType::Type, TString>) {
+            return TString(cell.Data(), cell.Size());
+        } else {
+            return cell.AsValue<typename ColumnType::Type>();
+        }
+    }
+
+    const NTable::TRowState& Row_;
+    NTable::TTagsRef Tags_;
+};
 
 }   // namespace
 

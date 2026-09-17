@@ -40,8 +40,11 @@ private:
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
     YDB_FLAG_ACCESSOR(ExternalStorageUnavailable, false);
+    YDB_ACCESSOR(bool, CutHistoryEnabled, false);
 
     std::vector<TMoveDataRowEvent> MoveDataRows;
+    std::vector<std::pair<ui32, ui32>> NominatedEntries;
+    std::vector<std::pair<ui32, ui32>> CutEntries;
     std::function<void()> OnMoveDataRowsWrittenCallback;
 
     YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
@@ -382,6 +385,10 @@ public:
         DisabledBackgrounds.erase(id);
     }
 
+    virtual bool IsCSCutHistoryEnabled() const override {
+        return CutHistoryEnabled;
+    }
+
     virtual void OnMoveDataRowPersisted(
         const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) override {
         TGuard<TMutex> g(Mutex);
@@ -396,6 +403,26 @@ public:
     void ClearMoveDataRows() {
         TGuard<TMutex> g(Mutex);
         MoveDataRows.clear();
+    }
+
+    virtual void OnHistoryEntryNominated(const ui32 channel, const ui32 fromGeneration) override {
+        TGuard<TMutex> g(Mutex);
+        NominatedEntries.emplace_back(channel, fromGeneration);
+    }
+
+    virtual void OnHistoryEntryCut(const ui32 channel, const ui32 fromGeneration) override {
+        TGuard<TMutex> g(Mutex);
+        CutEntries.emplace_back(channel, fromGeneration);
+    }
+
+    std::vector<std::pair<ui32, ui32>> GetNominatedEntries() const {
+        TGuard<TMutex> g(Mutex);
+        return NominatedEntries;
+    }
+
+    std::vector<std::pair<ui32, ui32>> GetCutEntries() const {
+        TGuard<TMutex> g(Mutex);
+        return CutEntries;
     }
 
     virtual void OnMoveDataRowsWritten() override {

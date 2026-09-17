@@ -66,6 +66,10 @@ struct TEvConfigNotificationRequest;
 }
 }   // namespace NKikimr::NConsole
 
+namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
+class THistoryCutterWrapper;
+}   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage
+
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
@@ -220,7 +224,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
     friend class TSpaceWatcher;
-    class TTxWriteMoveDataRow;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -278,6 +281,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TWriteTask;
 
     class TTxProgressTx;
+    class TTxWriteMoveDataRow;
     class TTxProposeCancel;
     // proto
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
@@ -461,6 +465,8 @@ protected:
 
     STFUNC(StateWork);
 
+    bool HasExternallyWrittenBlobs(ui32 channel) const override;
+
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
@@ -541,6 +547,9 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // Non-owning; set in SetupCutHistory() once per boot.
+    NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper* CutHistoryCutter = nullptr;
 
     // Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
     struct TMoveDataState {
@@ -636,6 +645,9 @@ private:
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();
     void SetupGC();
+    void SetupCutHistory();
+
+    void Handle(TEvPrivate::TEvCutHistoryNominate::TPtr& ev, const TActorContext& ctx);
 
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);

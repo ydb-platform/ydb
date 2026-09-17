@@ -43,6 +43,36 @@ public:
     }
 };
 
+// A stalled cut has several indistinguishable causes; these separate them.
+class THistoryCutterCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr Nominations;
+    NMonitoring::TDynamicCounters::TCounterPtr TriggeredNominations;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesCut;
+    NMonitoring::TDynamicCounters::TCounterPtr EntriesProven;
+
+public:
+    THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
+
+    void OnNomination() const {
+        Nominations->Add(1);
+    }
+
+    void OnTriggeredNomination() const {
+        TriggeredNominations->Add(1);
+    }
+
+    void OnEntryCut() const {
+        EntriesCut->Add(1);
+    }
+
+    // Passed every gate and the final re-check; in measure-only mode this is where the entry stops.
+    void OnEntryProven() const {
+        EntriesProven->Add(1);
+    }
+};
+
 class TBlobsManagerCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -54,6 +84,7 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentGen;
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentStep;
     const TBlobsManagerGCCounters GCCounters;
+    const THistoryCutterCounters HistoryCutterCounters;
     TBlobsManagerCounters(const TString& module);
 
     void OnBlobsToDelete(const NOlap::TTabletsByBlob& blobs) const {

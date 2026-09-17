@@ -227,7 +227,7 @@ public:
 
     void InsertPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionDataAccessor>& portion, const ui64 firstPKColumnId) const;
-    void InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& engine);
+    void InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion);
 
     void CommitPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;

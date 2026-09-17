@@ -437,11 +437,26 @@ public:
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
 
+    virtual bool IsCSCutHistoryEnabled() const {
+        return false;
+    }
+
+    virtual void OnHistoryEntryNominated(const ui32 /*channel*/, const ui32 /*fromGeneration*/) {
+    }
+
+    virtual void OnHistoryEntryCut(const ui32 /*channel*/, const ui32 /*fromGeneration*/) {
+    }
+
     virtual void OnMoveDataRowPersisted(
         const ui32 /*channel*/, const ui32 /*fromGeneration*/, const ui32 /*toGenerationExclusive*/, const ui32 /*groupId*/) {
     }
 
     virtual void OnMoveDataRowsWritten() {
+    }
+
+    // Minimum interval between consecutive triggered nominations (i.e. those that bypass the full cadence).
+    virtual TDuration GetMinTriggeredNominateInterval(const TDuration defaultValue) const {
+        return defaultValue;
     }
 };
 

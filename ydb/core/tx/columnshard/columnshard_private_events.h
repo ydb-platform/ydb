@@ -94,6 +94,8 @@ struct TEvPrivate {
 
         EvRetryConfigSubscription,
 
+        EvCutHistoryNominate,
+
         EvEnd
     };
 
@@ -518,6 +520,9 @@ struct TEvPrivate {
     };
 
     struct TEvRetryConfigSubscription: public TEventLocal<TEvRetryConfigSubscription, EvRetryConfigSubscription> {};
+
+    // Deferred nomination signal: the cutter sends this to itself so nomination never runs inside a tx Complete.
+    struct TEvCutHistoryNominate: public TEventLocal<TEvCutHistoryNominate, EvCutHistoryNominate> {};
 };
 
 }   // namespace NKikimr::NColumnShard

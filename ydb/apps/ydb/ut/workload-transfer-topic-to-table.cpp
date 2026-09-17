@@ -102,7 +102,7 @@ class TFixture : public NUnitTest::TBaseFixture {
             NYdb::NTable::TDescribeTableSettings options;
             options.WithTableStatistics(true);
 
-            auto result = session.DescribeTable("/" + GetYdbDatabase() + "/" + matcher.Name,
+            auto result = session.DescribeTable(GetYdbDatabase() + "/" + matcher.Name,
                                                 options).GetValueSync();
             if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
                 UNIT_ASSERT_VALUES_EQUAL(0, matcher.Partitions);

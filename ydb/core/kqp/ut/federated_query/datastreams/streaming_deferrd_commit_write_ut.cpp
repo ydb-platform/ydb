@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         if constexpr (LocalTopics) {
             ExecQuery(TStringBuilder() << "GRANT ALL ON `/Root` TO `" << testUser << "`");
         } else {
-            ExecExternalQuery(TStringBuilder() << "GRANT ALL ON `/" << YDB_DATABASE << "` TO `" << testUser << "`");
+            ExecExternalQuery(TStringBuilder() << "GRANT ALL ON `" << YDB_DATABASE << "` TO `" << testUser << "`");
         }
 
         TTopicClientSettings settings;

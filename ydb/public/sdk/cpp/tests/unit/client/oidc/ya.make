@@ -2,6 +2,7 @@ UNITTEST()
 
 SRCS(
     credentials_ut.cpp
+    protocol_ut.cpp
     test_server.cpp
 )
 

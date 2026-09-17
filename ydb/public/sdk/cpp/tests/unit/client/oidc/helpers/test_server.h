@@ -37,6 +37,8 @@ public:
 
     void Enqueue(TString body, HttpCodes status);
 
+    void SetDiscoveryReply(TString body, HttpCodes status);
+
     void BlockTokenRepliesUntil(NThreading::TFuture<void> released);
 
     std::vector<TRequestInfo> Requests() const;
@@ -65,6 +67,7 @@ private:
     mutable TMutex Mutex;
     std::condition_variable_any Changed;
     std::deque<TReply> Replies;
+    std::optional<TReply> DiscoveryReply;
     std::vector<TRequestInfo> Recorded;
     size_t Discoveries = 0;
     NThreading::TFuture<void> TokenReplyGate;

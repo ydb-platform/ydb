@@ -327,7 +327,7 @@ assert.equal(ctDefaultNode('amd','dynamic',1).actor_system,undefined);
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required")
     def test_moves_change_only_the_selected_view(self):
-        script = cluster_templates_ui.JS.split("function ctDefaultNode")[0] + r"""
+        script = cluster_templates_ui.JS.split("function ctNormalizeNodePlacement")[0] + r"""
 const assert=require('assert');
 const n={name:'compute',host_id:'amd',role:'dynamic',vcpu:8,affinity:{kind:'manual',cpus:[0,1]},tenant:'/Root/a',
   location:{data_center:'dc',rack:'r1',body:'server'}};

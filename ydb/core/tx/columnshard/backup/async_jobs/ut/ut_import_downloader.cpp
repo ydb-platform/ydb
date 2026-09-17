@@ -11,6 +11,7 @@
 #include <ydb/core/tx/datashard/import_common.h>
 
 #include <ydb/apps/ydbd/export/export.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
@@ -251,10 +252,8 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        if (format == EDataFormat::Parquet) {
-            runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-            runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        }
+        runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
@@ -314,12 +313,8 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT(!event4->Data);
     }
 
-    Y_UNIT_TEST(ImportCsv) {
-        Import(EDataFormat::YdbDump);
-    }
-
-    Y_UNIT_TEST(ImportParquet) {
-        Import(EDataFormat::Parquet);
+    Y_UNIT_TEST(Import, EBackupTestDataFormat) {
+        Import(ToDataFormat(Arg<0>()));
     }
 
     void ImportSchemaOrder(EDataFormat format) {
@@ -331,10 +326,8 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        if (format == EDataFormat::Parquet) {
-            runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-            runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        }
+        runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
         const auto edge = runtime->AllocateEdgeActor(0);
 
@@ -392,12 +385,8 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT(!event4->Data);
     }
 
-    Y_UNIT_TEST(ImportSchemaOrderCsv) {
-        ImportSchemaOrder(EDataFormat::YdbDump);
-    }
-
-    Y_UNIT_TEST(ImportSchemaOrderParquet) {
-        ImportSchemaOrder(EDataFormat::Parquet);
+    Y_UNIT_TEST(ImportSchemaOrder, EBackupTestDataFormat) {
+        ImportSchemaOrder(ToDataFormat(Arg<0>()));
     }
 }
 

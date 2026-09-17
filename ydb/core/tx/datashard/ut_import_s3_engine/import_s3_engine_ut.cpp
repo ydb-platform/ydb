@@ -486,7 +486,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             source,
             /*readBatchSize=*/8_KB);
 
-        UNIT_ASSERT(!engine->SupportsDirectPartImport());
+        UNIT_ASSERT(engine->SupportsDirectPartImport());
         UNIT_ASSERT_GT(source.size(), 64_KB);
         UNIT_ASSERT_LT(source.size(), 1_MB);
 
@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         };
 
         bool sawFirstRange = false;
-        bool sawBatch = false;
+        ui32 batches = 0;
         for (ui32 step = 0; step < 1024; ++step) {
             auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
             switch (data.Status) {
@@ -518,11 +518,18 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             }
 
             case IImportS3Engine::EDataStatus::Ready: {
-                UNIT_ASSERT(!sawBatch);
-                sawBatch = true;
-                UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, source.size());
-                UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 4);
-                UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
+                // The 8 KB batch budget yields one 24 KB row per batch; the
+                // row group's counters arrive with the batch that completes it.
+                ++batches;
+                UNIT_ASSERT_VALUES_EQUAL(rows.size(), batches);
+                if (data.Batch.Checkpoint) {
+                    UNIT_ASSERT_VALUES_EQUAL(batches, 4);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, source.size());
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 4);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 0);
+                }
 
                 const auto waiting = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
                 UNIT_ASSERT(waiting.Status == IImportS3Engine::EDataStatus::WaitingForCommit);
@@ -534,7 +541,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
             case IImportS3Engine::EDataStatus::Finished:
                 UNIT_ASSERT(sawFirstRange);
-                UNIT_ASSERT(sawBatch);
+                UNIT_ASSERT_VALUES_EQUAL(batches, 4);
                 UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
                 UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k1");
                 UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, TString(24_KB, 'a'));
@@ -548,6 +555,125 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         UNIT_FAIL("Parquet import engine did not finish within 1024 state transitions");
+    }
+
+    Y_UNIT_TEST(ParquetResumesFromCommittedRowGroup) {
+        // Two row groups of two 24 KB rows each. The 8 KB batch budget splits a
+        // row group into two batches, so the counter deferral is observable.
+        const TString source = BuildSmallParquet(/*rowGroupSize=*/2);
+        UNIT_ASSERT_GT(source.size(), 64_KB);
+
+        for (const bool validateChecksum : {false, true}) {
+            TEngineFixture fixture;
+            TMemoryPool pool(256);
+            TVector<TDecodedRow> rows;
+            TString checksumInput;
+            const auto addRow = CaptureRows(rows);
+            const auto addChecksum = [&](TStringBuf data) {
+                UNIT_ASSERT_C(validateChecksum,
+                    "checksum callback was called with validation disabled");
+                checksumInput.append(data.data(), data.size());
+            };
+
+            const auto feed = [&](IImportS3Engine& engine) {
+                const auto range = ExtractValue(engine.NextRange());
+                UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                AssertSuccess(engine.PutRange(range.Range, Slice(source, range.Range)));
+            };
+
+            // First attempt: import row group 0 and stop, as if the shard restarted.
+            NKikimrBackup::TS3DownloadState checkpoint;
+            TString checkpointChecksumInput;
+            {
+                auto engine = fixture.MakeEngine(
+                    EDataFormat::Parquet, source, /*readBatchSize=*/8_KB, validateChecksum);
+
+                ui32 batches = 0;
+                bool committedRowGroup = false;
+                for (ui32 step = 0; step < 1024 && !committedRowGroup; ++step) {
+                    auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
+                    switch (data.Status) {
+                    case IImportS3Engine::EDataStatus::NeedInput:
+                        feed(*engine);
+                        break;
+
+                    case IImportS3Engine::EDataStatus::Ready: {
+                        ++batches;
+                        UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, 0);
+                        const auto& parquetState = data.Batch.DownloadStateAfter.GetParquet();
+                        if (data.Batch.Checkpoint) {
+                            UNIT_ASSERT_VALUES_EQUAL(batches, 2);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 2);
+                            UNIT_ASSERT_GT(data.Batch.DataBytes, 48_KB);
+                            UNIT_ASSERT_VALUES_EQUAL(parquetState.GetCommittedRowGroups(), 1);
+                            UNIT_ASSERT(!parquetState.GetChecksumComplete());
+                            UNIT_ASSERT_VALUES_EQUAL(parquetState.GetChecksumOffset(), checksumInput.size());
+                            checkpoint = data.Batch.DownloadStateAfter;
+                            checkpointChecksumInput = checksumInput;
+                            committedRowGroup = true;
+                        } else {
+                            // rows of a partially imported row group are not counted yet
+                            UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(data.Batch.DataBytes, 0);
+                            UNIT_ASSERT_VALUES_EQUAL(parquetState.GetCommittedRowGroups(), 0);
+                        }
+                        AssertSuccess(engine->Commit(data.Batch.Id));
+                        break;
+                    }
+
+                    default:
+                        UNIT_FAIL("unexpected engine state before the first row group was committed");
+                    }
+                }
+
+                UNIT_ASSERT(committedRowGroup);
+                UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k1");
+                UNIT_ASSERT_VALUES_EQUAL(rows[1].Key, "k2");
+            }
+
+            // Second attempt: a fresh engine restored from the durable checkpoint
+            // (the coordinator restores the checksum state the same way).
+            rows.clear();
+            checksumInput = checkpointChecksumInput;
+            auto engine = fixture.MakeEngine(
+                EDataFormat::Parquet, source, /*readBatchSize=*/8_KB, validateChecksum);
+            AssertSuccess(engine->RestoreFromState(/*processedBytes=*/0, checkpoint));
+
+            ui64 countedRows = 0;
+            bool finished = false;
+            for (ui32 step = 0; step < 1024 && !finished; ++step) {
+                auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
+                switch (data.Status) {
+                case IImportS3Engine::EDataStatus::NeedInput:
+                    feed(*engine);
+                    break;
+
+                case IImportS3Engine::EDataStatus::Ready:
+                    countedRows += data.Batch.Rows;
+                    if (data.Batch.Checkpoint) {
+                        UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, source.size());
+                    }
+                    AssertSuccess(engine->Commit(data.Batch.Id));
+                    break;
+
+                case IImportS3Engine::EDataStatus::Finished:
+                    finished = true;
+                    break;
+
+                case IImportS3Engine::EDataStatus::WaitingForCommit:
+                    UNIT_FAIL("unexpected batch waiting for commit");
+                }
+            }
+
+            UNIT_ASSERT_C(finished, "resumed Parquet import did not finish");
+            UNIT_ASSERT_VALUES_EQUAL(countedRows, 2);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(rows[0].Key, "k3");
+            UNIT_ASSERT_VALUES_EQUAL(rows[1].Key, "k4");
+            UNIT_ASSERT_VALUES_EQUAL(checksumInput, validateChecksum ? source : TString());
+        }
     }
 
     Y_UNIT_TEST(ParquetChecksumReadsEachByteOnceInSourceOrder) {

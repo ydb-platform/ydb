@@ -542,6 +542,7 @@ public:
         TDataBatch batch;
         batch.Id = NextBatchId++;
         batch.ProcessedBytesAfter = ProcessedBytes + readyBytes;
+        batch.Checkpoint = readyBytes > 0;
         UncheckpointedDataBytes += parsedData.DataBytes;
         UncheckpointedRows += parsedData.Rows;
         if (readyBytes) {
@@ -693,7 +694,7 @@ class TParquetImportS3Engine final : public IImportS3Engine {
 public:
     TParquetImportS3Engine(
         const TImportS3EngineSettings& settings,
-        IDataParser::TPtr parser)
+        IParquetStreamParser::TPtr parser)
         : ContentLength(settings.ContentLength)
         , ReadBatchSize(settings.ReadBatchSize)
         , BufferSizeLimit(settings.BufferSizeLimit)
@@ -800,7 +801,9 @@ public:
                 << ", " << active.Offset + active.Length << ")");
         }
 
-        SparseFile->PutRange(range.Offset, std::move(data));
+        if (auto result = SparseFile->PutRange(range.Offset, std::move(data)); !result) {
+            return result;
+        }
         active.Fetched += range.Length;
         OutstandingRange.Clear();
 
@@ -858,7 +861,9 @@ public:
                 }
 
                 if (UseOnePassChecksum && !RowGroupRanges.empty()) {
-                    RouteChecksumChunkToCurrentRowGroup(ChecksumOffset, ChecksumChunk);
+                    if (auto result = RouteChecksumChunkToCurrentRowGroup(ChecksumOffset, ChecksumChunk); !result) {
+                        return SetDataError(std::move(result.error()));
+                    }
                 }
                 ChecksumOffset += ChecksumChunk.size();
                 ChecksumChunk.clear();
@@ -876,6 +881,8 @@ public:
             TDataBatch batch;
             batch.Id = NextBatchId++;
             batch.ProcessedBytesAfter = ContentLength;
+            batch.Checkpoint = true;
+            *batch.DownloadStateAfter.MutableParquet() = MakeCheckpointState(RowGroupRanges.size());
 
             WaitingBatch = batch;
             WaitingBatchIsFinal = true;
@@ -889,13 +896,8 @@ public:
             return TDataResult{.Status = EDataStatus::NeedInput};
         }
 
-        auto* parquetParser = AsParquetStreamParser(Parser.Get());
-        if (!parquetParser) {
-            return SetDataError("Parquet engine has an incompatible data parser");
-        }
-
         if (!RowGroupParserOpen) {
-            if (auto result = parquetParser->OpenRowGroup(CurrentRowGroup); !result) {
+            if (auto result = Parser->OpenRowGroup(CurrentRowGroup); !result) {
                 auto error = std::move(result.error());
                 return SetDataError(error.empty()
                     ? TString("failed to open Parquet row group")
@@ -907,7 +909,7 @@ public:
         while (true) {
             IParquetStreamParser::TParsedBatch parsedBatch;
             try {
-                auto result = parquetParser->ProcessNextBatch(pool, addRow);
+                auto result = Parser->ProcessNextBatch(pool, addRow, ReadBatchSize);
                 if (!result) {
                     return SetDataError(std::move(result.error()));
                 }
@@ -923,11 +925,23 @@ public:
             const bool rowGroupFinished = !parsedBatch.HasMore;
             const bool finalBatch = rowGroupFinished && CurrentRowGroup + 1 == RowGroupRanges.size();
 
+            // A row group is the resume unit: rows of a partially imported row
+            // group are replayed after a restart, so their counters are only
+            // reported with the batch that completes it.
+            UncheckpointedDataBytes += parsedBatch.DataBytes;
+            UncheckpointedRows += parsedBatch.Rows;
+
             TDataBatch batch;
             batch.Id = NextBatchId++;
             batch.ProcessedBytesAfter = finalBatch ? ContentLength : 0;
-            batch.DataBytes = parsedBatch.DataBytes;
-            batch.Rows = parsedBatch.Rows;
+            batch.Checkpoint = rowGroupFinished;
+            if (rowGroupFinished) {
+                batch.DataBytes = std::exchange(UncheckpointedDataBytes, 0);
+                batch.Rows = std::exchange(UncheckpointedRows, 0);
+                *batch.DownloadStateAfter.MutableParquet() = MakeCheckpointState(CurrentRowGroup + 1);
+            } else {
+                *batch.DownloadStateAfter.MutableParquet() = CheckpointState;
+            }
 
             WaitingBatch = batch;
             WaitingBatchFinishesRowGroup = rowGroupFinished;
@@ -949,6 +963,9 @@ public:
         }
 
         CheckpointProcessedBytes = WaitingBatch->ProcessedBytesAfter;
+        if (WaitingBatch->Checkpoint) {
+            CheckpointState = WaitingBatch->DownloadStateAfter.GetParquet();
+        }
         const bool finishesRowGroup = WaitingBatchFinishesRowGroup;
         const bool finalBatch = WaitingBatchIsFinal;
         WaitingBatch.Clear();
@@ -956,23 +973,14 @@ public:
         WaitingBatchIsFinal = false;
 
         if (finalBatch) {
-            if (auto* parquetParser = AsParquetStreamParser(Parser.Get())) {
-                parquetParser->ResetFile();
-            }
+            Parser->ResetFile();
             SparseFile.reset();
             FetchQueue.clear();
             RowGroupRanges.clear();
             RowGroupParserOpen = false;
             Phase = EPhase::Finished;
         } else if (finishesRowGroup) {
-            auto* parquetParser = AsParquetStreamParser(Parser.Get());
-            if (!parquetParser) {
-                Phase = EPhase::Error;
-                FatalError = "Parquet engine has an incompatible data parser";
-                return std::unexpected(FatalError);
-            }
-
-            parquetParser->ResetRowGroup();
+            Parser->ResetRowGroup();
             RowGroupParserOpen = false;
             if (UseOnePassChecksum) {
                 SparseFile->ClearBefore(FooterSuffixStart);
@@ -1001,18 +1009,22 @@ public:
                 << processedBytes << " of " << ContentLength);
         }
 
+        const auto& resume = state.GetParquet();
         const bool started = HasLiveState();
-        if (started && processedBytes == CheckpointProcessedBytes) {
-            return {};
-        }
         if (started) {
+            // Restart() reloads the durable checkpoint even when this live
+            // engine is intentionally preserved after FailRange(); it must be
+            // the one this engine last committed.
+            if (processedBytes == CheckpointProcessedBytes
+                && resume.GetCommittedRowGroups() == CheckpointState.GetCommittedRowGroups())
+            {
+                return {};
+            }
             return std::unexpected("cannot replace the checkpoint of a Parquet engine after processing has started");
         }
 
         if (processedBytes == ContentLength) {
-            if (auto* parquetParser = AsParquetStreamParser(Parser.Get())) {
-                parquetParser->ResetFile();
-            }
+            Parser->ResetFile();
             SparseFile.reset();
             FetchQueue.clear();
             RowGroupRanges.clear();
@@ -1022,7 +1034,11 @@ public:
             Phase = EPhase::Finished;
         } else {
             ResetDownload();
+            if (resume.GetCommittedRowGroups() || resume.GetChecksumOffset() || resume.GetChecksumComplete()) {
+                ResumeState = resume; // applied once the footer is parsed
+            }
         }
+        CheckpointState = resume;
         CheckpointProcessedBytes = processedBytes;
         return {};
     }
@@ -1037,14 +1053,14 @@ public:
     }
 
     bool SupportsDirectPartImport() const override {
-        return false;
+        // The exporter writes rows in key order across row groups, which is
+        // all the direct-part writer requires.
+        return true;
     }
 
 private:
     void ResetDownload() {
-        if (auto* parquetParser = AsParquetStreamParser(Parser.Get())) {
-            parquetParser->ResetFile();
-        }
+        Parser->ResetFile();
         SparseFile.reset();
         FetchQueue.clear();
         RowGroupRanges.clear();
@@ -1059,8 +1075,55 @@ private:
         WaitingBatchIsFinal = false;
         UseOnePassChecksum = false;
         ChecksumComplete = false;
+        UncheckpointedDataBytes = 0;
+        UncheckpointedRows = 0;
+        ResumeState.Clear();
+        CheckpointState.Clear();
         FatalError.clear();
         StartFooterDownload();
+    }
+
+    NKikimrBackup::TS3DownloadState::TParquet MakeCheckpointState(ui32 committedRowGroups) const {
+        NKikimrBackup::TS3DownloadState::TParquet state;
+        state.SetCommittedRowGroups(committedRowGroups);
+        state.SetChecksumOffset(ChecksumOffset);
+        state.SetChecksumComplete(ChecksumComplete);
+        return state;
+    }
+
+    // Positions a freshly planned download at the durable checkpoint.
+    std::expected<void, TString> ApplyResumeState() {
+        const auto resume = *std::exchange(ResumeState, Nothing());
+
+        if (resume.GetCommittedRowGroups() > RowGroupRanges.size()) {
+            return std::unexpected(TStringBuilder() << "Parquet checkpoint has "
+                << resume.GetCommittedRowGroups() << " committed row groups, but the file has "
+                << RowGroupRanges.size());
+        }
+        if (!RowGroupRanges.empty() && resume.GetCommittedRowGroups() == RowGroupRanges.size()) {
+            return std::unexpected("Parquet checkpoint committed every row group without finishing the import");
+        }
+        CurrentRowGroup = resume.GetCommittedRowGroups();
+
+        if (!ValidateChecksum) {
+            return {};
+        }
+        if (resume.GetChecksumComplete()) {
+            // The persisted checksum state already covers the whole object, so
+            // there is nothing left to hash; row groups are fetched sparsely.
+            ChecksumComplete = true;
+            ChecksumOffset = ContentLength;
+            UseOnePassChecksum = false;
+            return {};
+        }
+
+        const ui64 limit = UseOnePassChecksum ? FooterSuffixStart : ContentLength;
+        if (resume.GetChecksumOffset() > limit) {
+            return std::unexpected(TStringBuilder() << "Parquet checkpoint checksum offset "
+                << resume.GetChecksumOffset() << " is past " << limit);
+        }
+        ChecksumOffset = resume.GetChecksumOffset();
+        return {};
     }
 
     void StartFooterDownload() {
@@ -1166,16 +1229,12 @@ private:
     }
 
     std::expected<void, TString> InitializeRowGroups() {
-        auto* parquetParser = AsParquetStreamParser(Parser.Get());
-        if (!parquetParser) {
-            return std::unexpected("Parquet engine has an incompatible data parser");
-        }
-        if (auto result = parquetParser->OpenMetadata(SparseFile->MakeRandomAccessFile(SparseFile)); !result) {
+        if (auto result = Parser->OpenMetadata(SparseFile->MakeRandomAccessFile(SparseFile)); !result) {
             return result;
         }
         auto ranges = SparseFile->PlanColumnChunkRangesByRowGroup(SparseFile);
         if (!ranges) {
-            parquetParser->ResetFile();
+            Parser->ResetFile();
             return std::unexpected(std::move(ranges.error()));
         }
         RowGroupRanges = std::move(*ranges);
@@ -1186,10 +1245,17 @@ private:
         if (ValidateChecksum) {
             auto onePass = CanUseOnePassChecksum();
             if (!onePass) {
-                parquetParser->ResetFile();
+                Parser->ResetFile();
                 return std::unexpected(std::move(onePass.error()));
             }
             UseOnePassChecksum = *onePass;
+        }
+
+        if (ResumeState) {
+            if (auto result = ApplyResumeState(); !result) {
+                Parser->ResetFile();
+                return result;
+            }
         }
 
         if (!UseOnePassChecksum) {
@@ -1323,9 +1389,12 @@ private:
         return Max(ChecksumOffset, CurrentRowGroupPrefixEnd());
     }
 
-    void RouteChecksumChunkToCurrentRowGroup(ui64 offset, TStringBuf data) {
-        Y_ENSURE(UseOnePassChecksum);
-        Y_ENSURE(CurrentRowGroup < RowGroupRanges.size());
+    // In one-pass mode the sequential checksum scan is also the source of the
+    // current row group's bytes: keep the parts of the chunk that belong to it.
+    std::expected<void, TString> RouteChecksumChunkToCurrentRowGroup(ui64 offset, TStringBuf data) {
+        if (!UseOnePassChecksum || CurrentRowGroup >= RowGroupRanges.size()) {
+            return std::unexpected("Parquet checksum chunk routed outside a one-pass row group");
+        }
 
         const ui64 chunkEnd = offset + data.size();
         for (const auto& range : RowGroupRanges[CurrentRowGroup]) {
@@ -1333,13 +1402,17 @@ private:
             const ui64 intersectionStart = Max(offset, range.Offset);
             const ui64 intersectionEnd = Min(chunkEnd, rangeEnd);
             if (intersectionStart < intersectionEnd) {
-                SparseFile->PutRange(
+                auto result = SparseFile->PutRange(
                     intersectionStart,
                     TString(
                         data.data() + intersectionStart - offset,
                         intersectionEnd - intersectionStart));
+                if (!result) {
+                    return result;
+                }
             }
         }
+        return {};
     }
 
     std::expected<void, TString> AdvanceSequentialChecksum(
@@ -1417,7 +1490,7 @@ private:
     const ui32 ReadBatchSize;
     const ui64 BufferSizeLimit;
     const bool ValidateChecksum;
-    IDataParser::TPtr Parser;
+    IParquetStreamParser::TPtr Parser;
     std::shared_ptr<TParquetSparseFile> SparseFile;
     TVector<TParquetFetchRange> FetchQueue;
     TVector<TVector<TParquetFetchRange>> RowGroupRanges;
@@ -1433,7 +1506,11 @@ private:
     bool WaitingBatchIsFinal = false;
     bool UseOnePassChecksum = false;
     bool ChecksumComplete = false;
+    ui64 UncheckpointedDataBytes = 0;
+    ui64 UncheckpointedRows = 0;
     ui64 CheckpointProcessedBytes = 0;
+    NKikimrBackup::TS3DownloadState::TParquet CheckpointState; // as of the last commit
+    TMaybe<NKikimrBackup::TS3DownloadState::TParquet> ResumeState; // pending until the footer is parsed
     EPhase Phase = EPhase::FooterTail;
     TString FatalError;
 };
@@ -1469,13 +1546,11 @@ std::expected<IImportS3Engine::TPtr, TString> CreateImportS3Engine(
         return std::unexpected(std::move(result.error()));
     }
 
-    IDataParser::TPtr parser;
     switch (settings.DataFormat) {
     case NBackupRestoreTraits::EDataFormat::YdbDump:
-        parser = CreateCsvDataParser();
         break;
 
-    case NBackupRestoreTraits::EDataFormat::Parquet:
+    case NBackupRestoreTraits::EDataFormat::Parquet: {
         if (settings.EncryptionKey) {
             return std::unexpected("externally encrypted Parquet import is not supported because Parquet requires random access");
         }
@@ -1485,19 +1560,21 @@ std::expected<IImportS3Engine::TPtr, TString> CreateImportS3Engine(
         if (settings.ContentLength < 8) {
             return std::unexpected("Parquet file is too small");
         }
-        parser = CreateParquetDataParser();
-        break;
+
+        auto parser = CreateParquetDataParser();
+        if (auto result = parser->Configure(tableInfo, scheme); !result) {
+            return std::unexpected(TStringBuilder() << "failed to configure import parser: " << result.error());
+        }
+        return MakeHolder<TParquetImportS3Engine>(settings, std::move(parser));
+    }
 
     case NBackupRestoreTraits::EDataFormat::Invalid:
         return std::unexpected("invalid S3 import data format");
     }
 
+    auto parser = CreateCsvDataParser();
     if (auto result = parser->Configure(tableInfo, scheme); !result) {
         return std::unexpected(TStringBuilder() << "failed to configure import parser: " << result.error());
-    }
-
-    if (settings.DataFormat == NBackupRestoreTraits::EDataFormat::Parquet) {
-        return MakeHolder<TParquetImportS3Engine>(settings, std::move(parser));
     }
 
     THolder<ISequentialReadController> reader;

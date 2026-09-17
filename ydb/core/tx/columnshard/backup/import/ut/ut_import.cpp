@@ -13,6 +13,7 @@
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
@@ -151,9 +152,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
-            if (dataFormat == EDataFormat::Parquet) {
-                runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-            }
+            runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 
             const ui64 tableId = 1;
             const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -238,9 +237,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
-            if (dataFormat == EDataFormat::Parquet) {
-                runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-            }
+            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
             const ui64 tableId = 1;
             const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -322,12 +319,8 @@ Y_UNIT_TEST_SUITE(Restore) {
         }
     }
 
-    Y_UNIT_TEST(ProposeRestoreCsv) {
-        ProposeRestore(EDataFormat::YdbDump);
-    }
-
-    Y_UNIT_TEST(ProposeRestoreParquet) {
-        ProposeRestore(EDataFormat::Parquet);
+    Y_UNIT_TEST(ProposeRestore, EBackupTestDataFormat) {
+        ProposeRestore(ToDataFormat(Arg<0>()));
     }
 }
 

@@ -26,6 +26,7 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -34,8 +35,6 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/system/env.h>
-
-#include "ut_export_enums.h"
 
 using namespace NSchemeShardUT_Private;
 using namespace NKikimr::NWrappers::NTestHelpers;
@@ -46,7 +45,7 @@ using namespace NKikimr::Tests;
 
 namespace {
 
-    using NKikimr::NSchemeShard::EBackupTestDataFormat;
+    using NKikimr::EBackupTestDataFormat;
 
     const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
         switch (format) {
@@ -58,21 +57,15 @@ namespace {
         Y_ABORT("Unexpected backup test data format");
     }
 
-    const char* ExportDataFileExtension(EBackupTestDataFormat format) {
-        switch (format) {
-            case EBackupTestDataFormat::Csv:
-                return ".csv";
-            case EBackupTestDataFormat::Parquet:
-                return ".parquet";
-        }
-        Y_ABORT("Unexpected backup test data format");
+    TString ExportDataFileExtension(EBackupTestDataFormat format) {
+        return NKikimr::NDataShard::NBackupRestoreTraits::DataFileExtension(
+            ToDataFormat(format), ECompressionCodec::None);
     }
 
-    void EnableDataFormat(TTestBasicRuntime& runtime, EBackupTestDataFormat format) {
-        if (format == EBackupTestDataFormat::Parquet) {
-            runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        }
+    // Both flags are inert for CSV, so every format-parametrized test sets them.
+    void EnableParquetFormats(TTestBasicRuntime& runtime) {
+        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
     }
 
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
@@ -5626,7 +5619,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        EnableDataFormat(Runtime(), format);
+        EnableParquetFormats(Runtime());
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -5704,7 +5697,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        EnableDataFormat(Runtime(), format);
+        EnableParquetFormats(Runtime());
         Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
@@ -5943,7 +5936,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        EnableDataFormat(Runtime(), format);
+        EnableParquetFormats(Runtime());
         Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 

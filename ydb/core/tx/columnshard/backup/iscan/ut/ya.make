@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/library/aclib/protos
     ydb/library/testlib/parquet_helpers
+    ydb/library/testlib/backup_test_enums
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value
     ydb/services/metadata

@@ -309,6 +309,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             {"logPrefix", LogPrefix()},
             {"attempt", Attempt});
 
+        // At most one external-storage request is ever outstanding, and every
+        // path into Restart() runs after that request's response was consumed,
+        // so no reply from the previous client can arrive later. (Replies are
+        // sent through the actor system and carry no Sender to correlate on.)
+        Y_DEBUG_ABORT_UNLESS(!ActiveHeadKey && !ActiveGetKey && !ActiveGetRange);
         ActiveHeadKey.Clear();
         ActiveGetKey.Clear();
         ActiveGetRange.Clear();
@@ -374,9 +379,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         const auto* msg = ev->Get();
         const auto& interval = msg->GetReadInterval();
         const TImportRange range{interval.first, msg->GetReadIntervalLength()};
+        // A failed reply may carry the FS operator's (0, 0) sentinel instead of
+        // the requested interval; it still belongs to the only outstanding
+        // request (see Restart()).
+        const bool sentinelInterval = interval.first == 0 && interval.second == 0;
         const bool matches = ActiveGetKey && ActiveGetRange
             && (!msg->Key || *msg->Key == *ActiveGetKey)
-            && (!msg->Result.IsSuccess() || range == *ActiveGetRange);
+            && (range == *ActiveGetRange || (!msg->Result.IsSuccess() && sentinelInterval));
         if (!matches) {
             YDB_LOG_WARN("[Import] Ignoring stale GetObject response",
                 {"logPrefix", LogPrefix()},
@@ -694,13 +703,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         switch (result->Status) {
         case IImportS3Engine::EDataStatus::Ready: {
             Y_ENSURE(!PendingBatchId, "new import batch while another batch is in flight");
-            const bool checkpointAdvanced = result->Batch.ProcessedBytesAfter > ProcessedBytes;
             ProcessedBytes = result->Batch.ProcessedBytesAfter;
             DownloadState = std::move(result->Batch.DownloadStateAfter);
             WrittenBytes += result->Batch.DataBytes;
             WrittenRows += result->Batch.Rows;
             PendingBatchId = result->Batch.Id;
-            if (Checksum && checkpointAdvanced) {
+            if (Checksum && result->Batch.Checkpoint) {
                 ProcessedChecksumState = Checksum->GetState();
             }
 

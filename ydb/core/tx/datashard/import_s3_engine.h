@@ -10,6 +10,7 @@
 #include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <compare>
 #include <expected>
 #include <functional>
 
@@ -33,13 +34,7 @@ struct TImportRange {
         return Offset + Length;
     }
 
-    bool operator==(const TImportRange& other) const {
-        return Offset == other.Offset && Length == other.Length;
-    }
-
-    bool operator!=(const TImportRange& other) const {
-        return !(*this == other);
-    }
+    auto operator<=>(const TImportRange&) const = default;
 };
 
 class IImportS3Engine {
@@ -74,6 +69,11 @@ public:
         // could not yet advance to a restartable input boundary.
         ui64 DataBytes = 0;
         ui64 Rows = 0;
+        // True when committing this batch moves the durable resume position
+        // (ProcessedBytesAfter and/or DownloadStateAfter). The coordinator
+        // snapshots the checksum state only for such batches, so the persisted
+        // checksum state always matches the persisted position.
+        bool Checkpoint = false;
         NKikimrBackup::TS3DownloadState DownloadStateAfter;
     };
 
@@ -121,8 +121,8 @@ public:
     // in-memory checksum state even when no source bytes are currently held.
     virtual bool HasLiveState() const = 0;
 
-    // Direct-part import is a CSV-only sequential sink. The coordinator uses
-    // this capability instead of branching on the concrete data format.
+    // Whether rows may be fed to the direct-part writer (which requires
+    // strictly ascending keys, as every backup produced by the exporter has).
     virtual bool SupportsDirectPartImport() const = 0;
 };
 

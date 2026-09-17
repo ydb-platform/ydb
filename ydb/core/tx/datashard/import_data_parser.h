@@ -32,25 +32,34 @@ public:
 
     virtual ~IDataParser() = default;
 
+    // Binds the parser to the destination table. For every format the column
+    // order, key positions and types come from the backup's table description
+    // (scheme.pb); the data file is only checked against it.
     virtual std::expected<void, TString> Configure(
         const TTableInfo& tableInfo,
         const NKikimrSchemeOp::TTableDescription& scheme) = 0;
 
+    // Parses one self-contained block and calls addRow for every row. TCell
+    // values are borrowed and valid only for the duration of that call.
     virtual std::expected<TParsedData, TString> ParseBlock(
         TStringBuf data,
         TMemoryPool& pool,
         const TAddRowFn& addRow) = 0;
 };
 
-class IParquetStreamParser {
+// Parquet cannot be consumed as a byte stream: the footer is read first and
+// row groups are then decoded one at a time from a random-access source. This
+// extends IDataParser with that lifecycle; ParseBlock remains available for a
+// file that is already fully in memory.
+class IParquetStreamParser : public IDataParser {
 public:
+    using TPtr = THolder<IParquetStreamParser>;
+
     struct TParsedBatch {
         ui64 DataBytes = 0;
         ui64 Rows = 0;
         bool HasMore = false;
     };
-
-    virtual ~IParquetStreamParser() = default;
 
     virtual bool HasOpenFile() const = 0;
 
@@ -58,8 +67,9 @@ public:
 
     virtual std::expected<void, TString> OpenFile(std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
 
-    // Opens and validates file metadata without creating a record-batch reader.
-    // The source may be populated with one row group's bytes at a time later.
+    // Opens the file metadata and validates the schema (column names and Arrow
+    // types) without creating a record-batch reader. The source may be
+    // populated with one row group's bytes at a time later.
     virtual std::expected<void, TString> OpenMetadata(
         std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
 
@@ -67,17 +77,19 @@ public:
 
     virtual void ResetRowGroup() = 0;
 
+    // Decodes rows of the open row group until about maxDataBytes of cell data
+    // have been emitted (0 = no limit) or the row group ends. HasMore reports
+    // whether rows remain in the row group.
     virtual std::expected<TParsedBatch, TString> ProcessNextBatch(
         TMemoryPool& pool,
-        const IDataParser::TAddRowFn& addRow) = 0;
+        const TAddRowFn& addRow,
+        ui64 maxDataBytes) = 0;
 
     virtual void ResetFile() = 0;
 };
 
-IParquetStreamParser* AsParquetStreamParser(IDataParser* parser);
-
 IDataParser::TPtr CreateCsvDataParser();
-IDataParser::TPtr CreateParquetDataParser();
+IParquetStreamParser::TPtr CreateParquetDataParser();
 
 } // namespace NKikimr::NDataShard
 

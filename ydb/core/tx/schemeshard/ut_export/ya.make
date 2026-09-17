@@ -14,14 +14,13 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 
 IF (NOT OS_WINDOWS)
-    GENERATE_ENUM_SERIALIZATION(ydb/core/tx/schemeshard/ut_export/ut_export_enums.h)
-
     PEERDIR(
         contrib/libs/apache/arrow
         library/cpp/getopt
         library/cpp/regex/pcre
         library/cpp/svnversion
         ydb/core/testlib/default
+        ydb/library/testlib/backup_test_enums
         ydb/library/testlib/parquet_helpers
         ydb/core/tx
         ydb/core/tx/columnshard

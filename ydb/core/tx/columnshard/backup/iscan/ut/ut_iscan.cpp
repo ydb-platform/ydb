@@ -8,6 +8,7 @@
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 
 #include <ydb/apps/ydbd/export/export.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
@@ -101,10 +102,9 @@ NKikimrSchemeOp::TBackupTask MakeBackupTask(const TString& bucketName, EDataForm
     return backupTask;
 }
 
-void EnableDataFormat(TTestActorRuntime& runtime, EDataFormat dataFormat) {
-    if (dataFormat == EDataFormat::Parquet) {
-        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
-    }
+// Inert for CSV, so every format-parametrized test sets it.
+void EnableParquetFormats(TTestActorRuntime& runtime) {
+    runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 }
 
 void AssertParquetData(const TString& data, const TVector<std::pair<TString, TString>>& expectedRows)
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        EnableDataFormat(*runtime, dataFormat);
+        EnableParquetFormats(*runtime);
 
         auto grabActor = new TGrabActor(runtime.get(), bucketName, dataFormat);
         runtime->Register(grabActor);
@@ -311,12 +311,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             { { "foo", "one" }, { "bar", "two" }, { "baz", "three" } });
     }
 
-    Y_UNIT_TEST(SimpleExportCsv) {
-        TestSimpleExport(EDataFormat::YdbDump, "iscan-simple-csv");
-    }
-
-    Y_UNIT_TEST(SimpleExportParquet) {
-        TestSimpleExport(EDataFormat::Parquet, "iscan-simple-parquet");
+    Y_UNIT_TEST(SimpleExport, EBackupTestDataFormat) {
+        TestSimpleExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-simple-" << Arg<0>());
     }
 
     void TestUploaderExport(EDataFormat dataFormat, const TString& bucketName) {
@@ -326,7 +322,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        EnableDataFormat(*runtime, dataFormat);
+        EnableParquetFormats(*runtime);
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
@@ -345,12 +341,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             { { "foo", "one" }, { "bar", "two" }, { "baz", "three" } });
     }
 
-    Y_UNIT_TEST(UploaderExportCsv) {
-        TestUploaderExport(EDataFormat::YdbDump, "iscan-uploader-csv");
-    }
-
-    Y_UNIT_TEST(UploaderExportParquet) {
-        TestUploaderExport(EDataFormat::Parquet, "iscan-uploader-parquet");
+    Y_UNIT_TEST(UploaderExport, EBackupTestDataFormat) {
+        TestUploaderExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-uploader-" << Arg<0>());
     }
 
     void TestMultiExport(EDataFormat dataFormat, const TString& bucketName) {
@@ -360,7 +352,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
-        EnableDataFormat(*runtime, dataFormat);
+        EnableParquetFormats(*runtime);
 
         const auto edge = runtime->AllocateEdgeActor(0);
         auto exportFactory = std::make_shared<TDataShardExportFactory>();
@@ -390,12 +382,8 @@ Y_UNIT_TEST_SUITE(IScan) {
             });
     }
 
-    Y_UNIT_TEST(MultiExportCsv) {
-        TestMultiExport(EDataFormat::YdbDump, "iscan-multi-csv");
-    }
-
-    Y_UNIT_TEST(MultiExportParquet) {
-        TestMultiExport(EDataFormat::Parquet, "iscan-multi-parquet");
+    Y_UNIT_TEST(MultiExport, EBackupTestDataFormat) {
+        TestMultiExport(ToDataFormat(Arg<0>()), TStringBuilder() << "iscan-multi-" << Arg<0>());
     }
 
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {

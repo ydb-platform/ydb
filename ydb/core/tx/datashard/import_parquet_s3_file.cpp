@@ -123,50 +123,6 @@ static TVector<ReadRange> CoalesceReadRanges(TVector<ReadRange> ranges) {
     return coalesced;
 }
 
-static TVector<TParquetFetchRange> SubtractLoadedRanges(
-    const TVector<ReadRange>& ranges,
-    const TParquetSparseFile& file)
-{
-    TVector<TParquetFetchRange> result;
-    for (auto&& range : ranges) {
-        const ui64 rangeStart = static_cast<ui64>(range.offset);
-        const ui64 rangeEnd = rangeStart + static_cast<ui64>(range.length);
-        ui64 pos = rangeStart;
-
-        for (const auto& segment : file.Segments) {
-            const ui64 segmentStart = segment.first;
-            const ui64 segmentEnd = segment.first + segment.second.size();
-            if (segmentEnd <= pos) {
-                continue;
-            }
-            if (segmentStart >= rangeEnd) {
-                break;
-            }
-
-            if (pos < segmentStart) {
-                result.push_back({
-                    .Offset = pos,
-                    .Length = Min(segmentStart, rangeEnd) - pos,
-                });
-            }
-
-            pos = Max(pos, segmentEnd);
-            if (pos >= rangeEnd) {
-                break;
-            }
-        }
-
-        if (pos < rangeEnd) {
-            result.push_back({
-                .Offset = pos,
-                .Length = rangeEnd - pos,
-            });
-        }
-    }
-
-    return result;
-}
-
 class TParquetSparseRandomAccessFile final : public arrow::io::RandomAccessFile {
 public:
     static std::shared_ptr<TParquetSparseRandomAccessFile> Create(std::shared_ptr<TParquetSparseFile> file) {
@@ -232,98 +188,86 @@ TParquetSparseFile::TParquetSparseFile(ui64 fileSize)
 {
 }
 
-void TParquetSparseFile::PutRange(ui64 offset, TString data) {
+TVector<TParquetSparseFile::TSegment>::const_iterator TParquetSparseFile::FindSegment(ui64 offset) const {
+    // Segments are disjoint and sorted, so their ends are sorted as well.
+    return std::upper_bound(Segments.begin(), Segments.end(), offset,
+        [](ui64 offset, const TSegment& segment) { return offset < segment.End(); });
+}
+
+std::expected<void, TString> TParquetSparseFile::PutRange(ui64 offset, TString data) {
     if (data.empty()) {
-        return;
+        return {};
+    }
+    if (offset > FileSize || data.size() > FileSize - offset) {
+        return std::unexpected(TStringBuilder() << "parquet range [" << offset << ", "
+            << offset + data.size() << ") is past the end of a " << FileSize << " byte file");
     }
 
-    Y_ENSURE(offset + data.size() <= FileSize, "parquet range write past EOF");
+    ui64 begin = offset;
+    const ui64 end = offset + data.size();
 
-    if (HasBytes(offset, data.size())) {
-        return;
-    }
-
-    ui64 writeOffset = offset;
-    while (!data.empty() && HasBytes(writeOffset, 1)) {
-        data.erase(0, 1);
-        ++writeOffset;
-    }
-
-    if (data.empty()) {
-        return;
-    }
-
-    for (auto&& segment : Segments) {
-        const ui64 segmentEnd = segment.first + segment.second.size();
-        if (writeOffset < segmentEnd && writeOffset + data.size() > segment.first) {
-            Y_ENSURE(writeOffset >= segmentEnd || writeOffset + data.size() <= segment.first,
-                "parquet sparse file ranges must not overlap");
+    // Skip the prefix that is already loaded.
+    auto it = Segments.begin() + (FindSegment(begin) - Segments.begin());
+    if (it != Segments.end() && it->Offset <= begin) {
+        const ui64 covered = Min(it->End(), end) - begin;
+        if (covered == data.size()) {
+            return {};
         }
+        data.erase(0, covered);
+        begin = it->End();
+        ++it;
+    }
+
+    // Now no segment contains begin; the next one must start at or after end.
+    if (it != Segments.end() && it->Offset < end) {
+        return std::unexpected(TStringBuilder() << "parquet range [" << begin << ", " << end
+            << ") overlaps loaded range [" << it->Offset << ", " << it->End() << ")");
     }
 
     BufferedBytes_ += data.size();
-    Segments.emplace_back(writeOffset, std::move(data));
-    SortBy(Segments, [](const auto& segment) { return segment.first; });
+
+    const bool mergePrev = it != Segments.begin() && std::prev(it)->End() == begin;
+    const bool mergeNext = it != Segments.end() && it->Offset == end;
+    if (mergePrev && mergeNext) {
+        auto prev = std::prev(it);
+        prev->Data.append(data);
+        prev->Data.append(it->Data);
+        Segments.erase(it);
+    } else if (mergePrev) {
+        std::prev(it)->Data.append(data);
+    } else if (mergeNext) {
+        data.append(it->Data);
+        it->Data = std::move(data);
+        it->Offset = begin;
+    } else {
+        Segments.insert(it, TSegment{.Offset = begin, .Data = std::move(data)});
+    }
+
+    return {};
 }
 
 bool TParquetSparseFile::HasBytes(ui64 offset, ui64 length) const {
     if (length == 0) {
         return true;
     }
-
-    ui64 covered = 0;
-    while (covered < length) {
-        const ui64 pos = offset + covered;
-        bool found = false;
-        for (auto&& segment : Segments) {
-            const ui64 segmentStart = segment.first;
-            const ui64 segmentEnd = segment.first + segment.second.size();
-            if (pos < segmentStart || pos >= segmentEnd) {
-                continue;
-            }
-
-            const ui64 available = segmentEnd - pos;
-            covered += available;
-            found = true;
-            break;
-        }
-
-        if (!found) {
-            return false;
-        }
+    if (offset > FileSize || length > FileSize - offset) {
+        return false;
     }
 
-    return true;
+    const auto it = FindSegment(offset);
+    return it != Segments.end() && it->Offset <= offset && it->End() >= offset + length;
 }
 
 TMaybe<TString> TParquetSparseFile::ReadBytes(ui64 offset, ui64 length) const {
     if (!HasBytes(offset, length)) {
         return Nothing();
     }
-
-    TString out;
-    out.reserve(length);
-
-    ui64 remaining = length;
-    ui64 pos = offset;
-    while (remaining > 0) {
-        for (auto&& segment : Segments) {
-            const ui64 segmentStart = segment.first;
-            const ui64 segmentEnd = segment.first + segment.second.size();
-            if (pos < segmentStart || pos >= segmentEnd) {
-                continue;
-            }
-
-            const ui64 inSegment = pos - segmentStart;
-            const ui64 toCopy = Min(remaining, segment.second.size() - inSegment);
-            out.append(segment.second.data() + inSegment, toCopy);
-            pos += toCopy;
-            remaining -= toCopy;
-            break;
-        }
+    if (length == 0) {
+        return TString();
     }
 
-    return out;
+    const auto it = FindSegment(offset);
+    return TString(it->Data.data() + (offset - it->Offset), length);
 }
 
 bool TParquetSparseFile::IsFullyBuffered() const {
@@ -400,7 +344,7 @@ std::expected<TVector<TParquetFetchRange>, TString> TParquetSparseFile::PlanColu
             }
         }
 
-        return SubtractLoadedRanges(CoalesceReadRanges(std::move(ranges)), *this);
+        return SubtractLoaded(CoalesceReadRanges(std::move(ranges)));
     } catch (const parquet::ParquetException& ex) {
         return std::unexpected(TString(ex.what()));
     } catch (const std::exception& ex) {
@@ -454,28 +398,49 @@ void TParquetSparseFile::Clear() {
 }
 
 void TParquetSparseFile::ClearBefore(ui64 offset) {
-    TVector<std::pair<ui64, TString>> retained;
-    retained.reserve(Segments.size());
+    const auto first = Segments.begin() + (FindSegment(offset) - Segments.begin());
+    Segments.erase(Segments.begin(), first);
 
-    ui64 bufferedBytes = 0;
-    for (auto& segment : Segments) {
-        const ui64 segmentStart = segment.first;
-        const ui64 segmentEnd = segmentStart + segment.second.size();
-        if (segmentEnd <= offset) {
-            continue;
-        }
-
-        if (segmentStart < offset) {
-            segment.second.erase(0, offset - segmentStart);
-            segment.first = offset;
-        }
-
-        bufferedBytes += segment.second.size();
-        retained.push_back(std::move(segment));
+    if (!Segments.empty() && Segments.front().Offset < offset) {
+        auto& segment = Segments.front();
+        segment.Data.erase(0, offset - segment.Offset);
+        segment.Offset = offset;
     }
 
-    Segments = std::move(retained);
-    BufferedBytes_ = bufferedBytes;
+    BufferedBytes_ = 0;
+    for (const auto& segment : Segments) {
+        BufferedBytes_ += segment.Data.size();
+    }
+}
+
+TVector<TParquetFetchRange> TParquetSparseFile::SubtractLoaded(const TVector<ReadRange>& ranges) const {
+    TVector<TParquetFetchRange> result;
+    for (const auto& range : ranges) {
+        const ui64 rangeEnd = static_cast<ui64>(range.offset) + static_cast<ui64>(range.length);
+        ui64 pos = static_cast<ui64>(range.offset);
+
+        for (auto it = FindSegment(pos); it != Segments.end() && it->Offset < rangeEnd; ++it) {
+            if (pos < it->Offset) {
+                result.push_back({
+                    .Offset = pos,
+                    .Length = it->Offset - pos,
+                });
+            }
+            pos = Max(pos, it->End());
+            if (pos >= rangeEnd) {
+                break;
+            }
+        }
+
+        if (pos < rangeEnd) {
+            result.push_back({
+                .Offset = pos,
+                .Length = rangeEnd - pos,
+            });
+        }
+    }
+
+    return result;
 }
 
 } // namespace NKikimr::NDataShard

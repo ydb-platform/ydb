@@ -31,7 +31,10 @@ public:
         return BufferedBytes_;
     }
 
-    void PutRange(ui64 offset, TString data);
+    // Stores one byte range. Bytes already loaded at the start of the range
+    // are skipped (a retried or re-routed chunk may repeat them); overlapping
+    // loaded bytes anywhere else is an error.
+    std::expected<void, TString> PutRange(ui64 offset, TString data);
 
     bool HasBytes(ui64 offset, ui64 length) const;
 
@@ -59,9 +62,27 @@ public:
 
     TMaybe<TString> ReadBytes(ui64 offset, ui64 length) const;
 
+private:
+    // Loaded bytes, sorted by offset, pairwise disjoint and never adjacent:
+    // touching puts are merged, so a fully loaded range always lies within
+    // exactly one segment and lookups are a binary search.
+    struct TSegment {
+        ui64 Offset = 0;
+        TString Data;
+
+        ui64 End() const {
+            return Offset + Data.size();
+        }
+    };
+
+    // First segment ending after offset (i.e. the one containing offset, if any).
+    TVector<TSegment>::const_iterator FindSegment(ui64 offset) const;
+
+    TVector<TParquetFetchRange> SubtractLoaded(const TVector<arrow::io::ReadRange>& ranges) const;
+
     ui64 FileSize = 0;
     ui64 BufferedBytes_ = 0;
-    TVector<std::pair<ui64, TString>> Segments;
+    TVector<TSegment> Segments;
 };
 
 } // namespace NKikimr::NDataShard

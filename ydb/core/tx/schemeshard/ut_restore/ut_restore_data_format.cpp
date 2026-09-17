@@ -13,6 +13,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -261,8 +262,7 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
     auto configureResult = parser->Configure(tableInfo, scheme);
     UNIT_ASSERT_C(configureResult.has_value(), configureResult.error());
 
-    auto* streamParser = NDataShard::AsParquetStreamParser(parser.Get());
-    UNIT_ASSERT(streamParser);
+    auto* streamParser = parser.Get();
     auto openResult = streamParser->OpenFile(sparseFile->MakeRandomAccessFile(sparseFile));
     UNIT_ASSERT_C(openResult.has_value(), openResult.error());
 
@@ -291,7 +291,7 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
     ui64 pendingBytes = 0;
     ui64 pendingRows = 0;
     while (true) {
-        auto batchResult = streamParser->ProcessNextBatch(pool, addRow);
+        auto batchResult = streamParser->ProcessNextBatch(pool, addRow, /*maxDataBytes=*/0);
         UNIT_ASSERT_C(batchResult.has_value(), batchResult.error());
         pendingBytes += batchResult->DataBytes;
         pendingRows += batchResult->Rows;
@@ -765,11 +765,8 @@ THashMap<TString, TString> MakeImportSingleShardS3Data(ERestoreDataFormat format
 }
 
 Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardUtf8, ERestoreDataFormat) {
-        const auto format = Arg<0>();
-        if (format == ERestoreDataFormat::Invalid) {
-            return;
-        }
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardUtf8, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -790,11 +787,31 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
         NKqp::CompareYson(expectedYson, content);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnInt32Key, ERestoreDataFormat) {
-        const auto format = Arg<0>();
-        if (format == ERestoreDataFormat::Invalid) {
-            return;
-        }
+    Y_UNIT_TEST(ShouldSucceedWithDirectPartImport, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(true);
+
+        const auto s3Data = MakeSingleShardUtf8S3Data(format);
+
+        DoRestore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", s3Data, format);
+
+        const TString expectedYson =
+            R"([[[[[["a1"];["value1"]];[["a2"];["value2"]];[["a3"];["value3"]]];%false]]])";
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(expectedYson, content);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnInt32Key, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -813,11 +830,8 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
         NKqp::CompareYson(expectedYson, content);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMultiShardTable, ERestoreDataFormat) {
-        const auto format = Arg<0>();
-        if (format == ERestoreDataFormat::Invalid) {
-            return;
-        }
+    Y_UNIT_TEST(ShouldSucceedOnMultiShardTable, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -915,11 +929,8 @@ Y_UNIT_TEST_SUITE(TRestoreDataFormatTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTable, ERestoreDataFormat) {
-        const auto format = Arg<0>();
-        if (format == ERestoreDataFormat::Invalid) {
-            return;
-        }
+    Y_UNIT_TEST(ShouldSucceedOnSingleShardTable, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
 
         TTestBasicRuntime runtime;
 

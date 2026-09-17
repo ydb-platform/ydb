@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -113,7 +114,7 @@ ui32 TakeAbortCount(TTestActorRuntime& runtime, TActorId edgeActor) {
     auto events = runtime.CaptureMailboxEvents(edgeActor.Hint(), edgeActor.NodeId());
     ui32 count = 0;
     for (const auto& event : events) {
-        UNIT_ASSERT_VALUES_EQUAL(event->GetTypeRewrite(), TEvStreamingQueryNodesManager::TEvAbortQuery::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(event->GetTypeRewrite(), TEvKqp::TEvAbortExecution::EventType);
         ++count;
     }
     return count;

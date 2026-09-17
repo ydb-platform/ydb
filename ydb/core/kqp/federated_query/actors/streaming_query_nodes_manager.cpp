@@ -1,6 +1,7 @@
 #include "streaming_query_nodes_manager.h"
 
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -254,7 +255,7 @@ private:
 
     void Abort(const TString& reason) {
         AlreadyAborted = true;
-        Send(RunActorId, new TEvStreamingQueryNodesManager::TEvAbortQuery(reason));
+        Send(RunActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, reason));
     }
 
     // -------------------------------------------------------------------------

@@ -73,7 +73,7 @@ security:
 | `security.oidc.client_id` | Идентификатор клиента YDB EM в IdP. Обязательный параметр. |
 | `security.oidc.client_secret` | Секрет клиента YDB EM в IdP. Обязательный параметр. |
 | `security.oidc.scopes` | Список запрашиваемых scopes. По умолчанию пустой; `openid` Gateway добавляет автоматически. Дополнительные scopes, например `profile`, `email` или необходимые для получения групп и refresh token, согласуйте с настройками IdP. |
-| `security.oidc.redirect_to_idp_on_unauthorized` | По умолчанию `true`: при полyчении ответа `401 Unauthorized`, UI выполняет редирект пользователя на страницу аутентификации IdP. При `false` редирект не происходит, но `/meta/oidc/authorize` остаётся доступен для явного начала входа. |
+| `security.oidc.redirect_to_idp_on_unauthorized` | По умолчанию `true`: при получении ответа `401 Unauthorized`, UI выполняет редирект пользователя на страницу аутентификации IdP. При `false` редирект не происходит, но `/meta/oidc/authorize` остаётся доступен для явного начала входа. |
 
 Если секция `security.oidc` присутствует, все три поля `issuer`, `client_id` и `client_secret` должны быть непустыми. Иначе Gateway не загрузит конфигурацию. Чтобы отключить OIDC, удалите секцию целиком.
 

@@ -3,7 +3,7 @@
 CSS = r"""
 .ct-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr));gap:24px;align-items:start}
 .ct-host{padding:0;background:transparent;border:0;min-width:0}
-.ct-hosts>.ct-host{border:1px solid var(--line);border-radius:6px;padding:12px}
+.ct-hosts>.ct-host{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--panel)}
 .ct-host>.ct-host{margin-top:12px}
 .ct-host>.runs-toolbar,.ct-host>.ct-zone-header{border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 10px}
 .ct-host>.ct-host>.ct-zone-header{border:0;color:var(--muted);padding:0;margin:0 0 5px}
@@ -14,10 +14,23 @@ CSS = r"""
 .ct-edit:hover{color:var(--accent)}
 .ct-node-row{position:relative;margin:7px 0}
 .ct-node-row>.ct-remove{position:absolute;top:4px;right:5px}
+.ct-node-disks{border:1px solid var(--line);border-radius:6px;background:#fff}
+.ct-node-disks>.ct-node{border:0;box-shadow:none}
+.ct-node-disks:has(>.ct-node[aria-pressed=true]){border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.ct-disks{padding:8px 12px 12px;display:grid;gap:6px;border-top:1px solid var(--line);background:var(--panel);border-radius:0 0 5px 5px}
+.ct-disk-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ct-add-disk{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;padding:0;color:var(--accent);font-size:22px}
+.ct-disk{display:flex;align-items:center;gap:8px;margin-left:12px;padding:8px;border:1px solid var(--line);border-radius:4px;background:#fff;min-width:0;cursor:grab}
+.ct-disk>.ct-disk-grip{color:var(--muted);flex:0 0 auto}
+.ct-icon{width:18px;height:18px;flex-shrink:0;vertical-align:middle;color:var(--muted)}
+.ct-node-title>.ct-icon,.ct-zone-header>strong>.ct-icon,.ct-host>.runs-toolbar>strong>.ct-icon{margin-right:8px}
+.ct-disk>span{flex:1;min-width:0;overflow-wrap:anywhere}.ct-disk small{display:block;color:var(--muted);margin-top:3px}
+.ct-node-disks.ct-drop{outline:2px solid var(--accent)}
 .ct-node{display:block;width:100%;text-align:left;margin:0;padding:10px 12px;overflow-wrap:anywhere}
 .ct-node-title{display:block;font-weight:500;padding-right:30px}.ct-node-title em{font-style:normal;color:var(--muted);margin-left:10px}
 .ct-node span{display:block;color:var(--muted);margin-top:4px}
 .ct-node[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 3px 0 var(--accent)}
+.ct-node-disks>.ct-node[aria-pressed=true]{box-shadow:none}
 .ct-node[draggable=true]{cursor:grab}.ct-host.ct-drop{outline:2px solid var(--accent);background:var(--panel)}
 .ct-empty{color:var(--muted);padding:14px 0}.ct-placement-tabs{display:flex;gap:.35rem;margin:16px 0;border-bottom:1px solid var(--line)}
 .ct-placement-tabs button{padding:.6rem .8rem;border:1px solid transparent;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);margin-bottom:-1px}
@@ -29,6 +42,7 @@ CSS = r"""
 .ct-editor{border-top:1px solid var(--line);margin-top:20px;padding-top:16px}
 .ct-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:12px}
 .ct-fields label{display:grid;gap:5px;min-width:0}.ct-fields input,.ct-fields select{width:100%;min-width:0}
+.ct-fields label[hidden]{display:none}
 .ct-flags{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
 .ct-pop{position:fixed;inset:auto;margin:0;padding:16px;width:min(680px,calc(100vw - 24px));max-height:80vh;
 overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--text);box-shadow:0 6px 24px #0003;z-index:200}
@@ -50,7 +64,7 @@ overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;col
 .ct-scope-bar.ct-double{box-shadow:0 -5px 0 var(--accent);margin-top:12px}
 .ct-pop-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .ct-mask{overflow-wrap:anywhere;margin-top:10px}.ct-small-action{padding:2px 6px}
-@media(pointer:coarse){.ct-cpu{min-height:44px}.ct-remove,.ct-edit{min-width:44px;min-height:44px}.ct-node-title{padding-right:42px}}
+@media(pointer:coarse){.ct-cpu{min-height:44px}.ct-remove,.ct-edit,.ct-add-disk{min-width:44px;min-height:44px}.ct-node-title{padding-right:42px}}
 """
 
 JS = r"""
@@ -114,6 +128,7 @@ function ctMoveNode(record,index,kind,target,resetManual=false){
   if(kind==='physical'){
     if(!record.host_ids.includes(target))throw Error('Select a template host');
     if(n.host_id===target)return;
+    if(!ctNodePortable(n))throw Error('Persistent disks cannot move to another host');
     if(n.affinity.kind==='manual'&&!resetManual)throw Error('Clear the manual CPU mask before moving to another host');
     if(n.affinity.kind==='manual')n.affinity={kind:'strategy',mode:'none',count:n.vcpu||8};
     n.host_id=target;
@@ -130,7 +145,30 @@ function ctMoveNode(record,index,kind,target,resetManual=false){
 }
 function ctDefaultNode(host,role,index){
   return {name:role+'-'+index,role,host_id:host,binary:'bundled',
-    sector_map:{count:1,size_gib:64},affinity:{kind:'strategy',mode:'none',count:8}};
+    disks:[{source:'sector_map',media:'ssd',size_gib:64}],affinity:{kind:'strategy',mode:'none',count:8}};
+}
+function ctNodeDisks(n){
+  if(!n.disks){const old=n.sector_map||{count:1,size_gib:64};
+    n.disks=Array.from({length:old.count},()=>({source:'sector_map',media:'ssd',size_gib:old.size_gib}));delete n.sector_map}
+  return n.disks;
+}
+function ctNodePortable(n){
+  return n.role!=='static'||ctNodeDisks(n).every(d=>d.source==='sector_map'||(d.source==='file'&&d.temporary===true));
+}
+function ctDiskLabel(d){
+  if(d.source==='file'&&d.temporary)return 'Temporary file · '+d.size_gib+' GiB · deleted after run';
+  return d.source==='sector_map'?'SectorMap · '+d.size_gib+' GiB':d.source==='partlabel'?'PARTLABEL · '+d.label:
+    (d.source==='file'?'File':'Block device')+' · '+(d.name?'file-disks/'+d.name:d.path)+(d.source==='file'?' · '+d.size_gib+' GiB':'');
+}
+function ctMoveDisk(record,from,index,to){
+  const source=record.nodes[from],target=record.nodes[to];
+  if(!source||!target||source.role!=='static'||target.role!=='static')throw Error('Select a storage node');
+  if(source.host_id!==target.host_id)throw Error('Disks cannot move between hosts');
+  const disks=ctNodeDisks(source),destination=ctNodeDisks(target);
+  if(!Number.isInteger(index)||index<0||index>=disks.length)throw Error('Disk no longer exists');
+  if(from===to)return;
+  if(destination.length>=64)throw Error('At most 64 disks per node');
+  destination.push(disks.splice(index,1)[0]);
 }
 function ctNormalizeNodePlacement(n){
   n.location??={data_center:'',rack:'',body:''};n.tenant??='';
@@ -162,6 +200,7 @@ function ctRemoveHost(record,host,target){
   if(!record.host_ids.includes(host))throw Error('Host no longer exists');
   const nodes=record.nodes.filter(n=>n.host_id===host);
   if(nodes.length&&(!record.host_ids.includes(target)||target===host))throw Error('Select another template host for these nodes');
+  if(nodes.some(n=>!ctNodePortable(n)))throw Error('Remove or reassign persistent disks before removing this host');
   nodes.forEach(n=>ctMoveNode(record,record.nodes.indexOf(n),'physical',target,true));
   record.host_ids=record.host_ids.filter(h=>h!==host);
 }
@@ -171,6 +210,20 @@ function ctNextRack(dc){let i=1;while(dc.racks.includes(dc.name+'-R'+i))i++;retu
 function ctShortHost(name,names){
   const short=name.split('.')[0];
   return names.filter(other=>other.split('.')[0]===short).length>1?name:short;
+}
+function ctIcon(kind){
+  const paths={
+    dc:'<path d="M3 21V3h14v18M17 9h4v12M1 21h22M7 7h2M11 7h2M7 11h2M11 11h2M7 15h2M11 15h2M9 21v-3h2v3"/>',
+    rack:'<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M5 8h14M5 15h14M8 5h.01M8 11.5h.01M8 18.5h.01M12 5h4M12 11.5h4M12 18.5h4"/>',
+    tenant:'<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>',
+    host:'<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>',
+    disk:'<path d="M5 4h14l3 10v5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-5zM2 14h20M6 17h.01M10 17h.01"/>',
+    static:'<rect x="2" y="4" width="20" height="16" rx="2"/><rect x="5" y="7" width="3" height="10" rx="1"/>'+
+      '<rect x="10.5" y="7" width="3" height="10" rx="1"/><rect x="16" y="7" width="3" height="10" rx="1"/>',
+    dynamic:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v5M15 1v5M9 18v5M15 18v5M1 9h5M1 15h5M18 9h5M18 15h5"/>',
+    cli:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 8 4 4-4 4M13 16h5"/>'
+  };
+  return '<svg class=ct-icon viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[kind]||'')+'</svg>';
 }
 function ctRemoveButton(attributes,label){return '<button class=ct-remove '+attributes+' title="'+esc(label)+'" aria-label="'+esc(label)+'">×</button>';}
 function ctNodeInfo(node,view,hostName){
@@ -220,7 +273,7 @@ async function renderClusterTemplates(id){
       const dc=record.data_centers.find(dc=>dc.name===n.location.data_center);
       if(dc&&!n.location.rack){if(!dc.racks.length)dc.racks.push(ctNextRack(dc));n.location.rack=dc.racks[0];ctNormalizeNodePlacement(n)}
     });
-    let selected=0,saving=false,view='physical',dragged=null;
+    let selected=0,saving=false,view='physical',dragged=null,draggedDisk=null;
     let previewVersion=0;
     const topology=async(host,affinity,excluded=[])=>{
       const query=affinity?.kind==='strategy'?'?mode='+enc(affinity.mode)+'&cpus='+enc(affinity.count)+'&exclude='+enc(excluded.join(',')):'';
@@ -244,6 +297,7 @@ async function renderClusterTemplates(id){
       app.appendChild(pop);pop.onclose=()=>pop.remove();pop.querySelector('[type=button]').onclick=()=>pop.close();
       pop.querySelector('form').onsubmit=e=>{e.preventDefault();try{submit(new FormData(e.currentTarget));pop.close();draw()}
         catch(error){pop.querySelector('[role=alert]').textContent=error.message}};pop.showModal();
+      return pop;
     }
     function move(index,kind,target){
       const n=record.nodes[index];
@@ -260,16 +314,24 @@ async function renderClusterTemplates(id){
       if(view==='physical'&&selected<0&&record.nodes.length)selected=0;
       const n=record.nodes[selected];
       const targets=[];
-      const card=(node,i)=>'<div class=ct-node-row><button class=ct-node draggable=true data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+
-        '<strong class=ct-node-title>'+esc(node.name)+'<em>'+esc(node.role)+'</em></strong>'+
+      const card=(node,i)=>'<div class="ct-node-row '+(view==='physical'&&node.role==='static'?'ct-node-disks':'')+'" data-ct-disk-target="'+i+'">'+
+        '<button class=ct-node draggable=true data-ct-node="'+i+'" aria-pressed="'+(selected===i)+'">'+
+        '<strong class=ct-node-title>'+ctIcon(node.role)+esc(node.name)+'<em>'+esc(node.role)+'</em></strong>'+
         '<span title="'+esc(hostName(node.host_id))+'">'+esc(ctNodeInfo(node,view,shortHost))+'</span>'+
         (view==='physical'?'<span>'+esc(ctAffinityLabel(node.affinity))+'</span><span data-ct-plan="'+i+'">Calculating placement…</span>':'')+
-        '</button>'+ctRemoveButton('data-ct-remove-node="'+i+'"','Remove node '+node.name)+'</div>';
+        '</button>'+ctRemoveButton('data-ct-remove-node="'+i+'"','Remove node '+node.name)+
+        (view==='physical'&&node.role==='static'?'<div class=ct-disks><div class=ct-disk-header><strong>Disks · '+ctNodeDisks(node).length+'</strong>'+
+          '<button class=ct-add-disk data-ct-add-disk="'+i+'" title="Add disk" aria-label="Add disk to '+esc(node.name)+'">+</button></div>'+ctNodeDisks(node).map((d,j)=>
+          '<div class=ct-disk draggable=true data-ct-drag-disk="'+i+':'+j+'"><span class=ct-disk-grip aria-hidden=true>⠿</span>'+
+          ctIcon('disk')+'<span>'+esc(ctDiskLabel(d))+'<small>'+esc(d.media.toUpperCase())+'</small></span>'+
+          ctRemoveButton('data-ct-remove-disk="'+i+':'+j+'"','Remove disk '+ctDiskLabel(d))+'</div>').join('')+
+          '</div>':'')+'</div>';
       const cards=filter=>record.nodes.map((node,i)=>(view==='physical'||node.role!=='cli')&&filter(node)?card(node,i):'').join('')||'<p class=ct-empty>No nodes</p>';
       const zone=(title,target,filter,actions='',description='',fullTitle='')=>{
         const index=targets.push(target)-1;
         const content=cards(filter);
-        return '<section class=ct-host data-ct-drop="'+index+'"><div class=ct-zone-header><strong title="'+esc(fullTitle||title)+'">'+esc(title)+'</strong>'+
+        return '<section class=ct-host data-ct-drop="'+index+'"><div class=ct-zone-header><strong title="'+esc(fullTitle||title)+'">'+
+          (view==='physical'?ctIcon('host'):view==='logical'&&target[1]?ctIcon('rack'):view==='tenants'&&target?ctIcon('tenant'):'')+esc(title)+'</strong>'+
           (actions?'<div class=runs-actions>'+actions+'</div>':'')+'</div>'+
           (description?'<p class=muted>'+esc(description)+'</p>':'')+content+'</section>';
       };
@@ -277,7 +339,7 @@ async function renderClusterTemplates(id){
       if(view==='physical')layout=record.host_ids.map((host,i)=>zone(shortHost(host),host,node=>node.host_id===host,
         ctRemoveButton('data-ct-delete-host="'+i+'"','Remove host '+hostName(host)),'',hostName(host))).join('');
       if(view==='logical'){
-        layout=record.data_centers.map((dc,i)=>'<section class=ct-host><div class=runs-toolbar><strong>'+esc(dc.name)+
+        layout=record.data_centers.map((dc,i)=>'<section class=ct-host><div class=runs-toolbar><strong>'+ctIcon('dc')+esc(dc.name)+
           '</strong><div class=runs-actions><button data-ct-rack="'+i+'">Add rack</button>'+
           ctRemoveButton('data-ct-delete-dc="'+i+'"','Remove DC '+dc.name)+'</div></div>'+dc.racks.map((rack,j)=>
             zone(rack,[dc.name,rack],node=>node.location?.data_center===dc.name&&node.location?.rack===rack,
@@ -320,13 +382,11 @@ async function renderClusterTemplates(id){
             '<option '+(n.tenant===t.path?'selected':'')+'>'+esc(t.path)+'</option>').join('')+'</select></label>')+
           '<label>Binary · bundled, version or path<input data-ct-field=binary value="'+esc(n.binary)+'"></label>'+
           '<label>CPU affinity<button id=ct-affinity aria-haspopup=dialog>'+esc(ctAffinityLabel(n.affinity))+'</button></label>'+
-          (n.role==='static'?'<label>SectorMap count<input type=number min=1 max=64 data-ct-disk=count value="'+n.sector_map.count+'"></label>'+
-            '<label>SectorMap size · GiB<input type=number min=1 max=1048576 data-ct-disk=size_gib value="'+n.sector_map.size_gib+'"></label>':'')+
           '</div></section>':''));
       const error=e=>{if(active())app.querySelector('#ct-error').innerHTML=displayError(e)};
       app.querySelector('#ct-name').oninput=e=>record.name=e.target.value;
       app.querySelectorAll('[data-ct-view]').forEach(b=>b.onclick=()=>{view=b.dataset.ctView;draw()});
-      const clearDrag=()=>{dragged=null;app.querySelectorAll('.ct-drop').forEach(b=>b.classList.remove('ct-drop'))};
+      const clearDrag=()=>{dragged=null;draggedDisk=null;app.querySelectorAll('.ct-drop').forEach(b=>b.classList.remove('ct-drop'))};
       app.onkeydown=e=>{if(e.key==='Escape')clearDrag()};
       app.querySelectorAll('[data-ct-node]').forEach(b=>{
         b.onclick=()=>{selected=+b.dataset.ctNode;draw()};
@@ -354,10 +414,58 @@ async function renderClusterTemplates(id){
           return;
         }
         n[field]=f.type==='number'?Number(f.value):f.value;
-        if(field==='role'){n.sector_map??={count:1,size_gib:64};ctNormalizeNodePlacement(n)}
+        if(field==='role'){if(n.role==='static')ctNodeDisks(n);ctNormalizeNodePlacement(n)}
         draw();
       });
-      app.querySelectorAll('[data-ct-disk]').forEach(f=>f.onchange=()=>n.sector_map[f.dataset.ctDisk]=Number(f.value));
+      app.querySelectorAll('[data-ct-drag-disk]').forEach(b=>{
+        b.ondragstart=e=>{e.stopPropagation();dragged=null;draggedDisk=b.dataset.ctDragDisk.split(':').map(Number);
+          e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','disk')};b.ondragend=clearDrag;
+      });
+      app.querySelectorAll('[data-ct-disk-target]').forEach(b=>{
+        const to=+b.dataset.ctDiskTarget,valid=()=>draggedDisk&&record.nodes[to].role==='static'&&
+          record.nodes[to].host_id===record.nodes[draggedDisk[0]].host_id&&to!==draggedDisk[0]&&ctNodeDisks(record.nodes[to]).length<64;
+        b.ondragover=e=>{if(!draggedDisk)return;e.stopPropagation();if(valid()){e.preventDefault();b.classList.add('ct-drop')}};
+        b.ondragleave=e=>{if(!b.contains(e.relatedTarget))b.classList.remove('ct-drop')};
+        b.ondrop=e=>{if(!draggedDisk)return;e.preventDefault();e.stopPropagation();const disk=draggedDisk,allowed=valid();clearDrag();
+          if(allowed){try{ctMoveDisk(record,...disk,to);draw()}catch(e){error(e)}}};
+      });
+      app.querySelectorAll('[data-ct-remove-disk]').forEach(b=>b.onclick=()=>{const [i,j]=b.dataset.ctRemoveDisk.split(':').map(Number);ctNodeDisks(record.nodes[i]).splice(j,1);draw()});
+      app.querySelectorAll('[data-ct-add-disk]').forEach(addDisk=>addDisk.onclick=()=>{
+        const n=record.nodes[+addDisk.dataset.ctAddDisk];
+        if(ctNodeDisks(n).length>=64)return error('At most 64 disks per node');
+        const pop=dialog('Add disk','<label>Source<select name=source><option value=sector_map>SectorMap</option><option value=file>File</option>'+
+          '<option value=block_device>Block device</option><option value=partlabel>PARTLABEL</option></select></label>'+
+          '<label>Media<select name=media><option value=ssd>SSD</option><option value=hdd>HDD</option></select></label>'+
+          '<label data-disk-temporary><span>File lifetime</span><select name=temporary><option value=yes>Create and delete after run</option>'+
+          '<option value=no>Persistent file</option></select></label>'+
+          '<label data-disk-address><span>Absolute path</span><input name=address maxlength=4096></label>'+
+          '<label data-disk-size>Size · GiB<input name=size type=number min=1 max=1048576 value=64></label>',data=>{
+            const source=data.get('source'),disk={source,media:data.get('media')};
+            if(source==='sector_map'||source==='file')disk.size_gib=Number(data.get('size'));
+            if(source==='file')disk.temporary=data.get('temporary')==='yes';
+            if(source!=='sector_map'&&!disk.temporary){
+              const value=data.get('address').trim();
+              if(source==='partlabel'){
+                if(!value||value==='.'||value==='..'||/[\\/\x00\r\n]/.test(value))throw Error('Enter a partition label, not a path');
+                disk.label=value;
+              }else if(source==='file'){
+                if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value))throw Error('Enter a file name, not a path');disk.name=value;
+              }else{if(!value.startsWith('/')||value==='/')throw Error('Enter an absolute disk path');disk.path=value}
+              const path=d=>d.source==='partlabel'?'/dev/disk/by-partlabel/'+d.label:d.name?'file-disks/'+d.name:d.path;
+              if(record.nodes.some(other=>other.role==='static'&&other.host_id===n.host_id&&ctNodeDisks(other).some(d=>path(d)===path(disk))))
+                throw Error('This disk is already assigned on this host');
+            }
+            n.disks.push(disk);
+          });
+        const update=()=>{const source=pop.querySelector('[name=source]').value,virtual=source==='sector_map';
+          const temporary=source==='file'&&pop.querySelector('[name=temporary]').value==='yes';
+          pop.querySelector('[data-disk-temporary]').hidden=source!=='file';
+          pop.querySelector('[data-disk-address]').hidden=virtual||temporary;pop.querySelector('[name=address]').required=!(virtual||temporary);
+          pop.querySelector('[data-disk-address] span').textContent=source==='partlabel'?'Partition label':source==='file'?'File name in file-disks/':'Absolute path';
+          pop.querySelector('[data-disk-size]').hidden=!(virtual||source==='file');
+          pop.querySelector('[name=size]').disabled=!(virtual||source==='file')};
+        pop.querySelector('[name=source]').onchange=update;pop.querySelector('[name=temporary]').onchange=update;update();
+      });
       const unique=role=>{let i=1;while(record.nodes.some(n=>n.name===role+'-'+i))i++;return role+'-'+i};
       const add=app.querySelector('#ct-add');if(add)add.onclick=()=>{if(record.nodes.length>=64)return error('At most 64 nodes');
         const node=ctDefaultNode(record.host_ids[0],'dynamic',1);node.location={data_center:'',rack:'',body:''};node.tenant='';

@@ -12,6 +12,7 @@ PY_SRCS(
     distributed_plan.py
     distributed_builder_ui.py
     distributed_worker.py
+    distributed_disks.py
     distributed_workload.py
     distributed_artifacts.py
     distributed_runtime.py

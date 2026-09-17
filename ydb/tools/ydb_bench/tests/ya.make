@@ -18,6 +18,7 @@ TEST_SRCS(
     test_distributed_builder.py
     test_process_recovery.py
     test_distributed_worker.py
+    test_distributed_disks.py
     test_distributed_coordinator.py
     test_distributed_telemetry.py
     test_distributed_reports.py

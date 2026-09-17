@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.PQClient().MkDir("/Root/PQ", "Config");
         server.PQClient().MkDir("/Root/PQ/Config", "V2");
         server.PQClient().RunYqlSchemeQuery(R"___(
-            CREATE TABLE `/Root/PQ/Config/V2/Cluster` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Cluster` (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -907,12 +907,12 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
                 fnx Bool,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE `/Root/PQ/Config/V2/Balancer` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Balancer` (
                 name Utf8,
                 clusters Utf8,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE `/Root/PQ/Config/V2/Versions` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Versions` (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)

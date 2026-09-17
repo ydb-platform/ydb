@@ -179,4 +179,15 @@ bool IssuesLookLikeMissingColumn(TStringBuf issues) {
             issues.Contains("not found") || issues.Contains("Unknown") || issues.Contains("unknown")));
 }
 
+bool IssuesLookLikeMissingVersionsTable(TStringBuf issues) {
+    return IssuesLookLikeMissingTable(issues) && issues.Contains("Versions");
+}
+
+bool IssuesLookLikeClusterSchemaGone(TStringBuf issues) {
+    if (IssuesLookLikeMissingVersionsTable(issues)) {
+        return false;
+    }
+    return IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues);
+}
+
 } // namespace NKikimr::NPQ::NClusterTracker

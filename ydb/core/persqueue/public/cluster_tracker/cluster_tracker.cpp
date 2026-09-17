@@ -292,7 +292,7 @@ private:
                     }
                 }
                 {
-                    const bool remigrate = !success && (IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues));
+                    const bool remigrate = !success && IssuesLookLikeClusterSchemaGone(issues);
                     if (remigrate) {
                         YDB_LOG_ERROR_CTX(Ctx(), "Failed to list clusters, remigrate schema",
                             {"record", record});
@@ -315,7 +315,7 @@ private:
                     return;
                 }
                 {
-                    const bool remigrate = IssuesLookLikeMissingTable(issues) || IssuesLookLikeMissingColumn(issues);
+                    const bool remigrate = IssuesLookLikeClusterSchemaGone(issues);
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with empty balancer cache",
                         {"record", record});
                     if (remigrate) {

@@ -162,5 +162,11 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(IssuesLookLikeMissingColumn("unknown column fnx"));
         UNIT_ASSERT(!IssuesLookLikeMissingColumn("column weight not found"));
         UNIT_ASSERT(!IssuesLookLikeMissingColumn("fnx is fine"));
+
+        UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
+        UNIT_ASSERT(!IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
+        UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Member not found: fnx"));
     }
 }

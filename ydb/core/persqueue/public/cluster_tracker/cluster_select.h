@@ -24,5 +24,7 @@ TString MakeBackfillFnxQuery(TStringBuf clusterTablePath);
 bool IssuesLookLikeAlreadyExists(TStringBuf issues);
 bool IssuesLookLikeMissingTable(TStringBuf issues);
 bool IssuesLookLikeMissingColumn(TStringBuf issues);
+bool IssuesLookLikeMissingVersionsTable(TStringBuf issues);
+bool IssuesLookLikeClusterSchemaGone(TStringBuf issues);
 
 } // namespace NKikimr::NPQ::NClusterTracker

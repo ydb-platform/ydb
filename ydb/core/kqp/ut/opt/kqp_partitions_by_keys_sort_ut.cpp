@@ -37,21 +37,31 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
     }
 }
 
-void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
+void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bool fromJoin = false) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(windowFunctionsV2);
-    TKikimrRunner kikimr(appConfig);
-    auto db = kikimr.GetTableClient();
-    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
+    tableServiceConfig->SetEnableWindowFunctionsV2(windowFunctionsV2);
+    if (fromJoin) {
+        tableServiceConfig->SetEnableQueryServiceSpilling(true);
+        auto* localFileConfig = tableServiceConfig->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+        localFileConfig->SetEnable(true);
+        localFileConfig->SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
+    }
 
+    TKikimrRunner kikimr(appConfig);
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
     const TString query = TStringBuilder() << "--!syntax_v1\n" << selectBody;
 
-    auto explain = session.ExplainDataQuery(query).GetValueSync();
+    auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
-    const TString ast{explain.GetAst()};
+    const TString ast = *explain.GetStats()->GetAst();
 
     Cerr << "=== Full-frame SUM AST, WindowFunctionsV2="
          << (windowFunctionsV2 ? "true" : "false")
+         << ", fromJoin=" << (fromJoin ? "true" : "false")
          << " ===\n" << ast << Endl;
 
     if (windowFunctionsV2) {
@@ -59,11 +69,19 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
         UNIT_ASSERT_C(ast.Contains("WideCondense1") || ast.Contains("Condense1"), ast);
         UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin")
             || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin"), ast);
+        if (fromJoin) {
+            UNIT_ASSERT_C(ast.Contains("DqReplicate") || ast.Contains("Switch") || ast.Contains("MultiMap"), ast);
+            ui32 streamLookups = 0;
+            for (size_t pos = 0; (pos = ast.find("KqpCnStreamLookup", pos)) != TString::npos; ++pos) {
+                ++streamLookups;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(streamLookups, 1, ast);
+        }
     } else {
         UNIT_ASSERT_C(ast.Contains("WinFramesCollector"), ast);
     }
 
-    auto exec = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    auto exec = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
     CompareYsonUnordered(R"([
         [[101u];["Value1"];[1];[15]];
@@ -91,14 +109,6 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2) {
         [[703u];["Value3"];[2];[17]];
         [[803u];["Value3"];[3];[17]]
     ])", FormatResultSetYson(exec.GetResultSet(0)));
-}
-
-size_t CountOccurrences(TStringBuf text, TStringBuf needle) {
-    size_t count = 0;
-    for (size_t pos = 0; (pos = text.find(needle, pos)) != TStringBuf::npos; pos += needle.size()) {
-        ++count;
-    }
-    return count;
 }
 
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
@@ -204,67 +214,13 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
             WindowFunctionsV2);
     }
 
-    Y_UNIT_TEST(WindowFunctionAggrAndJoinDqReplicate) {
-        NKikimrConfig::TAppConfig appConfig;
-        auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
-        tableServiceConfig->SetEnableWindowFunctionsV2(true);
-        tableServiceConfig->SetEnableQueryServiceSpilling(true);
-        auto* localFileConfig = tableServiceConfig->MutableSpillingServiceConfig()->MutableLocalFileConfig();
-        localFileConfig->SetEnable(true);
-        localFileConfig->SetRoot("./spilling/");
-        MakeDirIfNotExist("./spilling");
-
-        TKikimrRunner kikimr(appConfig);
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        const TString query = R"(--!syntax_v1
-            SELECT a.Key, a.Text, a.Data, SUM(a.Data) OVER (PARTITION BY a.Text) AS tot
-            FROM `/Root/EightShard` AS a
-            INNER JOIN `/Root/EightShard` AS b ON a.Key = b.Key;
-        )";
-
-        auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
-        const TString ast{*explain.GetStats()->GetAst()};
-
-        Cerr << "=== Full-frame SUM from join AST ===\n" << ast << Endl;
-
-        UNIT_ASSERT_C(!ast.Contains("WinFramesCollector"), ast);
-        UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin")
-            || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin"), ast);
-        UNIT_ASSERT_C(ast.Contains("DqReplicate") || ast.Contains("Switch") || ast.Contains("MultiMap"), ast);
-        UNIT_ASSERT_VALUES_EQUAL_C(CountOccurrences(ast, "KqpCnStreamLookup"), 1, ast);
-
-        auto exec = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(exec.GetStatus(), EStatus::SUCCESS, exec.GetIssues().ToString());
-        CompareYsonUnordered(R"([
-            [[101u];["Value1"];[1];[15]];
-            [[201u];["Value1"];[2];[15]];
-            [[301u];["Value1"];[3];[15]];
-            [[401u];["Value1"];[1];[15]];
-            [[501u];["Value1"];[2];[15]];
-            [[601u];["Value1"];[3];[15]];
-            [[701u];["Value1"];[1];[15]];
-            [[801u];["Value1"];[2];[15]];
-            [[102u];["Value2"];[3];[16]];
-            [[202u];["Value2"];[1];[16]];
-            [[302u];["Value2"];[2];[16]];
-            [[402u];["Value2"];[3];[16]];
-            [[502u];["Value2"];[1];[16]];
-            [[602u];["Value2"];[2];[16]];
-            [[702u];["Value2"];[3];[16]];
-            [[802u];["Value2"];[1];[16]];
-            [[103u];["Value3"];[2];[17]];
-            [[203u];["Value3"];[3];[17]];
-            [[303u];["Value3"];[1];[17]];
-            [[403u];["Value3"];[2];[17]];
-            [[503u];["Value3"];[3];[17]];
-            [[603u];["Value3"];[1];[17]];
-            [[703u];["Value3"];[2];[17]];
-            [[803u];["Value3"];[3];[17]]
-        ])", FormatResultSetYson(exec.GetResultSet(0)));
+    Y_UNIT_TEST(WindowFunctionFullFrameFromJoinAst) {
+        CheckFullFrameSumPlan(
+            "SELECT a.Key, a.Text, a.Data, SUM(a.Data) OVER (PARTITION BY a.Text) AS tot\n"
+            "FROM `/Root/EightShard` AS a\n"
+            "INNER JOIN `/Root/EightShard` AS b ON a.Key = b.Key;\n",
+            true,
+            true);
     }
 }
 

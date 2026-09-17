@@ -155,12 +155,7 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
     return node;
 }
 
-TExprBase DqExpandWindowFunctions(
-    TExprBase node,
-    TExprContext& ctx,
-    TTypeAnnotationContext& typesCtx,
-    bool enforceCompact)
-{
+TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool enforceCompact) {
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {
         if (enforceCompact) {
             auto calcs = ExtractCalcsOverWindow(node.Ptr(), ctx);

@@ -460,22 +460,6 @@ bool GatherConsumers(const TExprNode& root, TParentsMultiMap& consumers) {
     return GatherConsumersImpl(root, consumers, visited);
 }
 
-using TStageOutputConsumers = TNodeMap<THashMap<ui32, TNodeMultiSet>>;
-
-TStageOutputConsumers GatherStageOutputConsumers(const TExprNode::TPtr& root) {
-    TStageOutputConsumers consumers;
-
-    VisitExpr(root, [&consumers](const TExprNode::TPtr& node) {
-        if (auto connection = TMaybeNode<TDqConnection>(node)) {
-            const auto output = connection.Cast().Output();
-            consumers[output.Stage().Raw()][FromString<ui32>(output.Index().Value())].insert(connection.Raw());
-        }
-        return true;
-    });
-
-    return consumers;
-}
-
 } // anonymous namespace
 
 IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TExprNode::TPtr& output,
@@ -490,7 +474,17 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
     if (!GatherConsumers(*input, consumersMap)) {
         return IGraphTransformer::TStatus::Ok;
     }
-    const auto stageOutputConsumers = GatherStageOutputConsumers(input);
+
+    TNodeMap<THashMap<ui32, TNodeMultiSet>> stageOutputConsumers;
+    for (const auto& [node, nodeConsumers] : consumersMap) {
+        if (auto output = TMaybeNode<TDqOutput>(node)) {
+            const auto index = FromString<ui32>(output.Cast().Index().Value());
+            auto& equivalents = stageOutputConsumers[output.Cast().Stage().Raw()][index];
+            for (auto* consumer : nodeConsumers) {
+                equivalents.insert(consumer);
+            }
+        }
+    }
 
     // rewrite only 1 (any of) multi-used connection at a time
     std::optional<TMultiUsedConnection> multiUsedConnection;

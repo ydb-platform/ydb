@@ -951,15 +951,19 @@ private:
             topicReadSettings.AppendPartitionIds(partitionId);
         }
 
+        auto retryMaxTime = TDuration::Seconds(60);
+        ui64 maxTimeEnvMs = 60000;
+        if (TryFromString<ui64>(GetEnv("YDB_TEST_PQ_READ_ACTOR_RETRY_POLICY_MAX_TIME_MS"), maxTimeEnvMs)) {
+            retryMaxTime = TDuration::MilliSeconds(maxTimeEnvMs);
+        }
         const bool isLogbroker =  Clusters.size() > 2;
-
-        clusterState.RetryMaxTime = TDuration::MilliSeconds(maxTimeMs);
+        clusterState.RetryMaxTime = retryMaxTime;
         auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
             /* minDelay           */ TDuration::MilliSeconds(500),
             /* minLongRetryDelay  */ TDuration::Seconds(5),
             /* maxDelay           */ TDuration::Seconds(10),
             /* maxRetries         */ 100,
-            /* maxTime            */ isLogbroker ? TDuration::Max() : TDuration::Seconds(60),
+            /* maxTime            */ isLogbroker ? TDuration::Max() : retryMaxTime,
             /* scaleFactor        */ 2.0,
             /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {

@@ -4,6 +4,7 @@
 #include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
+#include <ydb/public/lib/udf/manifest/manifest.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
@@ -274,8 +275,12 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
 
 void TWasmLibraryCompileActor::CompileLibrary() {
     try {
-        const auto format = NWasm::DetectBytecodeFormatFromBody(LibrarySource_.Body);
-        Format_ = format == NYdb::NWasm::EBytecodeFormat::HumanReadable ? "wat" : "wasm";
+        const auto manifest = NYdb::NUdfManifest::Parse(LibrarySource_.Manifest);
+        if (manifest.Name != LibraryName_ || manifest.Type != NYdb::NUdfManifest::EModuleType::Library || manifest.Kind != NYdb::NUdfManifest::EModuleKind::Wasm) {
+            ythrow yexception() << "Expected matching WASM library manifest";
+        }
+        Format_ = manifest.Extension;
+        const auto format = NWasm::DetectBytecodeFormat(Format_);
         const TString objectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format);
         const auto wasmChunks = SplitBlob(LibrarySource_.Body);
         const auto objectChunks = SplitBlob(objectCode);

@@ -302,6 +302,7 @@ Y_UNIT_TEST_SUITE(TWasmBridgeAbiTest) {
 
 Y_UNIT_TEST(ParseBridgeManifest) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Echo",
         "calling_convention": "bridge",
         "required_libraries": ["sdk"],
@@ -323,6 +324,7 @@ Y_UNIT_TEST(ParseBridgeManifest) {
 
 Y_UNIT_TEST(ParseDictType) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "D",
         "calling_convention": "bridge",
         "functions": [
@@ -353,6 +355,7 @@ Y_UNIT_TEST(ParseDictType) {
 
 Y_UNIT_TEST(ParseCallableType) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "C",
         "calling_convention": "bridge",
         "functions": [
@@ -381,6 +384,7 @@ Y_UNIT_TEST(ParseCallableType) {
 
 Y_UNIT_TEST(ParseStructuredAndWideLeafTypes) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Wide",
         "calling_convention": "bridge",
         "functions": [
@@ -443,6 +447,7 @@ Y_UNIT_TEST(ParseStructuredAndWideLeafTypes) {
 
 Y_UNIT_TEST(NestedLeavesKeepTheirDeclaredType) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Nested",
         "calling_convention": "bridge",
         "functions": [
@@ -501,6 +506,7 @@ Y_UNIT_TEST(NestedLeavesKeepTheirDeclaredType) {
 
 Y_UNIT_TEST(RejectBridgeWithTypeConfigCallable) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
         "calling_convention": "bridge",
         "objects": [
@@ -1601,10 +1607,8 @@ Y_UNIT_TEST(KindsFollowDeclaredTypes) {
     UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TResourceType::Create("Trie", mkql.Env)) == EBridgeValueKind::Resource);
 
     // Optional over data is represented like the data itself, and reported so.
-    UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TOptionalType::Create(stringType, mkql.Env))
-        == EBridgeValueKind::String);
-    UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TOptionalType::Create(innerDict, mkql.Env))
-        == EBridgeValueKind::Optional);
+    UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TOptionalType::Create(stringType, mkql.Env)) == EBridgeValueKind::String);
+    UNIT_ASSERT(kindOf(NKikimr::NMiniKQL::TOptionalType::Create(innerDict, mkql.Env)) == EBridgeValueKind::Optional);
 }
 
 Y_UNIT_TEST(DeclaredResultShapeLooksUnderOptional) {
@@ -2042,4 +2046,4 @@ Y_UNIT_TEST(CollectWasmExportsReportsParamTypes) {
     UNIT_ASSERT_VALUES_EQUAL(wrongResults->ResultCount, 1u);
 }
 
-} // Y_UNIT_TEST_SUITE
+} // Y_UNIT_TEST_SUITE(TWasmBridgeAbiTest)

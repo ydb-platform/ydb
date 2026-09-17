@@ -197,7 +197,11 @@ def _run_upload_udf(
 
 
 def _run_upload_library(endpoint, database, library_file_path, library_name):
-    """Upload a WASM library via upload_udf --kind library."""
+    """Upload a textual WASM fixture with its library manifest."""
+    manifest_path = yatest.common.output_path(library_name + ".manifest.json")
+    with open(manifest_path, "w") as output:
+        json.dump(dict(module_name=library_name, module_type="library", module_kind="wasm",
+                       module_extension="wat"), output)
     return _run_upload_udf(
         endpoint,
         database,
@@ -205,6 +209,7 @@ def _run_upload_library(endpoint, database, library_file_path, library_name):
         udf_type="WASM",
         kind="library",
         library_name=library_name,
+        manifest_path=manifest_path,
     )
 
 

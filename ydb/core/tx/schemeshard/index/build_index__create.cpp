@@ -8,6 +8,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NSchemeShard {
 
 static constexpr ui32 DefaultMaxShardsInFlight = 32;
@@ -24,7 +26,9 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
         const auto& settings = request.GetSettings();
-        LOG_N("DoExecute " << request.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "DoExecute",
+            {"record", request.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
@@ -581,3 +585,5 @@ ITransaction* TSchemeShard::CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TP
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

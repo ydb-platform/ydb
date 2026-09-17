@@ -88,12 +88,36 @@ class ProcessRecoveryTest(unittest.TestCase):
         with mock.patch.object(web.RunService, "_start_recovery"):
             service = web.RunService(self.root, executor=executor)
         self.addCleanup(service.shutdown)
-        service.recover_once()
+        # No child processes belong to this run; unrelated /proc entries may be unreadable.
+        with mock.patch.object(process_recovery, "_owned", return_value=[]) as owned:
+            service.recover_once()
+        owned.assert_called_once_with(record["token"], record["owner"])
         manifest = json.loads((root / "run.json").read_text())
         self.assertEqual("failed", manifest["state"])
         self.assertEqual("completed", manifest["recovery"]["state"])
         self.assertEqual("cancelled", manifest["steps"][0]["state"])
         self.assertNotIn("interrupted", service._recovery_runs)
+        executor.assert_not_called()
+
+    def test_unreadable_process_environment_preserves_admission_fence(self):
+        root = self.root / "interrupted"
+        root.mkdir()
+        record = process_recovery.prepare(root)
+        record["owner"]["start"] = str(int(record["owner"]["start"]) + 1)
+        atomic_write_json(root / "process-owner.json", record)
+        atomic_write_json(
+            root / "run.json",
+            {"schema_version": SCHEMA_VERSION, "steps": [], "id": "interrupted", "state": "recovery_required"},
+        )
+        executor = mock.Mock()
+        with mock.patch.object(web.RunService, "_start_recovery"):
+            service = web.RunService(self.root, executor=executor)
+        self.addCleanup(service.shutdown)
+        with mock.patch.object(process_recovery, "_owned", side_effect=PermissionError("/proc/pid/environ")) as owned:
+            service.recover_once()
+        owned.assert_called_once_with(record["token"], record["owner"])
+        self.assertIn("interrupted", service._recovery_runs)
+        self.assertEqual("recovery_required", json.loads((root / "run.json").read_text())["state"])
         executor.assert_not_called()
 
     def test_failed_process_cleanup_preserves_admission_fence(self):

@@ -44,7 +44,6 @@
 #include <util/string/join.h>
 #include <util/system/env.h>
 
-#include <limits>
 #include <queue>
 #include <variant>
 
@@ -1054,7 +1053,6 @@ private:
             .AutoPartitioningSupport(!SourceParams.GetStopAtCurrentEndOffsets())     // In table mode the query will not fail query by TEndPartitionSessionEvent.
             .RetryPolicy(std::make_shared<TReadSessionRetryPolicy>(
                 std::move(retryPolicy), TActivationContext::ActorSystem(), SelfId(), clusterState.Index, isLogbroker));
-
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
         } else {

@@ -201,7 +201,6 @@ class TestBase:
                expected_grpc_methods=None, expected_exit_status=None):
         random.seed(42)
         common.cache.clear()
-        common.name_cache.clear()
         results = []
         results.append(' '.join(['dstool -e <endpoint> --mon-port <mon_port>', *args]))
         args = ['-e', endpoint or self.endpoint, '--mon-port', self.mon_port, *args]

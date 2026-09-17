@@ -1776,9 +1776,10 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
  * OpRoot operator methods
  */
 
-TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder)
+TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder, const TVector<TString>& queryColumns)
     : IUnaryOperator(EOperator::Root, pos, input)
-    , ColumnOrder(columnOrder) {
+    , ColumnOrder(columnOrder)
+    , QueryColumns(queryColumns) {
 }
 
 // Recompute output ius for now

@@ -1,4 +1,5 @@
 #include "classic_grpc_service.h"
+#include "classic_grpc_service_factory.h"
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -15,6 +16,12 @@ namespace NKikimr::NGRpcService {
     using namespace NYdb::NBS::NNbs1CompatApi::NBlockStore;
 
     ////////////////////////////////////////////////////////////////////////////////
+
+    TIntrusivePtr<NYdbGrpc::IGRpcService> CreateClassicNbsGrpcService(
+        IBlockStorePtr blockStore)
+    {
+        return MakeIntrusive<TClassicNbsGrpcService>(std::move(blockStore));
+    }
 
     TClassicNbsGrpcService::TClassicNbsGrpcService(IBlockStorePtr blockStore)
         : BlockStore(std::move(blockStore))

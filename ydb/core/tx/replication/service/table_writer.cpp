@@ -26,17 +26,22 @@ public:
     }
 
     ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord& record,
-            NKikimrReplication::TSchemaChange& schema, TString& error) const override {
+            NKikimrReplication::TSchemaChange& schema, TString& error) const override
+    {
         const auto& jsonRecord = static_cast<const TChangeRecord&>(record);
+
         if (!jsonRecord.IsValidJson(error)) {
             return ESchemaChangeResult::Error;
         }
+
         if (jsonRecord.GetKind() != NChangeExchange::IChangeRecord::EKind::CdcSchemaChange) {
             return ESchemaChangeResult::NotSchemaChange;
         }
+
         if (!jsonRecord.TryGetSchemaChange(schema, error)) {
             return ESchemaChangeResult::Error;
         }
+
         return ESchemaChangeResult::SchemaChange;
     }
 };

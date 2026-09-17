@@ -26,6 +26,10 @@ PY_SRCS(
     local_ydb_workloads.py
     linux_telemetry.py
     ydb_telemetry.py
+    monitoring_settings.py
+    monitoring_settings_ui.py
+    metrics_export.py
+    grafana.py
     runner.py
     process_recovery.py
     results.py
@@ -36,9 +40,11 @@ PY_SRCS(
 )
 
 PEERDIR(
+    library/python/resource
     contrib/python/grpcio
     contrib/python/PyYAML
     ydb/core/protos
+    ydb/deploy/helm/ydb-prometheus/dashboards
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/tools/ydb_bench/benchmarks

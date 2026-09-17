@@ -2303,8 +2303,6 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
-            Uid, OriginalDdl, UserSID,
-            BackupCollectionPathOwnerId, BackupCollectionPathId, AwaitingInitialRestore,
             OperationId,
             State,
             CurrentIncrementalIdx,
@@ -2315,7 +2313,14 @@ struct Schema : NIceDb::Schema {
             CurrentStageStartedAt,
             RetryScheduled,
             NextRetryAttemptAt,
-            RetryNeeded>;
+            RetryNeeded,
+            Uid,
+            OriginalDdl,
+            UserSID,
+            BackupCollectionPathOwnerId,
+            BackupCollectionPathId,
+            AwaitingInitialRestore
+        >;
     };
 
     // Deprecated: kept for compatibility
@@ -2352,14 +2357,15 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
-            Uid, OriginalDdl,
             Id,
             State,
             DomainPathOwnerId,
             DomainPathId,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            Uid,
+            OriginalDdl
         >;
     };
 
@@ -2622,7 +2628,6 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
-            Uid, OriginalDdl,
             Id,
             State,
             DomainPathOwnerId,
@@ -2633,7 +2638,9 @@ struct Schema : NIceDb::Schema {
             FinalIssues,
             BackupCollectionPathOwnerId,
             BackupCollectionLocalPathId,
-            ExpectedItemCount
+            ExpectedItemCount,
+            Uid,
+            OriginalDdl
         >;
     };
 

@@ -441,9 +441,7 @@ void TFastPathService::QueryRemoveHost(
 
 ui64 TFastPathService::GenerateLsn()
 {
-    const ui64 lsn = ++SequenceGenerator;
-    MaybeTriggerPBufferCleanup(lsn);
-    return lsn;
+    return ++SequenceGenerator;
 }
 
 <<<<<<< HEAD
@@ -453,23 +451,6 @@ void TFastPathService::StopTablet(const TString& reason)
     // Just forward the signal to the actor thread.
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
     ActorSystem->Send(PartitionActorId, event.release());
-}
-
-bool TFastPathService::TryAdvancePBufferBarrier(
-    const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-    ui64 lsn)
-{
-    auto guard = Guard(PBufferBarrierLock);
-    auto [it, inserted] =
-        LastSentBarrierByPBuffer.try_emplace(pbufferDDiskId, lsn);
-    if (inserted) {
-        return true;
-    }
-    if (lsn > it->second) {
-        it->second = lsn;
-        return true;
-    }
-    return false;
 }
 
 TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
@@ -505,11 +486,14 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     return {
         .LsnCounter = SequenceGenerator.load(),
 <<<<<<< HEAD
+<<<<<<< HEAD
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
 =======
         .LastSafeBarrier = LastSafeBarrier.load(),
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
         .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
@@ -622,6 +606,7 @@ void TFastPathService::OnAllRegionsStopped()
         LogTitle.GetWithTime().c_str());
 }
 
+<<<<<<< HEAD
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
@@ -692,6 +677,8 @@ void TFastPathService::FinishPBufferCleanup()
     }
 }
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 void TFastPathService::ScheduleDirtyMapDebugPrint()
 {
     auto delay = StorageConfig->GetDirtyMapDebugPrintInterval();

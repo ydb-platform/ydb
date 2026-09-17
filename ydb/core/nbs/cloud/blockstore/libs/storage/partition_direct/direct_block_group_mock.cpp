@@ -407,6 +407,7 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
     return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
 }
 
+<<<<<<< HEAD
 void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
 {
     Y_UNUSED(lsn);
@@ -418,6 +419,8 @@ TDirectBlockGroupMock::GatherSafeBarrierForErase()
     return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 NThreading::TFuture<TDBGRestoreResponse>
 TDirectBlockGroupMock::RestoreDBGPBuffers(ui32 vChunkIndex)
 {

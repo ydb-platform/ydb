@@ -73,6 +73,7 @@ struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
 <<<<<<< HEAD
+<<<<<<< HEAD
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
 =======
@@ -81,6 +82,8 @@ struct TFastPathServiceInfo
     ui64 LastSafeBarrier = 0;
 >>>>>>> f32af13259a (Refactor partition direct disk geometry calculations (#53169))
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 

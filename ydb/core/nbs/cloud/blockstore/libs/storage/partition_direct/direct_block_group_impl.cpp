@@ -542,6 +542,10 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 {
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+<<<<<<< HEAD
+=======
+    OnNewPBufferKey(pBufferKey);
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 
     using TEvWritePersistentBufferResultFuture = NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
@@ -628,6 +632,10 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.Count() > 0);
+<<<<<<< HEAD
+=======
+    OnNewPBufferKey(pBufferKey);
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 
     const auto startAt = TMonotonic::Now();
 
@@ -976,8 +984,9 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
     return result;
 }
 
-void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
+void TDirectBlockGroup::OnNewPBufferKey(TPBufferKey pBufferKey)
 {
+<<<<<<< HEAD
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(), lsn]()
         {
@@ -1000,6 +1009,56 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 self->DoBarrierEraseFromPBuffer(h, lsn, span.GetTraceId());
             }
         });
+=======
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(pBufferKey.Generation == TabletGeneration);
+
+    const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
+    if (step && pBufferKey.Lsn % step == 0) {
+        PBufferCleanup();
+    }
+}
+
+std::optional<TPBufferKey> TDirectBlockGroup::ComputeSafeBarrierForErase() const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    std::optional<TPBufferKey> safeBarrier;
+    for (const auto& weakVChunk: VChunks) {
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
+        }
+        const auto candidate = vChunk->GetSafeBarrierForErase();
+        if (candidate && (!safeBarrier || *candidate < *safeBarrier)) {
+            safeBarrier = candidate;
+        }
+    }
+    return safeBarrier;
+}
+
+void TDirectBlockGroup::PBufferCleanup()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    const auto safeBarrier = ComputeSafeBarrierForErase();
+    if (!safeBarrier || safeBarrier->Lsn == 0 ||
+        safeBarrier->Generation != TabletGeneration)
+    {
+        return;
+    }
+
+    const ui64 cleanupBound = safeBarrier->Lsn - 1;
+
+    auto span = TraceService->CreateRootSpan("NbsPartition.PBufferCleanup");
+    for (THostIndex h = 0; h < Connections.GetSlotCount(); ++h) {
+        if (cleanupBound <= LastSentBarrierByPBufferHost[h]) {
+            continue;
+        }
+        LastSentBarrierByPBufferHost[h] = cleanupBound;
+        DoBarrierEraseFromPBuffer(h, cleanupBound, span.GetTraceId());
+    }
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 }
 
 void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
@@ -1060,6 +1119,7 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
         });
 }
 
+<<<<<<< HEAD
 NThreading::TFuture<std::optional<ui64>>
 TDirectBlockGroup::GatherSafeBarrierForErase()
 {
@@ -1092,6 +1152,8 @@ TDirectBlockGroup::GatherSafeBarrierForErase()
     return future;
 }
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(
     ui32 vChunkIndex)
 {

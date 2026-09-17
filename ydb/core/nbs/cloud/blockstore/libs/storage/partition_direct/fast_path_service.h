@@ -56,6 +56,7 @@ private:
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
 
+<<<<<<< HEAD
     struct TPBufferCleanupGather
     {
         std::atomic<bool> Active{false};
@@ -64,6 +65,10 @@ private:
     };
 
     TPBufferCleanupGather CleanupGather;
+=======
+    TAdaptiveLock CopyRangeBucketLock;
+    std::optional<TSimpleLeakyBucket> CopyRangeBucket;
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 
 public:
     TFastPathService(
@@ -132,10 +137,6 @@ public:
 =======
     void StopTablet(const TString& reason) override;
 
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override;
-
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
     void PersistHostHealth(
@@ -157,12 +158,18 @@ private:
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);
 
+<<<<<<< HEAD
     void MaybeTriggerPBufferCleanup(ui64 lsn);
     void PBufferCleanup();
     void OnGatherSafeBarrierForErase(
         size_t dbgIndex,
         std::optional<ui64> safeBarrier);
     void FinishPBufferCleanup();
+=======
+    void ScheduleVChunkCountersUpdate();
+    void QueryVChunkStats();
+    void OnVChunkStats(const TVChunkStatsGatherResult& result);
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 };
 
 <<<<<<< HEAD

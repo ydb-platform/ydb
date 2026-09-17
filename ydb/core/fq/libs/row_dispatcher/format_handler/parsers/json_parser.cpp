@@ -113,6 +113,7 @@ public:
         ParsedRowsCount = 0;
         ParsedRows = parsedRows;
         TypeMkql = nullptr;
+        StructMembers.clear();
         HolderFactory = holderFactory;
         return Status = ExtractDataSlot(typeMkql);
     }

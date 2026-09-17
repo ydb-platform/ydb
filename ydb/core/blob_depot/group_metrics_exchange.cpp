@@ -130,6 +130,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 
+        UpdateAgentsBlockingGC();
+
         if (Config.HasVirtualGroupId() && !MetricsQ.empty()) {
             const TMonotonic now = TActivationContext::Monotonic();
             const TMonotonic left = now - Window;
@@ -161,6 +163,26 @@ namespace NKikimr::NBlobDepot {
             TActivationContext::Schedule(Window, new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
+    }
+
+    // Disconnected agents with outstanding blob sequence ranges can pin GetLeastExpectedBlobId and delay trash
+    // collection. TEvPrivate::EvCheckExpiredAgents periodically reclaims those ranges after ExpirationTimeout if
+    // the agent supports id range expiry; otherwise the ranges remain reserved. Count all disconnected agents
+    // with outstanding ranges, including those still waiting for expiration.
+    void TBlobDepot::UpdateAgentsBlockingGC() {
+        ui64 count = 0;
+        for (const auto& [nodeId, agent] : Agents) {
+            if (agent.Connection) {
+                continue;
+            }
+            for (const auto& [channel, range] : agent.GivenIdRanges) {
+                if (!range.IsEmpty()) {
+                    ++count;
+                    break;
+                }
+            }
+        }
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_BLOCKING_GC] = count;
     }
 
 } // NKikimr::NBlobDepot

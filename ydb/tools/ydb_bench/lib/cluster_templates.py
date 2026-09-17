@@ -1,6 +1,7 @@
 """Saved placement specifications; deliberately does not launch cluster processes."""
 
 import json
+import posixpath
 import re
 import threading
 import uuid
@@ -61,6 +62,53 @@ def _names(value, label):
     return result
 
 
+def validate_disks(node):
+    disks = node.get("disks")
+    if disks is None:
+        legacy = node.get("sector_map")
+        if not isinstance(legacy, dict):
+            raise BenchmarkError("Static nodes require disks")
+        count = _integer(legacy.get("count"), "SectorMap count", 64)
+        size = _integer(legacy.get("size_gib"), "SectorMap size", 1048576)
+        disks = [{"source": "sector_map", "media": "ssd", "size_gib": size} for _ in range(count)]
+    if not isinstance(disks, list) or len(disks) > 64:
+        raise BenchmarkError("Disks must be a list of at most 64 entries")
+    result = []
+    for disk in disks:
+        if not isinstance(disk, dict) or disk.get("source") not in ("sector_map", "file", "block_device", "partlabel"):
+            raise BenchmarkError("Unknown disk source")
+        source = disk["source"]
+        if disk.get("media") not in ("ssd", "hdd"):
+            raise BenchmarkError("Disk media must be ssd or hdd")
+        item = {"source": source, "media": disk["media"]}
+        if source in ("sector_map", "file"):
+            item["size_gib"] = _integer(disk.get("size_gib"), "Disk size", 1048576)
+        if source == "file" and "temporary" in disk:
+            if type(disk["temporary"]) is not bool:
+                raise BenchmarkError("Temporary disk flag must be boolean")
+            item["temporary"] = disk["temporary"]
+        if source == "partlabel":
+            label = _text(disk.get("label"), "Partition label", 255)
+            if label in (".", "..") or any(c in label for c in ("/", "\\", "\x00", "\n", "\r")):
+                raise BenchmarkError("Partition label must be a single path component")
+            item["label"] = label
+        elif source == "file" and not item.get("temporary") and "name" in disk:
+            name = _text(disk["name"], "File disk name", 200)
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", name):
+                raise BenchmarkError("File disk name must contain only letters, digits, dots, underscores and hyphens")
+            item["name"] = name
+        elif source in ("file", "block_device") and not item.get("temporary"):
+            path = _text(disk.get("path"), "Disk path", 4096)
+            if not path.startswith("/") or any(c in path for c in ("\x00", "\n", "\r")):
+                raise BenchmarkError("Disk path must be absolute")
+            path = posixpath.normpath(path)
+            if path == "/":
+                raise BenchmarkError("Disk path must not be the root directory")
+            item["path"] = path
+        result.append(item)
+    return result
+
+
 def validate_template(value, host_ids):
     if not isinstance(value, dict):
         raise BenchmarkError("Template must be an object")
@@ -103,7 +151,7 @@ def validate_template(value, host_ids):
                 "storage_groups": _integer(tenant.get("storage_groups"), "Storage groups", 64),
             }
         )
-    result, names = [], set()
+    result, names, disk_paths = [], set(), set()
     for node in nodes:
         if not isinstance(node, dict):
             raise BenchmarkError("Node must be an object")
@@ -143,16 +191,21 @@ def validate_template(value, host_ids):
             raise BenchmarkError("Only dynamic nodes can be assigned to an existing tenant")
         item["tenant"] = tenant
         if role == "static":
-            disk = node.get("sector_map")
-            if not isinstance(disk, dict):
-                raise BenchmarkError("Static nodes require SectorMap settings")
-            item["sector_map"] = {
-                "count": _integer(disk.get("count"), "SectorMap count", 64),
-                "size_gib": _integer(disk.get("size_gib"), "SectorMap size", 1048576),
-            }
+            item["disks"] = validate_disks(node)
+            for disk in item["disks"]:
+                path = disk.get("path")
+                if disk["source"] == "file" and "name" in disk:
+                    path = "file-disks/" + disk["name"]
+                if disk["source"] == "partlabel":
+                    path = "/dev/disk/by-partlabel/" + disk["label"]
+                if path:
+                    key = (host, path)
+                    if key in disk_paths:
+                        raise BenchmarkError("A disk path can only be assigned once per host")
+                    disk_paths.add(key)
         result.append(item)
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "name": name,
         "nodes": result,
         "host_ids": selected_hosts,

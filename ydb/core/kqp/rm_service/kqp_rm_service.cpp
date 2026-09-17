@@ -782,13 +782,14 @@ public:
         return Arena.Size;
     }
 
-    // The resource broker grants the first task of an idle queue whatever its size, so the node total is the limit
-    // the arena respects instead; the demand beyond it stays a charged deficit.
-    ui64 ArenaGrowthCapLocked() const {
+    // What the node total leaves for the arena once the transactions have taken their share. The resource broker
+    // grants the first task of an idle queue whatever its size, so this is the limit the arena respects instead;
+    // the demand beyond it stays a charged deficit.
+    ui64 ArenaSizeCapLocked() const {
         const ui64 limit = TotalMemoryResource->GetLimit();
         const ui64 used = TotalMemoryResource->GetUsed();
         const ui64 others = used > Arena.Charged ? used - Arena.Charged : 0; // the charge is part of the node total
-        return limit > others + Arena.Size ? limit - others - Arena.Size : 0;
+        return limit > others ? limit - others : 0;
     }
 
     // The demand a change may reach before the arena needs the lock: one past the growth threshold while the arena
@@ -836,13 +837,18 @@ public:
         if (Arena.AdjustInProgress || Arena.Stopped || !ResourceBroker) {
             return Arena.Size;
         }
-        ui64 target = ArenaTargetLocked(used);
+        const ui64 target = ArenaTargetLocked(used);
         // before the cap: a growth withheld by it is pending just as a refused one is
         ArenaGrowPending.store(target > Arena.Size, std::memory_order_relaxed);
+        const ui64 cap = ArenaSizeCapLocked();
         if (target > Arena.Size) {
-            target = Arena.Size + Min(target - Arena.Size, ArenaGrowthCapLocked());
+            // grow no further than the node total allows, and never shrink through this branch
+            return Min(target, Max(Arena.Size, cap));
         }
-        return target;
+        // the cap applies to a shrink as well: a node total that has dropped, or transactions that have taken more
+        // of it, leave the arena holding memory it is no longer entitled to. It keeps backing its own demand, so
+        // that the resource broker is never told less than the node is really using.
+        return Min(target, Max(used, cap));
     }
 
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller

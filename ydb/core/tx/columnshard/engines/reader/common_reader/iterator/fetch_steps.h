@@ -22,9 +22,7 @@ public:
     {
     }
 
-    virtual void Start() override {
-        Context->SendToGroupedMemoryAllocation(GroupId, { Allocation }, (ui32)Stage);
-    }
+    virtual void Start() override;
 };
 
 class TAllocateMemoryStep: public IFetchingStep {

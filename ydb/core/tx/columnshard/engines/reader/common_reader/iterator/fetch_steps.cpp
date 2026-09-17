@@ -16,6 +16,10 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
+void TMemoryAllocationJob::Start() {
+    Context->SendToGroupedMemoryAllocation(GroupId, { Allocation }, (ui32)Stage);
+}
+
 void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step,
     const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const {
     LWTRACK(ColumnBlobsFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),

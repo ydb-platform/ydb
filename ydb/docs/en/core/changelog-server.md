@@ -36,7 +36,7 @@ This functionality is present in the core to allow rollback from the future 26.3
 * QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there.
 * Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded.
 * [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message.
-* Streaming queries can read user attributes of topic messages.
+* Streaming queries can read [user attributes of topic messages](./concepts/query_execution/topics.md?version=main).
 * Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=main) for column-oriented tables.
 * Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables.
 * Added online construction of unique secondary indexes.

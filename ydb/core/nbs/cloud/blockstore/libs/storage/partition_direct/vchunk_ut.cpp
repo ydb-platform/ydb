@@ -226,10 +226,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     // Until the vchunk finishes restoring its dirty map from the PBuffers,
     // its pre-flush records exist only in the PBuffers and are not inflight.
     // Reporting "no constraint" (nullopt) in that window is indistinguishable
-    // from an idle vchunk, so FinishPBufferCleanup would skip it and a
-    // tablet-wide barrier erase could wipe the very records the restore is
-    // about to return. An un-restored vchunk must report the zero record id
-    // (the blocking bound) instead; cleanup skips its tick on it.
+    // from an idle vchunk, so the DBG cleanup would skip it and a barrier
+    // erase could wipe the very records the restore is about to return. An
+    // un-restored vchunk must report the zero record id (the blocking bound)
+    // instead; cleanup skips its tick on it.
     Y_UNIT_TEST_F(
         ShouldConstrainCleanupBarrierUntilRestoreCompletes,
         TBaseFixture)

@@ -87,7 +87,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             html,
             "Volume DirectBlockGroup Count</td><td>32</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
         UNIT_ASSERT_STRING_CONTAINS(
             html,

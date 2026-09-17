@@ -145,12 +145,6 @@ void RenderOverviewInfo(
                         str,
                         "LSN counter",
                         TStringBuilder() << serviceInfo->LsnCounter);
-                    RenderValue(
-                        str,
-                        "Last safe barrier",
-                        serviceInfo->LastSafeBarrier
-                            ? ToString(serviceInfo->LastSafeBarrier)
-                            : "-");
                 }
             }
         }

@@ -74,10 +74,6 @@ struct TArenaMemoryUsage
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
-    // Minimum safe barrier across all DBGs from the last finished cleanup
-    // round; 0 until the first round finishes.
-    ui64 LastSafeBarrier = 0;
-
     TArenaMemoryUsage ArenaMemoryUsage;
 };
 

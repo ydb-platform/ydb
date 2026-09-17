@@ -252,11 +252,6 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
-
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 

@@ -312,6 +312,7 @@ public:
     void AbortChannel(const TString& message);
     void AbortChannelByMemoryLimit(ui64 bytes);
     void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
+    void HandleEarlyFinish(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);

@@ -645,16 +645,7 @@ private:
     }
 
     void HandleTimeout(const TActorContext& ctx) {
-        const bool mayHaveWrittenRows = !ShardRepliesLeft.empty();
         ShardRepliesLeft.clear();
-
-        if (mayHaveWrittenRows) {
-            return ReplyWithError(Ydb::StatusIds::UNDETERMINED,
-                TStringBuilder() << "Upload timed out while waiting for shard replies; request state is unknown, duration: "
-                                 << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec",
-                ctx);
-        }
-
         return ReplyWithError(Ydb::StatusIds::TIMEOUT,
             TStringBuilder() << "longTx " << LongTxId.ToString()
                              << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec",
@@ -1342,8 +1333,7 @@ private:
         // with retriable status
         if (HasSuccessfulShardReply &&
             (Status.GetCode() == Ydb::StatusIds::UNAVAILABLE ||
-             Status.GetCode() == Ydb::StatusIds::OVERLOADED ||
-             Status.GetCode() == Ydb::StatusIds::TIMEOUT)) {
+             Status.GetCode() == Ydb::StatusIds::OVERLOADED)) {
             SetError(TUploadStatus(Ydb::StatusIds::UNDETERMINED,
                 TStringBuilder() << "Some rows were successfully written before a retriable error occurred: "
                                  << Status.GetErrorMessage().value_or(Status.GetCodeString())));

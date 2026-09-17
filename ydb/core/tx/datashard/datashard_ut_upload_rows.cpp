@@ -186,40 +186,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoWaitUploadRows(runtime, uploadSender, Ydb::StatusIds::UNDETERMINED);
     }
 
-    Y_UNIT_TEST(TestUploadRowsReturnsUndeterminedOnTimeoutAfterCommittedWrite) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
-
-        Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-
-        THolder<IEventHandle> blockedResponse;
-        auto observer = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
-            [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
-                if (!blockedResponse && ev->Get()->Record.GetStatus() ==
-                    static_cast<ui32>(NKikimrTxDataShard::TError::OK)) {
-                    blockedResponse.Reset(ev.Release());
-                }
-            });
-
-        auto uploadSender = DoStartUploadRows(runtime, "/Root/table-1", {{1, 10}});
-        WaitFor(runtime, [&] { return bool(blockedResponse); }, "blocked upload rows response");
-        observer.Remove();
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table-1`"),
-            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
-
-        runtime.SimulateSleep(TDuration::Minutes(5) + TDuration::Seconds(1));
-        DoWaitUploadRows(runtime, uploadSender, Ydb::StatusIds::UNDETERMINED);
-    }
-
     Y_UNIT_TEST(TestUploadRowsReturnsUndeterminedAfterOneOfMultipleShardsCommitted) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

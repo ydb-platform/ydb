@@ -364,7 +364,11 @@ TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const T
         << "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << shardCount << ");";
 
     ExecuteYqlScript(env, createTable);
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (env.GetServer().GetSettings().UseRealThreads) {
+        Sleep(TDuration::Seconds(1));
+    } else {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 
     TTableInfo tableInfo;
     tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());

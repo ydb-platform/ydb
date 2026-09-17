@@ -594,6 +594,22 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 return ctx.PgmBuilder().NewStruct(members);
             };
 
+            const auto projectItem = [&](TRuntimeNode item, const TExprNode& trait) {
+                const auto* const rowType = trait.Child(TCoAggregationTraits::idx_ItemType)->GetTypeAnn()
+                    ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (IsSameAnnotation(*rowType, GetSeqItemType(*node.Head().GetTypeAnn()))) {
+                    return item;
+                }
+
+                // A handler can use the whole argument as state, so extra input columns must not leak into it.
+                TVector<std::pair<std::string_view, TRuntimeNode>> members;
+                members.reserve(rowType->GetSize());
+                for (const auto* member : rowType->GetItems()) {
+                    members.emplace_back(member->GetName(), ctx.PgmBuilder().Member(item, member->GetName()));
+                }
+                return ctx.PgmBuilder().NewStruct(members);
+            };
+
             auto initLambda = [&](TRuntimeNode item) -> TRuntimeNode {
                 TVector<std::pair<std::string_view, TRuntimeNode>> members;
                 members.reserve(handlersList->ChildrenSize());
@@ -601,7 +617,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                     const auto* handler = handlersList->Child(i);
                     const auto& trait = *handler->Child(1);
                     const auto& init = *trait.Child(TCoAggregationTraits::idx_InitHandler);
-                    TRuntimeNode::TList args = {item};
+                    TRuntimeNode::TList args = {projectItem(item, trait)};
                     if (init.Head().ChildrenSize() == 2) {
                         args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
                     }
@@ -620,7 +636,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                     const auto& trait = *handler->Child(1);
                     auto prev = ctx.PgmBuilder().Member(state, colName);
                     const auto& update = *trait.Child(TCoAggregationTraits::idx_UpdateHandler);
-                    TRuntimeNode::TList args = {item, prev};
+                    TRuntimeNode::TList args = {projectItem(item, trait), prev};
                     if (update.Head().ChildrenSize() == 3) {
                         args.push_back(ctx.PgmBuilder().NewDataLiteral<ui32>(i));
                     }

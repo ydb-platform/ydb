@@ -257,28 +257,7 @@ protected:
         };
 
         if (!maybeInputConnection) {
-            auto normalizedInput = aggregateInput;
-
-            const auto inputKind = normalizedInput.Ref().GetTypeAnn()->GetKind();
-            if (inputKind != ETypeAnnotationKind::Flow) {
-                normalizedInput = Build<TCoToFlow>(ctx, aggregatePos)
-                    .Input(normalizedInput)
-                    .Done();
-            }
-
-            TExprBase result = buildAggregation(normalizedInput);
-
-            if (inputKind == ETypeAnnotationKind::List) {
-                result = Build<TCoForwardList>(ctx, aggregatePos)
-                    .Stream(result)
-                    .Done();
-            } else if (inputKind == ETypeAnnotationKind::Stream) {
-                result = Build<TCoFromFlow>(ctx, aggregatePos)
-                    .Input(result)
-                    .Done();
-            }
-
-            return result;
+            return buildAggregation(aggregateInput);
         }
 
         const auto inputConnection = maybeInputConnection.Cast();

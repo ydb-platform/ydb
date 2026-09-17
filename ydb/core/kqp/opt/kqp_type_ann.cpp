@@ -3420,8 +3420,16 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
         return TStatus::Ok;
     }
 
-    if (!EnsureStructType(inputStream.Pos(), *itemType, ctx)) {
+    if (!EnsureStructType(inputStream.Pos(), *itemType, ctx) || !EnsureComputableType(inputStream.Pos(), *itemType, ctx)) {
         return TStatus::Error;
+    }
+
+    if (const auto inputKind = inputStream.GetTypeAnn()->GetKind(); inputKind != ETypeAnnotationKind::Flow) {
+        auto flow = ctx.NewCallable(inputStream.Pos(), "ToFlow", {input->ChildPtr(TKqpStreamingAggregation::idx_Input)});
+        auto aggregation = ctx.ChangeChild(*input, TKqpStreamingAggregation::idx_Input, std::move(flow));
+        output = ctx.NewCallable(input->Pos(), inputKind == ETypeAnnotationKind::List ? "ForwardList" : "FromFlow",
+            {std::move(aggregation)});
+        return TStatus::Repeat;
     }
 
     const auto* const rowType = itemType->Cast<TStructExprType>();
@@ -3501,6 +3509,13 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             return TStatus::Error;
         }
 
+        // Handler distinct settings
+
+        if (handler->ChildrenSize() == 3) {
+            ctx.AddError(TIssue(ctx.GetPosition(handler->Pos()), "DISTINCT aggregation is not supported for mode: KqpStreamingAggregation"));
+            return TStatus::Error;
+        }
+
         // Handler trait
 
         const auto trait = handler->ChildPtr(TCoAggregateTuple::idx_Trait);
@@ -3514,16 +3529,28 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
             return TStatus::Error;
         }
 
+        const auto& traitItemType = *trait->Child(TCoAggregationTraits::idx_ItemType);
+        const auto* const traitRowType = traitItemType.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(traitItemType.Pos(), *traitRowType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!IsFieldSubset(*traitRowType->Cast<TStructExprType>(), *rowType)) {
+            ctx.AddError(TIssue(ctx.GetPosition(traitItemType.Pos()), TStringBuilder()
+                << "Aggregation traits input type must be a subset of the streaming input row type, with matching field types: "
+                << *traitRowType << " vs " << *itemType));
+            return TStatus::Error;
+        }
+
         const auto& update = *trait->Child(TCoAggregationTraits::idx_UpdateHandler);
         if (update.Tail().IsCallable("Void")) {
             ctx.AddError(TIssue(ctx.GetPosition(update.Pos()), "Update handler must be specified for streaming aggregation"));
             return TStatus::Error;
         }
 
-        // Handler distinct settings
-
-        if (handler->ChildrenSize() == 3) {
-            ctx.AddError(TIssue(ctx.GetPosition(handler->Pos()), "DISTINCT aggregation is not supported for mode: KqpStreamingAggregation"));
+        // Core traits skip this check when Merge is absent, but streaming compiles Save/Load in every mode.
+        const auto& save = *trait->Child(TCoAggregationTraits::idx_SaveHandler);
+        if (!EnsureComputableType(save.Pos(), *save.GetTypeAnn(), ctx)) {
             return TStatus::Error;
         }
 
@@ -3559,6 +3586,18 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
         } else {
             if (!inputKeys.ChildrenSize()) {
                 if (const auto* const defaultValue = trait->Child(TCoAggregationTraits::idx_DefVal); !defaultValue->IsCallable("Null")) {
+                    // MiniKQL Coalesce does not insert the implicit conversions allowed by core traits.
+                    const auto* const finishItemType = RemoveOptionalType(finishType);
+                    const auto defaultItemType = defaultValue->GetTypeAnn();
+                    const bool compatible = IsSameAnnotation(*finishItemType, *defaultItemType)
+                        || ((finishType->GetKind() == ETypeAnnotationKind::Optional || finishType->GetKind() == ETypeAnnotationKind::Pg)
+                            && IsSameAnnotation(*finishItemType, *RemoveOptionalType(defaultItemType)));
+                    if (!compatible) {
+                        ctx.AddError(TIssue(ctx.GetPosition(defaultValue->Pos()), TStringBuilder()
+                            << "Default value type requires an unsupported conversion in streaming aggregation: "
+                            << *finishType << " vs " << *defaultValue->GetTypeAnn()));
+                        return TStatus::Error;
+                    }
                     finishType = defaultValue->GetTypeAnn();
                 } else if (!finishType->IsOptionalOrNull()) {
                     finishType = ctx.MakeType<TOptionalExprType>(finishType);
@@ -3662,7 +3701,7 @@ TStatus AnnotateKqpStreamingAggregation(const TExprNode::TPtr& input, TExprNode:
         resultType = ctx.MakeType<TStructExprType>(columns);
     }
 
-    input->SetTypeAnn(MakeSequenceType(inputStream.GetTypeAnn()->GetKind(), *resultType, ctx));
+    input->SetTypeAnn(ctx.MakeType<TFlowExprType>(resultType));
     return TStatus::Ok;
 }
 

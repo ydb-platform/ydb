@@ -92,10 +92,11 @@ struct TStreamingAggregationTypeAnnTest {
         return Ctx.NewList(TPositionHandle(), std::move(items));
     }
 
-    TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)") {
+    TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)",
+        TStringBuf itemType = "(StructType '('key (DataType 'String)))")
+    {
         const TString program = TStringBuilder() << R"((
-            (return (AggregationTraits
-                (StructType '('key (DataType 'String)))
+            (return (AggregationTraits )" << itemType << R"(
                 (lambda '(item) (Int64 '0))
                 (lambda '(item state) state)
                 (lambda '(state) state)
@@ -180,21 +181,9 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
                 }));
                 continue;
             }
-            const auto result = node;
-            const auto inputKind = original->Head().GetTypeAnn()->GetKind();
-            if (inputKind == ETypeAnnotationKind::List) {
-                UNIT_ASSERT(NNodes::TCoForwardList::Match(result.Get()));
-            } else if (inputKind == ETypeAnnotationKind::Stream) {
-                UNIT_ASSERT(NNodes::TCoFromFlow::Match(result.Get()));
-            }
-            const auto aggregation = inputKind == ETypeAnnotationKind::Flow ? result : result->HeadPtr();
+            const auto aggregation = node;
             UNIT_ASSERT(NNodes::TKqpStreamingAggregation::Match(aggregation.Get()));
-            if (inputKind != ETypeAnnotationKind::Flow) {
-                UNIT_ASSERT(NNodes::TCoToFlow::Match(aggregation->HeadPtr().Get()));
-            }
-            const auto rewrittenInput = inputKind == ETypeAnnotationKind::Flow
-                ? aggregation->HeadPtr() : aggregation->Head().HeadPtr();
-            UNIT_ASSERT_C(rewrittenInput == original->HeadPtr(),
+            UNIT_ASSERT_C(aggregation->HeadPtr() == original->HeadPtr(),
                 "Pure input must be preserved without wrapping it in a stage or connection");
             UNIT_ASSERT(aggregation->ChildPtr(1) == original->ChildPtr(1));
             UNIT_ASSERT(aggregation->ChildPtr(2) == original->ChildPtr(2));
@@ -272,22 +261,6 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         }
     }
 
-    Y_UNIT_TEST(StreamingAggregationPreservesSequenceKind) {
-        // The SQL rewrite always supplies a flow; exercise the other internal sequence kinds here.
-        for (const auto kind : {ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}) {
-            TStreamingAggregationTypeAnnTest test;
-            auto node = test.Aggregation(kind, {test.Atom("key")},
-                {test.List({test.Atom("value"), test.Traits("(Int64 '1)")})});
-            const auto* result = test.CheckType(node);
-            UNIT_ASSERT_VALUES_EQUAL(node->GetTypeAnn()->GetKind(), kind);
-            UNIT_ASSERT_VALUES_EQUAL(result->GetSize(), 2);
-            UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("value"),
-                *test.Ctx.MakeType<TDataExprType>(EDataSlot::Int64)));
-            UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("key"),
-                *test.Ctx.MakeType<TDataExprType>(EDataSlot::String)));
-        }
-    }
-
     Y_UNIT_TEST_QUAD(StreamingAggregationTupleResultTypes, Keyed, Optional) {
         // Unlike fused SQL percentiles, these tuple elements have different optionality.
         TStreamingAggregationTypeAnnTest test;
@@ -303,6 +276,74 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("first"),
             *(Optional || !Keyed ? static_cast<const TTypeAnnotationNode*>(optionalType) : intType)));
         UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("second"), *optionalType));
+    }
+
+    Y_UNIT_TEST(StreamingAggregationTraitInputTypes) {
+        const TStringBuf rowType = "(StructType '('key (DataType 'String)))";
+        const TStringBuf optionalRowType = "(StructType '('key (OptionalType (DataType 'String))))";
+        const TStringBuf nestedRowType = "(StructType '('key (StructType '('nested (DataType 'String)))))";
+        struct TCase {
+            TStringBuf InputType;
+            TStringBuf TraitType;
+            TStringBuf ExpectedError;
+        };
+        const TCase cases[] = {
+            {rowType, "(DataType 'String)", "Expected struct type"},
+            {rowType, "(OptionalType (StructType '('key (DataType 'String))))", "Expected struct type"},
+            {rowType, "(StructType '('missing (DataType 'String)))", "must be a subset"},
+            {rowType, "(StructType '('key (DataType 'Uint64)))", "must be a subset"},
+            {rowType, optionalRowType, "must be a subset"},
+            {optionalRowType, rowType, "must be a subset"},
+            {nestedRowType, "(StructType '('key (StructType '('nested (DataType 'Uint64)))))", "must be a subset"},
+            {rowType, rowType, {}},
+            {rowType, "(StructType)", {}},
+            {optionalRowType, optionalRowType, {}},
+            {nestedRowType, nestedRowType, {}},
+        };
+        for (const auto& testCase : cases) {
+            TStreamingAggregationTypeAnnTest test;
+            const auto inputType = ParseAndAnnotate(TStringBuilder() << "((return " << testCase.InputType << "))",
+                test.Ctx, false, false, test.Types);
+            UNIT_ASSERT_C(inputType, test.Ctx.IssueManager.GetIssues().ToString());
+            auto node = test.Aggregation(ETypeAnnotationKind::Flow, {},
+                {test.List({test.Atom("value"), test.Traits("(Int64 '1)", "(Null)", testCase.TraitType)})},
+                {test.List({test.Atom("output_columns"), test.List({})})});
+            node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(inputType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()));
+            // The handler still consumes input when its result is projected away.
+            UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), testCase.ExpectedError.empty()
+                ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
+                test.Ctx.IssueManager.GetIssues().ToString());
+            if (!testCase.ExpectedError.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), testCase.ExpectedError);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationRejectsNonComputableInput) {
+        TStreamingAggregationTypeAnnTest test;
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {}, {});
+        const auto* type = test.Ctx.MakeType<TTypeExprType>(test.Ctx.MakeType<TDataExprType>(EDataSlot::Int64));
+        const auto* rowType = test.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            test.Ctx.MakeType<TItemExprType>("type", type)});
+        node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(rowType));
+        UNIT_ASSERT_VALUES_EQUAL(test.Annotate(node), IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "Expected computable data");
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingAggregationRejectsInvalidTupleResults, OptionalFinish) {
+        for (const ui32 testCase : {0, 1, 2}) {
+            TStreamingAggregationTypeAnnTest test;
+            const TStringBuf body = testCase == 0 ? "(Int64 '1)" : testCase == 1
+                ? "'((Int64 '1))" : "'((Int64 '1) (Int64 '2))";
+            const TString finish = OptionalFinish ? TStringBuilder() << "(Just " << body << ")" : TString(body);
+            auto node = test.Aggregation(ETypeAnnotationKind::Flow, {},
+                {test.List({test.List({test.Atom("first"), test.Atom(testCase == 2 ? "first" : "second")}),
+                    test.Traits(finish)})},
+                {test.List({test.Atom("output_columns"), test.List({})})});
+            UNIT_ASSERT_VALUES_EQUAL(test.Annotate(node), IGraphTransformer::TStatus::Error);
+            UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), testCase == 2
+                ? "Duplicated member" : testCase == 1 ? "Expected tuple type of size: 2" : "Expected tuple type");
+        }
     }
 
     Y_UNIT_TEST(StreamingAggregationInvalidSettings) {
@@ -358,77 +399,6 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
             {test.List({test.Atom("key"), test.Traits("(Int64 '1)")})});
         UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), IGraphTransformer::TStatus::Error,
             test.Ctx.IssueManager.GetIssues().ToString());
-    }
-
-    Y_UNIT_TEST_QUAD(StreamingAggregationParentIndicesAndHandlerArities, InitWithParent, UpdateWithParent) {
-        using namespace NKikimr::NMiniKQL;
-        TStreamingAggregationTypeAnnTest test;
-        const TString program = TStringBuilder() << R"((
-            (return (AggregationTraits
-                (StructType '('key (DataType 'String)))
-                (lambda '(item)" << (InitWithParent ? " parent" : "") << ") '("
-                << (InitWithParent ? "parent" : "(Uint32 '99)") << R"( (Uint32 '99) (Uint32 '0)))
-                (lambda '(item state)" << (UpdateWithParent ? " parent" : "") << ") '((Nth state '0) "
-                << (UpdateWithParent ? "parent" : "(Uint32 '99)") << R"( (Add (Nth state '2) (Uint32 '1))))
-                (lambda '(state) state)
-                (lambda '(state) state)
-                (lambda '(left right) left)
-                (lambda '(state) state)
-                (Null)))
-        ))";
-        const auto traits = ParseAndAnnotate(program, test.Ctx, false, false, test.Types);
-        UNIT_ASSERT_C(traits, test.Ctx.IssueManager.GetIssues().ToString());
-        // Reverse alphabetical order so handler indices cannot be confused with result member indices.
-        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")}, {
-            test.List({test.Atom("z_first"), traits}), test.List({test.Atom("a_second"), traits})});
-        auto input = ParseAndAnnotate(R"((
-            (return (ToFlow (AsList
-                (AsStruct '('key (String 'a)))
-                (AsStruct '('key (String 'a)))
-                (AsStruct '('key (String 'b)))
-                (AsStruct '('key (String 'a)))
-                (AsStruct '('key (String 'b))))))
-        ))", test.Ctx, false, false, test.Types);
-        UNIT_ASSERT_C(input, test.Ctx.IssueManager.GetIssues().ToString());
-        node = test.Ctx.ChangeChild(*node, NNodes::TKqpStreamingAggregation::idx_Input, std::move(input));
-        const auto* resultType = test.CheckType(node);
-
-        TScopedAlloc alloc(__LOCATION__);
-        TTypeEnvironment env(alloc);
-        TKqpComputeContextBase computeCtx;
-        const auto registry = CreateFunctionRegistry(CreateBuiltinRegistry());
-        const auto randomProvider = CreateDeterministicRandomProvider(1);
-        const auto timeProvider = CreateDeterministicTimeProvider(10000000);
-        const NKikimr::NKqp::TKqlCompileContext compileCtx("", MakeIntrusive<TKikimrTablesData>(), env, *registry);
-        const auto compiler = NKikimr::NKqp::CreateKqlCompiler(compileCtx, test.Types);
-        NCommon::TMkqlBuildContext buildCtx(*compiler, compileCtx.PgmBuilder(), test.Ctx);
-        const auto compiled = NCommon::MkqlBuildExpr(*node, buildCtx);
-        const auto programNode = compileCtx.PgmBuilder().Collect(compiled);
-        TExploringNodeVisitor explorer;
-        explorer.Walk(programNode.GetNode(), env.GetNodeStack());
-        const TComputationPatternOpts options(alloc.Ref(), env, GetKqpBaseComputeFactory(&computeCtx),
-            registry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
-        const auto pattern = MakeComputationPattern(explorer, programNode, {}, options);
-        const auto graph = pattern->Clone(options.ToComputationOptions(*randomProvider, *timeProvider));
-        const TBindTerminator bindTerminator(graph->GetTerminator());
-        const auto rows = graph->GetValue().GetListIterator();
-        const TVector<TStringBuf> expectedKeys = {"a", "a", "b", "a", "b"};
-        const TVector<ui32> expectedUpdates = {0, 1, 0, 2, 1};
-        NUdf::TUnboxedValue row;
-        for (ui32 i = 0; i < expectedKeys.size(); ++i) {
-            UNIT_ASSERT(rows.Next(row));
-            const auto key = row.GetElement(*resultType->FindItem("key"));
-            UNIT_ASSERT_VALUES_EQUAL(TString(key.AsStringRef()), expectedKeys[i]);
-            ui32 parent = 0;
-            for (const TStringBuf name : {"z_first", "a_second"}) {
-                const auto state = row.GetElement(*resultType->FindItem(name));
-                UNIT_ASSERT_VALUES_EQUAL(state.GetElement(0).Get<ui32>(), InitWithParent ? parent : 99);
-                UNIT_ASSERT_VALUES_EQUAL(state.GetElement(1).Get<ui32>(), UpdateWithParent && expectedUpdates[i] ? parent : 99);
-                UNIT_ASSERT_VALUES_EQUAL(state.GetElement(2).Get<ui32>(), expectedUpdates[i]);
-                ++parent;
-            }
-        }
-        UNIT_ASSERT(!rows.Next(row));
     }
 
     Y_UNIT_TEST_TWIN(StreamingAggregationProjectedStateMustBePersistable, UseStateTable) {

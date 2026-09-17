@@ -213,12 +213,25 @@ private:
         return false;
     }
 
-    bool IsMemberColumn(const TCoMember& member) const {
+    bool IsMemberColumn(const TCoMember& member) {
         // We allow member access only for top level predicate argument
-        return member.Struct().Raw() == LambdaArg.Raw();
+        if (member.Struct().Raw() == LambdaArg.Raw()) {
+            return true;
+        }
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(member.Struct());
+        }
+        return false;
     }
 
-    bool IsMemberColumn(const TExprBase& node) const {
+    bool IsSupportedNth(const TCoNth& nth) {
+        if (Settings.IsEnabled(EFlag::StructOperators)) {
+            return CheckExpressionNodeForPushdown(nth.Tuple());
+        }
+        return false;
+    }
+
+    bool IsMemberColumn(const TExprBase& node) {
         if (const auto member = node.Maybe<TCoMember>()) {
             return IsMemberColumn(member.Cast());
         }
@@ -300,6 +313,12 @@ private:
 
 public:
     bool CheckExpressionNodeForPushdown(const TExprBase& node) {
+        if (auto maybeMember = node.Maybe<TCoMember>()) {
+            return IsMemberColumn(maybeMember.Cast());
+        }
+        if (auto maybeNth = node.Maybe<TCoNth>()) {
+            return IsSupportedNth(maybeNth.Cast());
+        }
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
         }
@@ -594,7 +613,7 @@ private:
         return IsComparableArguments(left, right, true);
     }
 
-    bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists) const {
+    bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists) {
         if (!Settings.IsEnabled(EFlag::JsonExistsOperator)) {
             return false;
         }
@@ -617,7 +636,7 @@ private:
         return predicateTree.CanBePushed;
     }
 
-    bool ExistsCanBePushed(const TCoExists& exists) const {
+    bool ExistsCanBePushed(const TCoExists& exists) {
         return IsMemberColumn(exists.Optional());
     }
 

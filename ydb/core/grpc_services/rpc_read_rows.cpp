@@ -100,12 +100,6 @@ public:
         Y_ABORT_UNLESS(resolveNamesResult);
 
         const auto& entry = resolveNamesResult->ResultSet.front();
-
-        if (entry.Indexes.size()) {
-            errorMessage = "EvReadResults is not supported for tables with indexes";
-            return false;
-        }
-
         const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
 
         THashSet<TString> keyColumnNamesInSchema;

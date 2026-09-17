@@ -44,11 +44,13 @@ Other overheads can vary significantly depending on the nature of the stored dat
 
 These quantities can be approximately related by the ratio:
 
-
 ```text
 Database Storage = Tablet Storage × RF × Overhead
 ```
 
+In all calculations:<br/>
+1 KB = 1000 byte, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;<br/>
+1 KiB = 1024 byte, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
 
 ## Estimating Required Equipment {#hardware-estimation}
 
@@ -75,13 +77,11 @@ To estimate the required equipment, perform the following steps.
 
 1. Estimate the required Database Storage volume:
 
-
    ```text
    Database Storage = Tablet Storage × RF × Overhead
    ```
 
 2. Determine the slot size:
-
 
    ```text
    SlotSize = (DriveSize - 28.08 GB) / ExpectedSlotCount
@@ -94,22 +94,21 @@ To estimate the required equipment, perform the following steps.
 
    About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
 
-   This formula is applicable for disks with a capacity of 800 GiB or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
-3. Estimate the number of storage groups:
+   This formula is applicable for disks with a capacity of ~839 GB (800 GiB) or more. Using smaller disks is not recommended if optimal performance is required. For more details on disk subsystem requirements, see the [{#T}](system-requirements.md) section.
 
+3. Estimate the number of storage groups:
 
    ```text
    TotalGroups = ceil( Database Storage / (SlotSize × VDisksInGroup × 0.85) )
    ```
-
 
    The coefficient 0.85 reflects the recommended VDisk fill percentage (VDisk Raw Usage = 85%).
 
    When monitoring, it is recommended to focus on the VDisk Slot Usage and Capacity Alert values. For existing groups, the VDisk Raw Usage, VDisk Slot Usage, and Capacity Alert values can be viewed in the {{ ydb-short-name }} UI on the **Info → Storage** tab of the database page.
 
    The threshold at which a group is considered full corresponds to the values VDisk Slot Usage = 100%, Capacity Alert = LightYellow, VDisk Raw Usage ≈ 90% — whereas the formula above leaves a margin up to this threshold.
-4. Estimate the number of occupied slots:
 
+4. Estimate the number of occupied slots:
 
    ```text
    UsedSlots = TotalGroups × VDisksInGroup
@@ -117,32 +116,28 @@ To estimate the required equipment, perform the following steps.
 
 5. Obtain a lower estimate of the required number of physical disks (without considering the fault tolerance reserve):
 
-
    ```text
    TotalPDisks ≥ ceil( UsedSlots / ExpectedSlotCount )
    ```
 
 6. Select the cluster configuration — parameters `NumRacks`, `DisksPerRack`, and determine the minimum required total reserve of empty slots in the cluster:
 
-
    ```text
    TotalSlots    = NumRacks × DisksPerRack × ExpectedSlotCount
    MinEmptySlots = ceil( MaxSlotsInRack + 0.027 × TotalSlots )
    ```
-
 
    The reserve of empty slots is necessary for the normal operation of the [SelfHeal](../../maintenance/manual/selfheal.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
 
    The first term `MaxSlotsInRack` is the maximum number of slots in one failure domain. For a homogeneous cluster `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. This reserve is necessary so that when the most capacious domain fails, its VDisks can fit on the remaining equipment.
 
    The second term `0.027 × TotalSlots` is an empirically selected operational reserve (~1 disk per 37), covering unscheduled replacement of individual disks.
-7. Evaluate the configuration's compliance with the minimum requirements:
 
+7. Evaluate the configuration's compliance with the minimum requirements:
 
    ```text
    EmptySlots = TotalSlots - UsedSlots
    ```
-
 
    The condition `EmptySlots ≥ MinEmptySlots` must be met. If the condition is not met, increase `NumRacks` or `DisksPerRack` and return to step 6. See [{#T}](#example).
 
@@ -154,23 +149,19 @@ Suppose there are `TotalPDisks` physical disks with a capacity of `DriveSize` ea
 
 1. Total number of slots:
 
-
    ```text
    TotalSlots = TotalPDisks × ExpectedSlotCount
    ```
 
 2. Some slots remain empty for the SelfHeal reserve, the rest are available for storage groups:
 
-
    ```text
    MinEmptySlots = ceil( MaxSlotsInRack + 0.027 × TotalSlots )
    UsableSlots = TotalSlots - MinEmptySlots
    ```
 
-
    Here `MaxSlotsInRack` is the maximum number of slots in one failure domain (rack or server): for a homogeneous cluster `DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `max_i(DisksPerRack_i × ExpectedSlotCount)`.
 3. Number of storage groups:
-
 
    ```text
    TotalGroups = floor( UsableSlots / VDisksInGroup )
@@ -178,13 +169,11 @@ Suppose there are `TotalPDisks` physical disks with a capacity of `DriveSize` ea
 
 4. Useful capacity of the distributed storage considering the 85% fill threshold:
 
-
    ```text
    Database Storage = TotalGroups × VDisksInGroup × SlotSize × 0.85
    ```
 
 5. Estimation of useful data volume:
-
 
    ```text
    Tablet Storage = Database Storage / (RF × Overhead)

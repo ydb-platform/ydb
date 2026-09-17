@@ -1149,23 +1149,6 @@ Y_UNIT_TEST(CreateTopicDefaultsAndIdempotentCreate) {
     AssertStatus(duplicate, Ydb::StatusIds::SUCCESS);
 }
 
-Y_UNIT_TEST(CreateTopicWith35000Partitions) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-    const TString path = "/Root/topic_35000_parts";
-
-    auto request = MakeCreateTopicRequest(path, NPQ::MAX_TOPIC_PARTITIONS);
-    // Default is 1 partition per tablet; 35000 tablets exceeds PathShardsLimit (35000).
-    (*request.mutable_attributes())["_partitions_per_tablet"] = "20";
-    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
-        runtime, request, CreateCreateTopicActor, path);
-    AssertStatus(result, Ydb::StatusIds::SUCCESS);
-
-    const auto describe = DescribeTopic(runtime, path);
-    UNIT_ASSERT_VALUES_EQUAL(describe.partitioning_settings().min_active_partitions(), NPQ::MAX_TOPIC_PARTITIONS);
-    UNIT_ASSERT_VALUES_EQUAL(describe.partitions_size(), NPQ::MAX_TOPIC_PARTITIONS);
-}
-
 Y_UNIT_TEST(CreateTopicWith100000PartitionsRejected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

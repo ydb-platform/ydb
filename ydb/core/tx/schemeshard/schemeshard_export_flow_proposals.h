@@ -1,11 +1,21 @@
 #pragma once
 
+#include "schemeshard_export_table_scheme.h"
 #include "schemeshard_impl.h"
 
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    const TPath& sourcePath,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+);
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,

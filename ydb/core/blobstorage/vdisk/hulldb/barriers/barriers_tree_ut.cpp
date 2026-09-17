@@ -1,4 +1,5 @@
 #include "barriers_tree.h"
+#include "barriers_essence.h"
 #include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -44,6 +45,10 @@ namespace NKikimr {
 
             TIngressCachePtr GetCache0() const {
                 return Cache0;
+            }
+
+            TBlobStorageGroupType GetGType() const {
+                return Info.Type;
             }
 
         private:
@@ -104,6 +109,70 @@ namespace NKikimr {
 
             // New snapshot must see the latest write
             snap3.GetBarrier(tabletId, channel, soft, hard);
+            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+        }
+
+        Y_UNIT_TEST(CompleteTabletDeletionDropsBarriersKeepsBlobsUnneeded) {
+            TWriter writer;
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            TMaybe<NBarriers::TCurrentBarrier> soft;
+            TMaybe<NBarriers::TCurrentBarrier> hard;
+
+            const ui64 tabletId = 893475;
+            const ui32 channel = 4;
+            const TKeyBarrier currentSoft(tabletId, channel, 15, 2, false);
+            const TKeyBarrier oldSoft(tabletId, channel, 15, 1, false);
+            const TKeyLogoBlob blobBelow(TLogoBlobID(tabletId, 14, 150, channel, 100, 0));
+            const TKeyLogoBlob blobAbove(TLogoBlobID(tabletId, 14, 250, channel, 100, 0));
+            const TKeyLogoBlob blobOtherChannel(TLogoBlobID(tabletId, 1, 1, 0, 100, 0));
+            const TMemRecLogoBlob blobMemRec;
+            const TMemRecBarrier barrierMemRec;
+
+            writer.Write(memView, oldSoft, 14, 100);
+            writer.Write(memView, currentSoft, 14, 200);
+
+            {
+                NGcOpt::TBarriersEssence essence(memView.GetSnapshot(), writer.GetGType());
+                UNIT_ASSERT(essence.Keep(currentSoft, barrierMemRec, {}, false, true).KeepIndex);
+                UNIT_ASSERT(!essence.Keep(oldSoft, barrierMemRec, {}, false, true).KeepIndex);
+                UNIT_ASSERT(!essence.Keep(blobBelow, blobMemRec, {}, false, true).KeepIndex);
+                UNIT_ASSERT(essence.Keep(blobAbove, blobMemRec, {}, false, true).KeepIndex);
+                UNIT_ASSERT(essence.Keep(blobOtherChannel, blobMemRec, {}, false, true).KeepIndex);
+                UNIT_ASSERT(essence.Keep(TKeyBlock(tabletId), TMemRecBlock(Max<ui32>()), {}, false, true).KeepIndex);
+            }
+
+            memView.MarkTabletDeleted(tabletId);
+
+            NBarriers::TMemViewSnap snap = memView.GetSnapshot();
+            UNIT_ASSERT(snap.IsTabletDeleted(tabletId));
+            snap.GetBarrier(tabletId, channel, soft, hard);
+            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+            // channel that never had a barrier is still treated as collected
+            snap.GetBarrier(tabletId, 0, soft, hard);
+            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+
+            NGcOpt::TBarriersEssence essence(snap, writer.GetGType());
+            UNIT_ASSERT(!essence.Keep(currentSoft, barrierMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT(!essence.Keep(oldSoft, barrierMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT(!essence.Keep(blobBelow, blobMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT(!essence.Keep(blobAbove, blobMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT(!essence.Keep(blobOtherChannel, blobMemRec, {}, false, true).KeepIndex);
+            UNIT_ASSERT(essence.Keep(TKeyBlock(tabletId), TMemRecBlock(Max<ui32>()), {}, false, true).KeepIndex);
+        }
+
+        Y_UNIT_TEST(MarkTabletDeletedIgnoresLaterBarriers) {
+            TWriter writer;
+            NBarriers::TTree tree(writer.GetCache0(), VDiskLogPrefix);
+            TMaybe<NBarriers::TCurrentBarrier> soft;
+            TMaybe<NBarriers::TCurrentBarrier> hard;
+
+            const ui64 tabletId = 42;
+            const ui32 channel = 1;
+
+            tree.MarkTabletDeleted(tabletId);
+            UNIT_ASSERT(tree.IsTabletDeleted(tabletId));
+            writer.Write(tree, TKeyBarrier(tabletId, channel, 1, 1, false), 1, 1);
+            tree.GetBarrier(tabletId, channel, soft, hard);
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
         }
     }

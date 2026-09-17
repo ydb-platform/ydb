@@ -64,6 +64,7 @@ namespace NKikimr {
             void PutToFresh(ui64 lsn, const TKeyBarrier &key, const TMemRecBarrier &memRec);
             void PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
             void LoadCompleted() override;
+            void MarkTabletDeleted(ui64 tabletId);
             TBarriersDsSnapshot GetSnapshot(TActorSystem *as);
             TBarriersDsSnapshot GetIndexSnapshot();
 

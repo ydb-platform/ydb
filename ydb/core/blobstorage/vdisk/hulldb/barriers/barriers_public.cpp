@@ -73,6 +73,10 @@ namespace NKikimr {
             BuildMemView();
         }
 
+        void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
+            MemView->MarkTabletDeleted(tabletId);
+        }
+
         TBarriersDsSnapshot TBarriersDs::GetSnapshot(TActorSystem *as) {
             return TBarriersDsSnapshot(TBase::GetSnapshot(as), MemView->GetSnapshot());
         }

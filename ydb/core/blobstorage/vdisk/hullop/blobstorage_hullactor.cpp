@@ -11,6 +11,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 
 #include <type_traits>
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLCOMP
 
@@ -118,7 +119,10 @@ namespace NKikimr {
         Y_VERIFY_S(freshSegment, hullCtx->VCtx->VDiskLogPrefix);
 
         // prepare snapshots
-        auto barriersSnap = hullDs->Barriers->GetIndexSnapshot();
+        std::optional<TBarriersSnapshot> barriersSnap;
+        if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+            barriersSnap.emplace(hullDs->Barriers->GetIndexSnapshot());
+        }
         auto levelSnap = rtCtx->LevelIndex->GetIndexSnapshot();
 
         // prepare iterator and first/last lsns
@@ -340,7 +344,10 @@ namespace NKikimr {
             }
 
             // prepare snapshots
-            auto barriersSnap = HullDs->Barriers->GetIndexSnapshot();
+            std::optional<TBarriersSnapshot> barriersSnap;
+            if constexpr (!std::is_same_v<TKey, TKeyBlock>) {
+                barriersSnap.emplace(HullDs->Barriers->GetIndexSnapshot());
+            }
             auto levelSnap = RTCtx->LevelIndex->GetIndexSnapshot();
             // set up iterator
             TLevelSliceForwardIterator it(HullDs->HullCtx, vec);

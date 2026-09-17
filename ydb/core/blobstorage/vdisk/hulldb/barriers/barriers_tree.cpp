@@ -68,6 +68,12 @@ namespace NKikimr {
         {
             LockWrite();
 
+            if (DeadTablets.contains(key.TabletId)) {
+                // complete tablet deletion (Max generation block), ignore further barriers
+                UnlockWrite();
+                return;
+            }
+
             TIndexKey indexKey(key.TabletId, key.Channel);
             auto deadIt = Dead.find(indexKey);
             if (deadIt != Dead.end()) {
@@ -96,12 +102,44 @@ namespace NKikimr {
             UnlockWrite();
         }
 
+        void TTree::MarkTabletDeleted(ui64 tabletId) {
+            LockWrite();
+
+            if (!DeadTablets.insert(tabletId).second) {
+                UnlockWrite();
+                return;
+            }
+
+            for (ui32 channel = 0; channel < 256; ++channel) {
+                TIndexKey indexKey(tabletId, static_cast<ui8>(channel));
+                Index.erase(indexKey);
+                Dead.erase(indexKey);
+            }
+
+            UnlockWrite();
+        }
+
+        bool TTree::IsTabletDeleted(ui64 tabletId) const {
+            LockRead();
+            const bool deleted = DeadTablets.contains(tabletId);
+            UnlockRead();
+            return deleted;
+        }
+
         void TTree::GetBarrier(ui64 tabletId,
                 ui8 channel,
                 TMaybe<TCurrentBarrier> &soft,
                 TMaybe<TCurrentBarrier> &hard) const
         {
             LockRead();
+
+            if (DeadTablets.contains(tabletId)) {
+                // complete tablet deletion: treat every channel as collected
+                soft = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
+                hard = TCurrentBarrier(Max<ui32>(), Max<ui32>(), Max<ui32>(), Max<ui32>());
+                UnlockRead();
+                return;
+            }
 
             TIndexKey indexKey(tabletId, channel);
             auto deadIt = Dead.find(indexKey);
@@ -136,6 +174,10 @@ namespace NKikimr {
             for (const auto &x : Dead) {
                 str << "{key#" << x.ToString() << "} ";
             }
+            str << "] DeadTablets# [";
+            for (const auto &x : DeadTablets) {
+                str << x << " ";
+            }
             str << "]}";
         }
 
@@ -152,6 +194,10 @@ namespace NKikimr {
                 Tree->Update(gcOnlySynced, x.first, x.second);
             }
             Log.clear();
+            for (ui64 tabletId : DeletedTabletsLog) {
+                Tree->MarkTabletDeleted(tabletId);
+            }
+            DeletedTabletsLog.clear();
         }
 
         void TMemView::TTreeWithLog::Update(
@@ -167,12 +213,21 @@ namespace NKikimr {
             }
         }
 
+        void TMemView::TTreeWithLog::MarkTabletDeleted(bool gcOnlySynced, ui64 tabletId) {
+            if (Shared()) {
+                DeletedTabletsLog.push_back(tabletId);
+            } else {
+                RollUp(gcOnlySynced);
+                Tree->MarkTabletDeleted(tabletId);
+            }
+        }
+
         bool TMemView::TTreeWithLog::Shared() const {
             return Tree.use_count() > 1;
         }
 
         bool TMemView::TTreeWithLog::NeedRollUp() const {
-            return !Log.empty();
+            return !Log.empty() || !DeletedTabletsLog.empty();
         }
 
         TMemViewSnap TMemView::TTreeWithLog::GetSnapshot() const {
@@ -191,6 +246,14 @@ namespace NKikimr {
         void TMemView::Update(const TKeyBarrier &key, const TMemRecBarrier &memRec) {
             Active->Update(GCOnlySynced, key, memRec);
             Passive->Update(GCOnlySynced, key, memRec);
+            if (Active->Shared() && !Passive->Shared()) {
+                Active.swap(Passive);
+            }
+        }
+
+        void TMemView::MarkTabletDeleted(ui64 tabletId) {
+            Active->MarkTabletDeleted(GCOnlySynced, tabletId);
+            Passive->MarkTabletDeleted(GCOnlySynced, tabletId);
             if (Active->Shared() && !Passive->Shared()) {
                 Active.swap(Passive);
             }

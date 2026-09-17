@@ -192,5 +192,11 @@ namespace NKikimr {
             return collectGeneration == Max<ui32>() && collectStep == Max<ui32>();
         }
 
+        // Max-generation block is the persistent tombstone of a complete tablet deletion
+        // (issued by Hive). When it is present, no data for that tablet is needed.
+        inline bool CompleteDelBlock(ui32 blockedGeneration) {
+            return blockedGeneration == Max<ui32>();
+        }
+
     } // NGc
 } // NKikimr

@@ -78,6 +78,7 @@ namespace NKikimr {
             TString VDiskLogPrefix;
             TIndex Index;
             TDead Dead;
+            THashSet<ui64> DeadTablets;
 
         public:
             TTree(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix);
@@ -85,6 +86,8 @@ namespace NKikimr {
                     bool gcOnlySynced,
                     const TKeyBarrier &key,
                     const TMemRecBarrier &memRec);
+            void MarkTabletDeleted(ui64 tabletId);
+            bool IsTabletDeleted(ui64 tabletId) const;
             void GetBarrier(
                     ui64 tabletId,
                     ui8 channel,
@@ -144,6 +147,9 @@ namespace NKikimr {
             {
                 return Tree->GetBarrier(tabletId, channel, soft, hard);
             }
+            bool IsTabletDeleted(ui64 tabletId) const {
+                return Tree->IsTabletDeleted(tabletId);
+            }
             void Output(IOutputStream &str) const { return Tree->Output(str); }
         };
 
@@ -159,6 +165,7 @@ namespace NKikimr {
 
                 std::shared_ptr<TTree> Tree;
                 TLog Log;
+                TDeque<ui64> DeletedTabletsLog;
 
                 TTreeWithLog(TIntrusivePtr<TIngressCache> ingressCache, const TString &vdiskLogPrefix);
                 void RollUp(bool gcOnlySynced);
@@ -166,6 +173,7 @@ namespace NKikimr {
                         bool gcOnlySynced,
                         const TKeyBarrier &key,
                         const TMemRecBarrier &memRec);
+                void MarkTabletDeleted(bool gcOnlySynced, ui64 tabletId);
                 bool Shared() const;
                 bool NeedRollUp() const;
                 TMemViewSnap GetSnapshot() const;
@@ -178,6 +186,7 @@ namespace NKikimr {
         public:
             TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced);
             void Update(const TKeyBarrier &key, const TMemRecBarrier &memRec);
+            void MarkTabletDeleted(ui64 tabletId);
             TMemViewSnap GetSnapshot();
         };
 

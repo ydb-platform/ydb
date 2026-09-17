@@ -119,6 +119,9 @@ namespace NKikimr {
                 BlocksCache.UpdatePersistent(tabletId, {gen, issuerGuid});
                 break;
         }
+        if (gen == Max<ui32>() && HullDs->Barriers) {
+            HullDs->Barriers->MarkTabletDeleted(tabletId);
+        }
     }
 
     void THullDbRecovery::UpdateBlocksCache(
@@ -418,6 +421,11 @@ namespace NKikimr {
     void THullDbRecovery::BuildBlocksCache()
     {
         BlocksCache.Build(HullDs.Get());
+        if (HullDs && HullDs->Barriers) {
+            BlocksCache.ForEachDeletedTablet([this](ui64 tabletId) {
+                HullDs->Barriers->MarkTabletDeleted(tabletId);
+            });
+        }
     }
 
     TSatisfactionRank THullDbRecovery::GetSatisfactionRank(EHullDbType t, ESatisfactionRankType s) const

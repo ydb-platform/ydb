@@ -30,8 +30,8 @@ Release date: September 16, 2026.
 This functionality is present in the core to allow rollback from the future 26.3 release, but is not enabled by default. It will be enabled by default in the next major release. It may also be enabled in some managed YDB services.
 
 * Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection.
-* [Column-oriented tables](./recipes/backup/import-export-column-tables.md?version=v26.2) can be exported and imported using S3-compatible storage.
-* Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS.
+* [Column-oriented tables](https://ydb.tech/docs/en/core/recipes/backup/import-export-column-tables?version=main) can be exported and imported using S3-compatible storage.
+* Added [export and import of row-oriented tables](https://ydb.tech/docs/en/core/reference/ydb-cli/export-import/export-nfs?version=main) using a local file system, including file systems mounted over NFS.
 * Added snapshot retention for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes.
 * QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there.
 * Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded.

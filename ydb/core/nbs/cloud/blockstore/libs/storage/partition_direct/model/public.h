@@ -1,6 +1,10 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <library/cpp/threading/future/core/future.h>
+
+#include <util/generic/fwd.h>
 
 #include <memory>
 
@@ -15,6 +19,17 @@ enum class EPersistResult
 };
 using TPersistResultFuture = NThreading::TFuture<EPersistResult>;
 using TPersistResultPromise = NThreading::TPromise<EPersistResult>;
+
+using TRegionVChunks = TBitMap<VChunkPerRegionCount>;
+
+class ITouchedProvider
+{
+public:
+    virtual ~ITouchedProvider() = default;
+
+    [[nodiscard]] virtual TRegionVChunks GetTouchedVChunks(
+        ui32 startVChunkIndex) const = 0;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

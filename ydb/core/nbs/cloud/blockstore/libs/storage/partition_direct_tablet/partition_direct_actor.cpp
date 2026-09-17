@@ -408,6 +408,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         std::move(directBlockGroups),
         std::move(chaosInjectorControls),
         vChunkConfigs,
+        &TouchedVChunks,
         dirtyMapStates,
         StorageConfig,
         nbsService->Scheduler,

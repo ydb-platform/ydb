@@ -22,6 +22,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
+    bool isTouched,
     const TDirtyMapStateProto& state,
     ui32 blockSize,
     ui16 blockCount)
@@ -38,11 +39,7 @@ TBlocksDirtyMap::TBlocksDirtyMap(
         DDiskStates.emplace_back(ArenaAllocator, blockCount);
     }
 
-    if (state.GetDDiskTouched()) {
-        DDiskTouchedGeneration = PersistedStateGeneration;
-    }
-
-    UpdateConfig(vChunkConfig);
+    UpdateConfig(vChunkConfig, isTouched);
 
     size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
     for (const auto& ddiskState: state.GetDDiskStates()) {
@@ -62,7 +59,9 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
         });
 }
 
-void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
+void TBlocksDirtyMap::UpdateConfig(
+    const TVChunkConfig& vChunkConfig,
+    bool isTouched)
 {
     ResizeHosts(vChunkConfig.GetHostCount());
 
@@ -76,7 +75,7 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     // watermark level.
     for (auto indx: added) {
         const auto watermark =
-            IsDDiskTouched() ? vChunkConfig.GetWatermark(indx) : std::nullopt;
+            isTouched ? vChunkConfig.GetWatermark(indx) : std::nullopt;
         DDiskStates[indx].Init(
             this,
             BlockCount,
@@ -138,8 +137,6 @@ void TBlocksDirtyMap::RestorePBuffer(
     Y_ABORT_UNLESS(item);
     auto& inflight = item->Value;
     inflight.RestorePBuffer(host);
-
-    TouchDDisk();
 }
 
 // Create multiple readRangeHints for specified range with possible overlapping
@@ -233,12 +230,6 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
     {
         // We can't make a flush while DDisk quorum is unavailable. Will wait
         // until it becomes available.
-        return result;
-    }
-
-    if (!IsDDiskTouchPersisted()) {
-        // Persist that DDisk writes have occurred before issuing the first
-        // flush.
         return result;
     }
 
@@ -374,8 +365,6 @@ void TBlocksDirtyMap::WriteFinished(
     }
 
     inflightItem.OnWritten(requested, confirmed);
-
-    TouchDDisk();
 }
 
 void TBlocksDirtyMap::FlushFinished(
@@ -782,25 +771,16 @@ bool TBlocksDirtyMap::NeedErase() const
     return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
 }
 
-bool TBlocksDirtyMap::IsDDiskTouched() const
-{
-    return DDiskTouchedGeneration != DDiskNotTouched;
-}
-
 bool TBlocksDirtyMap::NeedPersist() const
 {
     const bool needPersistAheadBehind =
         StateGeneration > PersistedStateGeneration;
-    const bool needPersistDDiskTouch =
-        IsDDiskTouched() && !IsDDiskTouchPersisted();
-    return needPersistAheadBehind || needPersistDDiskTouch;
+    return needPersistAheadBehind;
 }
 
 TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
     TDirtyMapStateProto result;
-
-    result.SetDDiskTouched(IsDDiskTouched());
 
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());
@@ -1204,21 +1184,6 @@ void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
 
     const bool removed = Inflight.RemoveRange(pBufferKey);
     Y_ABORT_UNLESS(removed);
-}
-
-void TBlocksDirtyMap::TouchDDisk()
-{
-    if (DDiskTouchedGeneration != DDiskNotTouched) {
-        return;
-    }
-    ++StateGeneration;
-    DDiskTouchedGeneration = StateGeneration;
-}
-
-bool TBlocksDirtyMap::IsDDiskTouchPersisted() const
-{
-    return IsDDiskTouched() &&
-           PersistedStateGeneration >= DDiskTouchedGeneration;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

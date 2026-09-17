@@ -42,13 +42,14 @@ public:
     TBlocksDirtyMap(
         TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
+        bool isTouched,
         const TDirtyMapStateProto& state,
         ui32 blockSize,
         ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
     // Note. Fresh watermarks are not applying for exists DDisks.
-    void UpdateConfig(const TVChunkConfig& vChunkConfig);
+    void UpdateConfig(const TVChunkConfig& vChunkConfig, bool isTouched);
 
     void RestorePBuffer(
         TPBufferKey pBufferKey,
@@ -142,7 +143,6 @@ public:
 
     [[nodiscard]] bool NeedFlush() const;
     [[nodiscard]] bool NeedErase() const;
-    [[nodiscard]] bool IsDDiskTouched() const;
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
@@ -233,9 +233,6 @@ private:
 
     void RemovePBuffer(TPBufferKey pBufferKey);
 
-    void TouchDDisk();
-    [[nodiscard]] bool IsDDiskTouchPersisted() const;
-
     const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
     const ui32 BlockSize;
@@ -275,11 +272,6 @@ private:
     TVector<TDDiskState> DDiskStates;
     // Changes when a DDisk is first touched or its behind/ahead map changes.
     ui32 StateGeneration = 0;
-    // Generation in which the first write to a DDisk was observed. Flushes
-    // remain blocked until that generation, and therefore the DDiskTouched
-    // flag, is persisted. Loading an already persisted flag sets this to the
-    // current persisted generation and permits flushes immediately.
-    ui32 DDiskTouchedGeneration = DDiskNotTouched;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;
 

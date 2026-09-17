@@ -129,6 +129,7 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
             dirtyMaps.push_back(std::make_shared<TBlocksDirtyMap>(
                 arenaAllocatorPool,
                 config,
+                true,
                 TDirtyMapStateProto{},
                 BlockSize,
                 BlockCount));

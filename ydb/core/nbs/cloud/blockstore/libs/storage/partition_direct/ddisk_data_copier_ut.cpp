@@ -74,18 +74,17 @@ struct TFixture
 
         // Copier tests exercise range synchronization after the VChunk has
         // already started writing to DDisks.
-        TDirtyMapStateProto state;
-        state.SetDDiskTouched(true);
         DirtyMap = std::make_shared<TBlocksDirtyMap>(
             CreateArenaAllocatorPool(),
             VChunkConfig,
-            state,
+            true,
+            TDirtyMapStateProto{},
             BlockSize,
             VChunkBlockCount);
 
         VChunkConfig.PromoteHost(3, true);
         VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
-        DirtyMap->UpdateConfig(VChunkConfig);
+        DirtyMap->UpdateConfig(VChunkConfig, true);
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),

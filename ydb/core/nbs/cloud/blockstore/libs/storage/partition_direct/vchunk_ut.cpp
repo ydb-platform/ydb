@@ -31,9 +31,31 @@ std::optional<TPBufferKey> GetSafeBarrierOnExecutor(
     return future.GetValue(TDuration::Seconds(10));
 }
 
-// Drives dirtyMap into a state where the first DDisk touch needs to be
-// persisted. Must run on the executor thread.
+// Drives dirtyMap into a state where its Ahead/Behind state needs persistence.
+// Must run on the executor thread.
 void MakeDirtyMapNeedPersist(TBlocksDirtyMap& dirtyMap)
+{
+    THostMask requested;
+    requested.Set(0);
+    requested.Set(1);
+    requested.Set(2);
+    requested.Set(3);
+
+    const auto pBufferKey = MakeKey(100);
+    const auto range = TBlockRange16::WithLength(10, 10);
+    dirtyMap.RegisterInflightWrite(pBufferKey, range);
+    dirtyMap.WriteFinished(pBufferKey, range, requested, requested);
+
+    auto flushHints = dirtyMap.MakeFlushHint(1);
+    Y_ABORT_UNLESS(!flushHints.Empty());
+    for (const auto& [route, hint]: flushHints.GetAllHints()) {
+        dirtyMap.FlushFinished(route, MakePBufferKeys(hint.Segments), {});
+    }
+}
+
+// Adds a successful write that is ready to be flushed. Must run on the
+// executor thread.
+void MakeDirtyMapNeedFlush(TBlocksDirtyMap& dirtyMap)
 {
     THostMask requested;
     requested.Set(0);
@@ -60,7 +82,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     Y_UNIT_TEST_F(ShouldScheduleCleanup, TBaseFixture)
     {
         Init();
-        DirtyMapStateProto.SetDDiskTouched(true);
 
         const auto range = TBlockRange16::WithLength(10, 1);
         ExpectedRange = range;
@@ -80,6 +101,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            true,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -151,6 +173,66 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldPersistTouchedBeforeFirstFlush, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            false,
+            DirtyMapStateProto,
+            DirectBlockGroup,
+            1,   // syncRequestsBatchSize
+            DefaultBlockSize,
+            DefaultVChunkSize);
+        vchunk->Start();
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                MakeDirtyMapNeedFlush(AccessBlocksDirtyMap(*vchunk));
+                InvokeFlush(*vchunk);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TVector<ui32>{FixtureVChunkIndex},
+            PartitionDirectService->TouchedVChunkIndices);
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            WaitFlushRequests(1, TDuration::MilliSeconds(100)));
+
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeFlush(*vchunk);
+                return true;
+            })
+            .GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitFlushRequests(1, TDuration::Seconds(10)));
+
+        SetFlushResult(TDBGFlushResponse{.Errors{MakeError(S_OK)}}, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            WaitEraseRequests(1, TDuration::Seconds(10)));
+        SetEraseResult(TDBGEraseResponse{.Error = MakeError(S_OK)}, true);
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldHoldSafeBarrierForInflightWrite, TBaseFixture)
     {
         Init();
@@ -168,6 +250,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -246,6 +329,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -295,6 +379,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -400,6 +485,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
@@ -469,6 +555,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
@@ -527,6 +614,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
@@ -565,6 +653,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,
@@ -605,7 +694,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     Y_UNIT_TEST_F(ShouldSwitchHostToOfflineAndBack, TBaseFixture)
     {
         Init();
-        DirtyMapStateProto.SetDDiskTouched(true);
 
         bool isHostOffline = false;
         DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
@@ -662,6 +750,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            true,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -833,6 +922,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -938,6 +1028,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -996,6 +1087,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     // generation to the dirty map (NeedPersist() becomes false).
     Y_UNIT_TEST_F(ShouldPersistDirtyMapState, TBaseFixture)
     {
+        VChunkConfig.PromoteHost(3, true);
+        VChunkConfig.SetWatermark(3, BlockSize * 5);
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
@@ -1004,6 +1097,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            true,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -1028,14 +1122,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             .GetValue(TDuration::Seconds(10));
 
         // A single UpdateDirtyMapState request must have been issued with the
-        // vchunk index and DDiskTouched flag; the vchunk marks itself busy.
+        // vchunk index; the vchunk marks itself busy.
         UNIT_ASSERT_VALUES_EQUAL(
             1u,
             PartitionDirectService->UpdateDirtyMapStateRequests.size());
         const auto& request =
             PartitionDirectService->UpdateDirtyMapStateRequests.front();
         UNIT_ASSERT_VALUES_EQUAL(FixtureVChunkIndex, request.VChunkIndex);
-        UNIT_ASSERT_VALUES_EQUAL(true, request.Proto.GetDDiskTouched());
         UNIT_ASSERT_VALUES_EQUAL(true, IsDirtyMapStatePersisting(*vchunk));
 
         // Complete the persist; OnDirtyMapPersisted runs on the callback.
@@ -1076,6 +1169,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            true,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -1123,6 +1217,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             PartitionDirectService.get(),
             DiskDescription,
             VChunkConfig,
+            false,
             DirtyMapStateProto,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize

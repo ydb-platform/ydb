@@ -15,10 +15,6 @@ message TDDiskState {
 }
 
 message TDirtyMapState {
-    // DDiskTouched shows whether any writes occurred on the DDisk.
-    // If they did, it means that VChunk allocated space on the DDisk.
-    bool DDiskTouched = 1;
-
     // The map of ahead and behind blocks.
     repeated TDDiskState DDiskStates = 2;
 }

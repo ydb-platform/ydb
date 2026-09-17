@@ -181,6 +181,7 @@ static void BM_ReadSingleLocationRequestExecutorCreation(
     auto cleanDirtyMap = std::make_shared<TBlocksDirtyMap>(
         CreateArenaAllocatorPool(),
         fixture.VChunkConfig,
+        true,
         TDirtyMapStateProto{},
         fixture.BlockSize,
         fixture.VChunkBlockCount);

@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             /*vChunkIndex*/ 17,
             /*hostCount*/ 5,
             /*primaryCount*/ 3);
-        config.PromoteHost(3);
+        config.PromoteHost(3, true);
         config.SetWatermark(3, 42 * BlockSize);
         dbg.VChunkConfigs.emplace(config.GetVChunkIndex(), std::move(config));
 

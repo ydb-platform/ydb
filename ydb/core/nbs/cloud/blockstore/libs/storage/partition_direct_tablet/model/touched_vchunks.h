@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 
+#include <util/generic/bitmap.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -12,7 +13,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Stores touched-vchunk bits and tracks mask chunks that need persistence.
-class TTouchedVChunks final
+class TTouchedVChunks final: public ITouchedProvider
 {
 public:
     // Number of bytes in one persisted touched-vchunk mask.
@@ -27,6 +28,10 @@ public:
 
     // Returns whether vchunkIndex has a touched bit.
     [[nodiscard]] bool Get(ui32 vChunkIndex) const;
+
+    // ITouchedProvider implementation.
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 startVChunkIndex) const override;
 
     // Sets the touched bit and returns true if ready to start transaction.
     bool Add(ui32 vChunkIndex, TPersistResultPromise promise);

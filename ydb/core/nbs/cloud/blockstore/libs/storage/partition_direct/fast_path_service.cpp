@@ -100,6 +100,7 @@ TVector<TRegionPtr> CreateRegions(
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
@@ -116,6 +117,7 @@ TVector<TRegionPtr> CreateRegions(
             i,
             directBlockGroups,
             vChunkConfigs,
+            touchedProvider->GetTouchedVChunks(i * VChunkPerRegionCount),
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
             blockSize,
@@ -138,6 +140,7 @@ TFastPathService::TFastPathService(
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
     const TVChunkConfigs& vChunkConfigs,
+    ITouchedProvider* touchedProvider,
     const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
@@ -161,6 +164,7 @@ TFastPathService::TFastPathService(
           blockSize,
           DirectBlockGroups,
           vChunkConfigs,
+          touchedProvider,
           dirtyMapStates,
           *StorageConfig))
     , LogTitle(

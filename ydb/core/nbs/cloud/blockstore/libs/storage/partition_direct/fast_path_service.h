@@ -75,6 +75,7 @@ public:
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
         const TVChunkConfigs& vChunkConfigs,
+        ITouchedProvider* touchedProvider,
         const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,

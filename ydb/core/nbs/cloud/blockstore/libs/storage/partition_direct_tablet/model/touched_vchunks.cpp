@@ -1,5 +1,7 @@
 #include "touched_vchunks.h"
 
+#include <util/generic/bitmap.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -27,6 +29,17 @@ bool TTouchedVChunks::Get(ui32 vChunkIndex) const
     const ui32 bitIndex = vChunkIndex % VChunksPerMask;
     return static_cast<ui8>(Masks[maskIndex][bitIndex / 8]) &
            (1u << (bitIndex % 8));
+}
+
+TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 startVChunkIndex) const
+{
+    TRegionVChunks result;
+    for (ui32 index = 0; index < VChunkPerRegionCount; ++index) {
+        if (Get(startVChunkIndex + index)) {
+            result.Set(index);
+        }
+    }
+    return result;
 }
 
 bool TTouchedVChunks::Add(ui32 vChunkIndex, TPersistResultPromise promise)

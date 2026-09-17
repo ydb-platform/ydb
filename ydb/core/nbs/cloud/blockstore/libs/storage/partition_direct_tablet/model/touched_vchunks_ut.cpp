@@ -44,6 +44,28 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
         UNIT_ASSERT(touchedVChunks.Get(TTouchedVChunks::VChunksPerMask));
     }
 
+    Y_UNIT_TEST(ShouldGetTouchedVChunksForRegion)
+    {
+        TTouchedVChunks touchedVChunks;
+        touchedVChunks.Add(31, NThreading::NewPromise<EPersistResult>());
+        touchedVChunks.Add(32, NThreading::NewPromise<EPersistResult>());
+        touchedVChunks.Add(63, NThreading::NewPromise<EPersistResult>());
+        touchedVChunks.Add(64, NThreading::NewPromise<EPersistResult>());
+
+        const auto firstRegion = touchedVChunks.GetTouchedVChunks(0);
+        UNIT_ASSERT(firstRegion.Get(31));
+        UNIT_ASSERT(!firstRegion.Get(0));
+
+        const auto secondRegion = touchedVChunks.GetTouchedVChunks(32);
+        UNIT_ASSERT(secondRegion.Get(0));
+        UNIT_ASSERT(secondRegion.Get(31));
+        UNIT_ASSERT(!secondRegion.Get(1));
+
+        const auto thirdRegion = touchedVChunks.GetTouchedVChunks(64);
+        UNIT_ASSERT(thirdRegion.Get(0));
+        UNIT_ASSERT(!thirdRegion.Get(1));
+    }
+
     Y_UNIT_TEST(ShouldSaveOnlyChangedMaskChunks)
     {
         TTouchedVChunks touchedVChunks;

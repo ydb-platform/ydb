@@ -79,7 +79,6 @@ TDirtyMapStateProto MakeCompactedDirtyMapState(
     THostMask deadSlots)
 {
     TDirtyMapStateProto result;
-    result.SetDDiskTouched(state.GetDDiskTouched());
     for (size_t slot = 0; slot < state.DDiskStatesSize(); ++slot) {
         if (!deadSlots.Get(static_cast<THostIndex>(slot))) {
             *result.AddDDiskStates() = state.GetDDiskStates(slot);

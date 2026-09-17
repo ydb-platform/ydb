@@ -98,9 +98,9 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult,
-        const ui32 nodeId, const TString& currentCategoryName, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor,
-        const ui64 reservedMemory) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const NArrow::NAccessor::TAccessorsCollection& resources,
+        const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+        const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const;
 
 public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(

@@ -76,12 +76,9 @@ TStepAction::TStepAction(
     }
 }
 
-void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
-    const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
-    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
-    if (!processor) {
-        return;
-    }
+void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const NArrow::NAccessor::TAccessorsCollection& resources,
+    const TDuration executionDurationMs, const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
         !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
@@ -95,20 +92,13 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
     const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    const ui64 reservedMemory = source->GetReservedMemory();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
 
-    // Pin the visitor for the duration of this function so Stop() on ExecutionContext cannot free it under us.
-    // Snapshot scalars only — do not keep references into Resources across further work.
-    // Never call GetReservedMemory() here: Execute() may have started a concurrent continuation that
-    // mutates ResourceGuards (RegisterAllocationGuard / ClearMemoryGuards) on another worker.
-    const auto visitor = source->GetExecutionContext().GetExecutionVisitorOptional();
-    ui32 filteredRows = source->GetRecordsCount();
+    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
     TString indexStatus = "Unknown";
     ui32 indexFilteredRows = source->GetRecordsCount();
-    if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
-        filteredRows = resources->GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
-    }
     if (processorType == NArrow::NSSA::EProcessorType::CheckIndexData) {
         auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
         if (indexProcessor && source->GetSourceSchemaOptional()) {
@@ -126,10 +116,9 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             if (skipIndexes.empty() || !hasActualIndexData) {
                 indexStatus = "NoIndex";
                 indexFilteredRows = source->GetRecordsCount();
-            } else if (const auto* resources = visitor ? visitor->MutableContext().GetResourcesOptional() : nullptr) {
-                // Re-read resources after non-resource work — concurrent ExtractResources may have cleared them.
+            } else {
                 const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
-                const auto& outputAccessor = resources->GetAccessorOptional(outputColumnId);
+                const auto& outputAccessor = resources.GetAccessorOptional(outputColumnId);
                 if (outputAccessor) {
                     auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
                     if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
@@ -147,7 +136,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                     }
                 } else {
                     indexStatus = "Partial";
-                    indexFilteredRows = resources->GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                    indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
                 }
             }
         }
@@ -280,8 +269,6 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
         const auto& signals = GetSignals(nodeId);
         executionContext.OnStartProgramStepExecution(nodeId, signals);
 
-        // Snapshot before Execute(): allocation callbacks may mutate ResourceGuards concurrently afterwards.
-        const ui64 reservedMemoryBeforeExecute = source->GetReservedMemory();
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = visitor->Execute();
         const TDuration executionDuration = TMonotonic::Now() - start;
@@ -290,7 +277,7 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
         source->AddExecutionDuration(executionDuration);
 
         const TString executionResult = conclusion.IsFail() ? "Fail" : conclusion->DebugString();
-        ReportTracing(source, executionDuration, executionResult, nodeId, categoryName, processor, reservedMemoryBeforeExecute);
+        ReportTracing(source, visitor->MutableContext().GetResources(), executionDuration, executionResult, nodeId, categoryName, processor);
         executionContext.SetPrevNodeTracing(nodeId, conclusion);
         if (conclusion.IsFail()) {
             executionContext.OnFailedProgramStepExecution();
@@ -302,8 +289,7 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
         executionContext.OnFinishProgramStepExecution();
         signals->OnExecuteGraphNode(source->GetRecordsCount());
         counters.OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (const auto* resources = visitor->MutableContext().GetResourcesOptional();
-            resources && resources->GetRecordsCountActualOptional() == 0) {
+        if (visitor->MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
             visitor->MutableContext().MutableResources().Clear();
             break;
         }

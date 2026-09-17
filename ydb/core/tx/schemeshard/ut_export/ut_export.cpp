@@ -1477,12 +1477,13 @@ namespace {
                 UNIT_ASSERT(!HasS3File(key + ".enc"));
                 content = GetS3FileContent(key);
             }
-            UNIT_ASSERT(!expected.empty());
-            UNIT_ASSERT_VALUES_EQUAL(content, expected);
+            if (expected) {
+                UNIT_ASSERT_VALUES_EQUAL(content, expected);
+            }
             UNIT_ASSERT_VALUES_EQUAL(HasS3File(key + ".sha256"), checksums);
             if (checksums) {
                 UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(key + ".sha256"),
-                    NBackup::ComputeChecksum(expected) + " create_table.sql");
+                    NBackup::ComputeChecksum(content) + " create_table.sql");
             }
             UNIT_ASSERT(!HasS3File(key + ".enc.sha256"));
             for (const TString suffix : {"", ".enc", ".sha256"}) {
@@ -1843,10 +1844,13 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Env().TestWaitNotification(Runtime(), txId);
         WaitTableSqlExport(StartTableSqlExport(txId, "sql"));
         const auto sql = GetS3FileContent("/sql/create_table.sql");
-        CheckSqlBackup("/sql", sql);
+        CheckSqlBackup("/sql", {});
         UNIT_ASSERT_C(sql.Contains("CREATE TABLE `Table`"), sql);
         UNIT_ASSERT_C(sql.Contains("START WITH 2 INCREMENT BY 3 RESTART WITH 100"), sql);
+        UNIT_ASSERT_C(sql.Contains("ADD CHANGEFEED `feed` WITH (MODE = 'UPDATES', FORMAT = 'JSON'"), sql);
         UNIT_ASSERT_C(sql.Contains("VIRTUAL_TIMESTAMPS = TRUE"), sql);
+        UNIT_ASSERT_C(sql.Contains("RETENTION_PERIOD = INTERVAL('P2D')"), sql);
+        UNIT_ASSERT_C(sql.Contains("TOPIC_MIN_ACTIVE_PARTITIONS = 1"), sql);
         UNIT_ASSERT(HasS3File("/sql/feed/changefeed_description.pb"));
         UNIT_ASSERT(HasS3File("/sql/feed/topic_description.pb"));
         UNIT_ASSERT(HasS3File("/sql/feed/changefeed_description.pb.sha256"));

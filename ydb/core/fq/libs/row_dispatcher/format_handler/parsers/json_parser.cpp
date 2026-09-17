@@ -1228,7 +1228,9 @@ TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parse
     }
     result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
     result.SkipErrors = skipErrors;
-    result.StructuredParsing = parserConfig.GetEnableStructuredParsing();
+    if (parserConfig.HasEnableStructuredParsing()) {
+        result.StructuredParsing = parserConfig.GetEnableStructuredParsing();
+    }
     return result;
 }
 

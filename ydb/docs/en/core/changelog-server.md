@@ -24,18 +24,23 @@ Release date: September 16, 2026.
 * Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
 * Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
 * Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.
-* Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection. This functionality is disabled by a feature flag.
-* [Column-oriented tables](./recipes/import-export-column-tables.md?version=v26.2) can be exported and imported using S3-compatible storage. This functionality is disabled by a feature flag.
-* Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS. This functionality is disabled by a feature flag.
-* Added snapshot retention for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes. This functionality is disabled by a feature flag.
-* QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there. This functionality is disabled by a feature flag.
-* Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded. This functionality is disabled by a feature flag.
-* [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message. This functionality is disabled by a feature flag.
-* Streaming queries can read user attributes of topic messages. This functionality is disabled by a feature flag.
-* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=main) for column-oriented tables. This functionality is disabled by a feature flag.
-* Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables. This functionality is disabled by a feature flag.
-* Added online construction of unique secondary indexes. This functionality is disabled by a feature flag.
-* Transactions between topics and tables can use optimized conflict checking. This functionality is disabled by a feature flag.
+
+#### Disabled functionality
+
+This functionality is present in the core to allow rollback from the future 26.3 release, but is not enabled by default. It will be enabled by default in the next major release. It may also be enabled in some managed YDB services.
+
+* Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection.
+* [Column-oriented tables](./recipes/import-export-column-tables.md?version=v26.2) can be exported and imported using S3-compatible storage.
+* Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS.
+* Added snapshot retention for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes.
+* QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there.
+* Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded.
+* [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message.
+* Streaming queries can read user attributes of topic messages.
+* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=main) for column-oriented tables.
+* Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables.
+* Added online construction of unique secondary indexes.
+* Transactions between topics and tables can use optimized conflict checking.
 
 #### Bug Fixes
 

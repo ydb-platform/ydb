@@ -95,7 +95,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     THashSet<TInfoUnit, TInfoUnit::THashFunction> usedIUs;
     AddUsedIUs(usedIUs, join->GetLeftInput()->GetOutputIUs());
     AddUsedIUs(usedIUs, join->GetRightInput()->GetOutputIUs());
-    for (const auto& [leftKey, rightKey] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         usedIUs.insert(leftKey);
         usedIUs.insert(rightKey);
     }
@@ -131,9 +133,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
+    TVector<TJoinKey> newJoinKeys;
     for (const auto & column : keyColumns) {
-        newJoinKeys.push_back(std::make_pair(column, column));
+        newJoinKeys.emplace_back(column, column);
     }
 
     auto result = MakeJoinWithRightRenames(join->GetLeftInput(), newFilter, join->Pos, join->JoinKind, newJoinKeys, {}, renameMap, ctx.ExprCtx, props);

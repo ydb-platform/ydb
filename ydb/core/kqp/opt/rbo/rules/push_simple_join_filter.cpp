@@ -71,10 +71,10 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         for (const auto& expr : pushLeft) {
             if (expr.MaybeConstantCondition()) {
                 auto iu = expr.GetInputIUs()[0];
-                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
-                    {return iu == cond.first;}); it != join->JoinKeys.end()) {
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const TJoinKey& cond)
+                    {return iu == cond.Left;}); it != join->JoinKeys.end()) {
                     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
-                    mapping.insert({iu, it->second});
+                    mapping.insert({iu, it->Right});
                     auto rightExpr = expr.ApplyRenames(mapping);
                     pushConstantCondsRight.push_back(rightExpr);
                 }
@@ -84,10 +84,10 @@ bool TPushSimpleJoinFilterRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         for (const auto& expr : pushRight) {
             if (expr.MaybeConstantCondition()) {
                 auto iu = expr.GetInputIUs()[0];
-                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const std::pair<TInfoUnit, TInfoUnit>& cond)
-                    {return iu == cond.second;}); it != join->JoinKeys.end()) {
+                if (auto it = std::find_if(join->JoinKeys.begin(), join->JoinKeys.end(), [&iu](const TJoinKey& cond)
+                    {return iu == cond.Right;}); it != join->JoinKeys.end()) {
                     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapping;
-                    mapping.insert({iu, it->first});
+                    mapping.insert({iu, it->Left});
                     auto leftExpr = expr.ApplyRenames(mapping);
                     pushConstantCondsLeft.push_back(leftExpr);
                 }

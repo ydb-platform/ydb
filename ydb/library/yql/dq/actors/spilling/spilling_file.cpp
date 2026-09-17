@@ -280,7 +280,7 @@ private:
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
             }
-            Cout << "Cannot start DQ local file spilling service at " << root << ": " << e.what() << Endl << Flush;
+            Cout << (TStringBuilder() << "Cannot start DQ local file spilling service at " << root << ": " << e.what() << Endl) << Flush;
             abort();
         }
 

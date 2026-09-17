@@ -14,6 +14,7 @@
 #include "ydb_service_scripting.h"
 #include "ydb_service_table.h"
 #include "ydb_service_topic.h"
+#include "ydb_service_udf.h"
 #include "ydb_sql.h"
 #include "ydb_tools.h"
 #include "ydb_yql.h"
@@ -244,6 +245,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandSql>());
     AddCommand(std::make_unique<TCommandTopic>());
+    AddCommand(std::make_unique<TCommandUdf>());
     AddCommand(std::make_unique<TCommandWorkload>());
     AddCommand(std::make_unique<TCommandDebug>());
     AddHiddenCommand(std::make_unique<TCommandScripting>()); // TODO: remove in next major version

@@ -157,6 +157,7 @@
 #include <ydb/services/ydb/ydb_secret.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
@@ -902,6 +903,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 #endif
         TServiceCfg hasSecretService = services.empty();
         names["secret"] = &hasSecretService;
+        TServiceCfg hasUdfService = services.empty();
+        names["udf"] = &hasUdfService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1062,6 +1065,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasSecretService) {
             server.AddService(new NGRpcService::TGRpcYdbSecretService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasSecretService.IsRlAllowed()));
+        }
+
+        if (hasUdfService) {
+            server.AddService(new NGRpcService::TGRpcYdbUdfService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasUdfService.IsRlAllowed()));
         }
 
         if (hasOperationService) {
@@ -1716,6 +1724,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasLongTxServiceConfig()) {
         AppData->LongTxServiceConfig.CopyFrom(runConfig.AppConfig.GetLongTxServiceConfig());
+    }
+
+    if (runConfig.AppConfig.HasUdfStoreConfig()) {
+        AppData->UdfStoreConfig.CopyFrom(runConfig.AppConfig.GetUdfStoreConfig());
     }
 
     AppData->KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(Counters, runConfig.AppConfig);

@@ -1,0 +1,406 @@
+dstool -e <endpoint> --mon-port <mon_port> pdisk populate --snapshot-from-pdisk=[1:1001] --snapshot-file=pdisk-populate-snapshot.json
+Exit Status: 0
+===== stdout =====
+[80000001:_:0:0:0]
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 2
+  PDiskId: 1002
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 3
+  PDiskId: 1003
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 4
+  PDiskId: 1004
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 5
+  PDiskId: 1005
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 6
+  PDiskId: 1006
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 7
+  PDiskId: 1007
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 8
+  PDiskId: 1008
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+PDisk {
+  NodeId: 9
+  PDiskId: 1009
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1002
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1003
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 2
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1004
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 3
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 5
+    PDiskId: 1005
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 4
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 6
+    PDiskId: 1006
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 5
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 7
+    PDiskId: 1007
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 6
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+VSlot {
+  VSlotId {
+    NodeId: 8
+    PDiskId: 1008
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  FailDomainIdx: 7
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+    State: OK
+    Replicated: true
+  }
+  Status: "READY"
+  Ready: true
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "block-4-2"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 2
+    PDiskId: 1002
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 3
+    PDiskId: 1003
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 4
+    PDiskId: 1004
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 5
+    PDiskId: 1005
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 6
+    PDiskId: 1006
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 7
+    PDiskId: 1007
+    VSlotId: 1000
+  }
+  VSlotId {
+    NodeId: 8
+    PDiskId: 1008
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 2
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 3
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 4
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 5
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 6
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 7
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 8
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+Node {
+  NodeId: 9
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}

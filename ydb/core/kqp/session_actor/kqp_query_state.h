@@ -52,6 +52,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -656,6 +659,10 @@ public:
         }
 
         return cStats;
+    }
+
+    bool GetCollectAffectedRows() const {
+        return RequestEv->GetCollectAffectedRows();
     }
 
     bool ReportStats() const {

@@ -672,7 +672,7 @@ NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
     }
 
     if (!message->FlushPromise.Initialized()) {
-        message->FlushPromise = NThreading::NewPromise<bool>();
+        message->InitFlushPromise(Connections);
     }
 
     return message->FlushPromise.GetFuture();
@@ -906,14 +906,16 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         ++ConnectionGeneration;
 
-        if (!ClientContext) {
-            ClientContext = Client->CreateContext();
-            if (!ClientContext) {
-                AbortImpl();
-                // Grpc and WriteSession is closing right now.
-                return;
-            }
+        // Always probe the root, like persqueue DoConnect. Reusing a live
+        // ClientContext and checking only IsCancelled() races with
+        // TDriverScope::Cancel(): RootContext_ is already gone (CreateContext
+        // is null) while this session's context is not cancelled yet.
+        auto clientContext = Client->CreateContext();
+        if (!clientContext) {
+            AbortImpl();
+            return;
         }
+        auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
 
@@ -925,14 +927,26 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            // Drop children before AbortImpl resets ClientContext; otherwise a
+            // live child keeps CQ Contexts_ non-empty and driver.Stop(true) hangs.
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         // Cancel previous operations.
         Cancel(prevConnectContext);
@@ -940,6 +954,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+        Cancel(prevClientContext);
 
         if (Processor) {
             Processor->Cancel();
@@ -2161,6 +2176,12 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
+        // Drop children before ClientContext: ~TContextImpl aborts if children
+        // remain, and leftover child ptrs keep CQ alive so driver.Stop(true) hangs.
+        DescribePartitionContext.reset();
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 

@@ -42,6 +42,38 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }));
     }
 
+    Y_UNIT_TEST(DuplicateSchemaReleaseAfterRefresh) {
+        TEnv env;
+
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+        }));
+
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+
+        auto schemaChange = env.Send<TEvWorker::TEvSchemaChange>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"columns":{"key":"Uint32","value":"Utf8"},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
+        }));
+
+        auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        release->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
+        env.Send<TEvWorker::TEvSchemaChangeApplied>(writer, release.Release());
+
+        auto duplicate = MakeHolder<TEvService::TEvSchemaChangeResult>();
+        duplicate->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
+        env.GetRuntime().Send(writer, env.GetSender(), duplicate.Release());
+
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(2, R"({"key":[1], "update":{"value":"one"}})"),
+        }));
+    }
+
     Y_UNIT_TEST(SupportedTypes) {
         TEnv env(TFeatureFlags()
             .SetEnableTableDatetime64(true)

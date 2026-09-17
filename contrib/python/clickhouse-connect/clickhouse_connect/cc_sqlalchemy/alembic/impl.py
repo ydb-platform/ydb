@@ -16,6 +16,7 @@ from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Map as ChSqlaMap
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Nullable
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Tuple as ChSqlaTuple
 from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import MergeTree
+from clickhouse_connect.cc_sqlalchemy.inspector import with_internal_query_formats
 from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import (
     ClickHouseDDLHelper,
@@ -77,7 +78,7 @@ class ClickHouseImpl(DefaultImpl):
         super().__init__(*args, **kwargs)
         self._add_integration_tag()
         if self.context_opts.get("include_schemas") and not self.context_opts.get("version_table_schema") and self.connection is not None:
-            current_database = self.connection.execute(text("SELECT currentDatabase()")).scalar()
+            current_database = self.connection.execute(with_internal_query_formats(text("SELECT currentDatabase()"))).scalar()
             if current_database:
                 self.context_opts["version_table_schema"] = current_database
 

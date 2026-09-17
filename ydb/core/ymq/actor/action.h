@@ -766,7 +766,7 @@ private:
     void RequestTicketParser() {
         this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = SecurityToken_,
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
         }));
     }
 

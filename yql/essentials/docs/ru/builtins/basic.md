@@ -1240,6 +1240,45 @@ LinearDestroy(T, [Linear<U1>...])->T
 Функция доступна начиная с версии [2025.05](../changelog/2025.05.md).
 Функция возвращает свой первый аргумент, при этом поглощая 0 или более значений [линейных](../types/linear.md) типов, перечисленных после первого аргумента.
 
+## AsErased, PeekErased {#type_erasure}
+
+#### Сигнатура
+
+```yql
+AsErased(T)->Resource<_Erased>
+PeekErased(Resource<_Erased>, type U)->Optional<U>
+```
+
+Функции доступны начиная с версии [2026.02](../changelog/2026.02.md).
+
+Функция `AsErased` стирает тип значения, приводя любой входной тип в фиксированный. При этом запрещено передавать в `AsErased` [Linear](../types/linear.md) тип (но можно использовать тип `DynamicLinear`).
+Функция `PeekErased` проверяет строгое совпадение оригинального типа с заданным. Если типы не совпадают, возвращается пустой `Optional`, иначе - заполненное значение исходного типа.
+
+Типичное применение этих функций - построение рекурсивных функций и/или данных. Например, тип узла дерева и функция для его создания может выглядеть следующим образом:
+
+```yql
+$erased = TypeOf(AsErased(NULL));
+$nodeType = Struct<value: String, left: Optional<$erased>, right: Optional<$erased>>;
+
+$makeNode = ($value, $left, $right) -> {
+    RETURN CAST(
+        <|
+            value: $value,
+            left: if($left IS NOT NULL, AsErased($left)),
+            right: if($right IS NOT NULL, AsErased($right))
+        |> AS $nodeType
+    );
+};
+```
+
+#### Пример
+
+```yql
+$e = AsErased(1);
+SELECT PeekErased($e, Int32), -- 1
+       PeekErased($e, String) -- NULL
+```
+
 ## Block
 
 #### Сигнатура

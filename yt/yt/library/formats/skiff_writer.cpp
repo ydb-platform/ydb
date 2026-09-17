@@ -776,7 +776,8 @@ public:
                             return CreateComplexValueConverter(std::move(descriptor), skiffField.Schema(), isSparse);
                         }
                         case ELogicalMetatype::Tagged:
-                            // Don't expect tagged type in denullified logical type
+                        case ELogicalMetatype::AggregateState:
+                            // Don't expect tagged types in denullified logical type.
                             break;
                     }
                     YT_ABORT();
@@ -994,7 +995,7 @@ private:
                             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::FormatCannotRepresentRow, "Column %Qv is not described by Skiff schema and there is no %Qv column",
                                 NameTable_->GetName(columnId),
                                 OtherColumnsName)
-                                << GetRowPositionErrorAttributes();
+                                .With(GetRowPositionErrorAttributes());
                         }
                         OtherValueIndexes_.emplace_back(valueIndex);
                         break;

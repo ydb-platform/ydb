@@ -21,6 +21,23 @@ TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceNam
     // clang-format on
 }
 
+TExprBase BuildOptionalIf(const TExprBase& predicate, const TExprBase& value, TExprContext& ctx, TPositionHandle pos) {
+    const auto item = ctx.NewCallable(pos, "Just", {value.Ptr()});
+    return TExprBase(ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, "Coalesce")
+                .Add(0, predicate.Ptr())
+                .Callable(1, "Bool")
+                    .Atom(0, "false")
+                .Seal()
+            .Seal()
+            .Add(1, item)
+            .Callable(2, "EmptyFrom")
+                .Add(0, item)
+            .Seal()
+        .Seal().Build());
+}
+
 } // anonymous namespace
 
 namespace NKikimr::NKqp::NLookupJoinBuilder {
@@ -123,17 +140,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
             const auto predicate = equalities.size() == 1
                 ? equalities.front()
                 : TExprBase(Build<TCoAnd>(ctx, pos).Add(equalities).Done());
-            // clang-format off
-            maybeKey = Build<TCoOptionalIf>(ctx, pos)
-                .Predicate<TCoCoalesce>()
-                    .Predicate(predicate)
-                    .Value<TCoBool>()
-                        .Literal().Build("false")
-                    .Build()
-                .Build()
-                .Value(keyStruct)
-            .Done();
-            // clang-format on
+            maybeKey = BuildOptionalIf(predicate, keyStruct, ctx, pos);
         }
 
         // We have to check that ranges are not null. For example `where a is null`, where a is a pk, is also valid point predicate for us.
@@ -272,15 +279,7 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
             .Input(processedRow)
             .Lambda()
                 .Args({row})
-                .Body<TCoOptionalIf>()
-                    .Predicate<TCoCoalesce>()
-                        .Predicate(lambda.Body())
-                        .Value<TCoBool>()
-                            .Literal().Build("false")
-                        .Build()
-                    .Build()
-                    .Value(row)
-                .Build()
+                .Body(BuildOptionalIf(lambda.Body(), row, Ctx, Pos))
             .Build()
         .Done();
         // clang-format on
@@ -325,15 +324,7 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
             .Input(processedRow)
             .Lambda()
                 .Args({rightArg})
-                .Body<TCoOptionalIf>()
-                    .Predicate<TCoCoalesce>()
-                        .Predicate(pred)
-                        .Value<TCoBool>()
-                            .Literal().Build("false")
-                        .Build()
-                    .Build()
-                    .Value(rightArg)
-                .Build()
+                .Body(BuildOptionalIf(pred, rightArg, Ctx, Pos))
             .Build()
         .Done();
         // clang-format on

@@ -27,6 +27,11 @@ struct TEvCheckpointCoordinator {
     // Events.
 
     struct TEvScheduleCheckpointing : NActors::TEventLocal<TEvScheduleCheckpointing, EvScheduleCheckpointing> {
+        explicit TEvScheduleCheckpointing(const bool waitStatistics)
+            : WaitStatistics(waitStatistics)
+        {}
+
+        const bool WaitStatistics = false;
     };
 
     struct TEvCoordinatorRegistered : NActors::TEventLocal<TEvCoordinatorRegistered, EvCoordinatorRegistered> {

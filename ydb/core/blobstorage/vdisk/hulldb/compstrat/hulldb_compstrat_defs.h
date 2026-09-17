@@ -92,6 +92,7 @@ namespace NKikimr {
                 // huge blobs to delete
                 TDiskPartVec HugeBlobsToDelete;
                 TDiskPartVec HugeBlobsAllocated;
+                TDiskPartVec HugeBlobsAllocatedStripe;
                 // is data finalized
                 bool Finalized = false;
 
@@ -101,6 +102,8 @@ namespace NKikimr {
                     TablesToDelete.Clear();
                     TablesToAdd.Clear();
                     HugeBlobsToDelete.Clear();
+                    HugeBlobsAllocated.Clear();
+                    HugeBlobsAllocatedStripe.Clear();
                     Finalized = false;
                 }
 
@@ -122,6 +125,11 @@ namespace NKikimr {
                 const TDiskPartVec &GetHugeBlobsAllocated() const {
                     Y_ABORT_UNLESS(Finalized);
                     return HugeBlobsAllocated;
+                }
+
+                const TDiskPartVec &GetHugeBlobsAllocatedStripe() const {
+                    Y_ABORT_UNLESS(Finalized);
+                    return HugeBlobsAllocatedStripe;
                 }
 
                 TDiskPartVec ExtractHugeBlobsToDelete() {
@@ -226,6 +234,7 @@ namespace NKikimr {
                 using TBase::TablesToAdd;
                 using TBase::HugeBlobsToDelete;
                 using TBase::HugeBlobsAllocated;
+                using TBase::HugeBlobsAllocatedStripe;
 
                 ui32 TargetLevel = (ui32)(-1);
                 TKey LastCompactedKey = TKey::First();
@@ -267,7 +276,8 @@ namespace NKikimr {
                         TOrderedLevelSegmentsPtr &&segVec,
                         TDiskPartVec&& hugeBlobsToDelete,
                         TDiskPartVec&& hugeBlobsAllocated,
-                        bool aborted)
+                        bool aborted,
+                        TDiskPartVec&& hugeBlobsAllocatedStripe = {})
                 {
                     if (aborted) {
                         // no change at all
@@ -275,10 +285,12 @@ namespace NKikimr {
                         TablesToAdd.Clear();
                         HugeBlobsToDelete.Clear();
                         HugeBlobsAllocated.Clear();
+                        HugeBlobsAllocatedStripe.Clear();
                     } else {
                         Y_ABORT_UNLESS(!TablesToDelete.Empty());
                         HugeBlobsToDelete = std::move(hugeBlobsToDelete);
                         HugeBlobsAllocated = std::move(hugeBlobsAllocated);
+                        HugeBlobsAllocatedStripe = std::move(hugeBlobsAllocatedStripe);
                         if (segVec) {
                             TLeveledSsts tmp(TargetLevel, *segVec);
                             TablesToAdd.Swap(tmp);
@@ -356,6 +368,10 @@ namespace NKikimr {
 
             const TDiskPartVec &GetHugeBlobsAllocated() const {
                 return GetPtr()->GetHugeBlobsAllocated();
+            }
+
+            const TDiskPartVec &GetHugeBlobsAllocatedStripe() const {
+                return GetPtr()->GetHugeBlobsAllocatedStripe();
             }
 
             TDiskPartVec ExtractHugeBlobsToDelete() {

@@ -1807,50 +1807,51 @@ Y_UNIT_TEST(UnaryOp) {
 }
 
 Y_UNIT_TEST(MatchRecognize) {
-    TCases cases = {{R"(
-pragma FeatureR010="prototype";
-USE plato;
-SELECT
-    *
-FROM Input MATCH_RECOGNIZE(
-    PARTITION BY a, b, c
-    ORDER BY ts
-    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
-    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
-    PATTERN ( A B2 + B3 )
-    SUBSET U = (C, D), W = (Q, P)
-    DEFINE A as A, B as B
-);
-)",
-                     R"(PRAGMA FeatureR010 = 'prototype';
+    TCases cases = {
+        {TrimIndent(R"sql(
+                USE plato;
+                SELECT
+                    *
+                FROM Input MATCH_RECOGNIZE(
+                    PARTITION BY a, b, c
+                    ORDER BY ts
+                    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
+                    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
+                    PATTERN ( A B2 + B3 )
+                    SUBSET U = (C, D), W = (Q, P)
+                    DEFINE A as A, B as B
+                );
+        )sql"),
+         TrimIndent(R"sql(
+                USE plato;
 
-USE plato;
+                SELECT
+                    *
+                FROM
+                    Input MATCH_RECOGNIZE (
+                        PARTITION BY
+                            a,
+                            b,
+                            c
+                        ORDER BY
+                            ts
+                        MEASURES
+                            LAST(B1.ts) AS b1,
+                            LAST(B3.ts) AS b3
+                        ONE ROW PER MATCH
+                        AFTER MATCH SKIP TO NEXT ROW
+                        INITIAL PATTERN (A B2 + B3)
+                        SUBSET
+                            U = (C, D),
+                            W = (Q, P)
+                        DEFINE
+                            A AS A,
+                            B AS B
+                    )
+                ;
 
-SELECT
-    *
-FROM
-    Input MATCH_RECOGNIZE (
-        PARTITION BY
-            a,
-            b,
-            c
-        ORDER BY
-            ts
-        MEASURES
-            LAST(B1.ts) AS b1,
-            LAST(B3.ts) AS b3
-        ONE ROW PER MATCH
-        AFTER MATCH SKIP TO NEXT ROW
-        INITIAL PATTERN (A B2 + B3)
-        SUBSET
-            U = (C, D),
-            W = (Q, P)
-        DEFINE
-            A AS A,
-            B AS B
-    )
-;
-)"}};
+        )sql")},
+    };
     TSetup setup;
     setup.Run(cases);
 }
@@ -2231,7 +2232,15 @@ Y_UNIT_TEST(Analyze) {
         {"analyze table (col1, col2, col3)",
          "ANALYZE table (col1, col2, col3);\n"},
         {"analyze table",
-         "ANALYZE table;\n"}};
+         "ANALYZE table;\n"},
+        {"analyze table (col1,col2) sample 0.05",
+         "ANALYZE table (col1, col2) SAMPLE 0.05;\n"},
+        {"analyze table sample 1",
+         "ANALYZE table SAMPLE 1;\n"},
+        {"analyze table sample (0.1/2)",
+         "ANALYZE table SAMPLE (0.1 / 2);\n"},
+        {"analyze table sample $rate",
+         "ANALYZE table SAMPLE $rate;\n"}};
 
     TSetup setup;
     setup.Run(cases);

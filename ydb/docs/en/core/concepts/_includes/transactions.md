@@ -81,12 +81,12 @@ Listed below are the features and limitations of YQL support in {{ ydb-short-nam
 
 * Multi-statement transactions (transactions made up of a sequence of YQL statements) are supported. Transactions may interact with client software, or in other words, client interactions with the database might look as follows:
 
-```text
-BEGIN; make a SELECT; analyze the SELECT results on the client side;
-...; make an UPDATE; COMMIT
-```
+  ```text
+  BEGIN; make a SELECT; analyze the SELECT results on the client side;
+  ...; make an UPDATE; COMMIT
+  ```
 
-We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
+  We should note that if the transaction body is fully formed before accessing the database, it will be processed more efficiently.
 
 * {{ ydb-short-name }} does not support transactions that combine DDL and DML queries. The conventional [ACID](https://en.wikipedia.org/wiki/ACID) notion of a transaction is applicable specifically to DML queries, that is, queries that change data. DDL queries must be idempotent, meaning repeatable if an error occurs. If you need to manipulate a schema, each manipulation is transactional, while a set of manipulations is not.
 * YQL implementation used in {{ ydb-short-name }} employs the [Optimistic Concurrency Control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism. If an entity is affected during a transaction, optimistic blocking is applied. When the transaction is complete, the mechanism verifies that the locks have not been invalidated. For the user, locking optimism means that when transactions are competing with one another, the one that finishes first wins. Competing transactions fail with the `Transaction locks invalidated` error.

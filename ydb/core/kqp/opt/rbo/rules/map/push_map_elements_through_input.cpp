@@ -111,6 +111,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     }
 
     auto topMap = CastOperator<TOpMap>(input);
+        
     auto op = topMap->GetInput();
     if (!CanPushThroughInputOperator(*op) || !op->IsSingleConsumer()) {
         return input;
@@ -119,12 +120,12 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     TVector<TVector<TMapElement>> pushedElements(op->Children.size());
     TVector<TInfoUnitSet> pushedOutputs(op->Children.size());
     TVector<TMapElement> topElements;
-    TVector<bool> pushed(topMap->MapElements.size(), false);
+    TVector<bool> pushed(topMap->GetMapElements().size(), false);
     TRenameMap renameMap;
     TInfoUnitSet keptOutputs;
     TInfoUnitSet pushableOutputs;
 
-    for (const auto& mapElement : topMap->MapElements) {
+    for (const auto& mapElement : topMap->GetMapElements()) {
         if (mapElement.IsRename()) {
             continue;
         }
@@ -146,8 +147,8 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
 
     bool hasPushed = false;
     for (ui32 childIdx = 0; childIdx < op->Children.size(); ++childIdx) {
-        for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-            const auto& mapElement = topMap->MapElements[idx];
+        for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
+            const auto& mapElement = topMap->GetMapElements()[idx];
             if (pushed[idx]) {
                 continue;
             }
@@ -186,9 +187,9 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
         return input;
     }
 
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
         if (!pushed[idx]) {
-            topElements.push_back(topMap->MapElements[idx]);
+            topElements.push_back(topMap->GetMapElements()[idx]);
         }
     }
 
@@ -209,14 +210,14 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
 
     if (!renameMap.empty()) {
         op->RenameUsedIUs(renameMap, ctx.ExprCtx);
-        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     }
 
     if (topElements.empty()) {
         return op;
     }
 
-    return MakeIntrusive<TOpMap>(op, topMap->Pos, topElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(op, topMap->Pos, topElements);
 }
 
 } // namespace NKqp

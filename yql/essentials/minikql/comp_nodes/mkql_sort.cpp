@@ -69,6 +69,8 @@ public:
         return *this;
     }
 
+    // Defaulting this operator would delete it because the members are references.
+    // NOLINTNEXTLINE(modernize-use-equals-default)
     TGatherIteratorRef& operator=(const TGatherIteratorRef& rhs) {
         First_ = rhs.First_;
         Second_ = rhs.Second_;

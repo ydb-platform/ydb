@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -10,10 +11,6 @@
 #include <util/string/join.h>
 
 #include <optional>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
-
-#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
 
 namespace NKikimr::NPQ::NDescriber {
 
@@ -34,14 +31,20 @@ bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject>
     return false;
 }
 
-class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
+class TDescribeActor : public TBaseActor<TDescribeActor>
+                      , public TConstantLogPrefix {
 public:
     TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
-        : Parent(parent)
+        : TBaseActor(NKikimrServices::PQ_DESCRIBER)
+        , Parent(parent)
         , DatabasePath(databasePath)
         , TopicPaths(std::move(topicPaths))
         , Settings(settings)
     {
+    }
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return {};
     }
 
     void Bootstrap() {
@@ -52,15 +55,13 @@ public:
         for (const auto& topic : TopicPaths) {
             auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
             if (!resolved) {
-                YDB_LOG_DEBUG("Name resolve failed",
-                    {"logPrefix", LOG_PREFIX},
+                LOG_D("Name resolve failed",
                     {"topic", topic},
                     {"reason", resolved.error()});
-                SetErrorResult(topic, EStatus::BAD_REQUEST);
+                SetErrorResult(topic, EStatus::BadRequest);
                 continue;
             }
-            YDB_LOG_DEBUG("Name resolved",
-                {"logPrefix", LOG_PREFIX},
+            LOG_D("Name resolved",
                 {"topic", topic},
                 {"resolvedPath", resolved->Path},
                 {"navigateDatabase", resolved->NavigateDatabase});
@@ -77,8 +78,7 @@ public:
     }
 
     void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
-        YDB_LOG_DEBUG("Create request with",
-            {"logPrefix", LOG_PREFIX},
+        LOG_D("Create request with",
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
             {"syncVersion", RetryWithSyncVersion},
             {"databaseName", RequestDatabaseName});
@@ -100,8 +100,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", LOG_PREFIX});
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
         auto& result = ev->Get()->Request;
 
         absl::flat_hash_set<TString> unknownPaths;
@@ -126,17 +125,15 @@ public:
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (RetryWithSyncVersion) {
                         if (entry.SecurityObject && !HasAccess(Settings, entry.SecurityObject)) {
-                            YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                {"logPrefix", LOG_PREFIX},
+                            LOG_D("Path UNAUTHORIZED",
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                            SetErrorResults(originals, EStatus::Unauthorized);
                         } else {
-                            YDB_LOG_DEBUG("Path not found",
-                                {"logPrefix", LOG_PREFIX},
+                            LOG_D("Path not found",
                                 {"realPath", realPath});
 
-                            SetErrorResults(originals, EStatus::NOT_FOUND);
+                            SetErrorResults(originals, EStatus::NotFound);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -144,16 +141,14 @@ public:
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::AccessDenied: {
-                    YDB_LOG_DEBUG("Path ACCESS DENIED",
-                        {"logPrefix", LOG_PREFIX},
+                    LOG_D("Path ACCESS DENIED",
                         {"realPath", realPath});
-                    SetErrorResults(originals, EStatus::UNAUTHORIZED);
+                    SetErrorResults(originals, EStatus::Unauthorized);
                     break;
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        YDB_LOG_DEBUG("Path is CDC",
-                            {"logPrefix", LOG_PREFIX},
+                        LOG_D("Path is CDC",
                             {"realPath", realPath});
 
                         // Copy before mutating PathToOriginalPaths (rehash must not invalidate originals).
@@ -168,29 +163,26 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                YDB_LOG_DEBUG("Path not found",
-                                    {"logPrefix", LOG_PREFIX},
+                                LOG_D("Path not found",
                                     {"realPath", realPath});
-                                SetErrorResults(originals, EStatus::NOT_FOUND);
+                                SetErrorResults(originals, EStatus::NotFound);
                             } else {
                                 unknownPaths.insert(realPath);
                             }
                         } else {
                             if (!HasAccess(Settings, entry.SecurityObject)) {
-                                YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                    {"logPrefix", LOG_PREFIX},
+                                LOG_D("Path UNAUTHORIZED",
                                     {"realPath", realPath});
 
                                 SetTopicResults(originals, TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
-                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
+                                            ? EStatus::UnauthorizedWithDescribeAccess : EStatus::Unauthorized
                                 });
                             } else {
-                                YDB_LOG_DEBUG("Path SUCCESS",
-                                    {"logPrefix", LOG_PREFIX},
+                                LOG_D("Path SUCCESS",
                                     {"realPath", realPath});
                                 SetTopicResults(originals, TTopicInfo{
-                                    .Status = EStatus::SUCCESS,
+                                    .Status = EStatus::Success,
                                     .RealPath = realPath,
                                     .CdcStream = isCDCStream,
                                     .CdcStreamName = cdcStreamName,
@@ -202,20 +194,18 @@ public:
                             }
                         }
                     } else {
-                        YDB_LOG_DEBUG("Path is not a",
-                            {"logPrefix", LOG_PREFIX},
+                        LOG_D("Path is not a",
                             {"realPath", realPath},
                             {"topic", entry.Kind});
                         if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
-                            YDB_LOG_DEBUG("Path UNAUTHORIZED",
-                                {"logPrefix", LOG_PREFIX},
+                            LOG_D("Path UNAUTHORIZED",
                                 {"realPath", realPath});
                             SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
+                                .Status = EStatus::Unauthorized
                             });
                         } else {
                             SetTopicResults(originals, TTopicInfo{
-                                .Status = EStatus::NOT_TOPIC,
+                                .Status = EStatus::NotTopic,
                                 .RealPath = realPath
                             });
                         }
@@ -223,11 +213,10 @@ public:
                     break;
                 }
                 default: {
-                    YDB_LOG_DEBUG("Path unknown error",
-                        {"logPrefix", LOG_PREFIX},
+                    LOG_D("Path unknown error",
                         {"realPath", realPath});
                     SetTopicResults(originals, TTopicInfo{
-                        .Status = EStatus::UNKNOWN_ERROR,
+                        .Status = EStatus::UnknownError,
                         .RealPath = realPath
                     });
                     break;
@@ -364,35 +353,35 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TSt
 
 Ydb::StatusIds::StatusCode Convert(const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return Ydb::StatusIds::SUCCESS;
-        case EStatus::NOT_FOUND:
-        case EStatus::NOT_TOPIC:
+        case EStatus::NotFound:
+        case EStatus::NotTopic:
             return Ydb::StatusIds::NOT_FOUND;
-        case EStatus::UNAUTHORIZED:
-        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+        case EStatus::Unauthorized:
+        case EStatus::UnauthorizedWithDescribeAccess:
             return Ydb::StatusIds::UNAUTHORIZED;
-        case EStatus::BAD_REQUEST:
+        case EStatus::BadRequest:
             return Ydb::StatusIds::BAD_REQUEST;
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return Ydb::StatusIds::INTERNAL_ERROR;
     }
 }
 
 TString Description(const TString& topicPath, const EStatus status) {
     switch (status) {
-        case EStatus::SUCCESS:
+        case EStatus::Success:
             return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
-        case EStatus::NOT_FOUND:
-        case EStatus::UNAUTHORIZED:
+        case EStatus::NotFound:
+        case EStatus::Unauthorized:
             return TStringBuilder() << "You do not have access permissions or the '" << topicPath << "' does not exist";
-        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+        case EStatus::UnauthorizedWithDescribeAccess:
             return TStringBuilder() << "You do not have access permissions to the '" << topicPath << "' topic";
-        case EStatus::NOT_TOPIC:
+        case EStatus::NotTopic:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
-        case EStatus::BAD_REQUEST:
+        case EStatus::BadRequest:
             return TStringBuilder() << "Invalid topic name '" << topicPath << "'";
-        case EStatus::UNKNOWN_ERROR:
+        case EStatus::UnknownError:
             return TStringBuilder() << "Error describing the path '" << topicPath << "'";
     }
 }

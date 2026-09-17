@@ -119,10 +119,15 @@ public:
     //! any well-known tag, which the layout requires to come last.
     TTaggedPayloadWriter& AppendTags(TLoggingTagListPayloadView tags) &;
 
-    //! Appends a single framed keyed tag to #tags, for producers that hold an
-    //! already-formatted value and accumulate a tag section of their own (see
-    //! #TLoggingTagList).
-    static void AppendTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value);
+    //! Appends a single framed keyed tag to #tags, for producers accumulating a tag
+    //! section of their own (see #TLoggingTagList). The value is written by #formatter
+    //! straight into #tags.
+    /*!
+     *  #formatter must not read or write #tags: it is being appended to -- and may be
+     *  reallocated -- while #formatter runs.
+     */
+    template <class TFormatter>
+    static void AppendTag(TLoggingTagListPayload* tags, TStringBuf key, const TFormatter& formatter);
 
     //! Returns the serialized payload. Must follow #EndMessage.
     TTaggedLogEventPayload Finish() &;

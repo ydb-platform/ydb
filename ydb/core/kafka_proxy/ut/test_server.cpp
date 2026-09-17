@@ -23,6 +23,18 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     if (!settings.CheckACL) {
         appConfig.MutablePQConfig()->SetCheckACL(false);
     }
+    if (settings.ACLRetryTimeoutSec) {
+        appConfig.MutablePQConfig()->SetACLRetryTimeoutSec(settings.ACLRetryTimeoutSec);
+    }
+    if (settings.TokenRecheckIntervalMs.has_value()) {
+        appConfig.MutableKafkaProxyConfig()->SetTokenRecheckIntervalMs(*settings.TokenRecheckIntervalMs);
+    }
+    if (settings.LoginTokenExpireTime) {
+        appConfig.MutableAuthConfig()->SetLoginTokenExpireTime(settings.LoginTokenExpireTime);
+    }
+    if (settings.AuthRefreshTime) {
+        appConfig.MutableAuthConfig()->SetRefreshTime(settings.AuthRefreshTime);
+    }
     appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
 
     auto cst = appConfig.MutablePQConfig()->AddClientServiceType();
@@ -214,7 +226,8 @@ TTestServer<TKikimr, secure>::TTestServer(const TString& kafkaApiMode, bool serv
             bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL, bool EnableKafkaServerlessTransactions)
     : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing,
                 enableAutoTopicCreation, enableAutoConsumerCreation,
-                    enableQuoting, checkACL, false, EnableKafkaServerlessTransactions})
+                    enableQuoting, checkACL, false, EnableKafkaServerlessTransactions,
+                    std::nullopt, {}, {}, 0})
 {}
 
 // Explicit template instantiations

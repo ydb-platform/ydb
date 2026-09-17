@@ -1,6 +1,6 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
+#include <ydb/core/kqp/ut/olap/helpers/test_case.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 
 #include <ydb/library/formats/arrow/hash/xx_hash.h>

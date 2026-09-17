@@ -299,6 +299,7 @@ TLogicalTypePtr MergeTypes(const TLogicalTypePtr& firstType, const TLogicalTypeP
         case ELogicalMetatype::Dict: {
             return MergeDictTypes(firstDescriptor, secondDescriptor);
         }
+        case ELogicalMetatype::AggregateState:
         case ELogicalMetatype::Decimal: {
             if (*firstDescriptor.GetType() == *secondDescriptor.GetType()) {
                 return firstType;

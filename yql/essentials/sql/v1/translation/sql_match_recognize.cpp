@@ -14,10 +14,6 @@ TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(class TSqlTranslation& that)
 
 TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause& node) {
     auto pos = GetPos(node.GetToken1());
-    if (!Ctx_.FeatureR010) {
-        Ctx_.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
-        return {};
-    }
 
     auto [partitionKeySelector, partitionColumns] = ParsePartitionBy(
         pos,
@@ -276,7 +272,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             case TRule_row_pattern_primary::kAltRowPatternPrimary2: {
                 const auto& primary = primaryAlt.GetAlt_row_pattern_primary2();
                 const auto& token = primary.GetToken1();
-                const auto varName = token.GetValue();
+                const auto& varName = token.GetValue();
                 const auto var = BuildQuotedAtom(GetPos(token), varName);
                 if (PatternVarNames_.insert(varName).second) {
                     PatternVars_->Add(var);
@@ -286,7 +282,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
             case TRule_row_pattern_primary::kAltRowPatternPrimary3: {
                 const auto& primary = primaryAlt.GetAlt_row_pattern_primary3();
                 const auto& token = primary.GetToken1();
-                const auto varName = token.GetValue();
+                const auto& varName = token.GetValue();
                 const auto var = BuildQuotedAtom(GetPos(token), varName);
                 if (PatternVarNames_.insert(varName).second) {
                     PatternVars_->Add(var);
@@ -404,7 +400,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternTerm(TPosition pos, const TRule_r
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPattern(TPosition pos, std::vector<TNodePtr> pattern) {
-    const auto result = BuildList(pos, {BuildAtom(pos, "MatchRecognizePattern")});
+    auto result = BuildList(pos, {BuildAtom(pos, "MatchRecognizePattern")});
     for (auto& term : pattern) {
         if (!term) {
             return {};

@@ -278,11 +278,6 @@ public:
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
-        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
-            syntax = 1;
-        }
-	Config->_KqpYqlSyntaxVersion = syntax;
         Config->FreezeDefaults();
     }
 

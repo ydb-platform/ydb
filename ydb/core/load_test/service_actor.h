@@ -38,11 +38,11 @@ namespace NKikimr {
 
     NActors::IActor *CreateDDiskLoadTest(const NKikimr::TEvLoadTestRequest::TDDiskLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            ui64 index, ui64 tag);
+            ui64 index, ui64 tag, bool enableChecksums);
 
     NActors::IActor *CreatePersistentBufferWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPersistentBufferWriteLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            ui64 index, ui64 tag);
+            ui64 index, ui64 tag, bool enableChecksums);
 
     NActors::IActor *CreatePDiskLogWriterLoadTest(const NKikimr::TEvLoadTestRequest::TPDiskLogLoad& cmd,
             const NActors::TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,

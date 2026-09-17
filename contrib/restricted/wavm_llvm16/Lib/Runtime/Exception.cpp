@@ -1,3 +1,5 @@
+#include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
@@ -15,6 +17,7 @@
 #include "WAVM/Platform/RWMutex.h"
 #include "WAVM/Platform/Signal.h"
 #include "WAVM/Runtime/Intrinsics.h"
+#include "WAVM/Runtime/ModuleDebugInfo.h"
 #include "WAVM/Runtime/Runtime.h"
 #include "WAVM/RuntimeABI/RuntimeABI.h"
 
@@ -50,8 +53,29 @@ std::string Runtime::asString(const InstructionSource& source)
 	case InstructionSource::Type::unknown: return "<unknown>";
 	case InstructionSource::Type::native: return "host!" + asString(source.native);
 	case InstructionSource::Type::wasm:
-		return source.wasm.function->mutableData->debugName + '+'
-			   + std::to_string(source.wasm.instructionIndex);
+	{
+		// debugName is "wasm!<module>!<func>"; instructionIndex is the wasm op index
+		// from JIT DI. sourceLine/fileName come from original .wasm DWARF when present.
+		const std::string& debugName = source.wasm.function->mutableData->debugName;
+		std::string result = debugName + '+' + std::to_string(source.wasm.instructionIndex);
+
+		std::string path = source.wasm.fileName;
+		Uptr line = source.wasm.sourceLine;
+		if(line == 0 || path.empty() || path == "unknown")
+		{
+			// No wasm DWARF hit: synthesize "<func>.wat:<opIndex>".
+			const size_t lastBang = debugName.rfind('!');
+			const std::string func
+				= lastBang == std::string::npos ? debugName : debugName.substr(lastBang + 1);
+			path = func + ".wat";
+			line = source.wasm.instructionIndex;
+		}
+		result += " at ";
+		result += path;
+		result += ':';
+		result += std::to_string(line);
+		return result;
+	}
 	default: WAVM_UNREACHABLE();
 	};
 }
@@ -64,13 +88,31 @@ bool Runtime::getInstructionSourceByAddress(Uptr ip, InstructionSource& outSourc
 		outSource.type = InstructionSource::Type::native;
 		return Platform::getInstructionSourceByAddress(ip, outSource.native);
 	}
-	else
+
+	outSource.type = InstructionSource::Type::wasm;
+	outSource.wasm.function = llvmjitSource.function;
+	outSource.wasm.instructionIndex = llvmjitSource.instructionIndex;
+	outSource.wasm.fileName.clear();
+	outSource.wasm.sourceLine = 0;
+
+	FunctionMutableData* mutableData = llvmjitSource.function->mutableData;
+	if(mutableData->moduleDebugInfo
+	   && llvmjitSource.instructionIndex < mutableData->operatorCodeSectionOffsets.size())
 	{
-		outSource.type = InstructionSource::Type::wasm;
-		outSource.wasm.function = llvmjitSource.function;
-		outSource.wasm.instructionIndex = llvmjitSource.instructionIndex;
-		return true;
+		const U32 wasmPc
+			= mutableData->operatorCodeSectionOffsets[llvmjitSource.instructionIndex];
+		ModuleDebugInfo::Location location;
+		if(mutableData->moduleDebugInfo->lookup(wasmPc, location))
+		{
+			outSource.wasm.fileName = std::move(location.fileName);
+			outSource.wasm.sourceLine = location.line;
+			return true;
+		}
 	}
+
+	// Fall back to JIT synthetic DI path (wasm/<func>.wat).
+	outSource.wasm.fileName = std::move(llvmjitSource.fileName);
+	return true;
 }
 
 // Returns a vector of strings, each element describing a frame of the call stack. If the frame is a
@@ -109,6 +151,12 @@ std::vector<std::string> Runtime::describeCallStack(const Platform::CallStack& c
 			{
 				frameDescription = asString(source);
 			}
+
+			// Always prefix with the native IP so callers can keep addresses in
+			// user-facing backtraces (UDF errors, traps).
+			char ipBuffer[32];
+			snprintf(ipBuffer, sizeof(ipBuffer), "0x%" PRIxPTR, (uintptr_t)frameIP);
+			frameDescription = std::string(ipBuffer) + " " + frameDescription;
 
 			describedIPs.add(frameIP);
 			frameDescriptions.push_back(frameDescription);

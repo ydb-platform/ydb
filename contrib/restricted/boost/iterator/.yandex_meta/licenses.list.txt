@@ -148,6 +148,11 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
+// Copyright (C) 2017 Michel Morin.
+// Copyright (C) 2026 Jeremy W. Murphy
+
+
+====================COPYRIGHT====================
 // Copyright (c) David Abrahams 2001.
 // Copyright (c) Jeremy Siek 2001-2003.
 // Copyright (c) Thomas Witt 2002.

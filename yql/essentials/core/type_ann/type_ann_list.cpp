@@ -117,6 +117,7 @@ namespace {
                 auto member = structType->GetItems()[elem];
                 auto memberName = member->GetName();
                 memberAtom = ctx.NewAtom(node.Pos(), memberName);
+                // clang-format off
                 extractor = ctx.Builder(node.Pos())
                     .Lambda()
                         .Param("row")
@@ -126,8 +127,10 @@ namespace {
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else if (tupleType) {
                 nthAtom = ctx.NewAtom(node.Pos(), ToString(elem));
+                // clang-format off
                 extractor = ctx.Builder(node.Pos())
                     .Lambda()
                         .Param("row")
@@ -137,13 +140,16 @@ namespace {
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 extractor = ctx.Builder(node.Pos())
                     .Lambda()
                         .Param("row")
                         .Arg("row")
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             TNodeOnNodeOwnedMap factoryReplaces;
@@ -347,17 +353,20 @@ namespace {
                 ctx.NewList(node.Pos(), std::move(defValueArgs));
         } else {
             if (structType) {
+                // clang-format off
                 defValue = ctx.Builder(node.Pos())
                     .Lambda()
                         .Param("type")
                         .Callable("AsStruct")
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (ui32 i = 0; i < defValueArgs.size(); ++i) {
                                     const auto& x = defValueArgs[i];
                                     auto list = parent.List(i);
                                     list.Add(0, x->HeadPtr());
                                     auto value = x->ChildPtr(1);
                                     if (value->IsLambda()) {
+                                        // clang-format off
                                         list.Apply(1, value)
                                             .With(0)
                                             .Callable("StructMemberType")
@@ -365,6 +374,7 @@ namespace {
                                                 .Add(1, x->HeadPtr())
                                             .Seal()
                                             .Done().Seal();
+                                        // clang-format on
                                     } else {
                                         list.Add(1, value);
                                     }
@@ -373,19 +383,24 @@ namespace {
                                 }
 
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
+                // clang-format off
                 defValue = ctx.Builder(node.Pos())
                     .Lambda()
                         .Param("type")
                         .List()
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (ui32 i = 0; i < defValueArgs.size(); ++i) {
                                     const auto& value = defValueArgs[i];
                                     if (value->IsLambda()) {
+                                        // clang-format off
                                         parent.Apply(i, value)
                                             .With(0)
                                             .Callable("TupleElementType")
@@ -393,16 +408,19 @@ namespace {
                                                 .Atom(1, ToString(i))
                                             .Seal()
                                             .Done().Seal();
+                                        // clang-format on
                                     } else {
                                         parent.Add(i, value);
                                     }
                                 }
 
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
 
@@ -861,11 +879,13 @@ namespace {
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
             output = InverseCondition ?
+                // clang-format off
                 ctx.Expr.Builder(input->Pos())
                     .Callable("Nothing")
                         .Add(0, ExpandType(input->Pos(), *input->Head().GetTypeAnn(), ctx.Expr))
                     .Seal().Build():
                 input->HeadPtr();
+                // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -1631,6 +1651,7 @@ namespace {
         }
 
         if (isOptional) {
+            // clang-format off
             output = AddChildren(ctx.Expr.Builder(input->Pos())
                 .Callable(UseFlatMap ? "FlatMap" : "Map")
                     .Add(0, input->HeadPtr())
@@ -1641,6 +1662,7 @@ namespace {
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
         } else {
             output = ctx.Expr.RenameNode(*input, name);
         }
@@ -1723,15 +1745,18 @@ namespace {
         if (input->ChildrenSize() == 3) {
             sortLambda = input->ChildPtr(2);
         } else {
+            // clang-format off
             sortLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("item")
                     .Arg("item")
                 .Seal()
             .Build();
+            // clang-format on
         }
 
         bool isUniversal;
+        // clang-format off
         auto status = OptListWrapperImpl<4U, 4U>(ctx.Expr.Builder(input->Pos())
             .Callable(newName)
                 .Add(0, input->ChildPtr(0))
@@ -1742,6 +1767,7 @@ namespace {
                 .Add(3, sortLambda)
             .Seal()
         .Build(), output, ctx, newName, &isUniversal);
+        // clang-format on
         if (isUniversal) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
         }
@@ -1910,6 +1936,7 @@ namespace {
         TExprNode::TPtr fold1Input = input->HeadPtr();
         if (type->GetKind() == ETypeAnnotationKind::Optional) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
+            // clang-format off
             fold1Input = ctx.Expr.Builder(input->Head().Pos())
                 .Callable("Coalesce")
                     .Add(0, input->HeadPtr())
@@ -1918,8 +1945,10 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Fold1")
                 .Add(0, fold1Input)
@@ -1930,10 +1959,12 @@ namespace {
                 .Add(2, std::move(updateLambda))
             .Seal()
             .Build();
+        // clang-format on
 
         const auto itemType = type->Cast<TListExprType>()->GetItemType();
         if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
             // remove extra optional level created by Fold1
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("FlatMap")
                     .Add(0, output)
@@ -1943,6 +1974,7 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -1953,6 +1985,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        // clang-format off
         auto lambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("item")
@@ -1962,6 +1995,7 @@ namespace {
                     .Arg(1, "item")
                 .Seal()
             .Seal().Build();
+        // clang-format on
 
         return OptListFold1WrapperImpl(input, output, ctx, std::move(lambda));
     }
@@ -2020,6 +2054,7 @@ namespace {
         }
 
         if (isOptional) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("IfPresent")
                     .Add(0, input->TailPtr())
@@ -2034,9 +2069,11 @@ namespace {
                         .Add(0, input->HeadPtr())
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        // clang-format off
         auto lambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("item")
@@ -2049,6 +2086,7 @@ namespace {
                     .Arg(1, "item")
                 .Seal()
             .Seal().Build();
+        // clang-format on
         return OptListFold1WrapperImpl(input, output, ctx, std::move(lambda));
     }
 
@@ -2077,6 +2115,7 @@ namespace {
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("FlatMap")
                     .Add(0, input->HeadPtr())
@@ -2087,6 +2126,7 @@ namespace {
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -2108,6 +2148,7 @@ namespace {
             EDataSlot::Float : EDataSlot::Double;
 
         if (dataType->GetSlot() != targetSlot || isOptionalItem) {
+            // clang-format off
             auto cast = ctx.Expr.Builder(input->Head().Pos())
                 .Callable("SafeCast")
                     .Add(0, input->HeadPtr())
@@ -2117,13 +2158,17 @@ namespace {
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             output = ctx.Expr.ChangeChild(*input, 0U, std::move(cast));
         } else {
+            // clang-format off
             const auto list = ctx.Expr.Builder(input->Pos())
                 .Callable("ListCollect")
                     .Add(0, input->HeadPtr())
                 .Seal().Build();
+            // clang-format on
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Div")
                     .Callable(0, "ListSum")
@@ -2133,6 +2178,7 @@ namespace {
                         .Add(0, list)
                     .Seal()
                 .Seal().Build();
+            // clang-format on
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -2197,6 +2243,7 @@ namespace {
 
         const auto coalesce = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
             return isOptionalItem ?
+                // clang-format off
                 parent
                     .Callable("Coalesce")
                         .Arg(0, "item")
@@ -2205,11 +2252,13 @@ namespace {
                         .Seal()
                     .Seal():
                 parent.Arg("item");
+                // clang-format on
         };
 
         const auto filter = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
             return AllOrAny ? coalesce(parent):
                 isOptionalItem ?
+                    // clang-format off
                     parent
                         .Callable("Not")
                             .Callable(0, "Coalesce")
@@ -2220,8 +2269,10 @@ namespace {
                             .Seal()
                         .Seal():
                     parent.Callable("Not").Arg(0, "item").Seal();
+                    // clang-format on
         };
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("IfPresent")
                 .Callable(0, "ListLast")
@@ -2239,6 +2290,7 @@ namespace {
                 .Seal()
                 .Add(2, std::move(stub))
             .Seal().Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -2344,11 +2396,13 @@ namespace {
         }
 
         if (type->GetKind() == ETypeAnnotationKind::EmptyList || type->GetKind() == ETypeAnnotationKind::EmptyDict) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Head().Pos())
                 .Callable("Uint64")
                     .Atom(0, "0")
                 .Seal()
                 .Build();
+            // clang-format on
 
             if (isOptional) {
                 output = MakeConstMap(input->Pos(), input->HeadPtr(), output, ctx.Expr);
@@ -2607,30 +2661,6 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* InferDecimalListFromRangeType(
-        const TExprNode::TPtr& input, const TDataExprType* beginType,
-        const TDataExprType* endType, const TDataExprType* stepType, TExtContext& ctx)
-    {
-        if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
-            return nullptr;
-        }
-        if (!IsDataTypeDecimal(beginType->GetSlot()) || !IsDataTypeDecimal(endType->GetSlot()) ||
-            (stepType && !IsDataTypeDecimal(stepType->GetSlot())))
-        {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "ListFromRange over Decimal requires Decimal Start, End, and Step arguments"));
-            return nullptr;
-        }
-        if (!IsSameAnnotation(*beginType, *endType) ||
-            (stepType && !IsSameAnnotation(*beginType, *stepType)))
-        {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "ListFromRange over Decimal requires Start, End, and Step with the same precision and scale"));
-            return nullptr;
-        }
-        return beginType;
-    }
-
     IGraphTransformer::TStatus ListFromRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -2664,6 +2694,7 @@ namespace {
                 input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0U, "OptionalType")
@@ -2672,6 +2703,7 @@ namespace {
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
         case 2U: {
@@ -2703,6 +2735,7 @@ namespace {
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
                 commonType = commonType->Cast<TOptionalExprType>()->GetItemType();
             }
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0U, "OptionalType")
@@ -2711,6 +2744,7 @@ namespace {
                         .Seal()
                     .Seal()
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
         default:
@@ -2750,13 +2784,17 @@ namespace {
             (stepItemType && IsDataTypeDecimal(stepItemType->GetSlot()));
         const TTypeAnnotationNode* commonType = nullptr;
         if (hasDecimalArgument) {
-            commonType = InferDecimalListFromRangeType(
-                input, beginItemType, endItemType, stepItemType, ctx);
+            if (!EnsureAvailable(input->Pos(), NFeature::DecimalListFromRange, ctx.Expr, ctx.Types)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types);
             if (!commonType) {
                 return IGraphTransformer::TStatus::Error;
             }
-            if (beginIsOpt || endIsOpt || stepIsOpt) {
-                commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
+            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
+                status != IGraphTransformer::TStatus::Ok)
+            {
+                return status;
             }
         } else if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
             commonType = ((beginIsOpt || endIsOpt) && !stepIsOpt)
@@ -2858,6 +2896,7 @@ namespace {
         }
 
         if (commonIsOpt) {
+            // clang-format off
             const auto defVal = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
                     .Callable(0U, "OptionalType")
@@ -2869,6 +2908,7 @@ namespace {
             const auto lambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         if (beginIsOpt) {
                             parent.Param("begin");
                         }
@@ -2879,10 +2919,12 @@ namespace {
                             parent.Param("step");
                         }
                         return parent;
+                    // clang-format off
                     })
                     .Callable("Just")
                         .Callable(0U, input->Content())
                             .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 if (beginIsOpt) {
                                     parent.Arg(0U, "begin");
                                 } else {
@@ -2898,6 +2940,7 @@ namespace {
                                 } else {
                                     return parent.Add(2U, input->ChildPtr(2U));
                                 }
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
@@ -2905,6 +2948,7 @@ namespace {
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("IfPresent")
                     .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        // clang-format on
                         ui32 cnt = 0;
                         if (beginIsOpt) {
                             parent.Add(cnt++, input->ChildPtr(0U));
@@ -2917,8 +2961,10 @@ namespace {
                         }
                         parent.Add(cnt++, lambda);
                         return parent.Add(cnt++, defVal);
+                    // clang-format off
                     })
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -3551,6 +3597,7 @@ namespace {
         }
 
         // pack all nodes to tuple
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Map")
                 .Callable(0, "FilterNullElements")
@@ -3564,20 +3611,25 @@ namespace {
                     .Param("item")
                     .Callable(name)
                     .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                        // clang-format on
                         for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+                            // clang-format off
                             builder.Callable(i, "Nth")
                                     .Arg(0, "item")
                                     .Atom(1, ToString(i), TNodeFlags::Default)
                                 .Seal();
+                            // clang-format on
                         }
 
                         return builder;
+                    // clang-format off
                     })
 
                     .Seal()
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return IGraphTransformer::TStatus::Repeat;
     }
@@ -4113,6 +4165,7 @@ namespace {
             }
 
             // rewrite in new format
+            // clang-format off
             auto initLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("row")
@@ -4121,7 +4174,9 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
+            // clang-format off
             auto calculateLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("row")
@@ -4131,7 +4186,9 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
+            // clang-format off
             auto updateLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("row")
@@ -4151,6 +4208,7 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             output = ctx.Expr.ChangeChildren(*input, { listTypeNode, sortTraits, initLambda, updateLambda, calculateLambda });
             return IGraphTransformer::TStatus::Repeat;
@@ -4663,6 +4721,7 @@ namespace {
         }
 
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("IfPresent")
                     .Add(0, input->HeadPtr())
@@ -4675,6 +4734,7 @@ namespace {
                     .Seal()
                     .Add(2, input->ChildPtr(1))
                 .Seal().Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -5777,12 +5837,14 @@ namespace {
                 columnOrder.push_back(ctx.Expr.NewAtom(input->Pos(), c));
             }
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("AssumeColumnOrder")
                     .Add(0, input->HeadPtr())
                     .Add(1, ctx.Expr.NewList(input->Tail().Pos(), std::move(columnOrder)))
                 .Seal()
                 .Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -6568,6 +6630,7 @@ namespace {
             }
 
             // extractor for state, not initial value itself
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("AggApplyState")
                     .Add(0, root->ChildPtr(0))
@@ -6577,6 +6640,7 @@ namespace {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (root->IsCallable("AggregationTraits")) {
@@ -6585,6 +6649,7 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("AggregationTraits")
                     .Add(0, root->ChildPtr(0))
@@ -6602,6 +6667,7 @@ namespace {
                     .Add(7, root->ChildPtr(7))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else {
@@ -8375,11 +8441,13 @@ namespace {
             if (!farFutureSizeLimit->IsCallable("Void")) {
                 if (farFutureSizeLimit->IsCallable("String") && farFutureSizeLimit->Child(0)->Content() == "max") {
                     // special cast
+                    // clang-format off
                     farFutureSizeLimit = ctx.Expr.Builder(farFutureSizeLimit->Pos())
                         .Callable("Uint64")
                             .Atom(0, ToString(Max<ui64>()))
                         .Seal()
                         .Build();
+                    // clang-format on
                     return IGraphTransformer::TStatus::Repeat;
                 }
                 const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
@@ -8399,11 +8467,13 @@ namespace {
             if (!farFutureTimeLimit->IsCallable("Void")) {
                 if (farFutureTimeLimit->IsCallable("String") && farFutureTimeLimit->Child(0)->Content() == "max") {
                     // special cast
+                    // clang-format off
                     farFutureTimeLimit = ctx.Expr.Builder(farFutureTimeLimit->Pos())
                         .Callable("Interval")
                             .Atom(0, ToString(NUdf::MAX_TIMESTAMP - 1))
                         .Seal()
                         .Build();
+                    // clang-format on
                     return IGraphTransformer::TStatus::Repeat;
                 }
                 if (!EnsureSpecificDataType(*farFutureTimeLimit, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
@@ -9172,6 +9242,7 @@ namespace {
         if (handler->GetTypeAnn()->GetKind() != input->Head().GetTypeAnn()->GetKind()) {
             switch (input->Head().GetTypeAnn()->GetKind()) {
                 case ETypeAnnotationKind::Stream: {
+                    // clang-format off
                     auto lambda = ctx.Expr.Builder(input->Tail().Pos())
                         .Lambda()
                             .Param("key")
@@ -9183,10 +9254,12 @@ namespace {
                                 .Seal()
                             .Seal()
                         .Seal().Build();
+                    // clang-format on
                     output = ctx.Expr.ChangeChild(*input, 3U, std::move(lambda));
                     return IGraphTransformer::TStatus::Repeat;
                 }
                 case ETypeAnnotationKind::Flow: {
+                    // clang-format off
                     auto lambda = ctx.Expr.Builder(input->Tail().Pos())
                         .Lambda()
                             .Param("key")
@@ -9198,6 +9271,7 @@ namespace {
                                 .Seal()
                             .Seal()
                         .Seal().Build();
+                    // clang-format on
                     output = ctx.Expr.ChangeChild(*input, 3U, std::move(lambda));
                     return IGraphTransformer::TStatus::Repeat;
                 }
@@ -9292,10 +9366,12 @@ namespace {
 
         auto originalItemType = type->Cast<TListExprType>()->GetItemType();
         if (originalItemType->GetKind() == ETypeAnnotationKind::Null) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("AsList")
                 .Seal()
                 .Build();
+            // clang-format on
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -9305,12 +9381,14 @@ namespace {
             newType = ctx.Expr.MakeType<TOptionalExprType>(newType);
         }
 
+        // clang-format off
         output = ctx.Expr.Builder(input->Pos())
             .Callable("SafeCast")
                 .Add(0, input->HeadPtr())
                 .Add(1, ExpandType(input->Pos(), *newType, ctx.Expr))
             .Seal()
             .Build();
+        // clang-format on
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -9423,6 +9501,7 @@ namespace {
             if (!isOptional) {
                 output = empty;
             } else {
+                // clang-format off
                 output = ctx.Expr.Builder(input->Pos())
                     .Callable("OrderedMap")
                         .Add(0, input->HeadPtr())
@@ -9432,19 +9511,23 @@ namespace {
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        // clang-format off
         auto idLambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("z")
                 .Arg("z")
             .Seal()
             .Build();
+        // clang-format on
 
         auto innerLambda = isItemOptional ?
+            // clang-format off
             ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("y")
@@ -9455,7 +9538,9 @@ namespace {
             .Seal()
             .Build()
             : idLambda;
+            // clang-format on
 
+        // clang-format off
         auto lambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("x")
@@ -9465,20 +9550,25 @@ namespace {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if (!isOptional) {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                 .Apply(lambda)
                     .With(0, input->HeadPtr())
                 .Seal()
                 .Build();
+            // clang-format on
         } else {
+            // clang-format off
             output = ctx.Expr.Builder(input->Pos())
                     .Callable("OrderedMap")
                         .Add(0, input->HeadPtr())
                         .Add(1, lambda)
                     .Seal()
                     .Build();
+            // clang-format on
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -9534,6 +9624,7 @@ namespace {
 
     TExprNode::TPtr ExpandToWindowTraits(const TExprNode& input, TExprContext& ctx) {
         YQL_ENSURE(input.IsCallable("AggregationTraits"));
+        // clang-format off
         return ctx.Builder(input.Pos())
             .Callable("WindowTraits")
                 .Add(0, input.ChildPtr(0))
@@ -9549,6 +9640,7 @@ namespace {
                 .Add(5, input.ChildPtr(7))
             .Seal()
             .Build();
+        // clang-format on
     }
 
     bool ValidateAggManyStreams(const TExprNode& value, ui32 aggCount, TExprContext& ctx) {
@@ -9749,17 +9841,57 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus BuildSqlCombineInputLambdaType(const TExprNode::TPtr& input, ui32 usedColumnsIdx, const TStructExprType& rowType,
+        TExprNode::TPtr& output, const TTypeAnnotationNode*& lambdaInputType, TExprContext& ctx)
+    {
+        const auto& usedColumns = input->ChildRef(usedColumnsIdx);
+        if (usedColumns->IsCallable("Void")) {
+            TExprNode::TListType columnAtoms;
+            columnAtoms.reserve(rowType.GetSize());
+            for (const auto& item : rowType.GetItems()) {
+                columnAtoms.push_back(ctx.NewAtom(usedColumns->Pos(), item->GetName()));
+            }
+
+            output = ctx.ChangeChild(*input, usedColumnsIdx, ctx.NewList(usedColumns->Pos(), std::move(columnAtoms)));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureTupleOfAtoms(*usedColumns, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TVector<const TItemExprType*> members;
+        members.reserve(usedColumns->ChildrenSize());
+        for (const auto& column : usedColumns->Children()) {
+            const auto memberIdx = FindOrReportMissingMember(column->Content(), column->Pos(), rowType, ctx);
+            if (!memberIdx) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            members.push_back(rowType.GetItems()[*memberIdx]);
+        }
+
+        const auto narrowedType = ctx.MakeType<TStructExprType>(members);
+        if (!narrowedType->Validate(usedColumns->Pos(), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        lambdaInputType = narrowedType;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlCombineInputWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 8, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         const auto& inputNode = input->Head();
-        auto& presortKeyLambda = input->ChildRef(1U);
-        auto& presortDirectionNode = input->ChildRef(2U);
-        auto& keyExtractLambda = input->ChildRef(3U);
-        auto& argMapLambda = input->ChildRef(4U);
+        const auto& presortKeyUsedColumns = input->ChildRef(1U);
+        auto& presortKeyLambda = input->ChildRef(2U);
+        auto& presortDirectionNode = input->ChildRef(3U);
+        const auto& keyExtractUsedColumns = input->ChildRef(4U);
+        auto& keyExtractLambda = input->ChildRef(5U);
+        const auto& argMapUsedColumns = input->ChildRef(6U);
+        auto& argMapLambda = input->ChildRef(7U);
 
         // XXX: Explicitly initialize, since sort traits validation is omitted
         // when both components are Void callable (see more info below).
@@ -9778,6 +9910,16 @@ namespace {
         }
 
         const auto itemType = inputType->Cast<TListExprType>()->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!EnsureStructType(inputNode.Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& rowType = *itemType->Cast<TStructExprType>();
 
         // XXX: presortKeyLambda and presortDirectionNode type annotation is
         // completed within ValidateSortTraits. However, if any of sort traits
@@ -9788,8 +9930,10 @@ namespace {
         // receives unexpected false-positive error.
         const auto presortKeyLambdaType = presortKeyLambda->GetTypeAnn();
         const auto presortDirectionNodeType = presortDirectionNode->GetTypeAnn();
+        const auto presortKeyUsedColumnsType = presortKeyUsedColumns->GetTypeAnn();
         if (presortKeyLambdaType && presortKeyLambdaType->GetKind() == ETypeAnnotationKind::Universal ||
-            presortDirectionNodeType && presortDirectionNodeType->GetKind() == ETypeAnnotationKind::Universal) {
+            presortDirectionNodeType && presortDirectionNodeType->GetKind() == ETypeAnnotationKind::Universal ||
+            presortKeyUsedColumnsType && presortKeyUsedColumnsType->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -9801,10 +9945,17 @@ namespace {
         }
 
         if (!presortKeyLambda->IsCallable("Void")) {
+            const TTypeAnnotationNode* presortLambdaInputType = nullptr;
+            const auto presortInputStatus = BuildSqlCombineInputLambdaType(input, 1U, rowType, output, presortLambdaInputType, ctx.Expr);
+            if (presortInputStatus.Level != IGraphTransformer::TStatus::Ok) {
+                return presortInputStatus;
+            }
+
+            YQL_ENSURE(presortLambdaInputType);
             // XXX: Even if sort traits are not Universal per se, they can
             // become Universal as a result of ValidateSortTraits (i.e. type
             // annotation). Hence, isPresortUniversal is checked below either.
-            const auto status = ValidateSortTraits(itemType, presortDirectionNode, presortKeyLambda, ctx.Expr, isPresortUniversal);
+            const auto status = ValidateSortTraits(presortLambdaInputType, presortDirectionNode, presortKeyLambda, ctx.Expr, isPresortUniversal);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -9821,8 +9972,32 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(keyExtractLambda, {itemType}, ctx.Expr) ||
-            !UpdateLambdaAllArgumentsTypes(argMapLambda, {itemType}, ctx.Expr)) {
+        const auto keyExtractUsedColumnsType = keyExtractUsedColumns->GetTypeAnn();
+        if (keyExtractUsedColumnsType && keyExtractUsedColumnsType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(keyExtractUsedColumnsType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const TTypeAnnotationNode* keyExtractLambdaInputType = nullptr;
+        const auto keyExtractInputStatus = BuildSqlCombineInputLambdaType(input, 4U, rowType, output, keyExtractLambdaInputType, ctx.Expr);
+        if (keyExtractInputStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return keyExtractInputStatus;
+        }
+
+        const auto argMapUsedColumnsType = argMapUsedColumns->GetTypeAnn();
+        if (argMapUsedColumnsType && argMapUsedColumnsType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(argMapUsedColumnsType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        const TTypeAnnotationNode* argMapLambdaInputType = nullptr;
+        const auto argMapInputStatus = BuildSqlCombineInputLambdaType(input, 6U, rowType, output, argMapLambdaInputType, ctx.Expr);
+        if (argMapInputStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return argMapInputStatus;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(keyExtractLambda, {keyExtractLambdaInputType}, ctx.Expr) ||
+            !UpdateLambdaAllArgumentsTypes(argMapLambda, {argMapLambdaInputType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -9886,8 +10061,8 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        const auto leftKeyType = leftInput->Child(3U)->GetTypeAnn();
-        const auto rightKeyType = rightInput->Child(3U)->GetTypeAnn();
+        const auto leftKeyType = leftInput->Child(5U)->GetTypeAnn();
+        const auto rightKeyType = rightInput->Child(5U)->GetTypeAnn();
         const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, ctx.Types, /*warn=*/true);
         if (!commonKeyType) {
             return IGraphTransformer::TStatus::Error;

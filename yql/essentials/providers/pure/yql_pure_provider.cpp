@@ -157,7 +157,9 @@ public:
                                             secureParamsProvider.get(),
                                             logProvider.Get(),
                                             State_->Types->LangVer,
-                                            State_->Types->RuntimeSettings);
+                                            State_->Types->RuntimeSettings,
+                                            State_->Types->BridgeMode,
+                                            State_->Types->UdfBridgeBinaryPath);
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
 
@@ -171,9 +173,14 @@ public:
                                                /*countersProvider=*/nullptr,
                                                logProvider.Get(),
                                                State_->Types->LangVer,
-                                               State_->Types->RuntimeSettings);
+                                               State_->Types->RuntimeSettings,
+                                               State_->Types->BridgeMode,
+                                               State_->Types->UdfBridgeBinaryPath);
+        THolder<TBindTerminator> bind;
         auto graph = pattern->Clone(computeOpts);
-        const TBindTerminator bind(graph->GetTerminator());
+        // XXX: Keep the terminator bound while graph destruction
+        // releases values (e.g. mutables).
+        bind = MakeHolder<TBindTerminator>(graph->GetTerminator());
         graph->Prepare();
         auto value = graph->GetValue();
 

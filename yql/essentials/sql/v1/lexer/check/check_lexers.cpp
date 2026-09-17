@@ -97,7 +97,7 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
                 err << "Mismatch token #" << i << ", main: " << mainTokens[i].Name << ":" << mainTokens[i].Content
                     << ", " << name << ": " << otherTokens[i].Name << ":" << otherTokens[i].Content << "\n";
                 err << "Text sample: [";
-                TString text = textBuilder;
+                const TString& text = textBuilder;
                 constexpr size_t LexerContextSample = 50;
                 err << text.substr(text.size() >= LexerContextSample ? text.size() - LexerContextSample : 0U, LexerContextSample);
                 err << "]\n";

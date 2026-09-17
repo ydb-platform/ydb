@@ -483,6 +483,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Div", &TProgramBuilder::Div},
         {"Mod", &TProgramBuilder::Mod},
 
+        {"DecimalIntegralAdd", &TProgramBuilder::DecimalIntegralAdd},
+        {"DecimalIntegralSub", &TProgramBuilder::DecimalIntegralSub},
         {"DecimalMul", &TProgramBuilder::DecimalMul},
         {"DecimalDiv", &TProgramBuilder::DecimalDiv},
         {"DecimalMod", &TProgramBuilder::DecimalMod},
@@ -3233,7 +3235,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto extend = ctx.ProgramBuilder.Extend(args);
 
         if (auto sortConstr = node.GetConstraint<TSortedConstraintNode>()) {
-            const auto input = MkqlBuildExpr(node.Head(), ctx);
             const auto& content = sortConstr->GetContent();
             std::vector<TRuntimeNode> ascending;
             ascending.reserve(content.size());

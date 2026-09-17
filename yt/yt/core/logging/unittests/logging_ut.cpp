@@ -1448,8 +1448,9 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
     {
         bool SafeCoreDumped = false;
 
-        // TODO(babenko): migrate to std::string
-        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        TCoreDump WriteCoreDump(
+            const std::vector<std::string>& /*notes*/,
+            TStringBuf /*reason*/) override
         {
             SafeCoreDumped = true;
             return TCoreDump{

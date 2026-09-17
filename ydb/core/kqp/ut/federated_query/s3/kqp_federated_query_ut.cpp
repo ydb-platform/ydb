@@ -2953,7 +2953,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             const auto& issues = result.GetIssues().ToOneLineString();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (can not use delimiter: '/')");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (cannot use delimiter: '/')");
         }
     }
 

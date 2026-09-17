@@ -6,6 +6,50 @@
 
 namespace NKikimr::NDDisk {
 
+    void TDDiskActor::ValidateChecksumsModeAfterLogReplay() {
+        if (!Config.EnableChecksums) {
+            if (!RestoredIntegrityMapping.IntegrityChunks.empty()) {
+                EnterBroken(TStringBuilder()
+                    << "restored " << RestoredIntegrityMapping.IntegrityChunks.size()
+                    << " integrity chunks while EnableChecksums=false");
+            }
+            return;
+        }
+
+        absl::flat_hash_set<TIntegrityManager::TDataChunkKey> coveredDataChunks;
+        coveredDataChunks.reserve(RestoredIntegrityMapping.Extents.size());
+        for (const auto& extent : RestoredIntegrityMapping.Extents) {
+            coveredDataChunks.insert(extent.Key);
+        }
+
+        size_t dataChunkCount = 0;
+        size_t uncoveredDataChunkCount = 0;
+        for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [vChunkIndex, chunkRef] : chunks) {
+                if (!chunkRef.ChunkIdx) {
+                    continue;
+                }
+                ++dataChunkCount;
+                if (!coveredDataChunks.contains({tabletId, vChunkIndex})) {
+                    ++uncoveredDataChunkCount;
+                }
+            }
+        }
+
+        if (dataChunkCount && RestoredIntegrityMapping.IntegrityChunks.empty()) {
+            EnterBroken(TStringBuilder()
+                << "restored " << dataChunkCount
+                << " data chunks without integrity chunks while EnableChecksums=true");
+            return;
+        }
+
+        if (uncoveredDataChunkCount) {
+            EnterBroken(TStringBuilder()
+                << "restored " << uncoveredDataChunkCount << " of " << dataChunkCount
+                << " data chunks without integrity extents while EnableChecksums=true");
+        }
+    }
+
     void TDDiskActor::InitPDiskInterface() {
         Y_ABORT_UNLESS(!IsPersistentBufferActor);
         YDB_LOG_DEBUG("TDDiskActor::InitPDiskInterface",
@@ -14,7 +58,7 @@ namespace NKikimr::NDDisk {
             {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
-            0 /*groupSizeInUnits*/, true /*getDiskFd*/));
+            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/, Config.IdleSpinUs));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -32,19 +76,25 @@ namespace NKikimr::NDDisk {
         PDiskParams = std::move(msg.PDiskParams);
         DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
-        DiskFd = std::move(msg.DiskFd);
-
-        // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
-        // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
-        IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
-            Config.IntegrityChecksumCacheBytes);
-        if (!DiskFd.IsOpen()) {
+#if defined(__linux__)
+        if (!Config.ForcePDiskFallback) {
+            UringRouter = std::move(msg.UringRouter);
+        }
+        if (!UringRouter) {
             YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
-                "DiskFd is invalid, all further I/O will be routed "
+                "UringRouter is not set, all further I/O will be routed "
                 "through PDisk",
                 {"marker", "BSDD17"},
                 {"DDiskId", DDiskId},
                 {"PDiskActorId", BaseInfo.PDiskActorID});
+        }
+#endif
+
+        if (Config.EnableChecksums) {
+            // The integrity manager needs the chunk size, so it is created here rather than in the ctor.
+            // VDiskSlotId + PDiskGuid identify this DDisk in TIntegrityChunkHeader.
+            IntegrityManager.emplace(DiskFormat->ChunkSize, BaseInfo.VDiskSlotId, BaseInfo.PDiskGuid,
+                Config.IntegrityChecksumCacheBytes);
         }
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
@@ -60,12 +110,14 @@ namespace NKikimr::NDDisk {
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
                     tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
                     ++*Counters.Chunks.ChunksOwned;
-                    const auto& ref = chunkRef.GetExtentRef();
-                    RestoredIntegrityMapping.Extents.push_back({
-                        .Key = {tabletRecord.GetTabletId(), chunkRef.GetVChunkIndex()},
-                        .DataChunkIdx = chunkRef.GetChunkIdx(),
-                        .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
-                    });
+                    if (chunkRef.HasExtentRef()) {
+                        const auto& ref = chunkRef.GetExtentRef();
+                        RestoredIntegrityMapping.Extents.push_back({
+                            .Key = {tabletRecord.GetTabletId(), chunkRef.GetVChunkIndex()},
+                            .DataChunkIdx = chunkRef.GetChunkIdx(),
+                            .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                        });
+                    }
                 }
             }
             for (const auto& chunk : snapshot.GetIntegrityChunks()) {
@@ -128,12 +180,14 @@ namespace NKikimr::NDDisk {
                                 ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
                                     data.GetChunkIdx();
                                 ++*Counters.Chunks.ChunksOwned;
-                                const auto& ref = data.GetExtentRef();
-                                RestoredIntegrityMapping.Extents.push_back({
-                                    .Key = {data.GetTabletId(), data.GetVChunkIndex()},
-                                    .DataChunkIdx = data.GetChunkIdx(),
-                                    .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
-                                });
+                                if (data.HasExtentRef()) {
+                                    const auto& ref = data.GetExtentRef();
+                                    RestoredIntegrityMapping.Extents.push_back({
+                                        .Key = {data.GetTabletId(), data.GetVChunkIndex()},
+                                        .DataChunkIdx = data.GetChunkIdx(),
+                                        .Ref = {ref.GetIntegrityChunkIdx(), ref.GetExtentSlot(), ref.GetVChunkGeneration()},
+                                    });
+                                }
                                 break;
                             }
                             default:
@@ -155,15 +209,19 @@ namespace NKikimr::NDDisk {
         }
 
         if (msg.IsEndOfLog) {
-            // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
-            // the replayed increments. Used-block bitmaps are not persisted, so the restored
-            // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
-            // are tracked again (bitmap restore from the extents on disk is a later phase).
-            IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+            ValidateChecksumsModeAfterLogReplay();
+            if (Config.EnableChecksums && !IsBroken()) {
+                // Restore the DataChunk -> IntegrityExtent mapping accumulated from the snapshot and
+                // the replayed increments. Used-block bitmaps are not persisted, so the restored
+                // extents come up BitmapUnknown: reads of them pass through unchanged and new writes
+                // are tracked again (bitmap restore from the extents on disk is a later phase).
+                IntegrityManager->ApplyMappingSnapshot(RestoredIntegrityMapping);
+                RestoredIntegrityMapping = {};
+                // A durable increment is only logged after formatting, so restored chunks are Ready.
+                // Empty integrity chunks (no restored extents) are released here.
+                ReclaimUnusedIntegrityChunks();
+            }
             RestoredIntegrityMapping = {};
-            // A durable increment is only logged after formatting, so restored chunks are Ready.
-            // Empty integrity chunks (no restored extents) are released here.
-            ReclaimUnusedIntegrityChunks();
             CreatePersistentBuffer();
 
             LogReplayComplete = true;
@@ -188,7 +246,12 @@ namespace NKikimr::NDDisk {
         }
         auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
-            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format)
+#if defined(__linux__)
+            , UringRouter
+#endif
+            );
+        pbActor->ParentDDiskId = SelfId();
         auto *as = TActivationContext::ActorSystem();
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
@@ -202,101 +265,16 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitUring() {
 #if defined(__linux__)
-        NPDisk::TUringRouterConfig config;
-        config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = Config.UseSQPoll;
-        config.UseIOPoll = Config.UseIOPoll;
-        if (!UringRouter) {
-            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
-                UringRouter = std::make_unique<NPDisk::TUringRouter>(
-                    DiskFd,
-                    TActivationContext::ActorSystem(),
-                    config,
-                    &Counters.UringCounters);
-                if (const auto result = UringRouter->RegisterFile(); !result) {
-                    YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
-                        {"marker", "BSDD18"},
-                        {"DDiskId", DDiskId},
-                        {"errno", result.error()});
-                }
-
-                // Device overestimation tracking: reuse PDisk's measured seek/speed
-                // constants for the first iteration.
-                // SetSampleSink must be called before Start().
-                if (PDiskParams) {
-                    DeviceOverestimationReadSpeedBps = PDiskParams->ReadSpeedBps;
-                    DeviceOverestimationWriteSpeedBps = PDiskParams->WriteSpeedBps;
-                }
-                UringRouter->SetSampleSink([this](const NPDisk::TDeviceIoSample& sample) {
-                    OnDeviceIoSample(sample);
-                });
-
-                UringRouter->Start();
-
-                // Periodically flush buffered samples to the owning PDisk actor so it
-                // can merge them with samples from other sources sharing this device.
-                Schedule(DeviceOverestimationFlushPeriod,
-                    new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
-            }
+        if (Config.ForcePDiskFallback) {
+            UringRouter.reset();
         }
-
         if (UringRouter) {
-            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
-            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
-            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
-            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
-            *Counters.DirectIO.FallbackPDiskCount = 0;
-            if (actualFavor != requestedFavor) {
-                YDB_LOG_WARN("TDDiskActor::InitUring io_uring mode fallback",
-                    {"marker", "BSDD19"},
-                    {"DDiskId", DDiskId},
-                    {"requestedFavor", requestedFavor},
-                    {"actualFavor", actualFavor});
-            }
-            YDB_LOG_INFO("TDDiskActor::InitUring started io_uring with config",
+            YDB_LOG_INFO("TDDiskActor::InitUring using shared PDisk io_uring",
                 {"marker", "BSDD20"},
                 {"DDiskId", DDiskId},
-                {"config", UringRouter->GetConfig()});
-        } else {
-            *Counters.DirectIO.RegularUringCount = 0;
-            *Counters.DirectIO.FallbackUringCount = 0;
-            *Counters.DirectIO.FallbackPDiskCount = 1;
+                {"config", UringRouter->GetConfig().ToString()});
         }
 #endif
-    }
-
-    void TDDiskActor::OnDeviceIoSample(const NPDisk::TDeviceIoSample& sample) {
-        // Called from the io_uring completion poller thread (via UringRouter's
-        // sample sink). Keep this cheap: just fill BaseCostNs using the flat
-        // model and append under a mutex.
-        NPDisk::TDeviceIoSample sampleWithCost = sample;
-        sampleWithCost.BaseCostNs = EstimateDeviceIoBaseCostNs(sample.IsWrite, sample.Size);
-
-        TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
-        if (DeviceOverestimationSamples.size() >= MaxBufferedDeviceOverestimationSamples) {
-            // Drop oldest half under sustained overflow rather than the actor
-            // never keeping up; this is a monitoring signal, not correctness-critical.
-            const size_t toDrop = DeviceOverestimationSamples.size() / 2 + 1;
-            DeviceOverestimationSamples.erase(
-                DeviceOverestimationSamples.begin(), DeviceOverestimationSamples.begin() + toDrop);
-        }
-        DeviceOverestimationSamples.push_back(sampleWithCost);
-    }
-
-    void TDDiskActor::FlushDeviceOverestimationSamples() {
-        std::vector<NPDisk::TDeviceIoSample> batch;
-        {
-            TGuard<TMutex> guard(DeviceOverestimationSamplesMutex);
-            batch.swap(DeviceOverestimationSamples);
-        }
-
-        if (!batch.empty() && BaseInfo.PDiskActorID) {
-            TVector<NPDisk::TDeviceIoSample> samples(batch.begin(), batch.end());
-            Send(BaseInfo.PDiskActorID, new NPDisk::TEvDeviceOverestimationSamples(std::move(samples)));
-        }
-
-        Schedule(DeviceOverestimationFlushPeriod,
-            new TEvents::TEvWakeup(EWakeupTag::WakeupFlushDeviceOverestimationSamples));
     }
 
     void TDDiskActor::StartHandlingQueries() {

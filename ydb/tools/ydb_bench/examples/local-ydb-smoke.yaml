@@ -1,0 +1,25 @@
+local-ydb:
+  smoke:
+    workload:
+      type: stock
+      operation: put-rand-order
+      options:
+        min-partitions: 1
+        products: 10
+        quantity: 1000
+        orders: 10
+        auto-partition: 0
+    geometry:
+      preset: single
+      static-nodes: 1
+      disk-size-gb: 64
+      storage-groups: 1
+    client:
+      threads: 2
+    load:
+      parameter: rate
+      values: [10]
+    measurement:
+      warmup: 0
+      duration: 2
+      repetitions: 1

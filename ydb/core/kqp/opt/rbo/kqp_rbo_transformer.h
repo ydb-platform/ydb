@@ -101,7 +101,7 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
-    TIntrusivePtr<TOpRoot> OpRoot;
+    TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;
 };
 
@@ -128,5 +128,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpRBOCleanupTransformer(NYql::TTypeAnno
 
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx,
                               ui64& uniqueSourceIdCounter, THashMap<const TExprNode*, TExprNode::TPtr>& translated, bool generateRoot = false);
+
+TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
 } // namespace NKikimr::NKqp

@@ -506,6 +506,20 @@
             "uri": "https://{canondata_backend}/1777230/52d24600ceada6f625f4161edfba1861d2eed32d/resource.tar.gz#test.test_expr-common_type_for_resource_and_data--Results_/results.txt"
         }
     ],
+    "test.test[expr-decimal_integral_common_type_conversions_with_fix-default.txt-Debug]": [
+        {
+            "checksum": "179ed726375c9ef8d3cca77fc3974401",
+            "size": 758,
+            "uri": "https://{canondata_backend}/1903885/37514ff5634e78ef497fdda8befb3494b04a906d/resource.tar.gz#test.test_expr-decimal_integral_common_type_conversions_with_fix-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-decimal_integral_common_type_conversions_with_fix-default.txt-Results]": [
+        {
+            "checksum": "58ea06ca044cb17c8e98c03f71290b5e",
+            "size": 4380,
+            "uri": "https://{canondata_backend}/1903885/37514ff5634e78ef497fdda8befb3494b04a906d/resource.tar.gz#test.test_expr-decimal_integral_common_type_conversions_with_fix-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-evaluate_expr_cache_hit-default.txt-Debug]": [
         {
             "checksum": "ca0fe65296d31be418d377971a0ec0dd",
@@ -815,6 +829,20 @@
             "checksum": "961d16c08981e2d4058c5d6c48f46ccc",
             "size": 2244,
             "uri": "https://{canondata_backend}/1777230/52d24600ceada6f625f4161edfba1861d2eed32d/resource.tar.gz#test.test_linear-types-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[list_from_range_decimal-mixed_integral-default.txt-Debug]": [
+        {
+            "checksum": "9fa443fcd0cdf5f84bbecaed2af0e27c",
+            "size": 849,
+            "uri": "https://{canondata_backend}/1871002/b99fea1fdd39e63d5f4af0b63307357b017d5992/resource.tar.gz#test.test_list_from_range_decimal-mixed_integral-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[list_from_range_decimal-mixed_integral-default.txt-Results]": [
+        {
+            "checksum": "4ef6532c8027e11747a6f1cd9f190432",
+            "size": 6579,
+            "uri": "https://{canondata_backend}/1871002/b99fea1fdd39e63d5f4af0b63307357b017d5992/resource.tar.gz#test.test_list_from_range_decimal-mixed_integral-default.txt-Results_/results.txt"
         }
     ],
     "test.test[match_recognize-permute-default.txt-Debug]": [

@@ -49,7 +49,7 @@ void TPQWriteServiceImpl::TSession::OnRead(const TWriteRequest& request) {
 
     switch (request.GetRequestCase()) {
         case TWriteRequest::kInit: {
-            SendEvent(new TEvPQProxy::TEvWriteInit(request, GetPeerName(), GetDatabase()));
+            SendEvent(new TEvPQProxy::TEvWriteInit(request, GetPeerName(), GetDatabase(), GetRequestId()));
             break;
         }
         case TWriteRequest::kDataBatch:

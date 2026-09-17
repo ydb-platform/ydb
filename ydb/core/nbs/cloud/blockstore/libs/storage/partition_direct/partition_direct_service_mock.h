@@ -18,20 +18,35 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TAddHostRequest
     {
         size_t DirectBlockGroupId = 0;
-        size_t NewHostIndex = 0;
+        ui32 DBGConnectionsConfigGeneration = 0;
+    };
+
+    struct TRemoveHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        ui32 DBGConnectionsConfigGeneration = 0;
     };
 
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
     };
 
     struct TUpdateDirtyMapStateRequest
     {
         ui32 VChunkIndex = 0;
         TDirtyMapStateProto Proto;
-        NThreading::TPromise<void> Promise;
+        TPersistResultPromise Promise;
+    };
+
+    struct TPersistHostHealthRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t HostIndex = 0;
+        EHostHealth OldHealth = EHostHealth::Online;
+        EHostHealth NewHealth = EHostHealth::Online;
     };
 
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
@@ -41,11 +56,16 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
     TVector<TAddHostRequest> AddHostRequests;
+    TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
+    size_t CopyRangeBudgetRequestCount = 0;
+    ui64 LastCopyRangeBudgetByteCount = 0;
+    TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -64,29 +84,44 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         executor->ExecuteSimple(std::move(callback));
     }
 
-    NThreading::TFuture<void> UpdateVChunkConfig(
+    TPersistResultFuture UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
     {
-        UpdateConfigRequests.emplace_back(cfg, NThreading::NewPromise());
+        UpdateConfigRequests.emplace_back(
+            cfg,
+            NThreading::NewPromise<EPersistResult>());
         return UpdateConfigRequests.back().Promise.GetFuture();
     }
 
-    NThreading::TFuture<void> UpdateDirtyMapState(
+    TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override
     {
         UpdateDirtyMapStateRequests.emplace_back(TUpdateDirtyMapStateRequest{
             .VChunkIndex = vChunkIndex,
             .Proto = std::move(state),
-            .Promise = NThreading::NewPromise()});
+            .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override
     {
         AddHostRequests.push_back(TAddHostRequest{
             .DirectBlockGroupId = directBlockGroupId,
-            .NewHostIndex = newHostIndex});
+            .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
+    }
+
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration) override
+    {
+        RemoveHostRequests.push_back(TRemoveHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .HostIndex = hostIndex,
+            .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
     ui64 GenerateLsn() override
@@ -107,6 +142,23 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(pbufferDDiskId);
         Y_UNUSED(lsn);
         return true;
+    }
+
+    TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override
+    {
+        ++CopyRangeBudgetRequestCount;
+        LastCopyRangeBudgetByteCount = byteCount;
+        return CopyRangeBudgetDelay;
+    }
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override
+    {
+        PersistHostHealthRequests
+            .emplace_back(directBlockGroupId, hostIndex, oldHealth, newHealth);
     }
 };
 

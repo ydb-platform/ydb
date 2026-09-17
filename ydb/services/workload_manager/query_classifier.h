@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/common/resolver.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -46,7 +47,7 @@ public:
 
     struct TResolvedPoolId {
         TString PoolId;
-        TString Resolver;
+        TResolver Resolver;
         // If true, session actor should apply PoolConfig directly and skip WMS admission actor.
         // Used when the pool has per-node caps (TotalCpu/TotalMemory) but no admission gating.
         bool SkipAdmission = false;

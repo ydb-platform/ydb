@@ -223,7 +223,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
             desc = TxBody.MutableCreateIndexedTable()->MutableTableDescription();
-            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, status, error)) {
+            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
         } else {

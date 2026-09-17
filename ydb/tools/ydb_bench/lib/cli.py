@@ -13,8 +13,10 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_copy_file,
     atomic_write_json,
     extract_executable,
+    load_profile_binaries,
 )
 from ydb.tools.ydb_bench.lib.config import build_run_plan, config_schema, load_config
+from ydb.tools.ydb_bench.lib.local_ydb import run_local_ydb
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, ResultStore
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, topology_record
 from ydb.tools.ydb_bench.lib.web import production_executor, serve
@@ -30,6 +32,19 @@ def _positive_integer(value):
 def _default_output_directory():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return Path("ydb-bench-results") / "{}-ydb-bench".format(timestamp)
+
+
+def _local_ydb_progress_line(progress):
+    parts = ["local-ydb", str(progress.get("phase", "working")).replace("-", " ")]
+    if progress.get("attempt") is not None:
+        parts.append("attempt #{}".format(progress["attempt"]))
+    if progress.get("dynamic_nodes") is not None:
+        parts.append("dynamic nodes={}".format(progress["dynamic_nodes"]))
+    if progress.get("load") is not None:
+        parts.append("{}={}".format(progress.get("parameter", "load"), progress["load"]))
+    if progress.get("repetition") is not None:
+        parts.append("repetition {}/{}".format(progress["repetition"], progress.get("repetitions", "?")))
+    return ": ".join((parts[0], ", ".join(parts[1:])))
 
 
 def _create_parser():
@@ -69,6 +84,7 @@ def _create_parser():
     web.add_argument("--listen", default="127.0.0.1")
     web.add_argument("--port", type=lambda value: int(value), default=0)
     web.add_argument("--output", default=Path("ydb-bench-results"), type=Path)
+    web.add_argument("--binaries-dir", default=Path("bin"), type=Path, help="binary catalog: DIR/ydbd/<version>")
     web.add_argument("--no-open", action="store_true")
     web.add_argument("--allow-remote", action="store_true")
     return parser
@@ -79,6 +95,8 @@ def _benchmark_record(benchmark):
         "name": benchmark.name,
         "description": benchmark.description,
         "resource": benchmark.resource_name,
+        "resources": list(benchmark.resources),
+        "builder_supported": benchmark.builder_supported,
         "parameters": [
             {
                 "name": item.name,
@@ -95,9 +113,25 @@ def _benchmark_record(benchmark):
         "defaults": {item.name: list(item.default) for item in benchmark.parameters},
         "affinity_modes": list(AFFINITY_MODES),
         "csv_columns": list(benchmark.csv_columns),
-        "examples": [
-            {benchmark.name: {"example": {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}}}
-        ],
+        "examples": (
+            []
+            if benchmark.profile_kind == "distributed-ydb"
+            else [
+                {
+                    benchmark.name: {
+                        "example": (
+                            {
+                                "workload": {"type": "kv", "operation": "upsert"},
+                                "geometry": {"preset": "single"},
+                                "load": {"parameter": "rate", "values": [1000]},
+                            }
+                            if benchmark.profile_kind == "local-ydb"
+                            else {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}
+                        )
+                    }
+                }
+            ]
+        ),
     }
 
 
@@ -107,7 +141,7 @@ def _describe(benchmark_name, as_json=False):
         print(json.dumps(_benchmark_record(benchmark), indent=2, sort_keys=True))
         return
     print("{}: {}".format(benchmark.name, benchmark.description))
-    print("resource: {}".format(benchmark.resource_name))
+    print("resources: {}".format(", ".join(benchmark.resources)))
     print("parameters: {}".format(", ".join(item.name for item in benchmark.parameters)))
     print("metrics: {}".format(", ".join(item.name for item in benchmark.metrics)))
     print("affinity: {}".format(", ".join(AFFINITY_MODES)))
@@ -171,6 +205,8 @@ def _run(arguments, resource_loader, tool_revision):
         perf_enabled=arguments.perf,
         perf_frequency=arguments.perf_frequency,
     )
+    if any(configuration.benchmark.executor == "distributed-ydb" for configuration in loaded_config.runs):
+        raise BenchmarkError("distributed-ydb requires the web coordinator; submit this YAML through New run")
     planned_runs = len(loaded_config.runs)
     plan = build_run_plan(loaded_config)
     output_directory = _prepare_output(arguments.output)
@@ -237,15 +273,12 @@ def _run(arguments, resource_loader, tool_revision):
             store.write()
 
             for configuration in loaded_config.runs:
-                resource_name = configuration.benchmark.resource_name
-                if resource_name not in binaries:
-                    binaries[resource_name] = extract_executable(
-                        resource_loader(resource_name), temporary_directory, resource_name
-                    )
-                binary = binaries[resource_name]
-                binary_record = {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
-                manifest["binaries"][resource_name] = binary_record
-                manifest.setdefault("binary", binary_record)
+                profile_binaries = load_profile_binaries(configuration, resource_loader, temporary_directory, binaries)
+                for resource_name, binary in profile_binaries.items():
+                    binary_record = binary.manifest_record()
+                    manifest["binaries"][resource_name] = binary_record
+                    manifest.setdefault("binary", binary_record)
+                binary = profile_binaries[configuration.benchmark.resource_name]
                 profiler_binary_path = None
                 if arguments.perf:
                     profiler_binary_path = output_directory / "profiler" / binary.path.name
@@ -282,6 +315,10 @@ def _run(arguments, resource_loader, tool_revision):
                             ) from error
                         if event["type"] == "step-started":
                             store.transition_step(step_id, "running", **event.get("fields", {}))
+                        elif event["type"] == "step-progress":
+                            fields = event.get("fields", {})
+                            store.update_step(step_id, **fields)
+                            print(_local_ydb_progress_line(fields.get("progress", {})), file=sys.stderr, flush=True)
                         elif event["type"] == "step-artifacts":
                             store.add_artifacts(
                                 step_id,
@@ -292,16 +329,26 @@ def _run(arguments, resource_loader, tool_revision):
                         else:
                             raise BenchmarkError("unknown benchmark step event: {}".format(event["type"]))
 
-                    profile_manifest = run_benchmark(
-                        binary,
-                        configuration,
-                        profile_directory,
-                        tool_revision=tool_revision,
-                        work_dir_hint=temporary_directory,
-                        profiler_binary_path=profiler_binary_path,
-                        background_binary=background_binary,
-                        event_sink=on_event,
-                    )
+                    if configuration.benchmark.executor == "local-ydb":
+                        profile_manifest = run_local_ydb(
+                            profile_binaries,
+                            configuration,
+                            profile_directory,
+                            tool_revision=tool_revision,
+                            work_dir_hint=temporary_directory,
+                            event_sink=on_event,
+                        )
+                    else:
+                        profile_manifest = run_benchmark(
+                            binary,
+                            configuration,
+                            profile_directory,
+                            tool_revision=tool_revision,
+                            work_dir_hint=temporary_directory,
+                            profiler_binary_path=profiler_binary_path,
+                            background_binary=background_binary,
+                            event_sink=on_event,
+                        )
                 except BenchmarkInterrupted as error:
                     run_record["status"] = "interrupted"
                     run_record["error"] = str(error)
@@ -349,9 +396,7 @@ def _run(arguments, resource_loader, tool_revision):
         return 1
 
     failed = [record for record in manifest["runs"] if record["status"] == "failed"]
-    unsupported = bool(manifest["runs"]) and all(
-        record["status"] == "unsupported" for record in manifest["runs"]
-    )
+    unsupported = bool(manifest["runs"]) and all(record["status"] == "unsupported" for record in manifest["runs"])
     if failed:
         _cancel_unfinished_steps(store, "run completed with failed benchmark profiles")
     manifest["status"] = "failed" if failed else "unsupported" if unsupported else "completed"
@@ -423,7 +468,9 @@ def main(argv=None, resource_loader=None, tool_revision=None):
                 arguments.no_open,
                 arguments.allow_remote,
                 executor=production_executor(resource_loader, revision),
+                resource_loader=resource_loader,
                 perf_available=str(revision.get("build_type", "")).lower() == "profile",
+                binaries_dir=arguments.binaries_dir,
             )
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})

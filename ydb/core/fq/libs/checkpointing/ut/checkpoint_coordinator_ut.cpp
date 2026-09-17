@@ -320,7 +320,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         Send(new IEventHandle(
             CheckpointCoordinator,
             CheckpointCoordinator,
-            new TEvCheckpointCoordinator::TEvScheduleCheckpointing{}));
+            new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false)));
     }
 
     void MockRunGraph() {

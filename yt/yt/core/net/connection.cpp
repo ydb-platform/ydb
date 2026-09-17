@@ -1596,9 +1596,11 @@ private:
     {
         auto error = TError("Failed to %v for delivery fenced connection", action);
         if (!innerError.IsOK()) {
-            error <<= std::move(innerError);
+            error.Add(std::move(innerError));
         } else {
-            error <<= TError::FromSystem();
+            if (auto addedError = TError::FromSystem(); !addedError.IsOK()) {
+                error.Add(std::move(addedError));
+            }
         }
         THROW_ERROR(std::move(error));
     }

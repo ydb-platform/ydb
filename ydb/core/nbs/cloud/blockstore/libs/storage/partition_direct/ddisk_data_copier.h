@@ -17,7 +17,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlocksDirtyMap;
+struct IRangeSyncClient
+{
+    virtual ~IRangeSyncClient() = default;
+
+    [[nodiscard]] virtual std::optional<TBlockRange16> GetFreshRange(
+        THostIndex host) const = 0;
+    [[nodiscard]] virtual TReadHint MakeReadHint(TBlockRange16 range) = 0;
+    [[nodiscard]] virtual TRangeLock MakeDDiskRangeLock(
+        TBlockRange16 range,
+        THostMask mask) = 0;
+    virtual TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range) = 0;
+    virtual void EndRangeSync(ui64 syncId, bool success) = 0;
+    virtual void OnCopyProgress(ui64 totalBytes) = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TDDiskDataCopier: public std::enable_shared_from_this<TDDiskDataCopier>
 {
@@ -43,7 +58,7 @@ public:
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlocksDirtyMapPtr dirtyMap,
+        IRangeSyncClient* client,
         THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
@@ -52,14 +67,19 @@ public:
     // Stops processing. After stopping, the processing can be started again.
     NThreading::TFuture<EResult> Stop();
 
+    [[nodiscard]] ui64 GetBytesCopied() const;
+
 private:
     struct TCopyRangeRequestState;
     using TCopyRangeRequestStatePtr = std::shared_ptr<TCopyRangeRequestState>;
 
-    std::optional<TBlockRange64> GetFreshRange() const;
-    NWilson::TSpan CreateSpan(TBlockRange64 range) const;
+    std::optional<TBlockRange16> GetFreshRange() const;
+    NWilson::TSpan CreateSpan(TBlockRange16 range) const;
     void StartCopyRange();
-    void CopyRange(ui64 syncId, TBlockRange64 range);
+    void CopyRange(
+        TDuration timeWaitBeforeExecution,
+        ui64 syncId,
+        TBlockRange16 range);
     void OnRangeRead(
         TCopyRangeRequestStatePtr copyRangeState,
         const IReadRequestExecutor::TResponse& response);
@@ -74,12 +94,14 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
-    const TBlocksDirtyMapPtr DirtyMap;
+    IRangeSyncClient* const Client = nullptr;
 
     TLogTitle LogTitle;
     EState State = EState::Stopped;
     TBackoffDelayProvider BackoffDelayProvider;
     NThreading::TPromise<EResult> Complete;
+    ui64 BytesCopied = 0;
+    ui64 BytesCopiedSinceLastProgress = 0;
 };
 
 using TDDiskDataCopierPtr = std::shared_ptr<TDDiskDataCopier>;

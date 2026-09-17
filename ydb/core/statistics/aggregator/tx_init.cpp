@@ -256,6 +256,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .PathId = pathId,
                     .ColumnTags = std::move(columnTags),
                     .Path = path,
+                    .SampleRate = rowset.GetValueOrDefault<Schema::ForceTraversalTables::SampleRate>(1.0),
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);

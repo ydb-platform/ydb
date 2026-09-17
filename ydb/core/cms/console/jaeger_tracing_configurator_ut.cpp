@@ -1,7 +1,6 @@
 #include "ut_helpers.h"
 #include "jaeger_tracing_configurator.h"
 
-#include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 
 #include <util/generic/ptr.h>
@@ -54,11 +53,9 @@ TTenantTestConfig DefaultConsoleTestConfig() {
 void InitJaegerTracingConfigurator(
     TTenantTestRuntime& runtime,
     TIntrusivePtr<TSamplingThrottlingConfigurator> configurator,
-    const NKikimrConfig::TTracingConfig& initCfg,
-    ETracingConfigKind configKind = ETracingConfigKind::Dev
+    const NKikimrConfig::TTracingConfig& initCfg
 ) {
-    runtime.Register(CreateJaegerTracingConfigurator(
-        std::move(configurator), initCfg, configKind));
+    runtime.Register(CreateJaegerTracingConfigurator(std::move(configurator), initCfg));
 
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
@@ -90,19 +87,11 @@ private:
     size_t Count = 0;
 };
 
-void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order,
-        ETracingConfigKind configKind = ETracingConfigKind::Dev) {
-    const auto configItemKind = configKind == ETracingConfigKind::UserFacing
-        ? NKikimrConsole::TConfigItem::UserFacingTracingConfigItem
-        : NKikimrConsole::TConfigItem::TracingConfigItem;
-    auto configItem = MakeConfigItem(configItemKind,
+void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
+    auto configItem = MakeConfigItem(NKikimrConsole::TConfigItem::TracingConfigItem,
                                      NKikimrConfig::TAppConfig(), {}, {}, "", "", order,
                                      NKikimrConsole::TConfigItem::OVERWRITE, "");
-    if (configKind == ETracingConfigKind::UserFacing) {
-        configItem.MutableConfig()->MutableUserFacingTracingConfig()->CopyFrom(cfg);
-    } else {
-        configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
-    }
+    configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
 
     auto* event = new TEvConsole::TEvConfigureRequest;
     event->Record.AddActions()->CopyFrom(MakeAddAction(configItem));
@@ -113,11 +102,9 @@ void Configure(TTenantTestRuntime& runtime, const NKikimrConfig::TTracingConfig&
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
 }
 
-void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates,
-        const NKikimrConfig::TTracingConfig& cfg, ui32 order,
-        ETracingConfigKind configKind = ETracingConfigKind::Dev) {
+void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, TConfigUpdatesObserver& updates, const NKikimrConfig::TTracingConfig& cfg, ui32 order) {
     updates.Clear();
-    Configure(runtime, cfg, order, configKind);
+    Configure(runtime, cfg, order);
     updates.Wait();
 }
 
@@ -218,67 +205,9 @@ struct TTimeProviderMock : public ITimeProvider {
     TInstant Now_;
 };
 
-class THandleTracingActor : public TActorBootstrapped<THandleTracingActor> {
-public:
-    explicit THandleTracingActor(TActorId replyTo)
-        : ReplyTo(replyTo)
-    {}
-
-    void Bootstrap() {
-        const bool dev = static_cast<bool>(HandleTracing({}, {}));
-        const NWilson::TTraceId user = HandleUserFacingTracing({}, {});
-        const ui64 result = static_cast<ui64>(dev)
-            | (static_cast<ui64>(static_cast<bool>(user)) << 1)
-            | (static_cast<ui64>(user.GetVerbosity()) << 8);
-        Send(ReplyTo, new TEvents::TEvWakeup(result));
-        PassAway();
-    }
-
-private:
-    const TActorId ReplyTo;
-};
-
-ui64 HandleTracingOnActorThread(TTenantTestRuntime& runtime) {
-    runtime.Register(new THandleTracingActor(runtime.Sender));
-    return runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(runtime.Sender)->Get()->Tag;
-}
-
 } // namespace anonymous
 
 Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
-    Y_UNIT_TEST(UserFacingConfig) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
-
-        TConfigUpdatesObserver updates(runtime);
-        NKikimrConfig::TTracingConfig cfg;
-        auto* rule = cfg.AddSampling();
-        rule->SetFraction(1.0);
-        rule->SetLevel(7);
-        rule->SetMaxTracesBurst(100);
-        rule->SetMaxTracesPerMinute(1'000);
-
-        Configure(runtime, cfg, 1, ETracingConfigKind::UserFacing);
-        InitJaegerTracingConfigurator(
-            runtime,
-            runtime.GetAppData().UserFacingTracingConfigurator,
-            cfg,
-            ETracingConfigKind::UserFacing);
-        updates.Wait();
-
-        ui64 result = HandleTracingOnActorThread(runtime);
-        UNIT_ASSERT(!(result & 1));
-        UNIT_ASSERT(result & 2);
-        UNIT_ASSERT_VALUES_EQUAL(result >> 8, 7);
-
-        cfg.MutableSampling(0)->SetLevel(9);
-        ConfigureAndWaitUpdate(runtime, updates, cfg, 2, ETracingConfigKind::UserFacing);
-        result = HandleTracingOnActorThread(runtime);
-        UNIT_ASSERT(!(result & 1));
-        UNIT_ASSERT(result & 2);
-        UNIT_ASSERT_VALUES_EQUAL(result >> 8, 9);
-    }
-
     Y_UNIT_TEST(DefaultConfig) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
@@ -357,6 +286,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
             }
             // 1 of each 4 requests external traced + 1 of each 3 other requests sampled
             // (but not greater than 0.5 of them according to throttling)
+            // With independent sampling, P(false failure) < 2.42e-51.
             UNIT_ASSERT_C(traced >= 250 + 125 - 50 && traced <= 250 + 125 + 50, traced);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -381,7 +311,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
-            UNIT_ASSERT_C(sampled >= 210 && sampled <= 300, sampled);
+            // With independent sampling, P(false failure) < 9.96e-10.
+            UNIT_ASSERT_C(sampled >= 174 && sampled <= 330, sampled);
         }
         timeProvider->Advance(TDuration::Minutes(1));
     }
@@ -441,7 +372,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250)); // 4 requests per second
             }
-            UNIT_ASSERT_C(traced >= 250 + 375 - 75 && traced <= 250 + 375 + 75, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
+            // With independent sampling, P(false failure) < 4.61e-10.
+            UNIT_ASSERT_C(traced >= 542 && traced <= 700, traced); // 1 of each 4 requests external traced + 1.5 of each 3 other requests sampled
         }
     }
 
@@ -585,6 +517,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     timeProvider->Advance(TDuration::MilliSeconds(500));
                 }
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
         }
 
@@ -599,11 +532,13 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(125));
             }
+            // With independent sampling, P(false failure) < 1.70e-68.
             UNIT_ASSERT(sampled >= 190 && sampled <= 260);
         }
         for (size_t i = 0; i < 50; ++i) {
             controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators));
         }
+        // With independent sampling, P(any false failure in this loop) < 2.11e-9.
         for (size_t i = 0; i < 50; ++i) {
             UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(executeTransactionDiscriminators)).first, TTracingControls::OFF);
         }
@@ -643,7 +578,8 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(6));
             }
-            UNIT_ASSERT(sampled >= 190 && sampled <= 310);
+            // With independent sampling, P(false failure) < 9.27e-10.
+            UNIT_ASSERT(sampled >= 170 && sampled <= 336);
         }
     }
 
@@ -689,8 +625,10 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
-            UNIT_ASSERT(level8 >= 450 && level8 <= 570);
-            UNIT_ASSERT(level10 >= 450 && level10 <= 570);
+            // With independent sampling, P(false failure) < 9.32e-10.
+            UNIT_ASSERT(level8 >= 391 && level8 <= 613);
+            // With independent sampling, P(false failure) < 9.32e-10.
+            UNIT_ASSERT(level10 >= 391 && level10 <= 613);
         }
         timeProvider->Advance(TDuration::Minutes(1));
 
@@ -710,7 +648,9 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::MilliSeconds(250));
             }
-            UNIT_ASSERT(level8 >= 470 && level8 <= 760);
+            // With independent sampling, P(false failure) < 3.80e-10.
+            UNIT_ASSERT(level8 >= 456 && level8 <= 760);
+            // With independent sampling, P(false failure) < 6.38e-16.
             UNIT_ASSERT(level10 >= 340 && level10 <= 385);
         }
     }
@@ -848,12 +788,13 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
 
         }
         {
             size_t sampled = 0;
-            for (size_t i = 0; i < 60; ++i) {
+            for (size_t i = 0; i < 65; ++i) {
                 auto [state, level] = controls.HandleTracing(false, RandomChoice(discriminators));
                 UNIT_ASSERT_UNEQUAL(state, TTracingControls::EXTERNAL);
                 if (state == TTracingControls::SAMPLED) {
@@ -861,6 +802,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     ++sampled;
                 }
             }
+            // With independent sampling, P(false failure) < 5.88e-9.
             UNIT_ASSERT_EQUAL(sampled, 11);
         }
 
@@ -879,6 +821,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 }
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
             timeProvider->Advance(TDuration::Minutes(1));
 
@@ -1015,6 +958,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                 UNIT_ASSERT_EQUAL(controls.HandleTracing(false, RandomChoice(notMatchingDiscriminators)).first, TTracingControls::OFF);
                 timeProvider->Advance(TDuration::Seconds(1));
             }
+            // With independent sampling, P(false failure) < 1.81e-10.
             UNIT_ASSERT(sampled >= 400 && sampled <= 600);
         }
         timeProvider->Advance(TDuration::Minutes(1));
@@ -1029,6 +973,7 @@ Y_UNIT_TEST_SUITE(TJaegerTracingConfiguratorTests) {
                     ++sampled;
                 }
             }
+            // With independent sampling, P(false failure) < 5.88e-9.
             UNIT_ASSERT_EQUAL(sampled, 11);
         }
     }

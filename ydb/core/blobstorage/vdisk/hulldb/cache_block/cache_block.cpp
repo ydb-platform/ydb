@@ -61,6 +61,21 @@ namespace NKikimr {
         }
     }
 
+    std::tuple<ui32, ui64> TBlocksCache::FindMax(ui64 tabletId) const {
+        Y_ABORT_UNLESS(Initialized);
+
+        // Repeated or older records can remain in flight after the maximum is already persistent.
+        const auto persistentIt = PersistentBlocks.find(tabletId);
+        if (const auto it = InFlightBlocks.find(tabletId); it != InFlightBlocks.end() &&
+                (persistentIt == PersistentBlocks.end() ||
+                persistentIt->second.Generation < it->second.MaxBlockedGen.Generation)) {
+            return {it->second.MaxBlockedGen.Generation, it->second.LsnForMaxBlockedGen};
+        } else if (persistentIt != PersistentBlocks.end()) {
+            return {persistentIt->second.Generation, 0};
+        } else {
+            return {};
+        }
+    }
 
     void TBlocksCache::Build(const THullDs *hullDs) {
         Y_ABORT_UNLESS(!Initialized);
@@ -159,4 +174,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

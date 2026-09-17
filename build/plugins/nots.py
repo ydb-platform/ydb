@@ -1,4 +1,5 @@
 import functools
+import shlex
 import re
 import os
 from enum import auto, StrEnum
@@ -12,8 +13,6 @@ import ytest
 from _common import (
     rootrel_arc_src,
     sort_uniq,
-    to_yesno,
-    split_list_by_value,
 )
 from _dart_fields import create_dart_record
 
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
     from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
-    from lib.nots.typescript import TsConfig
 
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
@@ -45,6 +43,7 @@ TS_LINT_DART_FIELDS = (
     df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
+    df.TsCheckCommand.value,
     df.Requirements.from_unit_with_cpu,  # from macro REQUIREMENTS()
 )
 
@@ -224,10 +223,6 @@ class PluginLogger(object):
 
 
 logger = PluginLogger()
-
-
-def _wrap_file_path(s: str) -> str:
-    return f"'{s}'" if " " in s else s
 
 
 def _escape_space(s: str) -> str:
@@ -446,67 +441,6 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
         unit.onpeerdir(dirs)
 
 
-@ymake.macro
-@_with_report_configure_error
-def _TS_CONFIGURE(unit: ymake.Unit) -> None:
-    from lib.nots.package_manager import PackageJson
-    from lib.nots.package_manager.utils import build_pj_path
-    from lib.nots.typescript import TsConfig
-
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    # for use in CMD as inputs
-    __set_append(
-        unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True)
-    )
-
-    mod_dir = unit.get("MODDIR")
-    cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(_arc_path(unit, cur_dir))
-    dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
-
-    # reversed for using the first tsconfig as the config for include processor (legacy)
-    for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
-        if not abs_tsconfig_path:
-            raise Exception("tsconfig not found: {}".format(tsconfig_path))
-
-        source_dir = _arc_path(unit, _get_source_path(unit))
-        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
-        config_files = tsconfig.inline_extend(dep_paths)
-        config_files = [rootrel_arc_src(path, unit) for path in config_files]
-
-        use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
-        tsconfig.validate(use_tsconfig_outdir)
-
-        # add tsconfig files from which root tsconfig files were extended
-        __set_append(
-            unit, "TS_CONFIG_FILES", _build_cmd_input_paths(config_files, hide=True, disable_include_processor=True)
-        )
-
-        # region include processor
-        unit.set(["TS_CONFIG_ROOT_DIR", tsconfig.compiler_option("rootDir")])  # also for hermione
-        if use_tsconfig_outdir:
-            unit.set(["TS_CONFIG_OUT_DIR", tsconfig.compiler_option("outDir")])  # also for hermione
-
-        unit.set(["TS_CONFIG_SOURCE_MAP", to_yesno(tsconfig.compiler_option("sourceMap"))])
-        unit.set(["TS_CONFIG_DECLARATION", to_yesno(tsconfig.compiler_option("declaration"))])
-        unit.set(["TS_CONFIG_DECLARATION_MAP", to_yesno(tsconfig.compiler_option("declarationMap"))])
-        unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
-        # endregion
-
-        _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
-
-    # Code navigation
-    if unit.get("TS_YNDEXING") == "yes":
-        unit.on_do_ts_yndexing()
-
-    # Style tests
-    _setup_eslint(unit)
-    _setup_tsc_typecheck(unit)
-    _setup_stylelint(unit)
-    _setup_biome(unit)
-
-
 def _should_setup_build_env(unit: ymake.Unit) -> bool:
     build_env_for = unit.get("TS_BUILD_ENV_FOR")
     if build_env_for is None:
@@ -567,22 +501,6 @@ def __strip_prefix(prefix: str, line: str) -> str:
     return line
 
 
-def _filter_inputs_by_rules_from_tsconfig(unit: ymake.Unit, tsconfig: 'TsConfig') -> None:
-    """
-    Reduce file list from the TS_GLOB_FILES variable following tsconfig.json rules
-    """
-    mod_dir = unit.get("MODDIR")
-    target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
-
-    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
-        # TS_GLOB_* variables contain space-separated paths.
-        # Spaces in paths cause issues, so we split by target_path instead of space.
-        # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
-        all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
-        filtered_files = tsconfig.filter_files(all_files)
-        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
-
-
 @ymake.macro
 @_with_report_configure_error
 def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
@@ -590,6 +508,20 @@ def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
     _setup_tsc_typecheck(unit)
     _setup_stylelint(unit)
     _setup_biome(unit)
+
+
+@ymake.macro
+def _TS_TSC_BUILD_COMMAND(unit: ymake.Unit) -> None:
+    commands = [
+        "tsc --project {} --incremental false --composite false --pretty".format(tsconfig_path)
+        for tsconfig_path in unit.get("TS_CONFIG_PATH").split()
+    ]
+    _set_ts_build_command(unit, " && ".join(commands))
+
+
+def _set_ts_build_command(unit: ymake.Unit, command: str) -> None:
+    unit.set(["_TS_BUILD_COMMAND", command])
+    unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(command.replace('"', '\\"'))])
 
 
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
@@ -654,7 +586,7 @@ def _setup_tsc_typecheck(unit: ymake.Unit) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})
+    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
     if not test_files:
         return
 
@@ -871,12 +803,7 @@ def _TS_PROTO_CONFIGURE(unit: ymake.Unit) -> None:
         unit.on_ts_proto_auto_configure()
         return
 
-    in_pj = _build_directives(["hide", "input"], ["package.json"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj])
-
     unit.set(["_TS_PROTO_AUTO_ARGS", ""])
-
-    unit.on_ts_configure()
     unit.on_node_modules_configure()
 
     if unit.get("_GRPC_ENABLED") == "yes":
@@ -907,6 +834,20 @@ def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
 
+    if _use_hermetic_node_modules(unit):
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted
+
+        _configure_hermetic_node_modules(unit)
+        __set_append(
+            unit,
+            "_NODE_MODULES_INOUTS",
+            _build_directives(
+                ["hide", "input"],
+                [b_rooted(os.path.join(unit.get("MODDIR"), constants.NODE_MODULES_LAYER_FILENAME))],
+            ),
+        )
+
     if unit.get("_GRPC_ENABLED") == "yes":
         SUPPORTED_OUTPUT_SERVICES_VALUES = ["grpc-js", "generic-definitions", "default", "false", "none"]
         output_services_opts = set(
@@ -934,9 +875,17 @@ def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("TS_PROTO_PREPARE_DEPS") == "yes" and unit.get("_TS_PROTO_NON_RECURSIVE") == "yes":
+        unit.onpeerdir(sorted(set((unit.get_subst("_TS_PROTO_PEERS") or "").split())))
+
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
+
+    _prepare_deps_configure(unit)
+
+
+def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
@@ -983,16 +932,32 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    _, outs, resources = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
+    if _use_hermetic_node_modules(unit):
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted, s_rooted
+
+        _configure_hermetic_node_modules(unit)
+        outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
+        deps_lockfile_path = unit.resolve(s_rooted(os.path.join(deps_path, constants.PNPM_LOCKFILE_FILENAME)))
+        resources.extend(pkg.to_uri() for pkg in pm.extract_packages_meta_from_lockfiles([deps_lockfile_path]))
+        unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
+        unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
+    proto_peers = (
+        sorted(set((unit.get("_TS_PROTO_PEERS") or "").split())) if unit.get("_TS_PROTO_NON_RECURSIVE") == "yes" else []
+    )
+    proto_peers_flag = f" --ts-proto-workspace-peers {' '.join(proto_peers)}" if proto_peers else ""
     unit.set(
         [
             "_PREPARE_DEPS_TS_PROTO_AUTO_FLAG",
-            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}",
+            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}{proto_peers_flag}",
         ]
     )
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
 
 
 def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:
@@ -1036,17 +1001,17 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
 
-    # remove "^./" and "/$"
-    # build/, ./build, ./build/ => build
-    # build/a/, ./build/a/, ./build/a => build/a
+    # remove leading "./" or "/" and trailing "/"
+    # build/, /build, ./build, ./build/ => build
+    # build/a/, /build/a, ./build/a/, ./build/a => build/a
     def _normalize_path(p):
         if p.startswith("./"):
             p = p[2:]
-        return p.rstrip("/")
+        return p.strip("/")
 
     # checks that build outputs contains in package.json#files
     # TS_OUTPUTS(build) -- files: ["build/esm", "build/cjs"] ✅
-    # TS_OUTPUTS(build) -- files: ["./build", "./build/", "build/"] ✅
+    # TS_OUTPUTS(build) -- files: ["/build", "./build", "./build/", "build/"] ✅
     # TS_OUTPUTS(build/dist) -- files: ["build"] ✅
     # TS_OUTPUTS(dist) -- files: ["build"] ❌
     # TS_OUTPUTS(dist) -- files: ["build/dist"] ❌
@@ -1064,7 +1029,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs:
+    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
@@ -1073,9 +1038,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
 
     after_build_command = unit.get("_TS_AFTER_BUILD_COMMAND")
     if after_build_command:
-        build_command = "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command)
-        unit.set(["_TS_BUILD_COMMAND", build_command])
-        unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(build_command.replace('"', '\\"'))])
+        _set_ts_build_command(unit, "{} && {}".format(unit.get("_TS_BUILD_COMMAND"), after_build_command))
 
     # Code navigation
     if unit.get("TS_YNDEXING") == "yes":
@@ -1091,7 +1054,15 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    ts_check_list = split_list_by_value(_parse_list_var(unit, "_TS_CHECK_LIST", " "), unit.get("_TS_CHECK_SEPARATOR"))
+    checks_raw = unit.get("_TS_CHECK_LIST").removeprefix("$_TS_CHECK_LIST")
+    check_separator = unit.get("_TS_CHECK_SEPARATOR")
+    ts_check_list = []
+    for check in checks_raw.split(check_separator):
+        fields = check.strip().split(maxsplit=2)
+        if fields:
+            if len(fields) == 2:
+                fields.append("")
+            ts_check_list.append(fields)
     if not ts_check_list:
         if validation_mode == "TS_TEST_FOR":
             ymake.report_configure_error(
@@ -1126,16 +1097,18 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
 
     pj_scripts = pm.load_package_json_from_dir(pm.sources_path).data.get("scripts", {})
 
-    for script_name, is_medium, check_type in ts_check_list:
+    for check in ts_check_list:
+        script_name, check_type, command = check
         cov_script_name = f"{script_name}:coverage"
         flat_args = ("ts_check",)
         spec_args = dict(
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
-            TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
+            TS_CHECK_HAS_COVERAGE="yes" if not command and cov_script_name in pj_scripts else "no",
+            TS_CHECK_COMMAND=command,
             erm_json=_create_erm_json(unit),
         )
-        if is_medium == "yes":
+        if check_type == "lint":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
 
         dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
@@ -1157,6 +1130,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
+    prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
+    if prod_bundle and unit.get("_INJECT_PEERS") != "yes":
+        ymake.report_configure_error("WITH_NODE_MODULES(PROD) requires injected workspace dependencies")
+        return
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 
@@ -1164,7 +1141,10 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         if nm_bundle_needed:
-            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
+            bundle_args = "--nm-bundle yes"
+            if prod_bundle:
+                bundle_args += " --nm-bundle-prod yes"
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", bundle_args])
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
 
@@ -1177,8 +1157,8 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         }
         ins = [path for path in ins if path not in source_manifests]
 
-        if not _use_hermetic_node_modules(unit):
-            # Legacy builders materialize node_modules in the build action and
+        if not _use_hermetic_node_modules(unit) or prod_bundle:
+            # Legacy and production-bundle builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
             ins.extend(
@@ -1453,3 +1433,12 @@ def _TS_CONF_ERROR(unit: ymake.Unit, *messages: str) -> None:
 def _TS_CHECK_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     test_mod = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([test_mod])
+
+
+@ymake.macro
+@_with_report_configure_error
+def _TS_OUTPUT_PREFIX(unit: ymake.Unit, *args: str) -> None:
+    if len(args) > 1:
+        raise ValueError("TS_OUTPUT_PREFIX accepts at most one path")
+    prefix = args[0] if args else unit.get("MODDIR")
+    unit.set(["_TS_OUTPUT_PREFIX_ARG", shlex.quote("--output-prefix=" + prefix)])

@@ -12,8 +12,7 @@ namespace NKikimr::NMiniKQL {
 
 class INodeVisitor {
 public:
-    virtual ~INodeVisitor() {
-    }
+    virtual ~INodeVisitor() = default;
     virtual void Visit(TTypeType& node) = 0;
     virtual void Visit(TVoidType& node) = 0;
     virtual void Visit(TNullType& node) = 0;

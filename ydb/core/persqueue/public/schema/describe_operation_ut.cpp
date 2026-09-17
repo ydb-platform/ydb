@@ -2,15 +2,14 @@
 
 #include "describe_operation.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/threading/future/async.h>
-
-#include <util/thread/pool.h>
 
 #include <memory>
 #include <optional>
@@ -21,45 +20,194 @@ using namespace NTests;
 
 namespace {
 
-struct TSimulatedServer {
-    THolder<TThreadPool> Pool;
-    THolder<::NPersQueue::TTestServer> Server;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
-    ~TSimulatedServer() {
-        Server.Reset();
-        if (Pool) {
-            Pool->Stop();
+constexpr ui64 BALANCER_TABLET = 1001;
+constexpr ui64 PARTITION_TABLET = 2001;
+constexpr ui32 PARTITION_ID = 0;
+constexpr ui32 LOCATION_NODE_ID = 7;
+constexpr ui32 LOCATION_GENERATION = 3;
+
+struct TIsolatedPipeConfig {
+    enum class ELocation { Reply, Drop, FailOnce, StatusFalseAlways };
+    enum class EStatus { Reply, EmptyOnce, FailAlways, WithConsumers };
+
+    ELocation Location = ELocation::Reply;
+    EStatus Status = EStatus::Reply;
+};
+
+enum class EFakeNavigateKind {
+    Topic,
+    Table,
+};
+
+struct TIsolatedPipeStats {
+    size_t LocationForwards = 0;
+    size_t StatusForwards = 0;
+};
+
+class TFakeSchemeCacheActor : public NActors::TActorBootstrapped<TFakeSchemeCacheActor> {
+public:
+    explicit TFakeSchemeCacheActor(EFakeNavigateKind kind = EFakeNavigateKind::Topic)
+        : Kind(kind)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TFakeSchemeCacheActor::StateWork);
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+    )
+
+private:
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+        auto request = std::move(ev->Get()->Request);
+        for (auto& entry : request->ResultSet) {
+            entry.Status = TNavigate::EStatus::Ok;
+            if (Kind == EFakeNavigateKind::Table) {
+                entry.Kind = TNavigate::EKind::KindTable;
+                auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
+                self->Info.SetName("table");
+                self->Info.SetPathType(NKikimrSchemeOp::EPathTypeTable);
+                entry.Self = self;
+                continue;
+            }
+
+            entry.Kind = TNavigate::EKind::KindTopic;
+
+            auto pqInfo = MakeIntrusive<TNavigate::TPQGroupInfo>();
+            pqInfo->Description.SetBalancerTabletID(BALANCER_TABLET);
+            auto* partition = pqInfo->Description.AddPartitions();
+            partition->SetPartitionId(PARTITION_ID);
+            partition->SetTabletId(PARTITION_TABLET);
+            entry.PQGroupInfo = pqInfo;
+
+            auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
+            self->Info.SetName("topic");
+            self->Info.SetPathType(NKikimrSchemeOp::EPathTypePersQueueGroup);
+            entry.Self = self;
+        }
+        Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(std::move(request)));
+    }
+
+    EFakeNavigateKind Kind;
+};
+
+class TFakePipeCacheActor : public NActors::TActorBootstrapped<TFakePipeCacheActor> {
+public:
+    TFakePipeCacheActor(TIsolatedPipeConfig config, TIsolatedPipeStats* stats)
+        : Config(config)
+        , Stats(stats)
+    {
+    }
+
+    void Bootstrap() {
+        Become(&TFakePipeCacheActor::StateWork);
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvPipeCache::TEvForward, Handle);
+        IgnoreFunc(TEvPipeCache::TEvUnlink);
+    )
+
+private:
+    void Handle(TEvPipeCache::TEvForward::TPtr& ev) {
+        if (!ev->Get()->Ev) {
+            return;
+        }
+        const auto type = ev->Get()->Ev->Type();
+        const ui64 tabletId = ev->Get()->TabletId;
+        const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
+
+        if (type == TEvPersQueue::TEvGetPartitionsLocation::EventType) {
+            ++Stats->LocationForwards;
+            if (Config.Location == TIsolatedPipeConfig::ELocation::Drop) {
+                return;
+            }
+            if (Config.Location == TIsolatedPipeConfig::ELocation::FailOnce && Stats->LocationForwards == 1) {
+                Send(ev->Sender, new TEvPipeCache::TEvDeliveryProblem(tabletId, true), 0, subscribeCookie);
+                return;
+            }
+            auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+            if (Config.Location == TIsolatedPipeConfig::ELocation::StatusFalseAlways) {
+                response->Record.SetStatus(false);
+                Send(ev->Sender, response, 0, ev->Cookie);
+                return;
+            }
+            response->Record.SetStatus(true);
+            auto* location = response->Record.AddLocations();
+            location->SetPartitionId(PARTITION_ID);
+            location->SetNodeId(LOCATION_NODE_ID);
+            location->SetGeneration(LOCATION_GENERATION);
+            Send(ev->Sender, response, 0, ev->Cookie);
+            return;
+        }
+
+        if (type == TEvPersQueue::TEvStatus::EventType) {
+            ++Stats->StatusForwards;
+            if (Config.Status == TIsolatedPipeConfig::EStatus::EmptyOnce && Stats->StatusForwards == 1) {
+                Send(ev->Sender, new TEvPersQueue::TEvStatusResponse(), 0, ev->Cookie);
+                return;
+            }
+            if (Config.Status == TIsolatedPipeConfig::EStatus::FailAlways) {
+                Send(ev->Sender, new TEvPersQueue::TEvStatusResponse(), 0, ev->Cookie);
+                return;
+            }
+            auto* response = new TEvPersQueue::TEvStatusResponse();
+            auto* part = response->Record.AddPartResult();
+            part->SetPartition(PARTITION_ID);
+            part->SetStatus(NKikimrPQ::TStatusResponse::STATUS_OK);
+            part->SetStartOffset(0);
+            part->SetEndOffset(10);
+            if (Config.Status == TIsolatedPipeConfig::EStatus::WithConsumers) {
+                auto* cons = part->AddConsumerResult();
+                cons->SetConsumer("user");
+                cons->SetLastReadTimestampMs(1000);
+                cons->SetReadLagMs(10);
+                cons->SetWriteLagMs(20);
+                cons->SetCommitedLagMs(30);
+                cons->SetAvgReadSpeedPerMin(1);
+                cons->SetAvgReadSpeedPerHour(2);
+                cons->SetAvgReadSpeedPerDay(3);
+            }
+            Send(ev->Sender, response, 0, ev->Cookie);
+            return;
+        }
+
+        if (type == TEvPersQueue::TEvGetReadSessionsInfo::EventType) {
+            Send(ev->Sender, new TEvPersQueue::TEvReadSessionsInfoResponse(), 0, ev->Cookie);
         }
     }
 
-    NActors::TTestActorRuntime& GetRuntime() {
-        return *Server->CleverServer->GetRuntime();
-    }
+    TIsolatedPipeConfig Config;
+    TIsolatedPipeStats* Stats;
 };
 
-std::unique_ptr<TSimulatedServer> CreateSimulatedServer() {
-    auto settings = TTopicSdkTestSetup::MakeServerSettings();
-    settings.SetUseRealThreads(false);
+struct TIsolatedDescribeEnv {
+    TIsolatedPipeStats PipeStats;
+    NActors::TTestBasicRuntime Runtime;
 
-    auto out = std::make_unique<TSimulatedServer>();
-    out->Server = MakeHolder<::NPersQueue::TTestServer>(settings, /*start=*/false);
-    out->Server->StartServer(/*doClientInit=*/false, TString("/Root"));
+    explicit TIsolatedDescribeEnv(
+        TIsolatedPipeConfig config = {},
+        EFakeNavigateKind navigateKind = EFakeNavigateKind::Topic)
+        : Runtime(1, false)
+    {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Runtime.UpdateCurrentTime(TInstant::Now());
+        Runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        Runtime.SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
+        Runtime.SetLogPriority(NKikimrServices::PQ_DESCRIBER, NActors::NLog::PRI_DEBUG);
 
-    auto& runtime = out->GetRuntime();
-    runtime.UpdateCurrentTime(TInstant::Now());
-    out->Server->EnableLogs({NKikimrServices::PQ_SCHEMA}, NActors::NLog::PRI_DEBUG);
+        auto schemeCacheId = Runtime.Register(new TFakeSchemeCacheActor(navigateKind));
+        Runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId);
 
-    out->Server->AnnoyingClient->SetNoConfigMode();
-    out->Pool = MakeHolder<TThreadPool>();
-    out->Pool->Start(2);
-    auto* server = out->Server.Get();
-    auto future = NThreading::Async([server] {
-        server->AnnoyingClient->FullInit();
-        return true;
-    }, *out->Pool);
-    static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
-    return out;
-}
+        auto pipeCacheId = Runtime.Register(new TFakePipeCacheActor(config, &PipeStats));
+        Runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCacheId);
+        Runtime.DispatchEvents();
+    }
+};
 
 class TEnableScheduleForRootGuard {
 public:
@@ -197,63 +345,6 @@ TDescribeOperationSettings MakeSettings(
         .IncludeStats = includeStats,
         .IncludeLocation = includeLocation,
     };
-}
-
-auto BreakFirstLocationForward(NActors::TTestActorRuntime& runtime, size_t& broken) {
-    auto* rt = &runtime;
-    return runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [&broken, rt](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (!ev || !ev->Get()->Ev) {
-                return;
-            }
-            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvGetPartitionsLocation::EventType) {
-                return;
-            }
-            if (broken >= 1) {
-                return;
-            }
-            ++broken;
-            const ui64 tabletId = ev->Get()->TabletId;
-            const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
-            rt->Send(new IEventHandle(
-                ev->Sender,
-                ev->Recipient,
-                new TEvPipeCache::TEvDeliveryProblem(tabletId, true /*notDelivered*/),
-                0,
-                subscribeCookie));
-            ev.Reset();
-        });
-}
-
-auto DropLocationForwards(NActors::TTestActorRuntime& runtime) {
-    return runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (ev && ev->Get()->Ev &&
-                ev->Get()->Ev->Type() == TEvPersQueue::TEvGetPartitionsLocation::EventType)
-            {
-                ev.Reset();
-            }
-        });
-}
-
-auto InjectEmptyStatusOnce(NActors::TTestActorRuntime& runtime, size_t& injected) {
-    auto* rt = &runtime;
-    return runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [&injected, rt](TEvPipeCache::TEvForward::TPtr& ev) {
-            if (!ev || !ev->Get()->Ev) {
-                return;
-            }
-            if (ev->Get()->Ev->Type() != TEvPersQueue::TEvStatus::EventType) {
-                return;
-            }
-            if (injected >= 1) {
-                return;
-            }
-            ++injected;
-            auto* response = new TEvPersQueue::TEvStatusResponse();
-            rt->Send(new IEventHandle(ev->Sender, ev->Recipient, response, 0, ev->Cookie));
-            ev.Reset();
-        });
 }
 
 } // namespace
@@ -424,64 +515,52 @@ Y_UNIT_TEST(FiltersPartitionsByStrategy) {
 }
 
 Y_UNIT_TEST(RetriesOnLocationDeliveryProblem) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_op_retry";
-    CreateTopic(runtime, path);
-
-    size_t broken = 0;
-    auto breakObserver = BreakFirstLocationForward(runtime, broken);
+    TIsolatedDescribeEnv env({.Location = TIsolatedPipeConfig::ELocation::FailOnce});
 
     auto response = RunDescribeOperation(
-        runtime,
-        MakeSettings(path, /*includeLocation=*/true),
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true),
         std::make_unique<TTestDescribeStrategy>());
 
-    UNIT_ASSERT_VALUES_EQUAL(broken, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(env.PipeStats.LocationForwards, 2u);
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response->Partitions.size(), 1u);
-    UNIT_ASSERT_GT(response->Partitions.begin()->second.Location.node_id(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(response->Partitions.begin()->second.Location.node_id(), LOCATION_NODE_ID);
 }
 
 Y_UNIT_TEST(RetriesOnEmptyStatusResponse) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_op_stats_retry";
-    CreateTopic(runtime, path);
-
-    size_t injected = 0;
-    auto injectObserver = InjectEmptyStatusOnce(runtime, injected);
+    TIsolatedDescribeEnv env({.Status = TIsolatedPipeConfig::EStatus::EmptyOnce});
 
     auto response = RunDescribeOperation(
-        runtime,
-        MakeSettings(path, /*includeLocation=*/true, /*includeStats=*/true),
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true, /*includeStats=*/true),
         std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
             .WithReadSessions = true,
             .WithStatus = true,
             .ConsumerName = "user",
         }));
 
-    UNIT_ASSERT_VALUES_EQUAL(injected, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(env.PipeStats.StatusForwards, 2u);
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT(response->Partitions.begin()->second.Stats.has_partition_stats());
 }
 
 Y_UNIT_TEST(TimesOutWhenLocationStuck) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_op_timeout";
-    CreateTopic(runtime, path);
-
-    auto dropObserver = DropLocationForwards(runtime);
+    TIsolatedDescribeEnv env({.Location = TIsolatedPipeConfig::ELocation::Drop});
+    auto& runtime = env.Runtime;
 
     const auto edge = runtime.AllocateEdgeActor();
     TEnableScheduleForRootGuard schedule(runtime);
     schedule.SetRoot(runtime.Register(CreateDescribeOperationActor(
         edge,
-        MakeSettings(path, /*includeLocation=*/true),
+        MakeSettings("/Root/topic", /*includeLocation=*/true),
         std::make_unique<TTestDescribeStrategy>())));
 
-    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return env.PipeStats.LocationForwards >= 1;
+    };
+    runtime.DispatchEvents(options);
     runtime.AdvanceCurrentTime(TDuration::Seconds(31));
 
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, TDuration::Seconds(5));
@@ -492,27 +571,118 @@ Y_UNIT_TEST(TimesOutWhenLocationStuck) {
 }
 
 Y_UNIT_TEST(PoisonRepliesCancelled) {
-    auto server = CreateSimulatedServer();
-    auto& runtime = server->GetRuntime();
-    const TString path = "/Root/topic_describe_op_poison";
-    CreateTopic(runtime, path);
-
-    auto dropObserver = DropLocationForwards(runtime);
+    TIsolatedDescribeEnv env({.Location = TIsolatedPipeConfig::ELocation::Drop});
+    auto& runtime = env.Runtime;
 
     const auto edge = runtime.AllocateEdgeActor();
     TEnableScheduleForRootGuard schedule(runtime);
     schedule.SetRoot(runtime.Register(CreateDescribeOperationActor(
         edge,
-        MakeSettings(path, /*includeLocation=*/true),
+        MakeSettings("/Root/topic", /*includeLocation=*/true),
         std::make_unique<TTestDescribeStrategy>())));
 
-    runtime.DispatchEvents(TDispatchOptions{}, TDuration::MilliSeconds(100));
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return env.PipeStats.LocationForwards >= 1;
+    };
+    runtime.DispatchEvents(options);
     runtime.Send(new IEventHandle(schedule.GetRoot(), edge, new NActors::TEvents::TEvPoison()));
 
     auto handle = runtime.GrabEdgeEvent<TEvDescribeOperationResponse>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(handle);
     auto response = THolder(handle->Release());
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::CANCELLED);
+}
+
+Y_UNIT_TEST(BalancerRetriesExhaustedOnFalseStatus) {
+    TIsolatedDescribeEnv env({.Location = TIsolatedPipeConfig::ELocation::StatusFalseAlways});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true),
+        std::make_unique<TTestDescribeStrategy>(),
+        TDuration::Seconds(60));
+
+    UNIT_ASSERT_GT(env.PipeStats.LocationForwards, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::UNAVAILABLE);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "Partition locations are not available");
+}
+
+Y_UNIT_TEST(StatsRetriesExhaustedOnEmptyStatus) {
+    TIsolatedDescribeEnv env({.Status = TIsolatedPipeConfig::EStatus::FailAlways});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true, /*includeStats=*/true),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .WithReadSessions = true,
+            .WithStatus = true,
+            .ConsumerName = "user",
+        }),
+        TDuration::Seconds(60));
+
+    UNIT_ASSERT_GT(env.PipeStats.StatusForwards, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::UNAVAILABLE);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "unresponsive");
+}
+
+Y_UNIT_TEST(ValidateSchemaThrowsMapsToInternalError) {
+    TIsolatedDescribeEnv env;
+
+    class TThrowingStrategy: public IDescribeStrategy {
+    public:
+        TString GetName() const override { return "Throw"; }
+        TDescribeSchemaResult ValidateSchema(const NDescriber::TTopicInfo&) override {
+            throw yexception() << "boom";
+        }
+        bool NeedProcessPartition(
+            const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition&) const override {
+            return true;
+        }
+        std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() const override {
+            return nullptr;
+        }
+        std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() const override {
+            return nullptr;
+        }
+    };
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic"),
+        std::make_unique<TThrowingStrategy>());
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::INTERNAL_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "Unhandled exception");
+}
+
+Y_UNIT_TEST(NotTopicMapsToSchemeError) {
+    TIsolatedDescribeEnv env({}, EFakeNavigateKind::Table);
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/table"),
+        std::make_unique<TTestDescribeStrategy>());
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT_EQUAL(response->IssueCode, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+}
+
+Y_UNIT_TEST(StatusIncludesPerConsumerStats) {
+    TIsolatedDescribeEnv env({.Status = TIsolatedPipeConfig::EStatus::WithConsumers});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true, /*includeStats=*/true),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .WithReadSessions = true,
+            .WithStatus = true,
+            .ConsumerName = "user",
+        }));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->Partitions.size(), 1u);
+    UNIT_ASSERT(response->Partitions.begin()->second.Consumers.contains("user"));
 }
 
 } // Y_UNIT_TEST_SUITE(DescribeOperationActor)

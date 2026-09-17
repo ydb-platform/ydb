@@ -79,8 +79,7 @@ public:
     static constexpr ui64 BlockSize = CachelineSize;
     static constexpr ui64 BlockBits = CachelineBits;
 
-    TBloomfilter() {
-    }
+    TBloomfilter() = default;
     explicit TBloomfilter(ui64 size) {
         Resize(size);
     }

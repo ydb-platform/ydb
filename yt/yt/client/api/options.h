@@ -62,7 +62,7 @@ struct TClientOptions
 
 //! Fills client options from environment variable (client options is permanent for whole lifecycle of program).
 /*!
- *  UserName is extracted from YT_USER env variable or uses current system username.
+ *  User is extracted from a non-empty YT_USER env variable; otherwise it remains unset.
  *  Token is extracted from YT_TOKEN env variable or from file `~/.yt/token`.
  */
 TClientOptions GetClientOptionsFromEnv();

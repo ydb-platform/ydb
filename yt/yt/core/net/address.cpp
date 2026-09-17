@@ -980,10 +980,22 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+//! A resolution cache key.
+//! The second component overrides the IPv4/IPv6 flags.
+using TResolveKey = std::pair<std::string, std::optional<NDns::TDnsResolveOptions>>;
+
+using TResolveKeyView = std::pair<TStringBuf, std::optional<NDns::TDnsResolveOptions>>;
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<std::string, TNetworkAddress>
+    , private TAsyncExpiringCache<TResolveKey, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
@@ -996,7 +1008,7 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(TStringBuf hostName)
+    TFuture<TNetworkAddress> Resolve(TStringBuf hostName, std::optional<NDns::TDnsResolveOptions> options = {})
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1004,12 +1016,12 @@ public:
         }
 
         // Fast path: probe the cache without materializing a std::string key.
-        if (auto address = Find(hostName)) {
+        if (auto address = Find(TResolveKeyView(hostName, options))) {
             return MakeFuture(*address);
         }
 
         // Slow path: materialize the key and run async resolution.
-        return Get(std::string(hostName));
+        return Get(TResolveKey(std::string(hostName), options));
     }
 
     IDnsResolverPtr GetDnsResolver()
@@ -1079,13 +1091,20 @@ private:
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const TResolveKey& key, bool /*isPeriodicUpdate*/) noexcept override
     {
-        const auto config = Config_.Acquire();
-        TDnsResolveOptions options{
-            .EnableIPv4 = config->EnableIPv4,
-            .EnableIPv6 = config->EnableIPv6,
-        };
+        const auto& [hostName, optionsOverride] = key;
+
+        TDnsResolveOptions options;
+        if (optionsOverride) {
+            options = *optionsOverride;
+        } else {
+            const auto config = Config_.Acquire();
+            options = {
+                .EnableIPv4 = config->EnableIPv4,
+                .EnableIPv6 = config->EnableIPv6,
+            };
+        }
         return GetDnsResolver()->Resolve(hostName, options)
             .Apply(BIND([=] (const TErrorOr<TNetworkAddress>& result) {
                 // Empty callback just to forward future callbacks into proper thread.
@@ -1129,9 +1148,9 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address, std::optional<NDns::TDnsResolveOptions> options)
 {
-    return Impl_->Resolve(address);
+    return Impl_->Resolve(address, options);
 }
 
 IDnsResolverPtr TAddressResolver::GetDnsResolver()

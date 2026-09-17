@@ -16,6 +16,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -149,6 +152,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // EnableTightPDiskSpaceColors uses 30 (3%) plus per-color MinChunks floors; this default stays 130.
     ui32 ChunkBaseLimit = 130;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
@@ -191,6 +195,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     // used for tests only
     std::optional<ui64> NonceRandNum;
+
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -360,6 +366,10 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }

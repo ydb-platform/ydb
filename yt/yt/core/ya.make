@@ -457,6 +457,7 @@ ENDIF()
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests
+    dns/unittests
     http/unittests
     misc/unittests
     net/unittests

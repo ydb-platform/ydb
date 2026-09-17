@@ -170,10 +170,12 @@ struct TFileYtLambdaBuilder: public TLambdaBuilder {
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         TLangVersion langver,
-        TRuntimeSettings::TConstPtr runtimeSettings
+        TRuntimeSettings::TConstPtr runtimeSettings,
+        NUdf::EBridgeMode bridgeMode = NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {}
     )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -218,7 +220,7 @@ public:
         }
 
         if (name == TYtTableContent::CallableName()) {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << TYtTableContent::CallableName() << "File",
                     callable.GetType()->GetReturnType(), false);
@@ -230,7 +232,7 @@ public:
         }
 
         if (name == "YtTableInput") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -244,7 +246,7 @@ public:
         }
 
         if (name == "YtTableInputNoCtx") {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputNoCtxFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -254,7 +256,7 @@ public:
         }
 
         if (name == "YtUngroupingList") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtUngroupingListFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -460,7 +462,8 @@ public:
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
                         MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                        options.BridgeMode(), options.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -793,7 +796,8 @@ public:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -1109,6 +1113,10 @@ public:
         return cluster;
     }
 
+    TString GetClusterYtName(const TString& cluster) const final {
+        return cluster;
+    }
+
     NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         Y_UNUSED(sessionId);
         Y_UNUSED(cluster);
@@ -1378,7 +1386,8 @@ private:
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
             MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
-            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+            options.BridgeMode(), options.BridgeBinaryPath());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1460,7 +1469,8 @@ private:
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
                 MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
-                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings());
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);

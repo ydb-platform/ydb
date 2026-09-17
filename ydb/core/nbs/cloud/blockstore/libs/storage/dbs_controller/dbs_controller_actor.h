@@ -75,6 +75,16 @@ private:
         const TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleNodeMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleDiskMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(
         BLOCKSTORE_IMPLEMENT_TRANSACTION,
         TTxDbsController)

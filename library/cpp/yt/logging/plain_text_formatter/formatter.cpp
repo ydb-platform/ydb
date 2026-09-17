@@ -137,7 +137,6 @@ void FormatMessage(TBaseFormatter* out, TStringBuf message)
             auto value = _mm_lddqu_si128(reinterpret_cast<const __m128i*>(current));
             int mask = _mm_movemask_epi8(_mm_cmplt_epi8(value, vectorLow)) |
                 _mm_movemask_epi8(_mm_cmpgt_epi8(value, vectorHigh));
-                       _mm_movemask_epi8(_mm_cmpgt_epi8(value, vectorHigh));
 
             if (mask == 0) {
                 // Fast path: perfect 16 chars

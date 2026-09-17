@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -19,6 +21,13 @@ struct TIndexBuildShardStatus {
     TString LastToken;
     NTableIndex::NFulltext::TDocCount FirstTokenRows = 0;
     NTableIndex::NFulltext::TDocCount LastTokenRows = 0;
+
+    TString FirstPrefix;
+    NTableIndex::NFulltext::TDocCount FirstPrefixDocCount = 0;
+    NTableIndex::NFulltext::TDocCount FirstPrefixSumDocLength = 0;
+    TString LastPrefix;
+    NTableIndex::NFulltext::TDocCount LastPrefixDocCount = 0;
+    NTableIndex::NFulltext::TDocCount LastPrefixSumDocLength = 0;
 
     NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -85,6 +94,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Unlocking = 60,
         AlterSequence = 61,
         PrepareValidation = 62,
+        AlterIndexTable = 63,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -114,6 +124,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
+        FulltextIndexPrefixBorders = 204,
     };
 
     struct TColumnBuildInfo {
@@ -208,6 +219,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    size_t IndexPartitions = 0;
+    size_t IndexHistogramFields = 0;
+    std::shared_ptr<TEqHeightHistogram> IndexHistogram;
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
@@ -737,8 +752,10 @@ public:
                 }
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG("Restored index build",
+            {"buildId", indexInfo->Id},
+            {"indexInfo", *indexInfo},
+        );
     }
 
     template<class TRow>
@@ -755,8 +772,10 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG("AddShardStatus",
+            {"buildId", Id},
+            {"shardIdx", shardIdx},
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
@@ -789,6 +808,13 @@ public:
         shardStatus.FirstTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstTokenRows>();
         shardStatus.LastToken = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastToken>();
         shardStatus.LastTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastTokenRows>();
+
+        shardStatus.FirstPrefix = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefix>();
+        shardStatus.FirstPrefixDocCount = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefixDocCount>();
+        shardStatus.FirstPrefixSumDocLength = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstPrefixSumDocLength>();
+        shardStatus.LastPrefix = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefix>();
+        shardStatus.LastPrefixDocCount = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefixDocCount>();
+        shardStatus.LastPrefixSumDocLength = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastPrefixSumDocLength>();
     }
 
     bool IsCancellationRequested() const {
@@ -808,6 +834,11 @@ public:
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
+    bool IsBuildSimpleIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex ||
+            BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
+    }
+
     bool IsBuildPrefixedVectorIndex() const {
         return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
     }
@@ -824,6 +855,10 @@ public:
         return BuildKind == EBuildKind::BuildFulltext && (
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance ||
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+    }
+
+    bool IsBuildFulltextPrefixedRelevance() const {
+        return IsBuildFulltextRelevance() && IndexColumns.size() > 1;
     }
 
     bool IsBuildFulltextCompact() const {
@@ -986,6 +1021,9 @@ public:
         return 0.f;
     }
 
+    std::vector<ui32> GetSecondaryIndexKeyTags(TSchemeShard* ss) const;
+    void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
+    bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
@@ -1123,3 +1161,5 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
 
     o << "}";
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -375,6 +375,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+            pdiskConfig.SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
             if (node.VDisksMoved) {
                 continue;
@@ -539,9 +540,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig =
-            new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
-                                  ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                                  : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
+            new TNodeWardenConfig();
         google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         if (nodeIndex == 0) {
@@ -618,6 +617,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         0);
 
     runtime.LocationCallback = options.NodeLocationCallback;
+    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;
@@ -955,6 +955,32 @@ TCmsTestEnv::RequestDDiskInfo(ui64 tabletId)
 
     TAutoPtr<IEventHandle> handle;
     auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskInfoGetResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskTabletListResponse
+TCmsTestEnv::RequestDDiskTabletList(const NKikimrCms::TDDiskTabletListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskTabletListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskTabletListResponse>(handle);
+    UNIT_ASSERT(reply);
+    return reply->Record;
+}
+
+NKikimrCms::TDDiskDiskListResponse
+TCmsTestEnv::RequestDDiskDiskList(const NKikimrCms::TDDiskDiskListRequest &request)
+{
+    auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
+    event->Record.CopyFrom(request);
+    SendToPipe(CmsId, Sender, event.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvDDiskDiskListResponse>(handle);
     UNIT_ASSERT(reply);
     return reply->Record;
 }

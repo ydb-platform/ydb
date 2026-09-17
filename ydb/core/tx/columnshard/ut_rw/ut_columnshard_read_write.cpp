@@ -1560,6 +1560,204 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     }
 }
 
+// A scan that is resumed from a cursor skips every portion it has already read. Those portions
+// still have to reach the duplicate filter, otherwise the surviving portions deduplicate among
+// themselves and a key whose winning version lived in a skipped portion is emitted a second time.
+void TestScanResumedByCursorDeduplicates(const TString& readerClassName) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
+    runtime.GetAppData(0).ColumnShardConfig.SetDeduplicationEnabled(true);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const TestTableDescription table;
+    const ui64 tableId = 1;
+    const auto ydbSchema = table.Schema;
+    auto planStep = SetupSchema(runtime, sender, tableId);
+
+    constexpr ui64 portionsCount = 10;
+    constexpr ui64 duplicatedKey = 300;
+    constexpr ui32 portionsBeforeInterruption = 5;
+
+    // Portion i holds keys {i, duplicatedKey}, so all of them intersect. Writing them from the last
+    // one to the first one puts the newest version of duplicatedKey into the portion that sorts
+    // first, which is the one a resumed scan drops. That is required for the duplicate to show up:
+    // if the winning version survived the cursor it would win among the survivors too, and the
+    // interrupted scan would not have emitted duplicatedKey at all.
+    ui64 writeId = 0;
+    ui64 txId = 100;
+    for (ui64 i = portionsCount; i >= 1; --i) {
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(
+            WriteData(runtime, sender, ++writeId, tableId, MakeTestBlobValues({ i, duplicatedKey }, ydbSchema), ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCompactionStartedCounter().Val(), 0);
+
+    const NOlap::TSnapshot snapshot(planStep, Max<ui64>());
+
+    // One chunk per ack, so this reads exactly portionsBeforeInterruption portions, then drops the scan
+    // and keeps the last cursor.
+    TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    interrupted.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    UNIT_ASSERT(interrupted.InitializeScanner());
+    for (ui32 i = 0; i < portionsBeforeInterruption; ++i) {
+        interrupted.Ack();
+        UNIT_ASSERT_C(interrupted.Receive(), "scan finished after " << i << " chunks, too early to resume it from a cursor");
+    }
+
+    TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    resumed.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    resumed.SetScanCursor(interrupted.GetLastCursor());
+    resumed.ReadAll();
+    UNIT_ASSERT(resumed.IsCorrectlyFinished());
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = interrupted.GetReceivedBatches();
+    batches.insert(batches.end(), resumed.GetReceivedBatches().begin(), resumed.GetReceivedBatches().end());
+
+    UNIT_ASSERT(DataHas(batches, { duplicatedKey, duplicatedKey + 1 }, true));
+    UNIT_ASSERT(DataHas(batches, { 1, portionsCount + 1 }, true));
+
+    ui64 rowsCount = 0;
+    for (const auto& batch : batches) {
+        rowsCount += batch->num_rows();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowsCount, portionsCount + 1);
+}
+
+// Two rows per portion: {1,20}, {2,19} ... {10,11}. Every key once. Sorted by first key the portions
+// go 1,2..10; sorted by last key they go 10..2,1 -- so slot 3 is a different portion in each order.
+NOlap::TSnapshot WriteOverlappingPortions(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 tableId, const TestTableDescription& table, const ui64 portionsCount) {
+    auto planStep = SetupSchema(runtime, sender, tableId);
+    ui64 writeId = 0;
+    ui64 txId = 100;
+    for (ui64 i = 1; i <= portionsCount; ++i) {
+        std::vector<ui64> writeIds;
+        const std::vector<ui64> keys = { i, 2 * portionsCount + 1 - i };
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlobValues(keys, table.Schema), table.Schema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    return NOlap::TSnapshot(planStep, Max<ui64>());
+}
+
+void AssertResumedScanReadsEveryKeyOnce(TShardReader& interrupted, TShardReader& resumed, const ui64 portionsCount) {
+    UNIT_ASSERT_C(
+        resumed.IsCorrectlyFinished(), resumed.GetErrors().empty() ? "resumed scan did not finish" : resumed.GetErrors().front().message());
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches = interrupted.GetReceivedBatches();
+    batches.insert(batches.end(), resumed.GetReceivedBatches().begin(), resumed.GetReceivedBatches().end());
+    UNIT_ASSERT(DataHas(batches, { 1, 2 * portionsCount + 1 }, true));
+
+    ui64 rowsCount = 0;
+    for (const auto& batch : batches) {
+        rowsCount += batch->num_rows();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(rowsCount, 2 * portionsCount);
+}
+
+// No ORDER BY, but deduplication is on: the rows come out unordered while the portions are still read
+// in key order. Resuming must ask about the portion order, not about the row order.
+void TestScanResumedByCursorWithoutSorting(const TString& readerClassName) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
+    runtime.GetAppData(0).ColumnShardConfig.SetDeduplicationEnabled(true);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const TestTableDescription table;
+    const ui64 tableId = 1;
+
+    constexpr ui64 portionsCount = 10;
+    constexpr ui32 portionsBeforeInterruption = 5;
+    const NOlap::TSnapshot snapshot = WriteOverlappingPortions(runtime, sender, tableId, table, portionsCount);
+
+    TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    interrupted.SetReverse(std::nullopt);
+    interrupted.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    UNIT_ASSERT(interrupted.InitializeScanner());
+    for (ui32 i = 0; i < portionsBeforeInterruption; ++i) {
+        interrupted.Ack();
+        UNIT_ASSERT_C(interrupted.Receive(), "scan finished after " << i << " chunks, too early to resume it from a cursor");
+    }
+
+    TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    resumed.SetReverse(std::nullopt);
+    resumed.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    resumed.SetScanCursor(interrupted.GetLastCursor());
+    resumed.ReadAll();
+
+    AssertResumedScanReadsEveryKeyOnce(interrupted, resumed, portionsCount);
+}
+
+// The two readers sort portions differently: trivial by last key, simple by first. So slot 3 is a
+// different portion in each, and a scan resumed on the other reader must reuse its cursor's order.
+void TestScanResumedByCursorOnOtherReader(const TString& interruptedReader, const TString& resumedReader) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(interruptedReader);
+    runtime.GetAppData(0).ColumnShardConfig.SetDeduplicationEnabled(true);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const TestTableDescription table;
+    const ui64 tableId = 1;
+
+    constexpr ui64 portionsCount = 10;
+    constexpr ui32 portionsBeforeInterruption = 5;
+    const NOlap::TSnapshot snapshot = WriteOverlappingPortions(runtime, sender, tableId, table, portionsCount);
+
+    TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    interrupted.SetReverse(std::nullopt);
+    interrupted.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    UNIT_ASSERT(interrupted.InitializeScanner());
+    for (ui32 i = 0; i < portionsBeforeInterruption; ++i) {
+        interrupted.Ack();
+        UNIT_ASSERT_C(interrupted.Receive(), "scan finished after " << i << " chunks, too early to resume it from a cursor");
+    }
+
+    // The shard the scan comes back to is running the other reader, as during a rolling restart.
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(resumedReader);
+
+    TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    resumed.SetReverse(std::nullopt);
+    resumed.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+    resumed.SetScanCursor(interrupted.GetLastCursor());
+    resumed.ReadAll();
+
+    AssertResumedScanReadsEveryKeyOnce(interrupted, resumed, portionsCount);
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardInit) {
@@ -1903,7 +2101,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteStandalone) {
         TestTableDescription table;
-        table.InStore = false;
         TestWrite(table);
     }
 
@@ -1916,13 +2113,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(WriteStandaloneExoticTypes) {
         TestTableDescription table;
         table.Schema = TTestSchema::YdbExoticSchema();
-        table.InStore = false;
         TestWrite(table);
     }
 
-    Y_UNIT_TEST_DUO(WriteOverload, InStore) {
-        TestTableDescription table;
-        table.InStore = InStore;
+    Y_UNIT_TEST_DUO(WriteOverload, Standalone) {
+        TestTableDescription table{ .Standalone = Standalone };
         TestWriteOverload(table);
     }
 
@@ -1942,7 +2137,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         const ui64 tableId = 1;
-        TestTableDescription table;   // InStore == true: created via a schema preset (a column store)
+        TestTableDescription table{ .Standalone = false };
         Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
@@ -2186,6 +2381,30 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT(DataHas({ rb }, { 0, numRows }, true));
     }
 
+    Y_UNIT_TEST(ScanResumedByCursorDeduplicates) {
+        TestScanResumedByCursorDeduplicates("TRIVIAL");
+    }
+
+    Y_UNIT_TEST(ScanResumedByCursorDeduplicatesSimpleReader) {
+        TestScanResumedByCursorDeduplicates("SIMPLE");
+    }
+
+    Y_UNIT_TEST(ScanResumedByCursorWithoutSorting) {
+        TestScanResumedByCursorWithoutSorting("TRIVIAL");
+    }
+
+    Y_UNIT_TEST(ScanResumedByCursorWithoutSortingSimpleReader) {
+        TestScanResumedByCursorWithoutSorting("SIMPLE");
+    }
+
+    Y_UNIT_TEST(ScanResumedByCursorOnSimpleReader) {
+        TestScanResumedByCursorOnOtherReader("TRIVIAL", "SIMPLE");
+    }
+
+    Y_UNIT_TEST(ScanResumedByCursorOnTrivialReader) {
+        TestScanResumedByCursorOnOtherReader("SIMPLE", "TRIVIAL");
+    }
+
     Y_UNIT_TEST(WriteRead) {
         TestTableDescription table;
         TestWriteRead(false, table);
@@ -2193,7 +2412,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteReadStandalone) {
         TestTableDescription table;
-        table.InStore = false;
         TestWriteRead(false, table);
     }
 
@@ -2206,7 +2424,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(WriteReadStandaloneExoticTypes) {
         TestTableDescription table;
         table.Schema = TTestSchema::YdbExoticSchema();
-        table.InStore = false;
         TestWriteRead(false, table);
     }
 
@@ -2216,7 +2433,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(RebootWriteReadStandalone) {
         TestTableDescription table;
-        table.InStore = false;
         TestWriteRead(true, table);
     }
 
@@ -3270,7 +3486,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
     }
 
-    Y_UNIT_TEST(InternalScanAfterDropColumn) {
+    Y_UNIT_TEST_DUO(InternalScanAfterDropColumn, Standalone) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -3312,7 +3528,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
         };
 
-        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
+        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, Standalone, ydbSchema, ydbPk), ++txId);
 
         const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
         std::vector<ui64> writeIds;
@@ -3358,7 +3574,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             return false;
         });
 
-        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, Standalone, 2, ydbSchemaV2, ydbPk, {}), ++txId));
 
         // The restore scan was captured before the schema change and carries the write's schema
         // version (1). Observe (but don't drop) any scan error so we can assert the scan does not fail.

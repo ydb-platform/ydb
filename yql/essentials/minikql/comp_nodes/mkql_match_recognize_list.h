@@ -128,7 +128,7 @@ public:
         }
 
         TRange(TRange&& other)
-            : Container_(other.Container_)
+            : Container_(std::move(other.Container_))
             , FromIndex_(other.FromIndex_)
             , ToIndex_(other.ToIndex_)
             , NfaIndex_(other.NfaIndex_)

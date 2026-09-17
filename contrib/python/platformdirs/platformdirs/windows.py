@@ -230,6 +230,9 @@ def get_win_folder_if_csidl_name_not_env_var(csidl_name: str) -> str | None:  # 
     if csidl_name == "CSIDL_MYMUSIC":
         return os.path.join(os.path.normpath(os.environ["USERPROFILE"]), "Music")  # ruff:ignore[os-path-join]
 
+    if csidl_name == "CSIDL_DESKTOPDIRECTORY":
+        return os.path.join(os.path.normpath(os.environ["USERPROFILE"]), "Desktop")  # ruff:ignore[os-path-join]
+
     if csidl_name == "CSIDL_PROGRAMS":
         return os.path.join(  # ruff:ignore[os-path-join]
             os.path.normpath(os.environ["APPDATA"]),
@@ -270,6 +273,7 @@ def get_win_folder_from_registry(csidl_name: str) -> str:
         "CSIDL_MYPICTURES": "My Pictures",
         "CSIDL_MYVIDEO": "My Video",
         "CSIDL_MYMUSIC": "My Music",
+        "CSIDL_DESKTOPDIRECTORY": "Desktop",
         "CSIDL_PROGRAMS": "Programs",
         "CSIDL_COMMON_PROGRAMS": "Common Programs",
     }.get(csidl_name)

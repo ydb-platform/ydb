@@ -19,6 +19,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/system/tempfile.h>
+#include <optional>
 
 using namespace NYdb;
 
@@ -44,6 +45,10 @@ struct TTestServerSettings {
     bool CheckACL = false;
     bool HideAuthenticationFailureReasons = false;
     bool EnableKafkaServerlessTransactions = false;
+    std::optional<ui32> TokenRecheckIntervalMs;
+    TString LoginTokenExpireTime;
+    TString AuthRefreshTime;
+    ui32 ACLRetryTimeoutSec = 0;
 };
 
 template <class TKikimr, bool secure>

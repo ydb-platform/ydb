@@ -24,14 +24,15 @@ public:
     TICDirectStorageTransport(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId icStorageTransportActorId,
-        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry);
+        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry,
+        bool enableChecksums);
 
     ~TICDirectStorageTransport() override = default;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
+        const TPBufferKey pBufferKey,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
@@ -73,12 +74,12 @@ public:
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<ui64> lsns,
+        TVector<TPBufferKey> pBufferKeys,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
@@ -93,6 +94,7 @@ private:
     using EConnectionType = THostConnection::EConnectionType;
 
     const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
+    const bool EnableChecksums;
 
     [[nodiscard]] TSessionEntry GetSessionEntry(
         const THostConnection& connection) const;
@@ -102,10 +104,11 @@ private:
 
 // Convenience factory: creates the shared registry, transport actor and
 // TICDirectStorageTransport bound together.
-[[nodiscard]] std::unique_ptr<IStorageTransport> CreateDirectStorageTransport(
+[[nodiscard]] TStorageTransportPtr CreateDirectStorageTransport(
     NActors::TActorSystem* actorSystem,
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex);
+    ui32 dbgIndex,
+    bool enableChecksums);
 
 ////////////////////////////////////////////////////////////////////////////////
 

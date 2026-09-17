@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/compute/events/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
@@ -12,6 +13,7 @@
 
 #include <util/generic/ptr.h>
 
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -40,13 +42,37 @@ struct IMemoryQuotaManager {
     using TPtr = std::shared_ptr<IMemoryQuotaManager>;
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
     virtual ~IMemoryQuotaManager() = default;
-    virtual bool AllocateQuota(ui64 memorySize) = 0;
+    // isOptional == true: the caller can continue without the memory (e.g. hash table growth that can be
+    // replaced by spilling), the manager MAY refuse in advance even if it has free quota.
+    // isOptional == false: the caller fails without the memory.
+    virtual bool AllocateQuota(ui64 memorySize, bool isOptional) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;
     virtual ui64 GetCurrentQuota() const = 0;
     virtual ui64 GetMaxMemorySize() const = 0;
-    virtual bool IsReasonableToUseSpilling() const = 0;
+    // > 0: bytes that may still be requested, mandatory or optional;
+    //   0: do not request optional quota, it will most likely be refused;
+    // < 0: total consumption is over target, |value| is the overuse, consumers should give memory back.
+    // The old IsReasonableToUseSpilling() signal is (GetMemoryAvailability() < 0).
+    virtual i64 GetMemoryAvailability() const = 0;
     virtual TString MemoryConsumptionDetails() const = 0;
 };
+
+// Saturating add for availability values: std::numeric_limits<i64>::max() is the "unlimited" sentinel.
+inline i64 AddMemoryAvailability(i64 a, i64 b) {
+    if (b > 0 && a > std::numeric_limits<i64>::max() - b) {
+        return std::numeric_limits<i64>::max();
+    }
+    if (b < 0 && a < std::numeric_limits<i64>::min() - b) {
+        return std::numeric_limits<i64>::min();
+    }
+    return a + b;
+}
+
+// Availability of a quota manager that keeps a locally prepaid leftover on top of a parent (node level) value:
+// the sum, unless the parent is over target - a negative parent value is never masked by the leftover.
+inline i64 CombineMemoryAvailability(i64 localLeftover, i64 parent) {
+    return parent < 0 ? parent : AddMemoryAvailability(localLeftover, parent);
+}
 
 // Source/transform.
 // Must be IActor.
@@ -141,6 +167,8 @@ struct IDqComputeActorAsyncInput {
 // 6. Checkpoints actor builds state for all task node as sum of the state of CA and all its sinks and saves it.
 // 7. ...
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
+// 9. When all side effects were applied Sink/transform run callback ICallbacks::OnAsyncOutputStateCommitted()
+// 10. After receiving all commits checkpoint will be marked as completed
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution(EResumeSource source = EResumeSource::Default) = 0;
@@ -148,6 +176,7 @@ struct IDqComputeActorAsyncOutput {
 
         // Checkpointing
         virtual void OnAsyncOutputStateSaved(TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+        virtual void OnAsyncOutputStateCommitted(ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         // Finishing
         virtual void OnAsyncOutputFinished(ui64 outputIndex) = 0; // Signal that async output has successfully written its finish flag and so compute actor is ready to finish.
@@ -170,8 +199,14 @@ struct IDqComputeActorAsyncOutput {
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
 
     // Checkpointing.
-    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
-    virtual void LoadState(const TSinkState& state) = 0;
+
+    // Apply side effects related to this checkpoint. Should call ICallbacks::OnAsyncOutputStateCommitted() when state was committed.
+    // Function CommitState() must be idempotent, and may be called multiple times, in case of checkpoint restoration, for same sink.
+    virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
+
+    // Load state from specific checkpoint.
+    // If checkpoint used for restoration was in pending commit state, next will be called CommitState() on the same checkpoint.
+    virtual void LoadState(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) = 0;
 
     virtual TMaybe<google::protobuf::Any> ExtraData() { return {}; }
 
@@ -273,6 +308,7 @@ public:
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
         NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
+        IDqSchedulableWorkFactoryPtr SchedulableWorkFactory;
     };
 
     struct TLookupSourceArguments {
@@ -288,6 +324,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
         const bool IsMultiMatches;
+        const TCollectStatsLevel StatsLevel;
     };
 
     struct TSinkArguments {
@@ -305,6 +342,7 @@ public:
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
+        bool HasCheckpoints = false;
     };
 
     struct TInputTransformArguments {

@@ -1,6 +1,7 @@
 #include "pq_rl_helpers.h"
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/library/actors/core/log.h>
 

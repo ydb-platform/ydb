@@ -50,8 +50,8 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringConfig& indexAlter);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
-std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
-NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type, bool enableFulltextCompact);
 bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type);
 
 std::span<const std::string_view> GetImplTables(

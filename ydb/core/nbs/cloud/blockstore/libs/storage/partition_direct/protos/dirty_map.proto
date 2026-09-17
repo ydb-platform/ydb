@@ -3,8 +3,10 @@ syntax = "proto3";
 package NYdb.NBS.PartitionDirect.NProto;
 
 message TBlockField {
-    repeated fixed32 StartAndLength = 1;
-    optional bytes BitMask = 2;
+    oneof Encoding {
+        bytes RunLengthEncoding = 1;
+        bytes BitMask = 2;
+    }
 }
 
 message TDDiskState {

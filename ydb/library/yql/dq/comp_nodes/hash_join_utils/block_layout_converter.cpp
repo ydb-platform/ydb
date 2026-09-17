@@ -765,6 +765,9 @@ public:
 
     void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) override {
         columns.resize(Extractors_.size());
+        if (columns.empty()) {
+            return;
+        }
 
         std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
         TupleLayout_->CalculateColumnSizes(
@@ -800,6 +803,10 @@ public:
 
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
+    }
+
+    void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
+        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
     }
 
 private:

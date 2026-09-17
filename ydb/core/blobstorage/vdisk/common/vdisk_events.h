@@ -12,13 +12,14 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_matrix.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
+#include <ydb/core/blobstorage/vdisk/protos/space_report.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage_write_source.h>
 
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <ydb/core/util/pb.h>
@@ -28,6 +29,7 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/maybe.h>
+#include <optional>
 #include <util/stream/str.h>
 #include <util/string/escape.h>
 #include <util/generic/overloaded.h>
@@ -1913,12 +1915,16 @@ namespace NKikimr {
         {}
 
         TEvVBlock(ui64 tabletId, ui32 generation, const TVDiskID &vdisk, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0)
+                TWriteSource writeSource = UnknownWriteSource(), ui64 issuerGuid = 0,
+                std::optional<ui32> version = std::nullopt)
         {
             Record.SetTabletId(tabletId);
             Record.SetGeneration(generation);
             if (issuerGuid) {
                 Record.SetIssuerGuid(issuerGuid);
+            }
+            if (version) {
+                Record.SetVersion(*version);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (deadline != TInstant::Max()) {
@@ -1978,6 +1984,10 @@ namespace NKikimr {
             }
             if (Record.HasGeneration()) {
                 str << "Generation# " << Record.GetGeneration();
+            }
+            if (Record.HasIsTabletStorageInfoVersionObsolete()) {
+                str << " IsTabletStorageInfoVersionObsolete# "
+                    << Record.GetIsTabletStorageInfoVersionObsolete();
             }
             if (Record.HasVDiskID()) {
                 str << "VDisk# " << VDiskIDFromVDiskID(Record.GetVDiskID()).ToString().c_str();
@@ -3313,6 +3323,41 @@ namespace NKikimr {
         void SetError() {
             Record.set_status(NKikimrProto::EReplyStatus_Name(NKikimrProto::ERROR));
         }
+    };
+
+    struct TEvGetLogoBlobIndexStatResponseAck
+        : public TEventPB<TEvGetLogoBlobIndexStatResponseAck,
+                    NKikimrVDisk::GetLogoBlobIndexStatResponseAck,
+                    TEvBlobStorage::EvGetLogoBlobIndexStatResponseAck>
+    {
+        TEvGetLogoBlobIndexStatResponseAck() = default;
+
+        TEvGetLogoBlobIndexStatResponseAck(ui64 sequenceId, bool cancel = false) {
+            Record.set_sequence_id(sequenceId);
+            if (cancel) {
+                Record.set_cancel(true);
+            }
+        }
+    };
+
+    struct TEvGetVDiskSpaceReportRequest
+        : public TEventPB<TEvGetVDiskSpaceReportRequest,
+                    NKikimrVDisk::TGetVDiskSpaceReportRequest,
+                    TEvBlobStorage::EvGetVDiskSpaceReportRequest>
+    {
+        TEvGetVDiskSpaceReportRequest();
+    };
+
+    struct TEvGetVDiskSpaceReportResponse
+        : public TEvVResultBasePB<TEvGetVDiskSpaceReportResponse,
+                    NKikimrVDisk::TGetVDiskSpaceReportResponse,
+                    TEvBlobStorage::EvGetVDiskSpaceReportResponse>
+    {
+        TEvGetVDiskSpaceReportResponse();
+
+        TEvGetVDiskSpaceReportResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+                const TInstant& now, const ::NMonitoring::TDynamicCounters::TCounterPtr& counterPtr,
+                const NVDiskMon::TLtcHistoPtr& histoPtr);
     };
 
     struct TEvPermitGarbageCollection : TEventLocal<TEvPermitGarbageCollection, TEvBlobStorage::EvPermitGarbageCollection> {};

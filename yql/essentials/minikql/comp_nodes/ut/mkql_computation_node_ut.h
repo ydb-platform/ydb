@@ -12,7 +12,7 @@
 
 #define UNBOXED_VALUE_STR_EQUAL(unboxed, expected)                                              \
     do {                                                                                        \
-        const auto v = (unboxed);                                                               \
+        const auto& v = (unboxed);                                                              \
         if (!(v.AsStringRef() == (expected))) {                                                 \
             UNIT_FAIL_IMPL(                                                                     \
                 "equal assertion failed",                                                       \
@@ -132,7 +132,7 @@ struct TSetup {
     void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
         const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
             if (name == originalName) {
-                return [name, newName = newName](TCallable& callable, const TTypeEnvironment& env) {
+                return [newName = newName](TCallable& callable, const TTypeEnvironment& env) {
                     TCallableBuilder callableBuilder(env, newName,
                                                      callable.GetType()->GetReturnType(), /*disableMerge=*/false);
                     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {

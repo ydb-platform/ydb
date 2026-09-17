@@ -237,7 +237,7 @@ public:
 
 private:
     void VisitToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -654,7 +654,7 @@ private:
     }
 
     void MarkToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -882,7 +882,7 @@ private:
     void VisitPragma(const TRule_pragma_stmt& msg) {
         NewLine();
         VisitKeyword(msg.GetToken1());
-        auto prefix = msg.GetRule_opt_id_prefix_or_type2();
+        const auto& prefix = msg.GetRule_opt_id_prefix_or_type2();
         if (prefix.HasBlock1()) {
             Visit(prefix.GetBlock1().GetRule_an_id_or_type1());
             VisitKeyword(prefix.GetBlock1().GetToken2());
@@ -3165,7 +3165,7 @@ private:
 
         bool pushedIndent = false;
         for (; begin != end; ++begin) {
-            const auto op = getOp(*begin);
+            const auto& op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
             const bool hasFirstNewline = LastLine_ != ParsedTokens_[TokenIndex_].Line;
             const bool hasSecondNewline = ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + opSize].Line;

@@ -86,7 +86,7 @@ def _build_middlewares(
     """Apply middlewares to handler."""
     for app in apps[::-1]:
         for m, _ in app._middlewares_handlers:  # type: ignore[union-attr]
-            handler = update_wrapper(partial(m, handler=handler), handler)  # type: ignore[misc]
+            handler = update_wrapper(partial(m, handler=handler), handler)
     return handler
 
 
@@ -211,7 +211,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
     def _check_frozen(self) -> None:
         if self._frozen:
             warnings.warn(
-                "Changing state of started or joined " "application is deprecated",
+                "Changing state of started or joined application is deprecated",
                 DeprecationWarning,
                 stacklevel=3,
             )
@@ -455,7 +455,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
     ) -> Server:
 
         warnings.warn(
-            "Application.make_handler(...) is deprecated, " "use AppRunner API instead",
+            "Application.make_handler(...) is deprecated, use AppRunner API instead",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -498,6 +498,8 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         task: "asyncio.Task[None]",
         _cls: Type[Request] = Request,
     ) -> Request:
+        if TYPE_CHECKING:
+            assert self._loop is not None
         return _cls(
             message,
             payload,
@@ -514,7 +516,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
                 yield m, True
             else:
                 warnings.warn(
-                    'old-style middleware "{!r}" deprecated, ' "see #2252".format(m),
+                    f'old-style middleware "{m!r}" deprecated, see #2252',
                     DeprecationWarning,
                     stacklevel=2,
                 )
@@ -559,7 +561,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
                     for m, new_style in app._middlewares_handlers:  # type: ignore[union-attr]
                         if new_style:
                             handler = update_wrapper(
-                                partial(m, handler=handler), handler  # type: ignore[misc]
+                                partial(m, handler=handler), handler
                             )
                         else:
                             handler = await m(app, handler)  # type: ignore[arg-type,assignment]

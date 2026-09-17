@@ -14,7 +14,6 @@ SRCS(
 PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/local_executor
-    ydb/library/formats/arrow
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

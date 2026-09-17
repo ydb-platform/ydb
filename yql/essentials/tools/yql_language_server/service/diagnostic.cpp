@@ -45,6 +45,7 @@ private:
             .File = textDocument->Uri,
             .ClusterMode = ::NYql::NFastCheck::Unknown,
             .LangVer = ::NYql::GetMaxReleasedLangVersion(),
+            .SuppressPrerequisiteIssues = true,
         };
     }
 

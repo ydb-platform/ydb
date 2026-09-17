@@ -54,6 +54,7 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
@@ -342,7 +343,6 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
-    TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> UserFacingTracingConfigurator;
 
     // Immutable snapshot registry for fast snapshot queries
     TIntrusivePtr<IImmutableSnapshotRegistryHolder> SnapshotRegistryHolder;

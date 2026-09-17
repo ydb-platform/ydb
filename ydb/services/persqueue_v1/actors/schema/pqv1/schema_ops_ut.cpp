@@ -120,7 +120,7 @@ void AssertDescribeAliases(
         UNIT_ASSERT_VALUES_EQUAL_C(response->Topics.size(), 1u, name);
         const auto it = response->Topics.find(name);
         UNIT_ASSERT_C(it != response->Topics.end(), name);
-        UNIT_ASSERT_VALUES_EQUAL_C(it->second.Status, NPQ::NDescriber::EStatus::SUCCESS, name);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second.Status, NPQ::NDescriber::EStatus::Success, name);
         UNIT_ASSERT_VALUES_EQUAL_C(it->second.RealPath, expectedRealPath, name);
     }
 }
@@ -141,7 +141,7 @@ NKikimrPQ::TPQTabletConfig DescribeTabletConfig(
     auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
     return topic.Info->Description.GetPQTabletConfig();
 }
 
@@ -383,7 +383,7 @@ Y_UNIT_TEST(CreateWithRetentionStorageBytes) {
     auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
     UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1u);
     const auto& topic = response->Topics.begin()->second;
-    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(
         topic.Info->Description.GetPQTabletConfig().GetPartitionConfig().GetStorageLimitBytes(),
         10_MB);
@@ -596,46 +596,21 @@ Y_UNIT_TEST(NegativeReadSpeedRejected) {
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "partition_total_read_speed_bytes_per_second");
 }
 
-Y_UNIT_TEST(FccTopicNameFormatsCreateAndDescribeAliases) {
+Y_UNIT_TEST(FccKeepsLiteralDashDashTopicName) {
     auto setup = CreateSetup("PQv1NameFormatsFcc");
     auto& runtime = setup->GetRuntime();
 
-    MkDir(*setup, "/Root", "fcclegacy");
+    const TString name = "TestSchemeList--test-topic-1";
+    const TString path = "/Root/" + name;
+    CreateTopic(runtime, name);
+    AssertDescribeAliases(runtime, {name, path}, path);
+
     MkDir(*setup, "/Root", "fccmodern");
-    MkDir(*setup, "/Root", "fccshort");
-
-    CreateTopic(runtime, "rt3.dc1--fcclegacy--topic");
-    AssertDescribeAliases(
-        runtime,
-        {
-            "rt3.dc1--fcclegacy--topic",
-            "fcclegacy--topic",
-            "fcclegacy/topic",
-            "/Root/fcclegacy/topic",
-        },
-        "/Root/fcclegacy/topic");
-
     CreateTopic(runtime, "fccmodern/topic");
     AssertDescribeAliases(
         runtime,
-        {
-            "rt3.dc1--fccmodern--topic",
-            "fccmodern--topic",
-            "fccmodern/topic",
-            "/Root/fccmodern/topic",
-        },
+        {"fccmodern/topic", "/Root/fccmodern/topic"},
         "/Root/fccmodern/topic");
-
-    CreateTopic(runtime, "fccshort--topic");
-    AssertDescribeAliases(
-        runtime,
-        {
-            "rt3.dc1--fccshort--topic",
-            "fccshort--topic",
-            "fccshort/topic",
-            "/Root/fccshort/topic",
-        },
-        "/Root/fccshort/topic");
 }
 
 Y_UNIT_TEST(FederationTopicNameFormats) {

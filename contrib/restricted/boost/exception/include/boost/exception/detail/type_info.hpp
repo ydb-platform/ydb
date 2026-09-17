@@ -235,13 +235,13 @@ boost
             (void) static_assert_unrecognized_pretty_function_format_please_file_github_issue;
 
             if( std::size_t const p = sizeof(char[1 + !!s01 * (p01 + p02 + p03 + p04 + p05 + p06)]) - 1 )
-                return { BOOST_EXCEPTION_PRETTY_FUNCTION + p, s01 - p };
+                return { &BOOST_EXCEPTION_PRETTY_FUNCTION[p], s01 - p };
 
             if( std::size_t const p = sizeof(char[1 + !!s02 * (p07 + p08 + p09)]) - 1 )
-                return { BOOST_EXCEPTION_PRETTY_FUNCTION + p, s02 - p };
+                return { &BOOST_EXCEPTION_PRETTY_FUNCTION[p], s02 - p };
 
             std::size_t const p = sizeof(char[1 + !!s02 * p10]) - 1;
-            return { BOOST_EXCEPTION_PRETTY_FUNCTION + p, s02 - p };
+            return { &BOOST_EXCEPTION_PRETTY_FUNCTION[p], s02 - p };
             }
 
 #undef BOOST_EXCEPTION_CDECL

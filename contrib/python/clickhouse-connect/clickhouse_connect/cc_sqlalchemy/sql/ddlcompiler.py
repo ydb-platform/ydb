@@ -7,6 +7,7 @@ from sqlalchemy import Column
 from sqlalchemy.exc import CompileError
 from sqlalchemy.sql import sqltypes
 from sqlalchemy.sql.compiler import DDLCompiler
+from sqlalchemy.sql.visitors import Visitable
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Nullable
@@ -106,8 +107,7 @@ class ClickHouseDDLHelper:
     def render_comment(comment: str | None) -> str:
         if comment is None:
             return "''"
-        escaped = comment.replace("'", "''")
-        return f"'{escaped}'"
+        return format_str(comment)
 
     @staticmethod
     def _render_setting_value(value: Any) -> str:
@@ -209,3 +209,8 @@ class ChDDLCompiler(DDLCompiler):
         if ttl is not None:
             text += f" TTL {self.render_default_string(ttl)}"
         return text
+
+    def render_default_string(self, default: Visitable | str) -> str:
+        if isinstance(default, str):
+            return self.sql_compiler.render_literal_value(default, sqltypes.STRINGTYPE)
+        return self.sql_compiler.process(default, literal_binds=True)

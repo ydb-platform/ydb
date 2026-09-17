@@ -53,6 +53,8 @@ public:
     const TOperationStats& GetDeletes() const;
     //! Returns the number of accessed table partitions.
     uint64_t GetPartitionsCount() const;
+    //! Returns the number of affected rows when collection was enabled.
+    std::optional<uint64_t> GetAffectedRows() const;
 
 private:
     std::string Name_;
@@ -60,6 +62,7 @@ private:
     TOperationStats Updates_;
     TOperationStats Deletes_;
     uint64_t PartitionsCount_ = 0;
+    std::optional<uint64_t> AffectedRows_;
 };
 
 //! Statistics for one query execution phase.

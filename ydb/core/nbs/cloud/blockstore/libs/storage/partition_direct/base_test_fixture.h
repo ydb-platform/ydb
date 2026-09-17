@@ -10,7 +10,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/pbuffer_key_test_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -22,7 +24,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Default vchunk size.
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -41,7 +43,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static constexpr ui32 FixtureVChunkIndex = 100;
 
     const ui32 BlockSize = DefaultBlockSize;
-    const ui64 VChunkBlockCount = DefaultVChunkSize / BlockSize;
+    const ui64 VChunkBlockCount =
+        GetVChunkBlockCount(BlockSize, DefaultVChunkSize);
     const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
     const THostIndex FreshDDisk = 1;
     TVChunkConfig VChunkConfig = TVChunkConfig::MakeDefault(
@@ -60,19 +63,18 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
             .VChunkIndex = VChunkConfig.GetVChunkIndex()}};
 
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters{
-        new ::NMonitoring::TDynamicCounters()};
     std::shared_ptr<TTraceServiceMock> TraceService =
         std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
         VChunkConfig,
         BlockSize,
         VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
-    TBlockRange64 ExpectedRange;
+    TBlockRange16 ExpectedRange;
     TString RangeData;
 
     TMutex PromisesGuard;
@@ -133,6 +135,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
     {
         return vchunk.DirtyMapReady;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeOnCopyComplete(
+        TVChunk& vchunk,
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result)
+    {
+        vchunk.OnCopyComplete(hostIndex, result);
     }
 
     // Must be invoked on the vchunk's executor thread.

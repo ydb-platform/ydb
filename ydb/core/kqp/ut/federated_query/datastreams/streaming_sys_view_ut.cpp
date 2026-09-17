@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Setup();
 
         const std::string text = fmt::format(R"(
-            PRAGMA pq.Consumer = "unknown";
+            PRAGMA pq.Consumer = "test_consumer";
             INSERT INTO `{pq_source}`.`{output_topic}`
             SELECT * FROM `{pq_source}`.`{input_topic}`;)",
             "pq_source"_a = PQ_SOURCE,
@@ -267,11 +267,26 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             "input_topic"_a = InputTopic
         );
 
-        const auto start = TInstant::Now();
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)",
             "text"_a = text
         ));
+
+        WaitFor(TDuration::Seconds(10), "Wait query running", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            std::string status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        const auto start = TInstant::Now();
+        AlterTopic(InputTopic, NYdb::NTopic::TAlterTopicSettings{}.AppendDropConsumers("test_consumer"));
 
         const auto timeout = TDuration::Seconds(20);
         WaitFor(timeout, "Wait query suspend", [&](TString& error) {

@@ -158,6 +158,8 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_DEFAULT(EExecMode, ExecMode, EExecMode::Execute);
     //! Selects the statistics detail level; statistics are disabled by default.
     FLUENT_SETTING_DEFAULT(EStatsMode, StatsMode, EStatsMode::None);
+    //! Enables collection of affected row statistics; disabled by default and may add overhead.
+    FLUENT_SETTING_DEFAULT(bool, CollectAffectedRows, false);
     //! Allows parts of different result sets to be interleaved in the response stream.
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     //! Selects the workload manager resource pool used to execute the query.

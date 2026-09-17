@@ -14,6 +14,7 @@ FORK_SUBTESTS()
 PEERDIR(
     ydb/library/persqueue
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()
@@ -26,9 +27,11 @@ SRCS(
     local_partition_ut.cpp
     producer_deferred_publication_ut.cpp
     read_session_credentials_ut.cpp
+    read_session_kafka_timestamps_ut.cpp
     topic_deferred_publish_ut.cpp
     topic_to_table_ut.cpp
     topic_tx_skip_conflict_ut.cpp
+    write_session_connect_ut.cpp
     write_session_flush_ut.cpp
     write_session_size_ut.cpp
 )

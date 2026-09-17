@@ -130,6 +130,7 @@ public:
     TString UdfResolverLog;
     bool UdfResolverFilterSyscalls = false;
     bool ScanUdfs = false;
+    TString UdfBridgePath;
     THolder<NYqlMountConfig::TMountConfig> MountConfig;
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TStaticGatewaysConfig> StaticGatewaysConfig;

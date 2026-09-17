@@ -2187,8 +2187,10 @@ void TProducer::HandleClientMessage(TMessageInfo&& message) {
 void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult> promise) {
     if (Closed.load() || MessagesWorker->InFlightMessages.empty()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        bool isClosedDueToError = sessionClosedEvent &&
+            sessionClosedEvent->GetStatus() != EStatus::SUCCESS;
         FlushPromises.push_back(std::make_pair(std::move(promise), TFlushResult{
-            .Status = EFlushStatus::Success,
+            .Status = isClosedDueToError ? EFlushStatus::ProducerClosed : EFlushStatus::Success,
             .LastWrittenSeqNo = LastWrittenSeqNo.load(),
             .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
         }));
@@ -2419,8 +2421,10 @@ TWriteStats TProducer::GetWriteStats() {
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
     if (Closed.load()) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        bool isClosedDueToError = sessionClosedEvent &&
+            sessionClosedEvent->GetStatus() != EStatus::SUCCESS;
         return NThreading::MakeFuture(TFlushResult{
-            .Status = EFlushStatus::Success,
+            .Status = isClosedDueToError ? EFlushStatus::ProducerClosed : EFlushStatus::Success,
             .LastWrittenSeqNo = LastWrittenSeqNo.load(),
             .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
         });
@@ -2474,8 +2478,10 @@ TProducer::THashPartitionChooser::THashPartitionChooser(std::vector<std::uint32_
 }
 
 std::pair<std::uint32_t, std::string> TProducer::THashPartitionChooser::ChoosePartition(const std::string_view key) {
+    constexpr auto mask = 0x7FFFFFFF;
+    constexpr auto seed = 0x9747b28c;
     // Partitions is guaranteed non-empty by the constructor invariant.
-    auto hash = MurmurHash<std::uint64_t>(key.data(), key.size());
+    auto hash = MurmurHash<std::uint32_t>(key.data(), key.size(), seed) & mask;
     return {Partitions[hash % Partitions.size()], ""};
 }
 

@@ -121,7 +121,7 @@ TSourceResult TSqlValues::ValuesSource(const TRule_values_source& node, const TV
 TSourceResult TSqlIntoValues::Build(const TRule_into_values_source& node, const TString& operationName) {
     switch (node.Alt_case()) {
         case TRule_into_values_source::kAltIntoValuesSource1: {
-            auto alt = node.GetAlt_into_values_source1();
+            const auto& alt = node.GetAlt_into_values_source1();
             TVector<TString> columnsHint;
             if (alt.HasBlock1()) {
                 PureColumnListStr(alt.GetBlock1().GetRule_pure_column_list1(), *this, columnsHint);

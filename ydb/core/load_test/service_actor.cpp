@@ -574,7 +574,7 @@ public:
                 }
                 LOG_D("Create new load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskLoadTest(
-                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag, true)));
                 break;
             }
 
@@ -585,7 +585,7 @@ public:
                 }
                 LOG_D("Create new load actor with tag# " << tag);
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePersistentBufferWriterLoadTest(
-                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
+                                cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag, true)));
                 break;
             }
 
@@ -1104,6 +1104,8 @@ public:
             const ui32 numDbg             = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
             const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 4096);
             const bool disableReplication = params.Get("disable_replication") == "1";
+            const bool enableChecksums = !params.Has("enable_checksums")
+                || params.Get("enable_checksums") == "1";
 
             std::vector<std::pair<ui64, ui32>> targets;
             for (TStringBuf rest(targetsStr); rest;) {
@@ -1157,6 +1159,7 @@ public:
                 wc->SetNumDirectBlockGroupsToUse(numDbg);
             }
             wc->MutableTabletConfig()->SetMaxInflightLsns(maxInflightLsns);
+            wc->MutableTabletConfig()->SetEnableChecksums(enableChecksums);
             if (disableReplication) {
                 wc->MutableTabletConfig()->SetDisableReplication(true);
             }

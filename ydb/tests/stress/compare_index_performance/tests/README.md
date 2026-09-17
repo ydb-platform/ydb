@@ -61,6 +61,7 @@ sanity check) or two different refs — **without a local build**.
 | `compare_rows` | `10000` | rows in the generated database |
 | `compare_threads` | `10` | client threads |
 | `compare_targets` | `1000` | number of query targets |
+| `compare_index_type` | `` | value passed to the selected workload as `--index-type`; empty uses its default |
 | `compare_ref` | `main` | baseline S3 ref (download URL + report label) |
 | `compare_current_ref` | `` | current S3 ref; empty → use the locally built `ydbd` |
 | `compare_build_preset` | `release` | S3 preset for downloads + report label (e.g. `release`, `relwithdebinfo`, `profile`) |

@@ -631,7 +631,7 @@ class tree
       :  AllocHolder(BOOST_MOVE_BASE(AllocHolder, x), x.value_comp())
    {}
 
-   inline tree(const tree& x, const allocator_type &a)
+   inline tree(const tree& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  AllocHolder(x.value_comp(), a)
    {
       this->icont().clone_from
@@ -639,7 +639,7 @@ class tree
       //AllocHolder clears in case of exception
    }
 
-   tree(BOOST_RV_REF(tree) x, const allocator_type &a)
+   tree(BOOST_RV_REF(tree) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  AllocHolder(x.value_comp(), a)
    {
       if(this->node_alloc() == x.node_alloc()){

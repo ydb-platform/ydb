@@ -64,6 +64,16 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvJobStop(const Yql::DqsProto::JobStopRequest& request);
     };
 
+    struct TEvJobStopResponse
+        : NActors::TEventPB<
+            TEvJobStopResponse,
+            NYql::NDqProto::TEvJobStopResponse,
+            TDqResManEvents::ES_JOB_STOP_RESPONSE> {
+
+        TEvJobStopResponse() = default;
+        explicit TEvJobStopResponse(const TString& error, bool retryable = false);
+    };
+
     struct TEvOperationStop
         : NActors::TEventPB<TEvOperationStop, NYql::NDqProto::TEvOperationStop, TDqResManEvents::ES_OPERATION_STOP> {
 

@@ -6,13 +6,6 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TLoggingTagList::DoAdd(TLoggingTagKey key, TStringBuf value)
-{
-    TTaggedPayloadWriter::AppendTag(&Payload_, key.Get(), value);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void FormatValue(TStringBuilderBase* builder, TLoggingTagListPayloadView tags, TStringBuf /*spec*/)
 {
     TTaggedPayloadReader reader(tags);

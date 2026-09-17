@@ -181,6 +181,27 @@ class KikimrSqsTopicTestBase(object):
         finally:
             client.meta.events.unregister(event_name, add_forwarded_headers)
 
+    @contextmanager
+    def _boto_client_with_rfc_forwarded(self, public_host, proto='https'):
+        first_proto = proto.split(',', 1)[0].strip().lower()
+        if ':' in public_host or public_host.startswith('['):
+            host_param = '"{}"'.format(public_host)
+        else:
+            host_param = public_host
+        forwarded = 'for=192.0.2.43;host={};proto={}'.format(host_param, first_proto)
+        public_origin = '{}://{}'.format(first_proto, public_host)
+        client = self._make_boto_client()
+
+        def add_forwarded_header(request, **kwargs):
+            request.headers['Forwarded'] = forwarded
+
+        event_name = 'before-send.sqs.*'
+        client.meta.events.register(event_name, add_forwarded_header)
+        try:
+            yield public_origin, client
+        finally:
+            client.meta.events.unregister(event_name, add_forwarded_header)
+
     def _make_ydb_driver(self):
         node = self.cluster.nodes[1]
         config = ydb.DriverConfig(
@@ -341,3 +362,22 @@ class KikimrSqsTopicTestBase(object):
         assert_that(messages, not_none())
         assert_that(messages, has_length(1))
         return messages[0]['MessageAttributes'][attribute_name]
+
+    def _receive_messages(self, expected_count, wait_time_seconds=20):
+        # ReceiveMessage may return fewer than MaxNumberOfMessages as soon as
+        # any message is visible (including after DelaySeconds). Keep polling
+        # until the expected count is collected or the wait budget expires.
+        messages = []
+        deadline = time.time() + wait_time_seconds
+        while len(messages) < expected_count:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            response = self._boto_client.receive_message(
+                QueueUrl=self._queue_url,
+                WaitTimeSeconds=min(20, max(1, int(remaining))),
+                MaxNumberOfMessages=min(10, expected_count - len(messages)),
+            )
+            messages.extend(response.get('Messages') or [])
+        assert_that(messages, has_length(expected_count))
+        return messages

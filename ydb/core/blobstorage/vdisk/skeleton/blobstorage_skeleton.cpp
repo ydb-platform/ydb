@@ -66,6 +66,15 @@ using namespace NKikimrServices;
 
 namespace NKikimr {
 
+    // Space a LogoBlobs record is going to take in a Fresh SST: its index entry plus
+    // the DiskBlob written out next to it. Huge blobs keep their payload elsewhere and
+    // pass 0 here.
+    static ui64 FreshLogoBlobBytes(ui64 payloadBytes) {
+        const ui64 index = sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
+        const ui64 data = payloadBytes ? payloadBytes + TDiskBlob::MaxHeaderSize : 0;
+        return TFreshSpaceTracker::RecordBytes(index, data);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // TSkeleton -- rational VDisk implementation
     ////////////////////////////////////////////////////////////////////////////
@@ -257,6 +266,11 @@ namespace NKikimr {
             }
             MinHugeBlobInBytes = alignedSize;
             IFaceMonGroup->MinHugeBlobInBytes(MinHugeBlobInBytes);
+            if (HullCtx) {
+                // Raising the threshold makes a single Fresh record bigger, which is
+                // what bounds the space a chunk boundary can waste.
+                HullCtx->FreshSpaceTracker->UpdateMaxInPlaceLogoBlobSize(MinHugeBlobInBytes);
+            }
             return true;
         }
 
@@ -498,6 +512,27 @@ namespace NKikimr {
         template<> struct TLoggedRecType<TEvBlobStorage::TEvVPutResult> { using T = TLoggedRecVPut; };
         template<> struct TLoggedRecType<TEvVMultiPutItemResult> { using T = TLoggedRecVMultiPutItem; };
 
+        // Chunks a Fresh compaction would need if this write were accepted.
+        ui64 ProjectFreshChunks(ui64 admittedBytes) const {
+            if (!HullCtx || !Hull) {
+                return 0;
+            }
+            return HullCtx->FreshSpaceTracker->GetProjectedChunks(admittedBytes,
+                Hull->GetFreshSpaceDebt());
+        }
+
+        ui64 BlobAdmissionBytes(bool isHuge, ui64 payloadBytes) const {
+            if (isHuge) {
+                return HullCtx ? ui64(HullCtx->ChunkSize) : 0;
+            }
+            return FreshLogoBlobBytes(payloadBytes);
+        }
+
+        void AdmitFreshSpace(ui64 bytes, ILoggedRec *loggedRec) {
+            HullCtx->FreshSpaceTracker->Admit(bytes);
+            loggedRec->FreshSpaceAdmission = bytes;
+        }
+
         template <typename TEvResult>
         std::pair<std::unique_ptr<NPDisk::TEvLog>, NWilson::TTraceId> CreatePutLogEvent(const TActorContext &ctx, TString evPrefix,
                 NActors::TActorId sender, ui64 cookie, NLWTrace::TOrbit &&orbit, NKikimrBlobStorage::EPutHandleClass handleClass,
@@ -534,9 +569,11 @@ namespace NKikimr {
             UpdatePDiskWriteBytes(dataToWrite.size());
 
             bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
+            const ui64 freshSpaceAdmission = FreshLogoBlobBytes(buffer.GetSize());
             auto loggedRec = new typename TLoggedRecType<TEvResult>::T(seg, confirmSyncLogAlso, id, ingress,
                 std::move(buffer), info.Checksum, std::move(result), sender, cookie, std::move(info.TraceId), handleClass,
                 SelfVDiskId, Config, VCtx);
+            AdmitFreshSpace(freshSpaceAdmission, loggedRec);
             intptr_t loggedRecId = LoggedRecsVault.Put(loggedRec);
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
@@ -555,9 +592,13 @@ namespace NKikimr {
             info.Buffer = TDiskBlob::Create(info.BlobId.BlobSize(), info.BlobId.PartId(), Db->GType.TotalPartCount(),
                 std::move(info.Buffer), *Arena, HullCtx->VCfg->BlobHeaderMode, info.Checksum);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
-            return std::make_unique<TEvHullWriteHugeBlob>(sender, cookie, info.BlobId, info.Ingress,
+            auto ev = std::make_unique<TEvHullWriteHugeBlob>(sender, cookie, info.BlobId, info.Ingress,
                 std::move(info.Buffer), ignoreBlock, info.IssueKeepFlag, handleClass, std::move(res),
                 &info.ExtraBlockChecks, info.WriteSource, rewriteBlob);
+            ev->FreshSpaceAdmission = HullCtx->ChunkSize;
+            ev->SpaceTracker = HullCtx->FreshSpaceTracker;
+            HullCtx->FreshSpaceTracker->Admit(ev->FreshSpaceAdmission);
+            return ev;
         }
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
@@ -686,6 +727,7 @@ namespace NKikimr {
 
             TBatchedVec<TVPutInfo> putsInfo;
             ui64 lsnCount = 0;
+            ui64 batchAdmission = 0;
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = *record.MutableItems(itemIdx);
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
@@ -699,8 +741,11 @@ namespace NKikimr {
                 const bool ignoreBlock = record.GetIgnoreBlock() || info.IgnoreBlock;
                 const bool isZeroEntry = item.GetIsZeroEntry();
 
+                // Each item is judged against the space the items before it in this
+                // batch have already claimed, this one included.
+                const ui64 itemAdmission = BlobAdmissionBytes(false, info.Buffer.size());
                 if (!OutOfSpaceLogic->AllowVPutLikeWrite(ctx, ignoreBlock, isZeroEntry, info.Buffer.size(),
-                        item.GetDataKind())) {
+                        item.GetDataKind(), ProjectFreshChunks(batchAdmission + itemAdmission))) {
                     info.HullStatus = {NKikimrProto::OUT_OF_SPACE, "out of space", false};
                     continue;
                 }
@@ -741,6 +786,15 @@ namespace NKikimr {
                     }
                 }
                 hasPostponed |= info.HullStatus.Postponed;
+
+                // Only an item that goes on to create a log record keeps its charge:
+                // that is exactly the set CreatePutLogEvent() admits below. A refused
+                // or invalid item writes nothing, so leaving its bytes in the running
+                // total would push the items after it out of space for no reason, and
+                // would eat into what a SYSTEM item in the same batch is judged by.
+                if (!info.HullStatus.Postponed && info.HullStatus.Status == NKikimrProto::OK) {
+                    batchAdmission += itemAdmission;
+                }
 
                 lsnCount += info.HullStatus.Status == NKikimrProto::OK;
             }
@@ -873,7 +927,8 @@ namespace NKikimr {
 
             const bool ignoreBlock = record.GetIgnoreBlock();
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
+            if (!OutOfSpaceLogic->Allow(ctx, ev,
+                    ProjectFreshChunks(BlobAdmissionBytes(info.IsHugeBlob, info.Buffer.size())))) {
                 ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space", 0, false}, ev, ctx, now);
                 return;
             }
@@ -959,6 +1014,7 @@ namespace NKikimr {
 
         void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) {
             TEvHullLogHugeBlob *msg = ev->Get();
+            HullCtx->FreshSpaceTracker->CommitAdmission(msg->FreshSpaceAdmission);
 
             // update hull write duration
             msg->Result->MarkHugeWriteTime();
@@ -1009,7 +1065,7 @@ namespace NKikimr {
                 msg->Ingress);
 #endif
             // prepare message to recovery
-            NHuge::TPutRecoveryLogRec logRec(msg->LogoBlobID, msg->Ingress, msg->HugeBlob);
+            NHuge::TPutRecoveryLogRec logRec(msg->LogoBlobID, msg->Ingress, msg->HugeBlob, msg->IsStripe);
             auto dataToWrite = logRec.Serialize();
             UpdatePDiskWriteBytes(dataToWrite.size());
             // prepare TLoggedRecVPutHuge
@@ -1212,7 +1268,10 @@ namespace NKikimr {
             const ui32 gen = record.GetGeneration();
             const ui64 issuerGuid = record.GetIssuerGuid();
 
-            if (!OutOfSpaceLogic->Allow(ctx, ev)) {
+            ui32 currentGen = 0;
+            bool hasExistingEntry = Hull->GetBlocked(tabletId, &currentGen);
+
+            if (!OutOfSpaceLogic->Allow(ctx, ev, hasExistingEntry)) {
                 ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, now);
                 return;
             }
@@ -1222,26 +1281,33 @@ namespace NKikimr {
                 return;
             }
 
+            const std::optional<ui32> version = record.HasVersion()
+                ? std::optional<ui32>(record.GetVersion()) : std::nullopt;
+
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_BLOCK, "TEvVBlock",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"tabletId", tabletId},
                 {"gen", gen},
+                {"version", version},
                 {"marker", "BSVS00"});
 
             TLsnSeg seg;
             ui32 actGen = 0;
-            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, &actGen, &seg);
-            NKikimrProto::EReplyStatus status = checkStatus.Status;
-            bool postponed = checkStatus.Postponed;
-            bool postponeUntilLsn = checkStatus.Lsn;
+            bool versionChanged = false;
+            const auto writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+            auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, version,
+                writeSource, &actGen, &seg, &versionChanged);
             TEvBlobStorage::TEvVBlockResult::TTabletActGen act(tabletId, actGen);
-            std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, status, checkStatus.ErrorReason, &act,
-                ev, now, SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid()));
+            std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, checkStatus.Status,
+                checkStatus.ErrorReason, &act, ev, now, SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid()));
+            if (checkStatus.ObsoleteVersion) {
+                result->Record.SetIsTabletStorageInfoVersionObsolete(true);
+            }
 
-            if (status != NKikimrProto::OK) {
-                if (postponed) {
+            if (checkStatus.Status != NKikimrProto::OK) {
+                if (checkStatus.Postponed) {
                     Hull->PostponeReplyUntilCommitted(result.release(), ev->Sender, ev->Cookie, std::move(ev->TraceId),
-                        postponeUntilLsn);
+                        checkStatus.Lsn);
                 } else {
                     YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_BLOCK, "Dump VDiskLogPrefix, TEvVBlockResult, marker",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -1254,20 +1320,47 @@ namespace NKikimr {
             }
 
             OverloadHandler->ActualizeWeights(ctx, Mask(EHullDbType::Blocks));
+
+            std::unique_ptr<NPDisk::TEvLog> versionLogMsg;
+
+            if (versionChanged) {
+                NKikimrBlobStorage::TEvVBlock versionRecord;
+                versionRecord.SetTabletId(~tabletId);
+                versionRecord.SetGeneration(record.GetVersion());
+
+                const TLsnSeg vSeg(seg.First, seg.First);
+                auto versionSyncLogMsg = std::make_unique<NSyncLog::TEvSyncLogPut>(vSeg.Point(), ~tabletId,
+                    record.GetVersion(), 0);
+                intptr_t versionLoggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(vSeg, true, ~tabletId,
+                    record.GetVersion(), 0, nullptr, TActorId(), 0));
+                versionLogMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
+                    versionRecord.SerializeAsString(), vSeg, reinterpret_cast<void *>(versionLoggedRecId),
+                    std::move(versionSyncLogMsg), nullptr, writeSource);
+
+                seg = {seg.Last, seg.Last};
+            }
+
             // prepare synclog msg in advance
             std::unique_ptr<NSyncLog::TEvSyncLogPut> syncLogMsg(new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, gen,
                 record.GetIssuerGuid()));
 
-            bool confirmSyncLogAlso = static_cast<bool>(syncLogMsg);
-            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, confirmSyncLogAlso, tabletId, gen,
-                issuerGuid, std::move(result), ev->Sender, ev->Cookie));
+            intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVBlock(seg, true, tabletId, gen, issuerGuid,
+                std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
+
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
-                    ev->GetChainBuffer()->GetString(), seg, loggedRecCookie, std::move(syncLogMsg), nullptr,
-                    WriteSourceFromProto(record.GetWriteSourceOp()));
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock, ev->GetChainBuffer()->GetString(),
+                seg, loggedRecCookie, std::move(syncLogMsg), nullptr, writeSource);
+
             // send prepared message to recovery log
-            ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));
+            if (versionLogMsg) {
+                auto multiLog = std::make_unique<NPDisk::TEvMultiLog>();
+                multiLog->AddLog(THolder<NPDisk::TEvLog>(versionLogMsg.release()));
+                multiLog->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()), std::move(ev->TraceId));
+                ctx.Send(Db->LoggerID, multiLog.release());
+            } else {
+                ctx.Send(Db->LoggerID, logMsg.release(), 0, 0, std::move(ev->TraceId));
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1946,6 +2039,8 @@ namespace NKikimr {
                 std::unique_ptr<ILoggedRec> loggedRec(LoggedRecsVault.Extract(loggedRecId));
                 Db->LsnMngr->ConfirmLsnForHull(loggedRec->Seg, loggedRec->ConfirmSyncLogAlso);
                 loggedRec->Replay(*Hull, ctx);
+                // The record is in Fresh now, and the segment accounts for it.
+                HullCtx->FreshSpaceTracker->CommitAdmission(loggedRec->FreshSpaceAdmission);
             }
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
@@ -2259,6 +2354,7 @@ namespace NKikimr {
             auto hugeKeeperCtx = std::make_shared<THugeKeeperCtx>(VCtx, PDiskCtx, Db->LsnMngr,
                     ctx.SelfID, (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID),
                     localRecovInfoStr, Config->BaseInfo.ReadOnly);
+            hugeKeeperCtx->HugeBlobCtx = HugeBlobCtx;
             auto hugeKeeper = CreateHullHugeBlobKeeper(hugeKeeperCtx, ev->Get()->RepairedHuge);
             Db->HugeKeeperID.Set(ctx.Register(hugeKeeper));
             ActiveActors.Insert(Db->HugeKeeperID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever

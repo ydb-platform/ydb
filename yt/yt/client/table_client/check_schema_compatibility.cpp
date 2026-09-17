@@ -82,7 +82,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                     currentTypeCompatibility.first,
                     TError("Column %v input type is incompatible with output type",
                         inputColumn->GetDiagnosticNameString())
-                        << currentTypeCompatibility.second
+                        .With(currentTypeCompatibility.second)
                 };
             }
 

@@ -39,7 +39,7 @@ RUN ./ya make -r -T \
 
 FROM ubuntu:22.04
 RUN apt-get update  \
-    && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
+    && apt-get install --no-install-recommends -y libidn12 libaio1 jq util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
@@ -47,24 +47,28 @@ RUN mkdir -p /ydb_data/cluster/kikimr_configs \
     && touch /ydb_data/cluster/kikimr_configs/config.yaml
 
 COPY main/.github/docker/files/ /
+RUN chmod +x /health_check /initialize_local_ydb
 COPY --from=builder \
     /ydbwork/out/ydb/apps/ydbd/ydbd \
     /ydbwork/out/ydb/apps/ydb/ydb \
     /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     /
 
-# YDB grpc
-EXPOSE ${GRPC_TLS_PORT:-2135}
-EXPOSE ${GRPC_PORT:-2136}
-EXPOSE ${MON_PORT:-8765}
-EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
+# Persist the setting in the image so it also applies when /ydb is used
+# as an overridden entrypoint.
+RUN /ydb version --disable-checks
 
 # pass envs to container runtime
-ENV GRPC_PORT=${GRPC_PORT:-2136}
-ENV GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
-ENV MON_PORT=${MON_PORT:-8765}
-ENV YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
+ENV GRPC_PORT=2136
+ENV GRPC_TLS_PORT=2135
+ENV MON_PORT=8765
+ENV YDB_KAFKA_PROXY_PORT=9092
 
-HEALTHCHECK --start-period=10s --interval=15s CMD sh /health_check
+EXPOSE ${GRPC_TLS_PORT}
+EXPOSE ${GRPC_PORT}
+EXPOSE ${MON_PORT}
+EXPOSE ${YDB_KAFKA_PROXY_PORT}
+
+HEALTHCHECK --start-period=15s --interval=15s --start-interval=1s --timeout=12s --retries=3 CMD ["/health_check"]
 
 ENTRYPOINT ["bash", "/initialize_local_ydb"]

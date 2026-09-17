@@ -119,6 +119,7 @@ message TDqPqTopicSource {
     bool StopAtCurrentEndOffsets = 32;
     TOffsetPredicate OffsetPredicate = 33;
     TWriteTimePredicate WriteTimePredicate = 34;
+    bool UsedPartitionPredicate = 35;
 }
 
 message TDqPqTopicSink {
@@ -131,6 +132,7 @@ message TDqPqTopicSink {
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
     bool EnableDeduplication = 9;
+    string DeferredPublicationExtIdPrefix = 10; // Enables deferred publications usage on writing if non-empty
 }
 
 message TEvDqPqUpdateCounterValue {

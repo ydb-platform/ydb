@@ -142,10 +142,6 @@ void TDriverScope::LeaveCallback() noexcept {
 NYdbGrpc::IQueueClientContextPtr TDriverScope::CreateChildContext(
     NYdbGrpc::IQueueClientContext& parentContext)
 {
-    std::lock_guard lock(ContextMutex_);
-    if (!RootContext_) {
-        return nullptr;
-    }
     return WrapContext(parentContext.CreateContext());
 }
 

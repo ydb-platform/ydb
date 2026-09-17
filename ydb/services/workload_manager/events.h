@@ -40,8 +40,9 @@ struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoo
 };
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TWorkloadManagerEvents::EvPlaceRequestIntoPool> {
-    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
-        : DatabaseId(databaseId)
+    TEvPlaceRequestIntoPool(ui64 queryId, const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "", std::shared_ptr<ISessionUpdater> wmSessionUpdater = nullptr)
+        : QueryId(queryId)
+        , DatabaseId(databaseId)
         , SessionId(sessionId)
         , PoolId(poolId)
         , UserToken(userToken)
@@ -49,6 +50,7 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
         , WmSessionUpdater(wmSessionUpdater)
     {}
 
+    const ui64 QueryId;
     const TString DatabaseId;
     const TString SessionId;
     TString PoolId;  // Can be changed to default pool id
@@ -58,8 +60,9 @@ struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestInto
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TWorkloadManagerEvents::EvContinueRequest> {
-    TEvContinueRequest(Ydb::StatusIds::StatusCode status, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NYql::TIssues issues = {})
-        : Status(status)
+    TEvContinueRequest(ui64 queryId, Ydb::StatusIds::StatusCode status, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NYql::TIssues issues = {})
+        : QueryId(queryId)
+        , Status(status)
         , PoolId(poolId)
         , PoolConfig(poolConfig)
         , Issues(std::move(issues))
@@ -76,6 +79,7 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TWor
             issue.GetCode() == NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE;
     }
 
+    const ui64 QueryId;
     const Ydb::StatusIds::StatusCode Status;
     const TString PoolId;
     const NResourcePool::TPoolSettings PoolConfig;

@@ -48,6 +48,7 @@ struct TChecksRequest {
     const IUdfMeta* UdfMeta = nullptr;
     TMaybe<TVector<TCheckFilter>> Filters;
     TString IssueReportTarget;
+    bool SuppressPrerequisiteIssues = false;
 };
 
 struct TCheckResponse {

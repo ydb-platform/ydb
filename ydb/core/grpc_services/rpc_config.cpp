@@ -134,6 +134,12 @@ bool ConvertGetConfigToFetchConfigResult(
     return true;
 }
 
+bool IsDomainDatabaseOrEmpty(const TMaybe<TString>& databaseName) {
+    return !databaseName || databaseName->empty()
+        || NKikimr::CanonizePath(*databaseName)
+            == NKikimr::CanonizePath(NKikimr::AppData()->DomainsInfo->Domain->Name);
+}
+
 } // namespace
 
 namespace NKikimr::NGRpcService {
@@ -295,6 +301,13 @@ public:
                   NKikimrIssues::TIssuesIds::ACCESS_DENIED, self->ActorContext());
             return;
         }
+        if (!IsDomainDatabaseOrEmpty(Request_->GetDatabaseName())) {
+            self->Reply(Ydb::StatusIds::BAD_REQUEST,
+                "Cluster configuration replacement cannot be performed on a tenant database. "
+                "Specify the domain database or omit the database.",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
         self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
@@ -334,6 +347,7 @@ public:
         cmd->SetUserToken(Request_->GetSerializedToken());
         cmd->SetPeerName(Request_->GetPeerName());
         cmd->SetDryRun(protoRequest->dry_run());
+        cmd->SetAllowUnknownFields(protoRequest->allow_unknown_fields() || protoRequest->bypass_checks());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -687,12 +701,21 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
                 return;
             }
 
+            if (!IsDomainDatabaseOrEmpty(Request().GetDatabaseName())) {
+                Reply(Ydb::StatusIds::BAD_REQUEST,
+                    "Cluster bootstrap cannot be performed on a tenant database. "
+                    "Specify the domain database or omit the database.",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
+            }
+
             const auto& request = *GetProtoRequest();
 
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             auto& record = ev->Record;
             auto *cmd = record.MutableBootstrapCluster();
             cmd->SetSelfAssemblyUUID(request.self_assembly_uuid());
+            cmd->SetAllowUnknownFields(request.allow_unknown_fields());
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
         }
 

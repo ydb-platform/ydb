@@ -36,6 +36,8 @@ SRCS(
     interconnect_proxy_wrapper.h
     interconnect_resolve.cpp
     interconnect_session_iface.h
+    interconnect_session_pool_mapping.cpp
+    interconnect_session_pool_mapping.h
     interconnect_stream.cpp
     interconnect_stream.h
     interconnect_tcp_input_session.cpp
@@ -63,8 +65,11 @@ SRCS(
     subscription_manager.h
     types.cpp
     types.h
+    v2_probes.cpp
     v2_event_serializer.cpp
     v2_event_serializer.h
+    v2_io_buffers.h
+    v2_serialize_window.h
     watchdog_timer.h
 )
 

@@ -21,7 +21,7 @@ from email.parser import HeaderParser
 from email.utils import parsedate
 from math import ceil
 from pathlib import Path
-from types import TracebackType
+from types import MappingProxyType, TracebackType
 from typing import (
     Any,
     Callable,
@@ -47,6 +47,7 @@ from urllib.request import getproxies, proxy_bypass
 
 import attr
 from multidict import MultiDict, MultiDictProxy, MultiMapping
+from propcache.api import under_cached_property as reify
 from yarl import URL
 
 from . import hdrs
@@ -57,7 +58,7 @@ if sys.version_info >= (3, 11):
 else:
     import async_timeout
 
-__all__ = ("BasicAuth", "ChainMapProxy", "ETag")
+__all__ = ("BasicAuth", "ChainMapProxy", "ETag", "reify")
 
 IS_MACOS = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
@@ -73,6 +74,12 @@ _SENTINEL = enum.Enum("_SENTINEL", "sentinel")
 sentinel = _SENTINEL.sentinel
 
 NO_EXTENSIONS = bool(os.environ.get("AIOHTTP_NO_EXTENSIONS"))
+
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
+EMPTY_BODY_STATUS_CODES = frozenset((204, 304, *range(100, 200)))
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.2
+EMPTY_BODY_METHODS = hdrs.METH_HEAD_ALL
 
 DEBUG = sys.flags.dev_mode or (
     not sys.flags.ignore_environment and bool(os.environ.get("PYTHONASYNCIODEBUG"))
@@ -350,6 +357,20 @@ def parse_mimetype(mimetype: str) -> MimeType:
     )
 
 
+@functools.lru_cache(maxsize=56)
+def parse_content_type(raw: str) -> Tuple[str, MappingProxyType[str, str]]:
+    """Parse Content-Type header.
+
+    Returns a tuple of the parsed content type and a
+    MappingProxyType of parameters.
+    """
+    msg = HeaderParser().parsestr(f"Content-Type: {raw}")
+    content_type = msg.get_content_type()
+    params = msg.get_params(())
+    content_dict = dict(params[1:])  # First element is content type again
+    return content_type, MappingProxyType(content_dict)
+
+
 def guess_filename(obj: Any, default: Optional[str] = None) -> Optional[str]:
     name = getattr(obj, "name", None)
     if name and isinstance(name, str) and name[0] != "<" and name[-1] != ">":
@@ -395,16 +416,14 @@ def content_disposition_header(
     params is a dict with disposition params.
     """
     if not disptype or not (TOKEN > set(disptype)):
-        raise ValueError("bad content disposition type {!r}" "".format(disptype))
+        raise ValueError(f"bad content disposition type {disptype!r}")
 
     value = disptype
     if params:
         lparams = []
         for key, val in params.items():
             if not key or not (TOKEN > set(key)):
-                raise ValueError(
-                    "bad content disposition parameter" " {!r}={!r}".format(key, val)
-                )
+                raise ValueError(f"bad content disposition parameter {key!r}={val!r}")
             if quote_fields:
                 if key.lower() == "filename":
                     qval = quote(val, "", encoding=_charset)
@@ -427,58 +446,8 @@ def content_disposition_header(
     return value
 
 
-class _TSelf(Protocol, Generic[_T]):
-    _cache: Dict[str, _T]
-
-
-class reify(Generic[_T]):
-    """Use as a class method decorator.
-
-    It operates almost exactly like
-    the Python `@property` decorator, but it puts the result of the
-    method it decorates into the instance dict after the first call,
-    effectively replacing the function it decorates with an instance
-    variable.  It is, in Python parlance, a data descriptor.
-    """
-
-    def __init__(self, wrapped: Callable[..., _T]) -> None:
-        self.wrapped = wrapped
-        self.__doc__ = wrapped.__doc__
-        self.name = wrapped.__name__
-
-    def __get__(self, inst: _TSelf[_T], owner: Optional[Type[Any]] = None) -> _T:
-        try:
-            try:
-                return inst._cache[self.name]
-            except KeyError:
-                val = self.wrapped(inst)
-                inst._cache[self.name] = val
-                return val
-        except AttributeError:
-            if inst is None:
-                return self
-            raise
-
-    def __set__(self, inst: _TSelf[_T], value: _T) -> None:
-        raise AttributeError("reified property is read-only")
-
-
-reify_py = reify
-
-try:
-    from ._helpers import reify as reify_c
-
-    if not NO_EXTENSIONS:
-        reify = reify_c  # type: ignore[misc,assignment]
-except ImportError:
-    pass
-
-
-def is_ipv4_address(host: Optional[Union[str, bytes]]) -> bool:
-    """Check if host looks like an IPv4 address.
-
-    This function does not validate that the format is correct, only that
-    the host is a str or bytes, and its all numeric.
+def is_ip_address(host: Optional[str]) -> bool:
+    """Check if host looks like an IP Address.
 
     This check is only meant as a heuristic to ensure that
     a host is not a domain name.
@@ -486,39 +455,8 @@ def is_ipv4_address(host: Optional[Union[str, bytes]]) -> bool:
     if not host:
         return False
     # For a host to be an ipv4 address, it must be all numeric.
-    if isinstance(host, str):
-        return host.replace(".", "").isdigit()
-    if isinstance(host, (bytes, bytearray, memoryview)):
-        return host.decode("ascii").replace(".", "").isdigit()
-    raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
-
-
-def is_ipv6_address(host: Optional[Union[str, bytes]]) -> bool:
-    """Check if host looks like an IPv6 address.
-
-    This function does not validate that the format is correct, only that
-    the host contains a colon and that it is a str or bytes.
-
-    This check is only meant as a heuristic to ensure that
-    a host is not a domain name.
-    """
-    if not host:
-        return False
     # The host must contain a colon to be an IPv6 address.
-    if isinstance(host, str):
-        return ":" in host
-    if isinstance(host, (bytes, bytearray, memoryview)):
-        return b":" in host
-    raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
-
-
-def is_ip_address(host: Optional[Union[str, bytes, bytearray, memoryview]]) -> bool:
-    """Check if host looks like an IP Address.
-
-    This check is only meant as a heuristic to ensure that
-    a host is not a domain name.
-    """
-    return is_ipv4_address(host) or is_ipv6_address(host)
+    return ":" in host or host.replace(".", "").isdigit()
 
 
 _cached_current_datetime: Optional[int] = None
@@ -709,9 +647,7 @@ class TimerContext(BaseTimerContext):
     def __enter__(self) -> BaseTimerContext:
         task = asyncio.current_task(loop=self._loop)
         if task is None:
-            raise RuntimeError(
-                "Timeout context manager should be used " "inside a task"
-            )
+            raise RuntimeError("Timeout context manager should be used inside a task")
 
         if sys.version_info >= (3, 11):
             # Remember if the task was already cancelling
@@ -772,10 +708,11 @@ def ceil_timeout(
 
 
 class HeadersMixin:
+    """Mixin for handling headers."""
+
     ATTRS = frozenset(["_content_type", "_content_dict", "_stored_content_type"])
 
     _headers: MultiMapping[str]
-
     _content_type: Optional[str] = None
     _content_dict: Optional[Dict[str, str]] = None
     _stored_content_type: Union[str, None, _SENTINEL] = sentinel
@@ -787,10 +724,10 @@ class HeadersMixin:
             self._content_type = "application/octet-stream"
             self._content_dict = {}
         else:
-            msg = HeaderParser().parsestr("Content-Type: " + raw)
-            self._content_type = msg.get_content_type()
-            params = msg.get_params(())
-            self._content_dict = dict(params[1:])  # First element is content type again
+            content_type, content_mapping_proxy = parse_content_type(raw)
+            self._content_type = content_type
+            # _content_dict needs to be mutable so we can update it
+            self._content_dict = content_mapping_proxy.copy()
 
     @property
     def content_type(self) -> str:
@@ -1003,23 +940,10 @@ def parse_http_date(date_str: Optional[str]) -> Optional[datetime.datetime]:
 def must_be_empty_body(method: str, code: int) -> bool:
     """Check if a request must return an empty body."""
     return (
-        status_code_must_be_empty_body(code)
-        or method_must_be_empty_body(method)
-        or (200 <= code < 300 and method.upper() == hdrs.METH_CONNECT)
+        code in EMPTY_BODY_STATUS_CODES
+        or method in EMPTY_BODY_METHODS
+        or (200 <= code < 300 and method in hdrs.METH_CONNECT_ALL)
     )
-
-
-def method_must_be_empty_body(method: str) -> bool:
-    """Check if a method must return an empty body."""
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.2
-    return method.upper() == hdrs.METH_HEAD
-
-
-def status_code_must_be_empty_body(code: int) -> bool:
-    """Check if a status code must return an empty body."""
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
-    return code in {204, 304} or 100 <= code < 200
 
 
 def should_remove_content_length(method: str, code: int) -> bool:
@@ -1029,8 +953,6 @@ def should_remove_content_length(method: str, code: int) -> bool:
     """
     # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6-8
     # https://www.rfc-editor.org/rfc/rfc9110.html#section-15.4.5-4
-    return (
-        code in {204, 304}
-        or 100 <= code < 200
-        or (200 <= code < 300 and method.upper() == hdrs.METH_CONNECT)
+    return code in EMPTY_BODY_STATUS_CODES or (
+        200 <= code < 300 and method in hdrs.METH_CONNECT_ALL
     )

@@ -230,10 +230,11 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
+        : TBase(type, sourceIdx, context, isConflicting, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions,
+              deprecatedPortionId)
     {
     }
 
@@ -412,19 +413,22 @@ public:
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
         auto context = std::static_pointer_cast<TSpecialReadContext>(GetContext());
-        if (!context->IsActive()) {
+        const auto duplicatesManager = context->GetDuplicatesManager();
+        if (!duplicatesManager) {
+            // Scan abort raced with this step: UnregisterActors already dropped the manager.
+            AFL_VERIFY(!context->IsActive());
             return;
         }
         NActors::TActivationContext::AsActorContext().Send(
-            context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
+            duplicatesManager, new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
 
-    TPortionDataSource(
-        const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const bool isConflicting);
 };
 
 class TAggregationDataSource: public IDataSource {
@@ -433,7 +437,6 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
-    const ui64 LastDeprecatedPortionId;
     const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
@@ -544,10 +547,6 @@ public:
         return LastSourceRecordsCount;
     }
 
-    ui64 GetLastDeprecatedPortionId() const {
-        return LastDeprecatedPortionId;
-    }
-
     const std::optional<ui64>& GetLastPortionIdOptional() const {
         return LastPortionIdOptional;
     }
@@ -620,12 +619,11 @@ public:
 
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, false, TSnapshot::Zero(), TSnapshot::Zero(),
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
-        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
         , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());

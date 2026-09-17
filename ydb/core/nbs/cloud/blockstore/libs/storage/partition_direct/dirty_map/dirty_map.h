@@ -3,9 +3,11 @@
 #include "ddisk_state.h"
 #include "hints.h"
 #include "inflight_info.h"
+#include "mon_model.h"
 #include "range_locker.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_std_containers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
@@ -20,25 +22,6 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TVChunkConfig;
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TPBufferCounters
-{
-    // The current PBuffer usage.
-    TCountAndSize Current;
-
-    // Overall count and size written PBuffers and possibly already deleted.
-    TCountAndSize Total;
-
-    // The current prohibited for deletion PBuffers.
-    TCountAndSize CurrentLocked;
-
-    // The total number of records ever prohibited for deletion from PBuffer
-    TCountAndSize TotalLocked;
-
-    [[nodiscard]] TString DebugPrint() const;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -57,9 +40,10 @@ public:
     };
 
     TBlocksDirtyMap(
+        TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
-        ui64 blockCount);
+        ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
     void Load(const TDirtyMapStateProto& proto);
@@ -67,45 +51,50 @@ public:
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig);
 
-    void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
+    void RestorePBuffer(
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        THostIndex host);
 
     // MakeReadHint can work with multiple locations and returns multiple
     // RangeHints
-    [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
+    [[nodiscard]] TReadHint MakeReadHint(TBlockRange16 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
     // Registers a write as pending (lsn generated, data not in any PBuffer
     // yet) so that the cleanup bound covers it from the moment of generation.
-    void RegisterInflightWrite(ui64 lsn, TBlockRange64 range);
+    void RegisterInflightWrite(TPBufferKey pBufferKey, TBlockRange16 range);
 
     void WriteFinished(
-        ui64 lsn,
-        TBlockRange64 range,
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
         THostMask requested,
         THostMask confirmed);
     void FlushFinished(
         THostRoute route,
-        const TVector<ui64>& flushOk,
-        const TVector<ui64>& flushFailed);
+        const TVector<TPBufferKey>& flushOk,
+        const TVector<TPBufferKey>& flushFailed);
     void EraseFinished(
         THostIndex host,
-        const TVector<ui64>& eraseOk,
-        const TVector<ui64>& eraseFailed);
+        const TVector<TPBufferKey>& eraseOk,
+        const TVector<TPBufferKey>& eraseFailed);
 
-    void UpdateBelatedEraseQueue(THostMask completedWrites, ui64 lsn);
+    void UpdateBelatedEraseQueue(
+        THostMask completedWrites,
+        TPBufferKey pBufferKey);
 
     // Sets the mark up to which the disk can be read.
     void UpdateWatermarkDebugOnly(THostIndex host, ui64 bytesOffset);
     // Returns the first "fresh" range to be synced with data from another
     // replicas. Nullopt means that the disk is completely full of data. And you
     // can read it from anywhere.
-    [[nodiscard]] std::optional<TBlockRange64> GetFreshRange(
+    [[nodiscard]] std::optional<TBlockRange16> GetFreshRange(
         THostIndex host) const;
     // See TSyncHint for details.
     // The BeginRangeSync and EndRangeSync calls must be paired.
-    TSyncHint BeginRangeSync(THostIndex host, TBlockRange64 range);
+    TSyncHint BeginRangeSync(THostIndex host, TBlockRange16 range);
     // Should be called when the range synchronization is complete or failed.
     void EndRangeSync(ui64 syncId, bool success);
     void ClearRangeSyncs(THostIndex host);
@@ -118,33 +107,36 @@ public:
     [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
-    [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
-        THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex host) const;
+    [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     // ILockableRanges implementation
-    void LockPBuffer(ui64 lsn) override;
-    void UnlockPBuffer(ui64 lsn) override;
+    void LockPBuffer(TPBufferKey pBufferKey) override;
+    void UnlockPBuffer(TPBufferKey pBufferKey) override;
     TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override;
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
-    void Register(ui64 lsn, EQueueType queueType) override;
-    void UnRegister(ui64 lsn, EQueueType queueType) override;
-    void FlushCompleted(ui64 lsn, THostMask ddisks) override;
+    TPBufferKey GetPBufferKey(const TInflightInfo& inflight) const override;
+    void Register(const TInflightInfo& inflight, EQueueType queueType) override;
+    void UnRegister(
+        const TInflightInfo& inflight,
+        EQueueType queueType) override;
+    void InflightFlushFinished(
+        const TInflightInfo& inflight,
+        THostIndex host) override;
+    void FlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks) override;
     void DataToPBufferAdded(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) override;
+        EPBufferCounter counter) override;
     void DataFromPBufferReleased(
+        const TInflightInfo& inflight,
         THostIndex host,
-        EPBufferCounter counter,
-        size_t byteCount) override;
+        EPBufferCounter counter) override;
 
     // IBehindAheadMonitor implementation
     void OnBehindAheadChanged() override;
@@ -158,8 +150,17 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
+    void Trim();
+
+    // Stats
+    [[nodiscard]] TDirtyMapStats GetStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetHostStats(THostIndex host) const;
+    [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
+        THostIndex host) const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
+
     // Debug purposes
-    [[nodiscard]] TString DebugPrintPBuffers();
+    [[nodiscard]] TString DebugPrintPBuffers() const;
     [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
@@ -169,20 +170,26 @@ public:
     [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
     [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
-    [[nodiscard]] TString DebugPrintInflightSync();
+    [[nodiscard]] TString DebugPrintInflightSync() const;
 
 private:
-    using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
-    using TInflightDDiskReadsMap =
-        TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
+    using TPBufferKeySet = TArenaSet<TPBufferKey>;
+    using TInflightMap =
+        TBlockRangeMap<TPBufferKey, TInflightInfo, TBlockRange16, true>;
+    using TInflightDDiskReadsMap = TBlockRangeMap<
+        ILockableRanges::TLockRangeHandle,
+        THostMask,
+        TBlockRange16>;
 
     struct TInfoEraseBelated
     {
-        ui64 Lsn{};
+        TPBufferKey PBufferKey;
         THostMask Hosts;
 
         bool operator<(const TInfoEraseBelated& other) const;
     };
+
+    using TInfoEraseBelatedSet = TArenaSet<TInfoEraseBelated>;
 
     struct TInflightDDiskSync
     {
@@ -191,32 +198,43 @@ private:
             NThreading::NewPromise<void>();
     };
 
-    using TInflightDDiskSyncMap = TBlockRangeMap<ui64, TInflightDDiskSync>;
+    using TInflightDDiskSyncMap =
+        TBlockRangeMap<ui64, TInflightDDiskSync, TBlockRange16>;
 
     void ResizeHosts(size_t newHostCount);
 
     [[nodiscard]] THostMask FilterLocations(
         THostMask mask,
-        TBlockRange64 range) const;
+        TBlockRange16 range) const;
 
     // Create single readRangeHint for specified parameters
     [[nodiscard]] TReadRangeHint MakeReadRangeHint(
         THostMask mask,
-        ui64 lsn,
-        TBlockRange64 range,
-        ui64 offsetBlocks);
+        TPBufferKey pBufferKey,
+        TBlockRange16 range,
+        ui16 offsetBlocks);
 
-    void AddToAheadAndBehindOnFlushCompleted(ui64 lsn, THostMask ddisks);
+    void AddToAheadAndBehindOnFlushCompleted(
+        const TInflightInfo& inflight,
+        THostMask ddisks);
 
-    [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
-    void InflightFlushFinished(TBlockRange64 range);
+    [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange16 range);
+
+    [[nodiscard]] bool HasOlderUnflushedOverlap(
+        TPBufferKey pBufferKey,
+        TBlockRange16 range);
 
     [[nodiscard]] bool CheckEraseAbility(
-        TBlockRange64 range,
+        TBlockRange16 range,
         TInflightInfo& inflightInfo);
 
+    void RemovePBuffer(TPBufferKey pBufferKey);
+
+    const TArenaAllocatorPoolPtr ArenaAllocatorPool;
+    const IArenaAllocatorPtr ArenaAllocator;
     const ui32 BlockSize;
-    const ui64 BlockCount;
+    const ui16 BlockCount;
+    TDirtyMapStats Stats;
 
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
@@ -226,17 +244,17 @@ private:
 
     // Ranges that need to be copied to other PBuffers in order to reach a
     // quorum.
-    THashSet<ui64> ReadyToClone;
+    THashSet<TPBufferKey> ReadyToClone;
 
     // Ranges that are written PBuffers with quorum and ready to be flushed to
     // DDisk. Using TSet for O(1) min LSN access.
-    TSet<ui64> ReadyToFlush;
+    TPBufferKeySet ReadyToFlush{ArenaAllocatorPool.get()};
 
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
-    TSet<ui64> ReadyToErase;
+    TPBufferKeySet ReadyToErase{ArenaAllocatorPool.get()};
 
-    TSet<TInfoEraseBelated> ReadyToEraseBelated;
+    TInfoEraseBelatedSet ReadyToEraseBelated{ArenaAllocatorPool.get()};
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

@@ -1,7 +1,46 @@
 import importlib
 import os
 
+import fcntl
+
 package_manager_module = importlib.import_module("build.plugins.lib.nots.package_manager.package_manager")
+
+
+def test_sync_mutex_file_uses_four_slots_by_default(monkeypatch, tmp_path):
+    opened_paths = []
+    locked_slots = []
+
+    class Mutex:
+        def __init__(self, path):
+            self.path = path
+
+        def close(self):
+            pass
+
+    def open_mutex(path, mode):
+        assert mode == "w+"
+        opened_paths.append(path)
+        return Mutex(path)
+
+    def lock_mutex(mutex, operation):
+        if operation & fcntl.LOCK_UN:
+            return
+        locked_slots.append(mutex.path)
+        if len(locked_slots) < package_manager_module.LOCAL_PNPM_INSTALL_CONCURRENCY:
+            raise BlockingIOError
+
+    monkeypatch.setattr(package_manager_module, "open", open_mutex, raising=False)
+    monkeypatch.setattr(fcntl, "lockf", lock_mutex)
+    mutex_path = str(tmp_path / "install_mutex")
+
+    result = package_manager_module.sync_mutex_file(mutex_path)(lambda: "installed")()
+
+    assert result == "installed"
+    assert opened_paths == [
+        "{}.{}".format(mutex_path, slot)
+        for slot in range(package_manager_module.LOCAL_PNPM_INSTALL_CONCURRENCY)
+    ]
+    assert locked_slots == opened_paths
 
 
 def _package_manager(monkeypatch):
@@ -245,3 +284,50 @@ def _load_package_json(path):
     package_json = package_manager_module.PackageJson(path)
     package_json.read()
     return package_json
+
+
+def test_production_install_reuses_install_flags(monkeypatch, tmp_path):
+    package_manager, commands = _package_manager(monkeypatch)
+    store = str(tmp_path / "store")
+    os.makedirs(store)
+    cwd = str(tmp_path)
+    node_modules = str(tmp_path / "node_modules")
+    for prod in [False, True]:
+        package_manager._run_pnpm_install(
+            store, cwd, False, node_modules + "/.pnpm", True, node_modules, prod=prod
+        )
+    ordinary, production = [cmd for cmd, cwd in commands]
+    assert "--prod" in production
+    assert [arg for arg in production if arg != "--prod"] == ordinary
+
+
+def test_production_reinstall_removes_restored_node_modules(monkeypatch, tmp_path):
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.build_path = str(tmp_path / "build")
+    package_manager.inject_peers = True
+    os.makedirs(package_manager.build_path)
+    restored = tmp_path / "ram" / "node_modules"
+    restored.mkdir(parents=True)
+    (restored / ".pnpm").mkdir()
+    (restored / ".pnpm" / "dev-package").write_text("stale")
+    node_modules = tmp_path / "build" / "node_modules"
+    node_modules.symlink_to(restored)
+    calls = []
+
+    def create_node_modules(**kwargs):
+        assert not restored.exists()
+        assert not os.path.lexists(node_modules)
+        calls.append(kwargs)
+
+    package_manager.create_node_modules = create_node_modules
+    package_manager.prune_node_modules(yatool_prebuilder_path="/prebuilder", local_cli=False)
+    assert calls == [{"yatool_prebuilder_path": "/prebuilder", "local_cli": False, "prod": True}]
+
+
+def test_production_reinstall_rejects_linked_peers(tmp_path):
+    import pytest
+
+    package_manager = object.__new__(package_manager_module.PackageManager)
+    package_manager.inject_peers = False
+    with pytest.raises(package_manager_module.PackageManagerError, match="requires injected"):
+        package_manager.prune_node_modules()

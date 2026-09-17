@@ -126,11 +126,7 @@ public:
         {
         }
 
-        TBaseColumn(const TBaseColumn& other)
-            : Relation(other.Relation)
-            , Column(other.Column)
-        {
-        }
+        TBaseColumn(const TBaseColumn& other) = default;
 
         TBaseColumn& operator=(const TBaseColumn& other);
 

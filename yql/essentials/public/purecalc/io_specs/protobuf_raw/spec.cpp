@@ -276,7 +276,7 @@ void FillInputValue(
     TString scratch;
     auto reflection = source->GetReflection();
     for (ui32 i = 0; i < mappings.size(); ++i) {
-        auto mapping = mappings[i];
+        const auto& mapping = mappings[i];
         if (!mapping.Field) {
             YQL_ENSURE(timestampColumn && mapping.Name == *timestampColumn);
             destination[i] = TUnboxedValuePod(timeProvider->Now().MicroSeconds());

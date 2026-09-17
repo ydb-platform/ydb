@@ -17,9 +17,9 @@ using namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect;
 
 namespace {
 
-const TBlockRange64 BenchRange = TBlockRange64::WithLength(10, 1000);
+const TBlockRange16 BenchRange = TBlockRange16::WithLength(10, 1000);
 
-TRequestHeaders MakeHeaders(const TBlockRange64& range, ui32 blockSize)
+TRequestHeaders MakeHeaders(const TBlockRange16& range, ui32 blockSize)
 {
     auto volumeConfig = std::make_shared<TVolumeConfig>(TVolumeConfig{
         .DiskId = "disk-1",
@@ -31,7 +31,7 @@ TRequestHeaders MakeHeaders(const TBlockRange64& range, ui32 blockSize)
     return TRequestHeaders{
         .VolumeConfig = std::move(volumeConfig),
         .RequestId = 1,
-        .Range = range};
+        .Range = ConvertRangeSafe<TBlockRange64>(range)};
 }
 
 std::shared_ptr<TWriteRequestBundle> MakeWriteBundle(
@@ -48,7 +48,7 @@ std::shared_ptr<TWriteRequestBundle> MakeWriteBundle(
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
         f.Range);
-    bundle->SetLsn(f.UserLsn);
+    bundle->SetPBufferKey(f.UserPBufferKey);
     return bundle;
 }
 
@@ -58,7 +58,7 @@ std::shared_ptr<TReadBlocksLocalRequest> MakeReadRequest(
     auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
         .VolumeConfig = f.PartitionDirectService->GetVolumeConfig(),
         .RequestId = 1,
-        .Range = f.Range});
+        .Range = ConvertRangeSafe<TBlockRange64>(f.Range)});
     request->Sglist = f.MakeSgList();
     return request;
 }
@@ -126,10 +126,12 @@ void InitFixture(TWriteRequestTestFixture& f)
 
     // Split the range so CreateReadRequestExecutor picks the multi-location
     // path when MakeReadHint is called for BM_ReadMultiple*.
-    f.DirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(20, 10));
+    f.DirtyMap->RegisterInflightWrite(
+        MakeKey(100),
+        TBlockRange16::WithLength(20, 10));
     f.DirtyMap->WriteFinished(
-        100,
-        TBlockRange64::WithLength(20, 10),
+        MakeKey(100),
+        TBlockRange16::WithLength(20, 10),
         f.VChunkConfig.GetDesiredPBuffers(),
         f.VChunkConfig.GetDesiredPBuffers());
 }
@@ -176,6 +178,7 @@ static void BM_ReadSingleLocationRequestExecutorCreation(
 
     // Contiguous hint: a fresh dirty map without the split registered above.
     auto cleanDirtyMap = std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocatorPool(),
         fixture.VChunkConfig,
         fixture.BlockSize,
         fixture.VChunkBlockCount);
@@ -257,7 +260,7 @@ static void BM_EraseRequestExecutorCreation(benchmark::State& state)
             previous.reset();
         }
         TEraseHint hint;
-        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 42});
+        hint.Segments.push_back(TEraseSegment{.PBufferKey = MakeKey(42)});
         state.ResumeTiming();
 
         auto executor = std::make_shared<TEraseRequestExecutor>(
@@ -291,8 +294,8 @@ static void BM_FlushRequestExecutorCreation(benchmark::State& state)
         }
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .PBufferKey = MakeKey(42),
+            .Range = TBlockRange16::WithLength(10, 3)});
         state.ResumeTiming();
 
         auto executor = std::make_shared<TFlushRequestExecutor>(

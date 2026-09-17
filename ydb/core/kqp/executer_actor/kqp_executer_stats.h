@@ -190,10 +190,11 @@ struct TTableStats {
     std::vector<ui64> EraseBytes;
 
     std::vector<ui64> AffectedPartitions;
+    std::vector<ui64> AffectedRows;
 
     void Resize(ui32 taskCount);
     static TMetricInfo EstimateMem() {
-        return TMetricInfo(7);
+        return TMetricInfo(8);
     }
 };
 
@@ -289,7 +290,7 @@ struct TStageExecutionStats {
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline) const;
-    bool IsFinished();
+    bool IsFinished() const;
 };
 
 struct TGlobalMemoryUsage {
@@ -368,6 +369,7 @@ struct TStorageTableStats {
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
     ui64 AffectedPartitions = 0;
+    ui64 AffectedRows = 0;
 };
 
 struct TQueryTableStats {
@@ -383,6 +385,7 @@ struct TQueryTableStats {
     TSumStats WriteBytes;
     TSumStats EraseRows;
     TSumStats EraseBytes;
+    TSumStats AffectedRows;
     TSumStats AffectedPartitions;
     TStorageTableStats StorageStats;
     ui64 AffectedPartitionsUniqueCount = 0;

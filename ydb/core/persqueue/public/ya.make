@@ -25,9 +25,11 @@ END()
 RECURSE(
     cluster_tracker
     codecs
+    dataplane
     counters
     describer
     fetcher
+    ru_quoter
     list_topics
     mlp
     nameresolver

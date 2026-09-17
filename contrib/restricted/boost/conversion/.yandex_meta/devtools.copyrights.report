@@ -33,71 +33,92 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 2fbd9b2e362aeffc7f5ef13bf0f1ee15
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2025-2026 Antony Polukhin
+        // Copyright (c) 2025-2026 Fedor Osetrov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/conversion/detail/config.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d025f26029b29b01d04d5245dd44beb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_cast.hpp [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 782f15d3d7e7db30ac5e200895420548
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_cast.hpp [2:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL bb3eb4b4e302dcb6634d591111603d92
 BELONGS ya.make
-    License text:
-        //  (C) Copyright Boris Rasin, 2014-2021.
-        //  (C) Copyright Antony Polukhin, 2014-2026.
-        //  Distributed under the Boost
-        //  Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/polymorphic_pointer_cast.hpp [2:5]
+        include/boost/polymorphic_pointer_cast.hpp [2:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL caf6818f96cbd63eb0a359a0d1dd3ac5
+KEEP     COPYRIGHT_SERVICE_LABEL c962cc489f1678a430d0c6ab76a68daa
 BELONGS ya.make
     License text:
-        //  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
-        //  (C) Copyright Boris Rasin 2014.
-        //  Distributed under the Boost
-        //  Software License, Version 1.0. (See accompanying file
+        // Copyright (c) 2025-2026 Antony Polukhin
+        // Copyright (c) 2025-2026 Fedor Osetrov
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/polymorphic_cast.hpp [3:6]
+        include/boost/conversion/detail/config.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e436f438fbb08950731f2070af84a09c
 BELONGS ya.make
-    License text:
-        //  (C) Copyright Boris Rasin, 2014-2021.
-        //  (C) Copyright Antony Polukhin, 2014-2026.
-        //  Distributed under the Boost
-        //  Software License, Version 1.0. (See accompanying file
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/polymorphic_pointer_cast.hpp [2:5]
+        include/boost/polymorphic_pointer_cast.hpp [2:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
+KEEP     COPYRIGHT_SERVICE_LABEL e51779da52c314942a37b538cb253635
 BELONGS ya.make
     License text:
-        // Copyright David Abrahams 2003.
-        // Distributed under the Boost Software License, Version 1.0. (See
-        // accompanying file LICENSE_1_0.txt or copy at
+        //  (C) Copyright David Abrahams, 2003.
+        //  (C) Copyright Fedor Osetrov, 2025-2026.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/implicit_cast.hpp [1:3]
+        include/boost/implicit_cast.hpp [2:3]
+        include/boost/polymorphic_cast.hpp [2:6]
+        include/boost/polymorphic_pointer_cast.hpp [2:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL fccaaf374e92bea92a91f3c3f74bfb06
+KEEP     COPYRIGHT_SERVICE_LABEL e557bdb1f6c292be38b03dd7c1a43b9c
 BELONGS ya.make
     License text:
-        //  (C) Copyright Kevlin Henney and Dave Abrahams 1999.
-        //  (C) Copyright Boris Rasin 2014.
-        //  Distributed under the Boost
-        //  Software License, Version 1.0. (See accompanying file
+        //  (C) Copyright David Abrahams, 2003.
+        //  (C) Copyright Fedor Osetrov, 2025-2026.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/polymorphic_cast.hpp [3:6]
+        include/boost/implicit_cast.hpp [2:3]

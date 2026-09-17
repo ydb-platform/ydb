@@ -3,6 +3,5 @@ Currently, mixing [column-oriented tables](../concepts/glossary.md#column-orient
 If a write transaction includes both types of tables, it fails with the following error:
 
 ```text
-Write transactions that use both row-oriented and column-oriented
-tables are disabled at current time
+Write transactions that use both row-oriented and column-oriented tables are disabled at current time
 ```

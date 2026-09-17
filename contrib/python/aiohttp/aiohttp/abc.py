@@ -14,13 +14,16 @@ from typing import (
     Iterable,
     List,
     Optional,
+    Sequence,
     Tuple,
     TypedDict,
+    Union,
 )
 
 from multidict import CIMultiDict
 from yarl import URL
 
+from ._cookie_helpers import parse_set_cookie_headers
 from .typedefs import LooseCookies
 
 if TYPE_CHECKING:
@@ -59,6 +62,9 @@ class AbstractRouter(ABC):
 
 
 class AbstractMatchInfo(ABC):
+
+    __slots__ = ()
+
     @property  # pragma: no branch
     @abstractmethod
     def handler(self) -> Callable[[Request], Awaitable[StreamResponse]]:
@@ -171,6 +177,11 @@ class AbstractCookieJar(Sized, IterableBase):
     def __init__(self, *, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
         self._loop = loop or asyncio.get_event_loop()
 
+    @property
+    @abstractmethod
+    def quote_cookie(self) -> bool:
+        """Return True if cookies should be quoted."""
+
     @abstractmethod
     def clear(self, predicate: Optional[ClearCookiePredicate] = None) -> None:
         """Clear all cookies if no predicate is passed."""
@@ -183,6 +194,13 @@ class AbstractCookieJar(Sized, IterableBase):
     def update_cookies(self, cookies: LooseCookies, response_url: URL = URL()) -> None:
         """Update cookies."""
 
+    def update_cookies_from_headers(
+        self, headers: Sequence[str], response_url: URL
+    ) -> None:
+        """Update cookies from raw Set-Cookie headers."""
+        if headers and (cookies_to_update := parse_set_cookie_headers(headers)):
+            self.update_cookies(cookies_to_update, response_url)
+
     @abstractmethod
     def filter_cookies(self, request_url: URL) -> "BaseCookie[str]":
         """Return the jar's cookies filtered by their attributes."""
@@ -191,12 +209,12 @@ class AbstractCookieJar(Sized, IterableBase):
 class AbstractStreamWriter(ABC):
     """Abstract stream writer."""
 
-    buffer_size = 0
-    output_size = 0
+    buffer_size: int = 0
+    output_size: int = 0
     length: Optional[int] = 0
 
     @abstractmethod
-    async def write(self, chunk: bytes) -> None:
+    async def write(self, chunk: Union[bytes, bytearray, memoryview]) -> None:
         """Write chunk into stream."""
 
     @abstractmethod
@@ -208,7 +226,9 @@ class AbstractStreamWriter(ABC):
         """Flush the write buffer."""
 
     @abstractmethod
-    def enable_compression(self, encoding: str = "deflate") -> None:
+    def enable_compression(
+        self, encoding: str = "deflate", strategy: Optional[int] = None
+    ) -> None:
         """Enable HTTP body compression"""
 
     @abstractmethod
@@ -221,9 +241,18 @@ class AbstractStreamWriter(ABC):
     ) -> None:
         """Write HTTP headers"""
 
+    def send_headers(self) -> None:
+        """Force sending buffered headers if not already sent.
+
+        Required only if write_headers() buffers headers instead of sending immediately.
+        For backwards compatibility, this method does nothing by default.
+        """
+
 
 class AbstractAccessLogger(ABC):
     """Abstract writer to access log."""
+
+    __slots__ = ("logger", "log_format")
 
     def __init__(self, logger: logging.Logger, log_format: str) -> None:
         self.logger = logger
@@ -232,3 +261,8 @@ class AbstractAccessLogger(ABC):
     @abstractmethod
     def log(self, request: BaseRequest, response: StreamResponse, time: float) -> None:
         """Emit log to logger."""
+
+    @property
+    def enabled(self) -> bool:
+        """Check if logger is enabled."""
+        return True

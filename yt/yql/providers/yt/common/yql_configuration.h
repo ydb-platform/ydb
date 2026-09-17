@@ -131,6 +131,8 @@ constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapR
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
+// Leave room below YT's MaxExpressionDepth because YQL and YT have independent release cycles.
+constexpr ui32 DEFAULT_QL_FILTER_DEPTH_LIMIT = 45;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
@@ -180,5 +182,7 @@ constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Da
 constexpr bool DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST = false;
 
 constexpr bool DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS = false;
+
+constexpr bool DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL = false;
 
 } // NYql

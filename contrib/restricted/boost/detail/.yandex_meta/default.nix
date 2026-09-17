@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_detail = stdenv.mkDerivation rec {
     pname = "boost_detail";
-    version = "1.91.0";
+    version = "1.92.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

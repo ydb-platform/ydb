@@ -210,8 +210,9 @@ private:
 
             if (bucket.Terminated) {
                 guard.Release();
+                auto terminationError = TerminationError_.Load();
                 THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, "Channel terminated")
-                    << TerminationError_.Load();
+                    .WithIf(!terminationError.IsOK(), terminationError);
             }
 
             bucket.Sessions.reserve(parallelism);
@@ -357,7 +358,8 @@ private:
                 NotifyError(
                     requestControl,
                     std::get<1>(existingRequest),
-                    TStringBuf("Request failed due to channel termination"),
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request failed due to channel termination"_sb,
                     error);
             }
         }
@@ -466,7 +468,8 @@ private:
                 NotifyError(
                     requestControl,
                     responseHandler,
-                    TStringBuf("Request canceled"),
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request canceled"_sb,
                     TError(NYT::EErrorCode::Canceled, "Request canceled"));
                 --Depth;
             } else {
@@ -475,7 +478,8 @@ private:
                     MakeStrong(this),
                     requestControl,
                     responseHandler,
-                    TStringBuf("Request canceled"),
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request canceled"_sb,
                     TError(NYT::EErrorCode::Canceled, "Request canceled")));
             }
 
@@ -576,7 +580,8 @@ private:
             NotifyError(
                 requestControl,
                 responseHandler,
-                TStringBuf("Request timed out"),
+                YT_TLOG_STATIC_ANCHOR_REF(),
+                "Request timed out"_sb,
                 TError(NYT::EErrorCode::Timeout, TRuntimeFormat(aborted
                     ? "Request timed out or timer was aborted"
                     : "Request timed out")));
@@ -618,7 +623,8 @@ private:
             NotifyError(
                 requestControl,
                 responseHandler,
-                TStringBuf("Request acknowledgement timed out"),
+                YT_TLOG_STATIC_ANCHOR_REF(),
+                "Request acknowledgement timed out"_sb,
                 error);
 
             if (TerminationFlag_.load()) {
@@ -839,7 +845,8 @@ private:
                     NotifyError(
                         requestControl,
                         responseHandler,
-                        TStringBuf("Request serialization failed"),
+                        YT_TLOG_STATIC_ANCHOR_REF(),
+                        "Request serialization failed"_sb,
                         TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
                             .With(requestMessageOrError));
                     return;
@@ -849,12 +856,14 @@ private:
                     auto responseHandler = requestControl->Finalize(guard);
                     guard.Release();
 
+                    auto terminationError = TerminationError_.Load();
                     NotifyError(
                         requestControl,
                         responseHandler,
-                        TStringBuf("Request is dropped because channel is terminated"),
+                        YT_TLOG_STATIC_ANCHOR_REF(),
+                        "Request is dropped because channel is terminated"_sb,
                         TError(NRpc::EErrorCode::TransportError, "Channel terminated")
-                            << TerminationError_.Load());
+                            .WithIf(!terminationError.IsOK(), terminationError));
                     return;
                 }
 
@@ -879,7 +888,8 @@ private:
                 NotifyError(
                     existingRequestControl,
                     existingResponseHandler,
-                    "Request resent",
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request resent"_sb,
                     TError(NRpc::EErrorCode::TransportError, "Request resent"));
             }
 
@@ -913,21 +923,17 @@ private:
 
             requestControl->ProfileRequest(requestMessage);
 
-            // NB: The trailing request info is a caller-supplied, pre-formatted tag list
-            // (see SetRequestInfo), so it has to be spliced into the message text as-is.
-            YT_LOG_DEBUG("Request sent (RequestId: %v, Method: %v.%v, Timeout: %v, TrackingLevel: %v, "
-                "ChecksummedPartCount: %v, MultiplexingBand: %v, Endpoint: %v, BodySize: %v, AttachmentsSize: %v%v)",
-                requestId,
-                requestControl->GetService(),
-                requestControl->GetMethod(),
-                requestControl->GetTimeout(),
-                busOptions.TrackingLevel,
-                busOptions.ChecksummedPartCount,
-                options.MultiplexingBand,
-                Bus_->GetEndpointDescription(),
-                GetMessageBodySize(requestMessage),
-                GetTotalMessageAttachmentSize(requestMessage),
-                !request->GetRequestInfo().empty() ? std::string(Format(", %v", request->GetRequestInfo())) : std::string());
+            YT_TLOG_DEBUG("Request sent")
+                .With("RequestId", requestId)
+                .WithFormat("Method", "%v.%v", requestControl->GetService(), requestControl->GetMethod())
+                .With("Timeout", requestControl->GetTimeout())
+                .With("TrackingLevel", busOptions.TrackingLevel)
+                .With("ChecksummedPartCount", busOptions.ChecksummedPartCount)
+                .With("MultiplexingBand", options.MultiplexingBand)
+                .With("Endpoint", Bus_->GetEndpointDescription())
+                .With("BodySize", GetMessageBodySize(requestMessage))
+                .With("AttachmentsSize", GetTotalMessageAttachmentSize(requestMessage))
+                .With(request->GetLoggingTags());
         }
 
 
@@ -1016,7 +1022,8 @@ private:
                     NotifyError(
                         requestControl,
                         responseHandler,
-                        TStringBuf("Request failed"),
+                        YT_TLOG_STATIC_ANCHOR_REF(),
+                        "Request failed"_sb,
                         error);
                 }
             }
@@ -1148,7 +1155,8 @@ private:
                 NotifyError(
                     requestControl,
                     responseHandler,
-                    TStringBuf("Request acknowledgment failed"),
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request acknowledgment failed"_sb,
                     TError(NRpc::EErrorCode::TransportError, "Request acknowledgment failed")
                         .With(error));
             }
@@ -1157,17 +1165,18 @@ private:
         void NotifyError(
             const TClientRequestControlPtr& requestControl,
             const IClientResponseHandlerPtr& responseHandler,
+            NLogging::NDetail::TStaticAnchorRef anchorRef,
             TStringBuf reason,
             const TError& error) noexcept
         {
             YT_VERIFY(responseHandler);
 
             auto detailedError = error
-                << TErrorAttribute("realm_id", requestControl->GetRealmId())
-                << TErrorAttribute("service", requestControl->GetService())
-                << TErrorAttribute("method", requestControl->GetMethod())
-                << TErrorAttribute("request_id", requestControl->GetRequestId())
-                << Bus_->GetEndpointAttributes();
+                .With("realm_id", requestControl->GetRealmId())
+                .With("service", requestControl->GetService())
+                .With("method", requestControl->GetMethod())
+                .With("request_id", requestControl->GetRequestId())
+                .With(Bus_->GetEndpointAttributes());
 
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError
@@ -1180,9 +1189,13 @@ private:
                 }
             }
 
-            YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
-                reason,
-                requestControl->GetRequestId());
+            YT_TLOG_EVENT_WITH_STATIC_ANCHOR(
+                Logger,
+                NLogging::ELogLevel::Debug,
+                anchorRef,
+                reason)
+                .With("RequestId", requestControl->GetRequestId())
+                .With(detailedError);
 
             responseHandler->HandleError(std::move(detailedError), Bus_->GetEndpointAddress());
         }

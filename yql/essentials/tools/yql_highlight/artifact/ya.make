@@ -21,6 +21,11 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --generate="tmlanguage" --mode="ansi"
+    STDOUT YQL.ansi.tmLanguage.json
+)
+
+RUN_PROGRAM(
     yql/essentials/tools/yql_highlight --language="yqls" --generate="tmlanguage"
     STDOUT YQLs.tmLanguage.json
 )

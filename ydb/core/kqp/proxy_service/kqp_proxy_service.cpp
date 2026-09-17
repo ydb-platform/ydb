@@ -27,9 +27,13 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_pool_cap_pusher.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -328,11 +332,14 @@ public:
         }
 
         NYql::NDq::TDqChannelLimits limits;
+        limits.EnableSpillingChannelBackpressure = TableServiceConfig.GetEnableSpillingChannelBackpressure();
 
         if (TableServiceConfig.HasDqChannelConfig()) {
             auto& config = TableServiceConfig.GetDqChannelConfig();
             limits.LocalChannelInflightBytes  = config.GetLocalChannelInflightBytes();
+            limits.LocalChannelColdInflightBytes = config.GetLocalChannelColdInflightBytes();
             limits.RemoteChannelInflightBytes = config.GetRemoteChannelInflightBytes();
+            limits.RemoteChannelColdInflightBytes = config.GetRemoteChannelColdInflightBytes();
             limits.RemoteSessionInflightBytes = config.GetRemoteSessionInflightBytes();
             limits.ReconciliationCount = config.GetReconciliationCount();
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
@@ -379,6 +386,34 @@ public:
         KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(updateFairSharePeriod));
         TActivationContext::ActorSystem()->RegisterLocalService(
             NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
+
+        if (auto gateway = FederatedQuerySetup ? FederatedQuerySetup->HttpGateway : nullptr) {
+            if (auto scheduler = AppData()->KqpComputeScheduler) {
+                const auto& httpGatewayConfig = QueryServiceConfig.GetHttpGateway();
+                const size_t maxHandlers = httpGatewayConfig.HasMaxInFlightCount()
+                    ? httpGatewayConfig.GetMaxInFlightCount() : 1024;
+                const auto PoolCapsPushPeriod = TDuration::MilliSeconds(500);
+                const double MinDefaultPoolShare = 0.1;
+
+                auto poolSharesProvider = [scheduler]() {
+                    THashMap<NYql::NDq::TWorkScope, double> result;
+                    for (const auto& [fullPoolId, share] : scheduler->GetLeafPoolFairShares()) {
+                        result[NYql::NDq::TWorkScope{
+                            .Namespace = fullPoolId.DatabaseId,
+                            .Name = fullPoolId.PoolId,
+                        }] = share;
+                    }
+                    return result;
+                };
+                auto* pusher = NYql::CreateHttpPoolCapPusher(
+                    std::move(poolSharesProvider),
+                    gateway,
+                    PoolCapsPushPeriod,
+                    maxHandlers,
+                    MinDefaultPoolShare);
+                TActivationContext::Register(pusher);
+            }
+        }
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -2025,8 +2060,17 @@ private:
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        auto rowDispatcher = NFq::NewRowDispatcherService(
+        NFq::TRowDispatcherSettings settings(
             streamingQueries.GetExternalStorage(),
+            FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+        );
+
+        if (FeatureFlags.GetEnableRowDispatcherMemoryLimiting()) {
+            settings.SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_));
+        }
+
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            settings,
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

@@ -22,10 +22,12 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/datetime/cputimer.h>
+#include <util/generic/hash_set.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -150,7 +152,7 @@ private:
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
             DispatchLoadStatisticsQuery(
-                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags);
+                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags, req.AcceptSampledStatistics);
 
             ++request.ReplyCounter;
             ++reqIndex;
@@ -164,6 +166,70 @@ private:
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
         entry.RedirectRequired = redirectRequired;
         entry.ShowPrivatePath = true;
+    }
+
+    void LogNavigateFailure(const TNavigate& navigate, ui64 requestId, bool resolvingDatabase) const {
+        auto ctx = NActors::TlsActivationContext;
+        if (!ctx || !IS_CTX_LOG_PRIORITY_ENABLED(*ctx, NActors::NLog::PRI_ERROR, YDB_LOG_THIS_FILE_COMPONENT, 0ull)) {
+            return;
+        }
+
+        constexpr size_t maxDetails = 16;
+        THashSet<std::pair<TTableId, ui32>> failures;
+        TStringBuilder failureDetails;
+        size_t shownFailures = 0;
+        for (const auto& entry : navigate.ResultSet) {
+            if (entry.Status == TNavigate::EStatus::Ok
+                || !failures.emplace(entry.TableId, static_cast<ui32>(entry.Status)).second) {
+                continue;
+            }
+            if (shownFailures < maxDetails) {
+                if (shownFailures++) {
+                    failureDetails << ", ";
+                }
+                failureDetails << "{tableId: " << entry.TableId
+                    << ", status: " << entry.Status
+                    << ", statusCode: " << static_cast<ui32>(entry.Status) << "}";
+            }
+        }
+
+        const auto it = InFlight.find(requestId);
+        const bool requestFound = it != InFlight.end();
+        THashSet<TPathId> requestedPaths;
+        TStringBuilder requestedPathDetails;
+        size_t shownPaths = 0;
+        if (requestFound) {
+            for (const auto& req : it->second.StatRequests) {
+                if (!requestedPaths.insert(req.PathId).second) {
+                    continue;
+                }
+                if (shownPaths < maxDetails) {
+                    if (shownPaths++) {
+                        requestedPathDetails << ", ";
+                    }
+                    requestedPathDetails << req.PathId;
+                }
+            }
+        }
+
+        const auto* message = resolvingDatabase
+            ? "[TStatService::TEvNavigateKeySetResult] Resolve database navigate failed"
+            : "[TStatService::TEvNavigateKeySetResult] Navigate failed";
+        YDB_LOG_ERROR(message,
+            {"requestId", requestId},
+            {"phase", resolvingDatabase ? "database" : "table"},
+            {"database", navigate.DatabaseName},
+            {"requestFound", requestFound},
+            {"requestDatabase", requestFound ? it->second.Database : "<unavailable>"},
+            {"statType", requestFound ? ToString(static_cast<ui32>(it->second.StatType)) : "<unavailable>"},
+            {"replyToActorId", requestFound ? ToString(it->second.ReplyToActorId) : "<unavailable>"},
+            {"resultCount", navigate.ResultSet.size()},
+            {"distinctFailureCount", failures.size()},
+            {"failures", failureDetails},
+            {"omittedFailureCount", failures.size() - shownFailures},
+            {"requestedPathCount", requestedPaths.size()},
+            {"requestedPaths", requestedPathDetails},
+            {"omittedRequestedPathCount", requestedPaths.size() - shownPaths});
     }
 
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {
@@ -226,8 +292,7 @@ private:
             });
 
             if (entry == navigate->ResultSet.end()) {
-                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] Navigate failed",
-                    {"requestId", requestId});
+                LogNavigateFailure(*navigate, requestId, false);
                 ReplyFailed(requestId, true);
                 return;
             }
@@ -282,8 +347,7 @@ private:
             });
 
             if (entry == navigate->ResultSet.end()) {
-                YDB_LOG_ERROR("[TStatService::TEvNavigateKeySetResult] Resolve database navigate failed",
-                    {"requestId", originalRequestId});
+                LogNavigateFailure(*navigate, originalRequestId, true);
                 ReplyFailed(originalRequestId, true);
                 return;
             }
@@ -572,9 +636,35 @@ private:
                     TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
                 break;
             case EStatType::EQ_WIDTH_HISTOGRAM:
-                response.Success = true;
-                response.EqWidthHistogram.Data =
-                    std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                try {
+                    response.Success = true;
+                    response.EqWidthHistogram.Data =
+                        std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                } catch (const std::exception& ex) {
+                    YDB_LOG_ERROR("Failed to parse EQ_WIDTH_HISTOGRAM blob",
+                        {"requestId", requestId},
+                        {"error", ex.what()});
+                    response.Success = false;
+                }
+                break;
+            case EStatType::EQ_HEIGHT_HISTOGRAM:
+                try {
+                    TEqHeightHistogramResult result;
+                    Y_ENSURE(result.ParseFromArray(msg->Data->data(), msg->Data->size()));
+                    response.Success = true;
+                    response.EqHeightHistogram.Data =
+                        std::make_shared<TEqHeightHistogram>(result);
+                } catch (const std::exception& ex) {
+                    // Malformed blobs throw from TEqHeightHistogram; report failure
+                    // rather than propagating the exception out of the handler.
+                    // Protobuf unknown fields from a newer writer are skipped, not
+                    // thrown — this catch is for YQL_ENSURE validation, not version
+                    // skew.
+                    YDB_LOG_ERROR("Failed to parse EQ_HEIGHT_HISTOGRAM blob",
+                        {"requestId", requestId},
+                        {"error", ex.what()});
+                    response.Success = false;
+                }
                 break;
             case EStatType::TABLE_SUMMARY: {
                 NKikimrStat::TTableSummaryStatistics data;
@@ -593,6 +683,10 @@ private:
             }
         } else {
             response.Success = false;
+        }
+
+        if (response.Success) {
+            response.Sampling = msg->Sampling;
         }
 
         if (--request.ReplyCounter == 0) {
@@ -784,6 +878,7 @@ private:
                     << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
                     << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
                     << ", EQ_WIDTH_HISTOGRAM: " << counts[EStatType::EQ_WIDTH_HISTOGRAM]
+                    << ", EQ_HEIGHT_HISTOGRAM: " << counts[EStatType::EQ_HEIGHT_HISTOGRAM]
                     << ", TABLE_SUMMARY: " << counts[EStatType::TABLE_SUMMARY]
                     << "]" << Endl;
             }

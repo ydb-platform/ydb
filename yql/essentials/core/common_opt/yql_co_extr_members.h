@@ -31,6 +31,7 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
 TExprNode::TPtr ApplyExtractMembersToCombineCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, const TExprNode::TPtr& members, bool isFlat, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
+TExprNode::TPtr ApplyExtractMembersToSqlCombine(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 TExprNode::TPtr ApplyExtractMembersToWithWorld(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix);
 
 } // NYql

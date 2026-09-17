@@ -737,8 +737,8 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ui64 auxTxId = 1000;
         int auxWriteId = 1000;
         {
-            const auto auxPlan = ProposeSchemaTx(
-                runtime, sender, TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk, {}, /*generation=*/1), ++auxTxId);
+            const auto auxPlan = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(auxPathId, testTable.Standalone,
+                                                                      testTable.Schema, testTable.Pk, {}, /*generation=*/1), ++auxTxId);
             PlanSchemaTx(runtime, sender, { auxPlan, auxTxId });
         }
 

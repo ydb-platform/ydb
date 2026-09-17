@@ -9,6 +9,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -542,6 +543,7 @@ public:
         bool IsExternalStatisticsAggregator;
         bool IsExternalBackupController;
         bool IsGraphShardEnabled = false;
+        bool IsWasmCompileControllerEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

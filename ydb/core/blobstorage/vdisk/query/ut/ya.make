@@ -10,6 +10,7 @@ PEERDIR(
 
 SRCS(
     query_spacetracker_ut.cpp
+    query_statdb_stream_ut.cpp
     query_statalgo_ut.cpp
     query_stat_yield_ut.cpp
 )

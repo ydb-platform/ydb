@@ -110,7 +110,8 @@ void SenderThread(TMutex& lock, TActorSystem *as, ui32 nodeId, ui32 queueId, ui3
     }
 }
 
-void RaceTestIter(ui32 numThreads, ui32 count) {
+void RaceTestIter(ui32 numThreads, ui32 count,
+        const TVector<ui32>& interconnectSessionPoolIds = {0}, bool verifyPoolSelection = false) {
     TPortManager portman;
     THashMap<ui32, ui16> nodeToPort;
     const ui32 numNodes = 6; // total
@@ -123,7 +124,11 @@ void RaceTestIter(ui32 numThreads, ui32 count) {
     std::list<TNode> nodes;
     for (ui32 i = 1; i <= numNodes; ++i) {
         nodes.emplace_back(i, numNodes, nodeToPort, "127.1.0.0", counters->GetSubgroup("nodeId", TStringBuilder() << i),
-            TDuration::Seconds(10), TChannelsConfig(), numDynamicNodes, numThreads);
+            TDuration::Seconds(10), TChannelsConfig(), numDynamicNodes, numThreads,
+            nullptr, TNode::DefaultInflight(), ESocketSendOptimization::DISABLED, false,
+            std::function<IActor*(ui32)>(), NInterconnect::NRdma::ECqMode::EVENT, true,
+            std::function<void(ui32, TInterconnectSettings&)>(), TNode::TLogBackendFactory(),
+            interconnectSessionPoolIds);
     }
 
     const ui32 numSenders = 10;
@@ -161,11 +166,39 @@ void RaceTestIter(ui32 numThreads, ui32 count) {
         Y_ABORT_UNLESS(timer.Passed() < 10);
     }
 
+    if (verifyPoolSelection) {
+        const TInterconnectSessionPoolMapping mapping(interconnectSessionPoolIds);
+        for (TNode& node : nodes) {
+            const ui32 selfNodeId = node.GetActorSystem()->NodeId;
+            for (ui32 peerNodeId = 1; peerNodeId <= numNodes; ++peerNodeId) {
+                if (peerNodeId == selfNodeId) {
+                    continue;
+                }
+
+                TActorId proxyId;
+                if (peerNodeId <= numNodes - numDynamicNodes) {
+                    proxyId = node.InterconnectProxy(peerNodeId);
+                } else {
+                    proxyId = node.GetActorSystem()->LookupLocalService(MakeInterconnectProxyId(peerNodeId));
+                }
+
+                UNIT_ASSERT_C(proxyId,
+                    "proxy was not created for local node " << selfNodeId << " peer " << peerNodeId);
+                UNIT_ASSERT_VALUES_EQUAL_C(proxyId.PoolID(), mapping.GetPoolId(peerNodeId),
+                    "unexpected proxy pool for local node " << selfNodeId << " peer " << peerNodeId);
+            }
+        }
+    }
+
     nodes.clear();
     arriveQueue.Check();
 }
 
 Y_UNIT_TEST_SUITE(DynamicProxy) {
+    Y_UNIT_TEST(PoolSelection) {
+        RaceTestIter(2, 1, {0, 1}, true);
+    }
+
     Y_UNIT_TEST(RaceCheck1) {
         for (ui32 iteration = 0; iteration < 100; ++iteration) {
             RaceTestIter(1 + iteration % 5, 1);

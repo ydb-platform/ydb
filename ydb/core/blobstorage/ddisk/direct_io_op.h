@@ -27,13 +27,18 @@ public:
 
     // IO uring callbacks
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
-    virtual void OnDrop() noexcept override final;
+    virtual void OnDrop(NActors::TActorSystem* actorSystem) noexcept override final;
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
+    ui32 RetryCount = 0;
+    static constexpr ui32 MaxResubmissions = 20;
+    virtual bool IsRestoreIo() const noexcept { return false; }
     virtual bool IsIntegrityIo() const noexcept { return false; }
+    virtual bool IsChunkFormatIo() const noexcept { return false; }
+    bool IsCriticalDDiskIo() const noexcept { return IsIntegrityIo() || IsChunkFormatIo(); }
 
     virtual void ClearForRecycle() noexcept;
 
@@ -51,7 +56,7 @@ public:
 
     // Read-path integrity zero mask (TIntegrityManager::TReadPlan::Mixed): bit i covers the i-th
     // IntegrityUnitSize block of the read range; unset bits are zero-filled before replying. Must
-    // live in the op because the reply happens on the uring completion thread.
+    // live in the op because the reply happens on the uring I/O thread.
     void SetReadUsedBlocksMask(TDynBitMap&& usedBlocks) { ReadUsedBlocksMask.emplace(std::move(usedBlocks)); }
 
     const TActorId& GetDDiskId() const { return DDiskId; }
@@ -70,7 +75,7 @@ public:
 
     using NPDisk::TUringOperationBase::SetResult;
 
-    void SetResult(i32 result, TRope&& data);
+    void SetResult(i64 result, TRope&& data);
 
 protected:
     TDDiskActor& Actor;
@@ -82,6 +87,9 @@ protected:
     void ApplyReadUsedBlocksMask(TRope& data) noexcept;
 
 private:
+    class TCompletionGuard;
+    void AccountShortIo() noexcept;
+
     NHPTimer::STime StartTs;
 
     TActorId OriginalRequester;
@@ -165,6 +173,8 @@ public:
         IsErase = isErase;
     }
 
+    bool IsRestoreIo() const noexcept override { return IsRestore; }
+
     void SetIsRestore(bool isRestore) {
         IsRestore = isRestore;
     }
@@ -239,6 +249,33 @@ public:
 
 private:
     ui64 IoId = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TChunkFormatIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class TDDiskActor::TChunkFormatIoOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    explicit TChunkFormatIoOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
+    {}
+
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+    bool IsChunkFormatIo() const noexcept override { return true; }
+
+    void SetFormatRange(TChunkIdx chunkIdx, ui32 offsetInBytes, ui32 size) {
+        ChunkIdx = chunkIdx;
+        OffsetInBytes = offsetInBytes;
+        Size = size;
+    }
+
+private:
+    TChunkIdx ChunkIdx = 0;
+    ui32 OffsetInBytes = 0;
+    ui32 Size = 0;
 };
 
 } // namespace NKikimr::NDDisk

@@ -2652,9 +2652,7 @@ struct TExprStep {
         LastLevel
     };
 
-    TExprStep()
-    {
-    }
+    TExprStep() = default;
 
     void Done(ELevel level) {
         Steps_.Set(level);

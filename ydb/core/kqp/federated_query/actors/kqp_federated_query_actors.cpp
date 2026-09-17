@@ -274,21 +274,21 @@ private:
                                       {"selfId", selfId});
                                   state->Promise.SetValue(TEvDescribeResourceIdResponse::TDescription(""));
                               } catch(const std::exception& ex) {
-                                  YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+                                  YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got exception",
                                       {"selfId", selfId},
                                       {"exception", ex.what()});
                                   state->Promise.SetException(std::current_exception());
                               }
                           });
                   } catch(const std::exception& ex) {
-                    YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+                    YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got exception",
                         {"selfId", selfId},
                         {"exception", ex.what()});
                     state->Promise.SetException(std::current_exception());
                   }
             });
         } catch(const std::exception& ex) {
-            YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+            YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got exception",
                 {"selfId", selfId},
                 {"exception", ex.what()});
             state->Promise.SetException(std::current_exception());

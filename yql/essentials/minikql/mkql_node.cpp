@@ -25,8 +25,7 @@ TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
 {
 }
 
-TTypeEnvironment::~TTypeEnvironment() {
-}
+TTypeEnvironment::~TTypeEnvironment() = default;
 
 void TTypeEnvironment::ClearCookies() const {
     if (TypeOfType_) {

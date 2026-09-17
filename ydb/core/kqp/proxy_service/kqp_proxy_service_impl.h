@@ -95,11 +95,12 @@ public:
         State.store(state, std::memory_order_release);
     }
 
-    void SetPoolId(TString poolId) override {
+    void SetPoolContext(TString poolId, TString classifiedBy) override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         PoolId = std::move(poolId);
+        ClassifiedBy = std::move(classifiedBy);
     }
-    
+
     EState GetState() const {
         return State.load(std::memory_order_acquire);
     }
@@ -117,12 +118,18 @@ public:
         return PoolId;
     }
 
+    TString GetClassifiedBy() const {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        return ClassifiedBy;
+    }
+
     void Clean() {
         EnterTimeUs.store(0, std::memory_order_release);
         ExitTimeUs.store(0, std::memory_order_release);
         {
             TGuard<TAdaptiveLock> guard(PoolIdLock);
             PoolId.clear();
+            ClassifiedBy.clear();
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -134,6 +141,7 @@ private:
 
     mutable TAdaptiveLock PoolIdLock;
     TString PoolId;
+    TString ClassifiedBy;
 };
 
 template<typename TValue>
@@ -258,6 +266,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,

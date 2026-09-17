@@ -32,6 +32,7 @@ struct TRangePattern {
     TString BeginPlain;
     TString EndPlain;
     TMaybe<TString> EscapeRegex;
+    TMaybe<TString> EscapeRegexANSI;
 };
 
 // Range patterns are expected to be matched before others.

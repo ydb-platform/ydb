@@ -5,7 +5,6 @@
 #include "grpc_pq_session.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_select.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
@@ -98,7 +97,7 @@ public:
     TVector<TString> GetClusters(TStringBuf authority) const {
         auto g(Guard(Lock));
         if (ClustersList) {
-            auto selected = NPQ::NClusterTracker::SelectClustersForBalancer(*ClustersList, authority);
+            const auto& selected = ClustersList->GetClusters(authority);
             TVector<TString> names;
             names.reserve(selected.size());
             for (const auto& cluster : selected) {

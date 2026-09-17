@@ -1,6 +1,5 @@
 #include "cluster_select.h"
 
-#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -73,21 +72,12 @@ TVector<TString> ParseFnxClusterCsv(TStringBuf csv) {
     return names;
 }
 
-std::vector<TClustersList::TCluster> SelectClustersForBalancer(const TClustersList& list, TStringBuf authority) {
-    THashSet<TString> extraFnx;
+const TVector<TClustersList::TCluster>& TClustersList::GetClusters(TStringBuf authority) const {
     const TString host = NormalizeDiscoveryHost(authority);
-    if (const auto it = list.Balancers.find(host); it != list.Balancers.end()) {
-        extraFnx.insert(it->second.begin(), it->second.end());
+    if (const auto it = ClustersByBalancer.find(host); it != ClustersByBalancer.end()) {
+        return it->second;
     }
-
-    std::vector<TClustersList::TCluster> visible;
-    visible.reserve(list.Clusters.size());
-    for (const auto& cluster : list.Clusters) {
-        if (!cluster.IsFnx || extraFnx.contains(cluster.Name)) {
-            visible.push_back(cluster);
-        }
-    }
-    return visible;
+    return DefaultVisibleClusters;
 }
 
 TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath) {

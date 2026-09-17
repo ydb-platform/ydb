@@ -340,6 +340,7 @@ private:
         AFL_ENSURE(clustersList);
         AFL_ENSURE(clustersList->Clusters.size());
         clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion;
+        clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();
         AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);

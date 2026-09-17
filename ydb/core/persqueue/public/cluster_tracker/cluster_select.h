@@ -6,15 +6,11 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#include <vector>
-
 namespace NKikimr::NPQ::NClusterTracker {
 
 TString NormalizeDiscoveryHost(TStringBuf authority);
 
 TVector<TString> ParseFnxClusterCsv(TStringBuf csv);
-
-std::vector<TClustersList::TCluster> SelectClustersForBalancer(const TClustersList& list, TStringBuf authority);
 
 TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath);
 

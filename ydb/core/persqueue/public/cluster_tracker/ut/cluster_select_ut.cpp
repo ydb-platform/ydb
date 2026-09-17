@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         return cluster;
     }
 
-    Y_UNIT_TEST(SelectClustersForBalancerFiltersFnx) {
+    Y_UNIT_TEST(GetClustersFiltersFnx) {
         TClustersList list;
         list.Clusters.push_back(MakeCluster("sas", false));
         list.Clusters.push_back(MakeCluster("vla", false));
@@ -52,27 +52,32 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
             return result;
         };
 
-        UNIT_ASSERT_VALUES_EQUAL(names(SelectClustersForBalancer(list, "")), (TVector<TString>{"sas", "vla"}));
-        UNIT_ASSERT_VALUES_EQUAL(names(SelectClustersForBalancer(list, "sas.logbroker.yandex.net")), (TVector<TString>{"sas", "vla"}));
-        UNIT_ASSERT_VALUES_EQUAL(names(SelectClustersForBalancer(list, "unknown.example")), (TVector<TString>{"sas", "vla"}));
+        list.BuildVisibleClusters();
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetClusters("")), (TVector<TString>{"sas", "vla"}));
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetClusters("sas.logbroker.yandex.net")), (TVector<TString>{"sas", "vla"}));
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetClusters("unknown.example")), (TVector<TString>{"sas", "vla"}));
 
         list.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt", "missing"};
-        UNIT_ASSERT_VALUES_EQUAL(names(SelectClustersForBalancer(list, "")), (TVector<TString>{"sas", "vla"}));
+        list.BuildVisibleClusters();
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetClusters("")), (TVector<TString>{"sas", "vla"}));
         UNIT_ASSERT_VALUES_EQUAL(
-            names(SelectClustersForBalancer(list, "LOGBROKER-FNX.YANDEX.NET:2135")),
+            names(list.GetClusters("LOGBROKER-FNX.YANDEX.NET:2135")),
             (TVector<TString>{"sas", "vla", "myt"}));
 
         list.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{};
+        list.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(
-            names(SelectClustersForBalancer(list, "logbroker-fnx.yandex.net")),
+            names(list.GetClusters("logbroker-fnx.yandex.net")),
             (TVector<TString>{"sas", "vla"}));
 
         TClustersList onlyFnx;
         onlyFnx.Clusters.push_back(MakeCluster("myt", true));
-        UNIT_ASSERT(SelectClustersForBalancer(onlyFnx, "logbroker.yandex.net").empty());
+        onlyFnx.BuildVisibleClusters();
+        UNIT_ASSERT(onlyFnx.GetClusters("logbroker.yandex.net").empty());
         onlyFnx.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt"};
+        onlyFnx.BuildVisibleClusters();
         UNIT_ASSERT_VALUES_EQUAL(
-            names(SelectClustersForBalancer(onlyFnx, "logbroker-fnx.yandex.net")),
+            names(onlyFnx.GetClusters("logbroker-fnx.yandex.net")),
             (TVector<TString>{"myt"}));
     }
 

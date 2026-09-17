@@ -48,7 +48,7 @@ See also [{#T}](yandex-enterprise-database.md).
 #|
 || Version |  Release date | Docker `registry/image:tag` | Changelog ||
 || **v26.2** | > | > | > ||
-|| v.26.2.1.14 | 16.09.26 | **TBD: Docker image is not published** | [See list](../changelog-server.md#26-2-1-14) ||
+|| v.26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [See list](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v.26.1.1.22 | 27.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.22` | [See list](../changelog-server.md#26-1-1-22) ||
 || v.26.1.1.20 | 02.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.20` | [See list](../changelog-server.md#26-1-1-20) ||

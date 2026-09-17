@@ -48,7 +48,7 @@
 #|
 || Версия |  Дата выпуска | Docker `registry/image:tag` | Список изменений ||
 || **v26.2** | > | > | > ||
-|| v.26.2.1.14 | 16.09.26 | **TBD: Docker-образ не опубликован** | [См. список](../changelog-server.md#26-2-1-14) ||
+|| v.26.2.1.14 | 16.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.2.1.14` | [См. список](../changelog-server.md#26-2-1-14) ||
 || **v26.1** | > | > | > ||
 || v.26.1.1.22 | 27.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.22` | [См. список](../changelog-server.md#26-1-1-22) ||
 || v.26.1.1.20 | 02.07.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.20` | [См. список](../changelog-server.md#26-1-1-20) ||

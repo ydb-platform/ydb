@@ -12,7 +12,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    path_aliasing_ut.cpp
     actors_ut.cpp
     metarequest_ut.cpp
     topic_location_actor_ut.cpp
@@ -33,7 +32,6 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
-    ydb/library/persqueue/topic_parser
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils

@@ -4,7 +4,6 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/core/path_aliasing/context/path_context.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
@@ -70,9 +69,6 @@ struct TEvPqNewMetaCache {
         TVector<NPersQueue::TDiscoveryConverterPtr> Topics;
         bool SyncVersion;
         bool ShowPrivate = false;
-        std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
-        // CDC child paths were obtained from scheme metadata, not user input.
-        THashSet<TString> ResolvedTopics;
 
         TEvDescribeTopicsRequest() = default;
 
@@ -88,7 +84,6 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeTopicsByNameRequest: public TEventLocal<TEvDescribeTopicsByNameRequest, EvDescribeTopicsByNameRequest> {
         TVector<TString> Topics;
         bool SyncVersion;
-        std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
 
         TEvDescribeTopicsByNameRequest() = default;
 
@@ -102,10 +97,6 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
         TVector<NPersQueue::TDiscoveryConverterPtr> TopicsRequested;
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
-        TString PathRewriteError;
-        // Actual resource rewrites, keyed by the original converter path.
-        // Identity matches and already-resolved CDC children are not rewrites.
-        THashSet<TString> RewrittenTopics;
         explicit TEvDescribeTopicsResponse(TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,
                                            const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
 

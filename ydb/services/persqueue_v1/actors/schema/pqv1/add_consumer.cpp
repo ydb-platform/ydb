@@ -51,18 +51,12 @@ public:
 
     void DoAction() {
         Become(&TAddConsumerActor::StateWork);
-        auto strategy = std::make_unique<TAddConsumerStrategy>(GetProtoRequest()->read_rule(), GetTopicPath());
-        if (!ResolveConsumerSchemaReferences(strategy->Rule)) {
-            return;
-        }
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::move(strategy),
-            .PathContext = GetFederatedPathContext(),
-            .LogicalDatabase = GetLogicalDatabase(),
+            .Strategy = std::make_unique<TAddConsumerStrategy>(GetProtoRequest()->read_rule(), GetProtoRequest()->path()),
         }));
     }
 

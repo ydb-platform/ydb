@@ -1,6 +1,5 @@
 #include "service_secret.h"
 #include "rpc_scheme_base.h"
-#include "rpc_common/rpc_common.h"
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -22,14 +21,11 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        TString path;
-        if (!ResolveRootSchemaPath(*Request_, GetProtoRequest()->path(), path)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, ActorContext());
-        }
         auto navigateRequest = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
-        navigateRequest->Record.MutableDescribePath()->SetPath(path);
+        navigateRequest->Record.MutableDescribePath()->SetPath(
+            Request_->NormalizePath(GetProtoRequest()->path()));
 
         Send(MakeTxProxyID(), navigateRequest.release());
         Become(&TDescribeSecretRPC::StateDescribeScheme);

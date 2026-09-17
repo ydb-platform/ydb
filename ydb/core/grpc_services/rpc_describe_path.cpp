@@ -31,9 +31,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
-        if (!ResolveRootSchemaPath(*this->Request_, this->GetProtoRequest()->path(), ResolvedPath)) {
-            return this->Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-        }
+        Path = this->Request_->NormalizePath(this->GetProtoRequest()->path());
         ResolvePath(ctx);
     }
 
@@ -44,7 +42,7 @@ private:
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TSchemeCacheNavigate::OpList; // we need ListNodeEntry
-        entry.Path = NKikimr::SplitPath(ResolvedPath);
+        entry.Path = NKikimr::SplitPath(Path);
 
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
         this->Become(&TDerived::StateResolvePath);
@@ -65,7 +63,7 @@ private:
 
         const auto& entry = request->ResultSet.front();
         if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
-            return SendProposeRequest(ctx, ResolvedPath);
+            return SendProposeRequest(ctx, Path);
         }
 
         switch (entry.Kind) {
@@ -73,11 +71,11 @@ private:
             case TSchemeCacheNavigate::EKind::KindIndex:
                 break;
             default:
-                return SendProposeRequest(ctx, ResolvedPath);
+                return SendProposeRequest(ctx, Path);
         }
 
         if (!entry.Self || !entry.ListNodeEntry) {
-            return SendProposeRequest(ctx, ResolvedPath);
+            return SendProposeRequest(ctx, Path);
         }
 
         if (entry.ListNodeEntry->Children.size() != 1) {
@@ -89,7 +87,7 @@ private:
         const auto& childName = entry.ListNodeEntry->Children.at(0).Name;
 
         return SendProposeRequest(ctx,
-            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(ResolvedPath), childName)));
+            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(Path), childName)));
     }
 
     void SendProposeRequest(const TActorContext& ctx, const TString& path) {
@@ -152,8 +150,8 @@ private:
     }
 
 private:
+    TString Path;
     TMaybe<TString> OverrideName;
-    TString ResolvedPath;
 };
 
 class TListDirectoryRPC : public TBaseDescribe<TListDirectoryRPC, TEvListDirectoryRequest, Ydb::Scheme::ListDirectoryResult, true> {

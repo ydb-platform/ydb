@@ -32,9 +32,10 @@ public:
 private:
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
+        const TString destinationPath = Request_->NormalizePath(req->destination_path());
         std::pair<TString, TString> destinationPathPair;
         try {
-            destinationPathPair = SplitRootSchemaPath(*Request_, req->destination_path());
+            destinationPathPair = SplitPath(destinationPath);
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -42,10 +43,6 @@ private:
 
         const auto& workingDir = destinationPathPair.first;
         const auto& name = destinationPathPair.second;
-        TString sourcePath;
-        if (!ResolveRootSchemaPath(*Request_, req->source_path(), sourcePath)) {
-            return Reply(StatusIds::BAD_REQUEST, ctx);
-        }
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
@@ -54,7 +51,7 @@ private:
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         auto create = modifyScheme->MutableCreateTable();
         create->SetName(name);
-        create->SetCopyFromTable(sourcePath);
+        create->SetCopyFromTable(Request_->NormalizePath(req->source_path()));
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 };

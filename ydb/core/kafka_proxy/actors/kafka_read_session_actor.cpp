@@ -355,7 +355,7 @@ bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupReq
                     {LogPrefix()},
                     {"toRead", topic});
 
-                auto normalizedTopicName = request.GetTopicPath(Context->DatabasePath, topic.value());
+                auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
                 OriginalTopicNames[normalizedTopicName] = topic.value();
                 OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
                 topics.emplace(normalizedTopicName);

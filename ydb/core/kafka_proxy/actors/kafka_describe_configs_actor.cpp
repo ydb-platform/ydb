@@ -37,8 +37,7 @@ TKafkaDescribeTopicActor::TKafkaDescribeTopicActor(
         TActorId requester,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         TString topicPath,
-        TString databaseName,
-        TString responseTopicPath)
+        TString databaseName)
     : TBase(new TDescribeConfigsRequest(
         userToken,
         topicPath,
@@ -48,7 +47,6 @@ TKafkaDescribeTopicActor::TKafkaDescribeTopicActor(
         })
     )
     , TopicPath(topicPath)
-    , ResponseTopicPath(responseTopicPath.empty() ? topicPath : std::move(responseTopicPath))
     , Requester(requester)
 {
 };
@@ -56,7 +54,7 @@ TKafkaDescribeTopicActor::TKafkaDescribeTopicActor(
 void TKafkaDescribeTopicActor::SendResult(const EKafkaErrors status, const TString& message, const google::protobuf::Message& result) {
     THolder<TEvKafka::TEvTopicDescribeResponse> response(new TEvKafka::TEvTopicDescribeResponse());
     response->Status = status;
-    response->TopicPath = ResponseTopicPath;
+    response->TopicPath = TopicPath;
     response->Message = message;
     if (status == EKafkaErrors::NONE_ERROR) {
         const auto* protoResponse = dynamic_cast<const Ydb::Topic::DescribeTopicResult*>(&result);
@@ -134,9 +132,8 @@ void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         ctx.Register(new TKafkaDescribeTopicActor(
             SelfId(),
             Context->Token.UserToken,
-            Message.GetTopicPathOrOriginal(resource.ResourceName.value()),
-            Context->DatabasePath,
-            resource.ResourceName.value()
+            resource.ResourceName.value(),
+            Context->DatabasePath
         ));
         InflyTopics++;
     }

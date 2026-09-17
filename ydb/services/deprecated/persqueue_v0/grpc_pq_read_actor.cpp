@@ -1,5 +1,4 @@
 #include "grpc_pq_actor.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
@@ -159,8 +158,7 @@ class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const ui64 cookie, const TString& session, const ui32 generation,
                         const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition, const ui64 tabletID,
-                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder,
-                        bool resolvedTopic);
+                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -284,7 +282,6 @@ private:
 
     std::unordered_map<ui64, std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>> Kqps;
     const TTopicHolder::TPtr TopicHolder;
-    const bool ResolvedTopic;
 };
 
 
@@ -338,9 +335,6 @@ TReadSessionActor::~TReadSessionActor() = default;
 
 
 void TReadSessionActor::Bootstrap(const TActorContext& ctx) {
-    if (AppData(ctx)->PathNormalizer && !AppData(ctx)->PathNormalizer->Empty()) {
-        PathContext = std::make_shared<NPathAliasing::TPathContext>(*AppData(ctx)->PathNormalizer, Nothing());
-    }
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         ++(*GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("SessionsCreatedTotal", true));
     }
@@ -723,17 +717,6 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
 
     PeerName = event->PeerName;
     Database = CanonizePath(event->Database);
-    LogicalDatabase = Database;
-    if (PathContext && !event->Database.empty()) {
-        // Match an explicit root header without changing its legacy empty representation on a miss or identity.
-        auto database = PathContext->NormalizePath(LogicalDatabase.empty() ? TString("/") : LogicalDatabase);
-        if (database.IsFail()) {
-            return CloseSession(database.GetErrorMessage(), NPersQueue::NErrorCode::BAD_REQUEST, ctx);
-        }
-        if (database->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
-            Database = database.DetachResult().Path;
-        }
-    }
     RequestId = event->RequestId;
 
     ReadOnlyLocal = init.GetReadOnlyLocal();
@@ -746,7 +729,6 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         Groups.push_back(init.GetPartitionGroups(i));
     }
     THashSet<TString> topicsToResolve;
-    THashMap<TString, TString> logicalTopicNames;
     for (ui32 i = 0; i < init.TopicsSize(); ++i) {
         const auto& t = init.GetTopics(i);
 
@@ -755,20 +737,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
             return;
         }
 
-        TString topic = t;
-        bool topicRewritten = false;
-        if (PathContext && TopicsHandler.GetConverterFactory()->GetNoDCMode()) {
-            auto resolved = NGRpcService::ResolveFstClassTopicSchemaPath(*PathContext, LogicalDatabase, Database, topic);
-            if (resolved.IsFail()) {
-                return CloseSession(resolved.GetErrorMessage(), NPersQueue::NErrorCode::BAD_REQUEST, ctx);
-            }
-            topicRewritten = resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten;
-            topic = resolved.DetachResult().Path;
-        }
-        if (PathContext && (!TopicsHandler.GetConverterFactory()->GetNoDCMode() || topicRewritten)) {
-            logicalTopicNames.emplace(topic, t);
-        }
-        topicsToResolve.insert(topic);
+        topicsToResolve.insert(t);
     }
     YDB_LOG_INFO_CTX(ctx, "From",
         {PQ_LOG_PREFIX},
@@ -795,24 +764,13 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         }
     }
     TopicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, ReadOnlyLocal,
-            PathContext && !TopicsHandler.GetConverterFactory()->GetNoDCMode() ? LogicalDatabase : Database
+            topicsToResolve, ReadOnlyLocal, Database
     );
     if (!TopicsList.IsValid) {
         return CloseSession(
                 TopicsList.Reason,
                 NPersQueue::NErrorCode::BAD_REQUEST, ctx
         );
-    }
-    if (PathContext) {
-        for (const auto& [name, converters] : TopicsList.ClientTopics) {
-            const auto it = logicalTopicNames.find(name);
-            if (it != logicalTopicNames.end()) {
-                for (const auto& converter : converters) {
-                    ClientsideTopicNames.emplace(converter->GetOriginalPath(), it->second);
-                }
-            }
-        }
     }
     SendAuthRequest(ctx);
 
@@ -842,19 +800,12 @@ void TReadSessionActor::SendAuthRequest(const TActorContext& ctx) {
         }
         topics.push_back(t.second);
     }
-    auto request = MakeHolder<TEvDescribeTopicsRequest>(topics, false);
-    if (PathContext && !TopicsHandler.GetConverterFactory()->GetNoDCMode()) {
-        request->PathContext = PathContext;
-    }
-    ctx.Send(PqMetaCache, request.Release());
+    ctx.Send(PqMetaCache, new TEvDescribeTopicsRequest(topics, false));
 }
 
 
 
 void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ev->Get()->PathRewriteError.empty()) {
-        return CloseSession(ev->Get()->PathRewriteError, NPersQueue::NErrorCode::BAD_REQUEST, ctx);
-    }
     TString dbId, folderId;
     for (const auto& entry : ev->Get()->Result->ResultSet) {
         if (!entry.PQGroupInfo)
@@ -891,9 +842,7 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
     AuthInitActor = ctx.Register(new V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, InternalClientId, Cookie, Session, PqMetaCache, NewSchemeCache, Counters, Token,
-            TopicsList, TopicsHandler.GetLocalCluster(), false,
-            PathContext && !TopicsHandler.GetConverterFactory()->GetNoDCMode() ? PathContext : nullptr,
-            ClientsideTopicNames
+            TopicsList, TopicsHandler.GetLocalCluster()
     ));
 }
 
@@ -1192,7 +1141,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     IActor* partitionActor = new TPartitionActor(
             ctx.SelfID, InternalClientId, Cookie, Session, record.GetGeneration(),
             record.GetStep(), jt->second->FullConverter, database, record.GetPartition(), record.GetTabletId(), it->second,
-            ClientDC, jt->second, bool(PathContext)
+            ClientDC, jt->second
     );
 
     TActorId actorId = ctx.Register(partitionActor);
@@ -1419,7 +1368,7 @@ void TReadSessionActor::InformBalancerAboutRelease(const THashMap<std::pair<TStr
     req.SetSession(Session);
     ActorIdToProto(jt->second->PipeClient, req.MutablePipeClient());
     req.SetClientId(InternalClientId);
-    req.SetTopic(PathContext ? it->second.Converter->GetPrimaryPath() : it->first.first);
+    req.SetTopic(it->first.first);
     req.SetPartition(it->first.second);
 
     YDB_LOG_INFO_CTX(ctx, "Released",
@@ -2015,8 +1964,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& internalClientId, const ui64 cookie, const TString& session,
         const ui32 generation, const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition,
-        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder,
-        bool resolvedTopic
+        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, const TTopicHolder::TPtr& topicHolder
 )
     : ParentId(parentId)
     , InternalClientId(internalClientId)
@@ -2054,7 +2002,6 @@ TPartitionActor::TPartitionActor(
     , FirstRead(true)
     , ReadingFinishedSent(false)
     , TopicHolder(topicHolder)
-    , ResolvedTopic(resolvedTopic)
 {
 }
 
@@ -2125,7 +2072,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         kqp->SendCreateSessionRequest(ctx);
     } else {
         NKikimrClient::TPersQueueRequest request;
-        request.MutablePartitionRequest()->SetTopic(ResolvedTopic ? Topic->GetPrimaryPath() : Topic->GetClientsideName());
+        request.MutablePartitionRequest()->SetTopic(Topic->GetClientsideName());
         request.MutablePartitionRequest()->SetPartition(Partition);
         request.MutablePartitionRequest()->SetCookie(readId);
 
@@ -2743,7 +2690,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         NKikimrClient::TPersQueueRequest request;
 
-        request.MutablePartitionRequest()->SetTopic(ResolvedTopic ? Topic->GetPrimaryPath() : Topic->GetClientsideName());
+        request.MutablePartitionRequest()->SetTopic(Topic->GetClientsideName());
         request.MutablePartitionRequest()->SetPartition(Partition);
         request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
 
@@ -2900,7 +2847,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     NKikimrClient::TPersQueueRequest request;
 
-    request.MutablePartitionRequest()->SetTopic(ResolvedTopic ? Topic->GetPrimaryPath() : Topic->GetClientsideName());
+    request.MutablePartitionRequest()->SetTopic(Topic->GetClientsideName());
 
     request.MutablePartitionRequest()->SetPartition(Partition);
     request.MutablePartitionRequest()->SetCookie((ui64)ReadOffset);

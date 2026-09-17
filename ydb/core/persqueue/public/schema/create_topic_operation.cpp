@@ -81,7 +81,6 @@ private:
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        const auto logicalDatabase = Settings.PathContext ? CanonizePath(Settings.LogicalDatabase) : database;
         // Federation create still expects the original legacy name so ForFederation can
         // extract DC/producer metadata. ResolveName is only for FCC (literal modern path).
         TString path;
@@ -92,7 +91,7 @@ private:
             }
             path = std::move(resolved->Path);
         } else {
-            path = NormalizePath(logicalDatabase, CanonizePath(Settings.Strategy->GetTopicName()));
+            path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
         }
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -111,7 +110,7 @@ private:
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 
         auto result = ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
-            .Database = logicalDatabase,
+            .Database = std::move(database),
             .WorkingDir = workingDir,
             .Name = name,
             .ClustersList = ClustersList,
@@ -121,22 +120,6 @@ private:
 
         if (!result) {
             return ReplyAndDie(result.GetStatus(), std::move(result.GetErrorMessage()));
-        }
-
-        if (Settings.PathContext) {
-            // Federation metadata must be extracted from the original name before
-            // rewriting the complete schema operand. Nothing has been proposed yet.
-            auto resolved = Settings.PathContext->NormalizePath(path);
-            if (resolved.IsFail()) {
-                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, resolved.GetErrorMessage());
-            }
-            path = resolved.DetachResult().Path;
-            auto [resolvedDirectory, resolvedName] = GetWorkingDirAndName(path);
-            if (resolvedDirectory.empty() || resolvedName.empty()) {
-                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, "Wrong topic alias target");
-            }
-            modifyScheme.SetWorkingDir(resolvedDirectory);
-            modifyScheme.MutableCreatePersQueueGroup()->SetName(resolvedName);
         }
 
         ModifyScheme = modifyScheme;

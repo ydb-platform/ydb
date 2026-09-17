@@ -90,10 +90,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
-            if (!ResolveQueuePath(TopicPath)) {
-                return;
-            }
-            if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create, Request_.get()); !cc.has_value()) {
+            if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("{}", cc.error())));
             } else {
                 QueueAttributes = std::move(cc).value();
@@ -130,7 +127,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void CreateTopic() {
             Ydb::Topic::CreateTopicRequest topicRequest;
-            topicRequest.set_path(Request_->HasActivePathRewriting() ? GetTopicPath() : TopicPath);
+            topicRequest.set_path(TopicPath);
 
             {
                 auto* partitioningSettings = topicRequest.mutable_partitioning_settings();
@@ -168,7 +165,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void AddConsumer() {
             Ydb::Topic::AlterTopicRequest topicRequest;
-            topicRequest.set_path(Request_->HasActivePathRewriting() ? GetTopicPath() : TopicPath);
+            topicRequest.set_path(TopicPath);
 
             AddConsumerToRequest(topicRequest.add_add_consumers());
 
@@ -239,8 +236,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void ReplyAndDie(const TActorContext& ctx) {
             Result_.Clear();
             const TRichQueueUrl queueUrl{
-                .Database = Request_->HasActivePathRewriting()
-                    ? Request_->GetLogicalDatabaseName().GetOrElse(this->Database) : this->Database,
+                .Database = this->Database,
                 .TopicPath = this->TopicPath,
                 .Consumer = this->ConsumerName,
                 .Fifo = QueueAttributes.FifoQueue,

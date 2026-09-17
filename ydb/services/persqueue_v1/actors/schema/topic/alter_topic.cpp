@@ -20,37 +20,14 @@ public:
     void DoAction() {
         Become(&TAlterTopicActor::StateWork);
 
-        NPQ::NSchema::TAlterTopicSettings settings{
+        auto request = *GetProtoRequest();
+        request.set_path(NormalizeTopicPath(request.path()));
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Request = std::move(request),
             .UserToken = GetUserToken()
-        };
-        settings.Request.set_path(GetTopicPath());
-        settings.PathContext = GetFederatedPathContext();
-        settings.LogicalDatabase = GetLogicalDatabase();
-        for (auto& consumer : *settings.Request.mutable_add_consumers()) {
-            if (!ResolveConsumerSchemaReferences(consumer)) {
-                return;
-            }
-        }
-        for (auto& consumer : *settings.Request.mutable_alter_consumers()) {
-            if (!consumer.has_alter_shared_consumer_type()
-                || !consumer.alter_shared_consumer_type().has_alter_dead_letter_policy()) {
-                continue;
-            }
-            auto* policy = consumer.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy();
-            if (policy->has_alter_move_action() && policy->alter_move_action().has_set_dead_letter_queue()) {
-                if (!ResolveDeadLetterQueue(*policy->mutable_alter_move_action()->mutable_set_dead_letter_queue())) {
-                    return;
-                }
-            } else if (policy->has_set_move_action()) {
-                if (!ResolveDeadLetterQueue(*policy->mutable_set_move_action()->mutable_dead_letter_queue())) {
-                    return;
-                }
-            }
-        }
-        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), std::move(settings)));
+        }));
     }
 
 private:

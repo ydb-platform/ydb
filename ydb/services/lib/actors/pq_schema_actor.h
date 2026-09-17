@@ -3,7 +3,6 @@
 #include "consumers_advanced_monitoring_settings.h"
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -275,7 +274,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         TString GetTopicPath() const override {
-            auto path = ResolvedTopicPath ? *ResolvedTopicPath : NPersQueue::GetFullTopicPath(this->Request_->GetDatabaseName(), TActorBase::TopicPath);
+            auto path = NPersQueue::GetFullTopicPath(this->Request_->GetDatabaseName(), TActorBase::TopicPath);
             if (PrivateTopicName) {
                 path = JoinPath(ChildPath(NKikimr::SplitPath(path), *PrivateTopicName));
             }
@@ -306,9 +305,6 @@ namespace NKikimr::NGRpcProxy::V1 {
     protected:
         // TDerived must implement FillProposeRequest(TEvProposeTransaction&, const TActorContext& ctx, TString workingDir, TString name);
         void SendProposeRequest(const NActors::TActorContext& ctx) {
-            if (!ResolveTopicPath()) {
-                return;
-            }
             std::pair <TString, TString> pathPair;
             try {
                 pathPair = NKikimr::NGRpcService::SplitPath(GetTopicPath());
@@ -343,9 +339,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate = false) {
-            if (!ResolveTopicPath()) {
-                return;
-            }
             return TActorBase::SendDescribeProposeRequest(ctx, showPrivate || PrivateTopicName.Defined());
         }
 
@@ -418,29 +411,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-    protected:
-        bool ResolveTopicPath() {
-            if (ResolvedTopicPath || TActorBase::TopicPath.empty() || !this->Request_->HasActivePathRewriting()) {
-                return true;
-            }
-            auto resolved = NGRpcService::ResolveFullTopicSchemaPath(*this->Request_, TActorBase::TopicPath);
-            if (resolved.IsFail()) {
-                ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, resolved.GetErrorMessage());
-                return false;
-            }
-            ResolvedTopicPath = resolved.DetachResult().Path;
-            return true;
-        }
-
-    protected:
-        // Only decoded, validated continuation tokens carry an already resolved
-        // resource identity. Fresh resource operands must use ResolveTopicPath.
-        void SetContinuationTopicPath(const TString& path) {
-            ResolvedTopicPath = NPersQueue::GetFullTopicPath(this->Request_->GetDatabaseName(), path);
-        }
-
     private:
-        TMaybe<TString> ResolvedTopicPath;
         TMaybe<TString> PrivateTopicName;
         TMaybe<TString> CdcStreamName;
         bool InternalRequest = false;

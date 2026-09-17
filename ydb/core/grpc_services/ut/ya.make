@@ -7,7 +7,6 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
-    path_aliasing_ut.cpp
     rpc_calls_ut.cpp
     rpc_load_rows_ut.cpp
     operation_helpers_ut.cpp
@@ -21,7 +20,6 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/scheme
     ydb/core/testlib/default
-    ydb/library/persqueue/topic_parser
 )
 
 END()

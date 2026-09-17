@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    actors/path_aliasing.cpp
     actors/kafka_api_versions_actor.cpp
     actors/kafka_init_producer_id_actor.cpp
     actors/kafka_metadata_actor.cpp
@@ -59,11 +58,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
-    ydb/library/persqueue/topic_parser
     ydb/public/sdk/cpp/src/library/kafka
     ydb/core/base
-    ydb/core/grpc_services
-    ydb/core/path_aliasing/context
     ydb/core/persqueue/common
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher

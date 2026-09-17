@@ -1,5 +1,4 @@
 #include "read_info_actor.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include "persqueue_utils.h"
 #include "read_init_auth_actor.h"
@@ -62,21 +61,10 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
             AnswerError("empty topic in init request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
-        if (!TopicsHandler.GetConverterFactory()->GetNoDCMode()) {
-            topicsToResolve.insert(t.path());
-        } else {
-            auto resolved = NGRpcService::ResolveFstClassTopicSchemaPath(*Request_, t.path());
-            if (resolved.IsFail()) {
-                return AnswerError(resolved.GetErrorMessage(), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            }
-            topicsToResolve.insert(resolved.DetachResult().Path);
-        }
+        topicsToResolve.insert(t.path());
     }
     auto topicsList = TopicsHandler.GetReadTopicsList(
-            topicsToResolve, readOnlyLocal,
-            Request_->HasActivePathRewriting() && !TopicsHandler.GetConverterFactory()->GetNoDCMode()
-                ? Request_->GetLogicalDatabaseName().GetOrElse(TString())
-                : Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())
     );
     if (!topicsList.IsValid) {
         return AnswerError(
@@ -87,9 +75,7 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster(), false,
-            Request_->HasActivePathRewriting() && !TopicsHandler.GetConverterFactory()->GetNoDCMode()
-                ? Request_->GetPathRewriteSettings().Context : nullptr
+            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
     ));
 }
 

@@ -6,7 +6,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/db_metadata_cache.h>
-#include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -45,9 +44,6 @@ protected:
     bool Metrics = true;
     bool WithRetry = false;
     TString Database;
-    NGRpcService::TPathRewriteSettings PathRewrite = NGRpcService::TPathRewriteSettings::UserInput();
-    bool PathRewriteInitialized = false;
-    bool ResolveUserSchemaPath(const TString& logicalPath, TString& path);
     TString SharedDatabase;
     bool Direct = false;
     bool NeedRedirect = true;

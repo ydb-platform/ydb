@@ -9,7 +9,6 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/service_coordination.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/ticket_parser.h>
 
@@ -153,9 +152,7 @@ private:
         }
 
         const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
-        if (!NGRpcService::ResolveRootSchemaPath(*RequestEvent, StartRequest->Record.session_start().path(), KesusPath)) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten coordination node path");
-        }
+        KesusPath = RequestEvent->NormalizePath(StartRequest->Record.session_start().path());
 
         auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {

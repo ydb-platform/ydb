@@ -25,7 +25,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
     ydb/services/sqs_topic
-    ydb/services/sqs_topic/queue_url
     ydb/services/ydb
 )
 

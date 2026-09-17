@@ -83,9 +83,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
-            if (!ResolveQueuePath(TopicPath)) {
-                return;
-            }
             DescribeTopic(NACLib::DescribeSchema);
             Become(&TGetQueueUrlActor::TBase::StateWork);
         }
@@ -119,8 +116,7 @@ namespace NKikimr::NSqsTopic::V1 {
             const TString consumerInUrl = NPersQueue::ConvertOldConsumerName(ConsumerConfig->GetName(), ctx);
 
             const TRichQueueUrl queueUrl{
-                .Database = Request_->HasActivePathRewriting()
-                    ? Request_->GetLogicalDatabaseName().GetOrElse(this->Database) : this->Database,
+                .Database = this->Database,
                 .TopicPath = this->TopicPath,
                 .Consumer = consumerInUrl,
                 .Fifo = QueueName.EndsWith(".fifo"),

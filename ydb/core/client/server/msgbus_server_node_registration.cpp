@@ -2,8 +2,6 @@
 #include "msgbus_securereq.h"
 #include "grpc_server.h"
 
-#include <ydb/core/path_aliasing/context/path_context.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -62,17 +60,6 @@ public:
             return;
         }
 
-        TString tenantPath = Request.GetPath();
-        if (const auto& normalizer = AppData(ctx)->PathNormalizer;
-            Request.HasPath() && normalizer && !normalizer->Empty()) {
-            const NPathAliasing::TPathContext context(*normalizer, tenantPath);
-            if (!context.GetError().empty()) {
-                ReplyWithErrorAndDie(context.GetError(), ctx);
-                return;
-            }
-            tenantPath = context.GetDatabase().GetOrElse(TString{});
-        }
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(), pipeConfig);
@@ -88,7 +75,7 @@ public:
         request->Record.MutableLocation()->CopyFrom(Request.GetLocation());
         request->Record.SetFixedNodeId(Request.GetFixedNodeId());
         if (Request.HasPath()) {
-            request->Record.SetPath(tenantPath);
+            request->Record.SetPath(Request.GetPath());
         }
         request->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
 

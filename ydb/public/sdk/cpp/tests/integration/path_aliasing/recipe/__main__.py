@@ -42,39 +42,24 @@ def start(args):
             {"pattern": r"^/kfront(/|$)", "replacement": r"/failover/kfront\1"},
             {
                 "pattern": r"^/short-table$",
-                "replacement": r"/failover/kfront/TableResourceHandlesAndRepeatedSourceDestinationPaths/table",
+                "replacement": r"/failover/kfront/TableResourcesAndRepeatedSourceDestinationOperands/table",
             },
-            {"pattern": r"^/objects/(.*)$", "replacement": r"/failover/kfront/\1"},
-            # Continuations contain a resolved stream identity, not fresh input.
-            {
-                "pattern": r"^/failover/kfront/(DataStreamsContinuationsKeepResolvedIdentity)/stream$",
-                "replacement": r"/failover/kfront/\1/decoy",
-            },
-            # A returned physical topic name is not fresh user input. The SDK
-            # reuses StartPartitionSession.path for transactional offset RPCs.
-            {
-                "pattern": r"^/failover/kfront/(TopicSchemaStreamingAndTransactionalOffsets)/topic$",
-                "replacement": r"/failover/kfront/\1/decoy",
-            },
-            # This can only match wrongly forwarded service-local identifiers.
-            {"pattern": r"^kfront(/|$)", "replacement": r"must-not-rewrite\1"},
         ]
     }
     cluster = KiKiMR(configuration)
     try:
         cluster.start()
         save_processes(recipe, cluster)
-        for database in ("/failover/kfront", "/failover/isolation"):
-            cluster.create_database(database, storage_pool_units_count={"hdd": 1}, token="root@builtin")
-            cluster.register_and_start_slots(database, count=1)
-            save_processes(recipe, cluster)
-            cluster.wait_tenant_up(database, token="root@builtin")
+        database = "/failover/kfront"
+        cluster.create_database(database, storage_pool_units_count={"hdd": 1}, token="root@builtin")
+        cluster.register_and_start_slots(database, count=1)
+        save_processes(recipe, cluster)
+        cluster.wait_tenant_up(database, token="root@builtin")
         endpoint = "localhost:{}".format(cluster.nodes[1].grpc_port)
         recipe.write_endpoint(endpoint)
         recipe.write_database("/kfront")
         recipe.write_connection_string("grpc://{}?database=/kfront".format(endpoint))
         recipe.setenv("YDB_PATH_ALIAS_CANONICAL_DATABASE", "/failover/kfront")
-        recipe.setenv("YDB_PATH_ALIAS_ISOLATION_DATABASE", "/failover/isolation")
         fs_dir = os.path.join(work_dir, "exports")
         os.makedirs(fs_dir, exist_ok=True)
         recipe.setenv("YDB_PATH_ALIAS_FS_DIR", fs_dir)

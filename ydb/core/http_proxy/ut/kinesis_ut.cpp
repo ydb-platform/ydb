@@ -20,38 +20,6 @@ using namespace NActors;
 
 namespace {
 
-class THttpProxyPathAliases : public THttpProxyTestMock {
-public:
-    void SetUp(NUnitTest::TTestContext&) override {
-        TInitParameters settings;
-        auto* alias = settings.PathRewriteConfig.AddRules();
-        alias->SetPattern("^/alias(/|$)");
-        alias->SetReplacement("/Root\\1");
-        auto* decoy = settings.PathRewriteConfig.AddRules();
-        decoy->SetPattern("^/Root/physical(/|$)");
-        decoy->SetReplacement("/Root/decoy\\1");
-        InitAll(settings);
-    }
-
-    NJson::TJsonValue Call(const TString& url, const TString& operation, NJson::TJsonValue body) {
-        const auto response = SendHttpRequest(url, "kinesisApi." + operation, std::move(body),
-            FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL_C(response.HttpCode, 200, response.Body);
-        NJson::TJsonValue result;
-        UNIT_ASSERT(NJson::ReadJsonTree(response.Body, &result));
-        return result;
-    }
-
-    void CreateStreams() {
-        for (const auto* stream : {"/alias/physical", "/alias/decoy"}) {
-            auto create = CreateCreateStreamRequest();
-            create["StreamName"] = stream;
-            create["ShardCount"] = 1;
-            Call("/alias", "CreateStream", std::move(create));
-        }
-    }
-};
-
 using NYdb::TDriver;
 using NYdb::TDriverConfig;
 using NYdb::NTopic::TCreateTopicSettings;
@@ -185,65 +153,6 @@ static void compareJsons(ui16 port, const TString& query, const TString& referen
 }
 
 Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
-    Y_UNIT_TEST_F(RootGetRecordsKeepsTokenDerivedPhysicalRouting, THttpProxyPathAliases) {
-        CreateStreams();
-        auto put = [&](const TString& stream, const TString& data) {
-            auto request = CreatePutRecordsRequest();
-            request["StreamName"] = stream;
-            request["Records"].Back()["Data"] = Base64Encode(data);
-            const auto result = Call("/alias", "PutRecords", std::move(request));
-            UNIT_ASSERT_VALUES_EQUAL(GetByPath<i64>(result, "FailedRecordCount"), 0);
-        };
-        put("/alias/physical", "/alias/original-one");
-        put("/alias/physical", "/alias/original-two");
-        put("/alias/decoy", "wrong-target");
-        auto request = CreateGetShardIteratorRequest();
-        request["StreamName"] = "/alias/physical";
-        request["ShardIteratorType"] = "TRIM_HORIZON";
-        const auto iterator = Call("/", "GetShardIterator", std::move(request));
-        auto recordsRequest = CreateGetRecordsRequest();
-        recordsRequest["ShardIterator"] = GetByPath<TString>(iterator, "ShardIterator");
-        recordsRequest["Limit"] = 1;
-        const auto first = Call("/", "GetRecords", recordsRequest);
-        const auto firstRecords = GetByPath<TJVector>(first, "Records");
-        UNIT_ASSERT_VALUES_EQUAL(firstRecords.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(firstRecords[0], "Data"), Base64Encode("/alias/original-one"));
-        recordsRequest["ShardIterator"] = GetByPath<TString>(first, "NextShardIterator");
-        const auto second = Call("/", "GetRecords", std::move(recordsRequest));
-        const auto secondRecords = GetByPath<TJVector>(second, "Records");
-        UNIT_ASSERT_VALUES_EQUAL(secondRecords.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(secondRecords[0], "Data"), Base64Encode("/alias/original-two"));
-    }
-
-    Y_UNIT_TEST_F(RootListConsumersKeepsTokenDerivedPhysicalRouting, THttpProxyPathAliases) {
-        CreateStreams();
-        auto add = [&](const TString& stream, const TString& name) {
-            auto request = CreateRegisterStreamConsumerRequest();
-            request["StreamArn"] = stream;
-            request["ConsumerName"] = name;
-            Call("/alias", "RegisterStreamConsumer", std::move(request));
-        };
-        add("/alias/physical", "original-one");
-        add("/alias/physical", "original-two");
-        add("/alias/decoy", "decoy-only");
-        auto request = CreateListStreamConsumersRequest();
-        request["StreamArn"] = "/alias/physical";
-        request["MaxResults"] = 1;
-        const auto first = Call("/alias", "ListStreamConsumers", std::move(request));
-        const auto firstConsumers = GetByPath<TJVector>(first, "Consumers");
-        UNIT_ASSERT_VALUES_EQUAL(firstConsumers.size(), 1);
-        NJson::TJsonValue next;
-        next["NextToken"] = GetByPath<TString>(first, "NextToken");
-        const auto second = Call("/", "ListStreamConsumers", std::move(next));
-        const auto secondConsumers = GetByPath<TJVector>(second, "Consumers");
-        UNIT_ASSERT_VALUES_EQUAL(secondConsumers.size(), 1);
-        const auto firstName = GetByPath<TString>(firstConsumers[0], "ConsumerName");
-        const auto secondName = GetByPath<TString>(secondConsumers[0], "ConsumerName");
-        UNIT_ASSERT_VALUES_UNEQUAL(firstName, secondName);
-        UNIT_ASSERT_VALUES_UNEQUAL(firstName, "decoy-only");
-        UNIT_ASSERT_VALUES_UNEQUAL(secondName, "decoy-only");
-    }
-
 
     Y_UNIT_TEST_F(CreateStreamInIncorrectDb, THttpProxyTestMock) {
         auto res = SendHttpRequest("/Root1", "kinesisApi.CreateStream", CreateCreateStreamRequest(),

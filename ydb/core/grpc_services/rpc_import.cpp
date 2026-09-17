@@ -98,18 +98,27 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         ev->Record.SetPeerName(this->Request->GetPeerName());
 
         auto& createImport = *ev->Record.MutableRequest();
-        if (this->Request->HasActivePathRewriting()) {
-            createImport.SetPathRewriteFingerprint(this->Request->GetPathRewriteFingerprint());
-            createImport.SetLogicalDatabase(this->Request->GetLogicalDatabaseName().GetOrElse(""));
-        }
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
-            createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
+            auto* s3Settings = createImport.MutableImportFromS3Settings();
+            s3Settings->CopyFrom(request.settings());
+            s3Settings->set_destination_path(
+                this->Request->NormalizePath(s3Settings->destination_path()));
+            for (auto& item : *s3Settings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
             fsSettings->CopyFrom(request.settings());
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
+            fsSettings->set_destination_path(
+                this->Request->NormalizePath(fsSettings->destination_path()));
+            for (auto& item : *fsSettings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
 
         return ev.Release();

@@ -25,8 +25,8 @@ using TEvDescribeTableRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTa
 class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
+    const TString TablePath;
     TString OverrideName;
-    TString ResolvedPath;
     NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
     TActorId ShardsResolverId;
     bool NeedResolveShards = false;
@@ -48,17 +48,15 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
 
 public:
     TDescribeTableRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg)
+        , TablePath(Request_->NormalizePath(GetProtoRequest()->path()))
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
         const auto request = GetProtoRequest();
-        if (!ResolveRootSchemaPath(*Request_, request->path(), ResolvedPath)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-        }
-        const auto& path = ResolvedPath;
-        const auto paths = NKikimr::SplitPath(path);
+        const auto paths = NKikimr::SplitPath(TablePath);
         if (paths.empty()) {
             Request_->RaiseIssue(NYql::TIssue("Invalid path"));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -70,7 +68,7 @@ public:
         entry.Path = paths;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
-        entry.ShowPrivatePath = ShowPrivatePath(path);
+        entry.ShowPrivatePath = ShowPrivatePath(TablePath);
         NeedResolveShards = request->include_shard_nodes_info()
             && request->include_partition_stats()
             && request->include_table_stats();
@@ -114,7 +112,7 @@ private:
             OverrideName = entry.Path.back();
             SendProposeRequest(CanonizePath(ChildPath(entry.Path, list->Children.at(0).Name)), ctx);
         } else {
-            SendProposeRequest(ResolvedPath, ctx);
+            SendProposeRequest(TablePath, ctx);
         }
     }
 

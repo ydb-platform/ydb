@@ -4,8 +4,6 @@
 #include "msgbus_server_persqueue.h"
 #include "msgbus_securereq.h"
 
-#include "path_aliasing/path_aliasing.h"
-
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
@@ -92,22 +90,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        TBase::Become(&TMessageBusServerSchemeRequest::StateWork);
         SendProposeRequest(ctx);
-    }
-
-    bool ResolveUserSchemaPaths(NKikimrSchemeOp::TModifyScheme& scheme, const TActorContext& ctx) {
-        const auto& normalizer = AppData(ctx)->PathNormalizer;
-        if (!normalizer || normalizer->Empty()) {
-            return true;
-        }
-        const NPathAliasing::TPathContext context(*normalizer, Nothing());
-        const auto status = NormalizeMessageBusSchemaPaths(scheme, context);
-        if (status.IsFail()) {
-            TBase::HandleError(MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::Unknown, status.GetErrorMessage(), ctx);
-            return false;
-        }
-        return true;
+        TBase::Become(&TMessageBusServerSchemeRequest::StateWork);
     }
 
     void SendProposeRequest(const TActorContext &ctx);
@@ -153,9 +137,6 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
         pqgroup->SetName(cmd.GetTopic());
     }
 
-    if (!ResolveUserSchemaPaths(*record.MutableTransaction()->MutableModifyScheme(), ctx)) {
-        return;
-    }
     req->Record.SetUserToken(TBase::GetSerializedToken());
 
     ctx.Send(MakeTxProxyID(), req.Release());
@@ -221,9 +202,6 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
     }
 
     record.MutableTransaction()->MutableModifyScheme()->MergeFrom(Request->Record.GetTransaction().GetModifyScheme());
-    if (!ResolveUserSchemaPaths(*record.MutableTransaction()->MutableModifyScheme(), ctx)) {
-        return;
-    }
     req->Record.SetUserToken(TBase::GetSerializedToken());
     ctx.Send(MakeTxProxyID(), req.Release());
 }

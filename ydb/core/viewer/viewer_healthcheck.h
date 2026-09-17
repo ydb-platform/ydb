@@ -92,13 +92,9 @@ public:
                 }
             }
         }
-        if (PathRewrite.Context) {
-            Database = TBase::Database;
-        } else {
-            Database = Params.Get("database");
-            if (Database.empty()) {
-                Database = Params.Get("tenant");
-            }
+        Database = Params.Get("database");
+        if (Database.empty()) {
+            Database = Params.Get("tenant");
         }
         if (!CheckAccess()) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));

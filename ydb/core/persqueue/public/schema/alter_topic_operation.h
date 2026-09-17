@@ -30,8 +30,6 @@ struct TAlterTopicOperationSettings {
     bool IfExists = false;
     bool PrepareOnly = false;
     ui64 Cookie = 0;
-    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
-    TString LogicalDatabase;
 };
 
 

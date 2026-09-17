@@ -76,14 +76,12 @@ public:
         LogicActorId = RegisterWithSameMailbox(CreateDescribeOperationActor(
             SelfId(),
             {
-                .Path = GetTopicPath(),
+                .Path = NormalizeTopicPath(GetProtoRequest()->path()),
                 .Database = GetDatabase(),
                 .UserToken = GetUserToken(),
                 .AccessRights = NACLib::EAccessRights::DescribeSchema,
                 .IncludeStats = GetProtoRequest()->include_stats(),
                 .IncludeLocation = GetProtoRequest()->include_location(),
-                .PathContext = GetFederatedPathContext(),
-                .LogicalDatabase = GetLogicalDatabase(),
             },
             std::make_unique<TDescribeConsumerStrategy>(GetProtoRequest()->consumer())));
     }

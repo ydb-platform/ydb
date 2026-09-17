@@ -78,7 +78,7 @@ TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestDat
     PendingResponses++;
     // ListOffsets checks DescribeSchema (Kafka DESCRIBE). SelectRow is OffsetFetch only.
     return Register(CreateTopicOffsetsActor(SelfId(), {
-        .Path = ListOffsetsRequestData.GetTopicPath(Context->DatabasePath, topic.Name.value()),
+        .Path = NormalizePath(Context->DatabasePath, topic.Name.value()),
         .Database = Context->DatabasePath,
         .Token = GetUserSerializedToken(Context),
         .PartitionIds = std::move(partitionIds),

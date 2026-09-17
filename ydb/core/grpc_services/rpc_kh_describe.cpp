@@ -39,7 +39,6 @@ private:
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5;
 
     std::unique_ptr<IRequestOpCtx> Request;
-    TString ResolvedTable;
     Ydb::ClickhouseInternal::DescribeTableResult Result;
 
     TDuration Timeout;
@@ -66,9 +65,6 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        if (!ResolveRootSchemaPath(*Request, TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path(), ResolvedTable)) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path", ctx);
-        }
         ResolveTable(ctx);
     }
 
@@ -97,7 +93,8 @@ private:
     }
 
     void ResolveTable(const NActors::TActorContext& ctx) {
-        auto path = ::NKikimr::SplitPath(ResolvedTable);
+        const TString table = TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path();
+        auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
             if (!IsAdministrator(AppData(ctx), Request->GetInternalToken().Get())) {
@@ -114,7 +111,7 @@ private:
             request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = std::move(path);
+            entry.Path = ::NKikimr::SplitPath(Request->NormalizePath(table));
             if (entry.Path.empty()) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
@@ -161,7 +158,8 @@ private:
         ResolveNamesResult = new NSchemeCache::TSchemeCacheNavigate();
         auto &record = ev->Get()->Record;
 
-        auto path = ::NKikimr::SplitPath(ResolvedTable);
+        const TString table = TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path();
+        auto path = ::NKikimr::SplitPath(table);
         FillLocalDbTableSchema(*ResolveNamesResult, record.GetFullScheme(), path.back());
         ResolveNamesResult->ResultSet.back().Path = path;
 

@@ -44,14 +44,12 @@ public:
             std::optional<ui64> retentionMs,
             std::optional<ui64> retentionBytes,
             std::optional<ECleanupPolicy> cleanupPolicy,
-            std::optional<TString> timestampType,
-            TString responseTopicPath = {})
+            std::optional<TString> timestampType)
         : TAlterTopicActor<TAlterConfigsActor, TKafkaAlterConfigsRequest>(
             requester,
             userToken,
             topicPath,
-            databaseName,
-            std::move(responseTopicPath))
+            databaseName)
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
         , CleanupPolicy(cleanupPolicy)
@@ -190,13 +188,12 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         ctx.Register(new TAlterConfigsActor(
             SelfId(),
             Context->Token.UserToken,
-            Message.GetTopicPathOrOriginal(resource.ResourceName.value()),
+            resource.ResourceName.value(),
             Context->DatabasePath,
             convertedRetentions.Ms,
             convertedRetentions.Bytes,
             cleanupPolicy,
-            messageTimestampType,
-            resource.ResourceName.value()
+            messageTimestampType
         ));
 
         InflyTopics++;

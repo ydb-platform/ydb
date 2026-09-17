@@ -1,6 +1,5 @@
 #include "service_dynamic_config.h"
 #include "rpc_deferrable.h"
-#include "rpc_common/rpc_common.h"
 
 #include <type_traits>
 
@@ -254,27 +253,6 @@ private:
     {
         auto request = MakeHolder<TConsoleRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
-        auto& body = *request->Record.MutableRequest();
-        if constexpr (std::is_same_v<TRequest, TEvDropConfigRequest>
-            || std::is_same_v<TRequest, TEvRemoveVolatileConfigRequest>) {
-            if (body.identity().has_database()) {
-                TString database;
-                if (!ResolveRootSchemaPath(*this->Request_, body.identity().database(), database)) {
-                    this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                    PassAway();
-                    return;
-                }
-                body.mutable_identity()->set_database(database);
-            }
-        }
-        if constexpr (std::is_same_v<TRequest, TEvSetConfigRequest>
-            || std::is_same_v<TRequest, TEvReplaceConfigRequest>) {
-            if (!ResolveDatabaseConfigMetadata(*this->Request_, *body.mutable_config())) {
-                this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-                PassAway();
-                return;
-            }
-        }
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());
         if (this->Request_->GetDatabaseName()) {

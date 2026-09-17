@@ -44,7 +44,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvClo
     Error = ConvertErrorCode(ev->Get()->ErrorCode);
     if (Error == GROUP_ID_NOT_FOUND && Context->Config.GetAutoCreateConsumersEnable()) {
         for (auto topicReq: Message->Topics) {
-            TString topicPath = Message.GetTopicPath(Context->DatabasePath, *topicReq.Name);
+            TString topicPath = NormalizePath(Context->DatabasePath, *topicReq.Name);
             CreateConsumerGroupIfNecessary(*topicReq.Name, topicPath, *Message->GroupId);
         }
         if (PendingResponses == 0) { // case when AlterTopic requests have already sent and returned an unsuccessful response
@@ -257,7 +257,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
 void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
     std::vector<std::pair<TString, ui64>> unknownTopicPartitionResponses;
     for (auto topicReq: Message->Topics) {
-        auto topicIt = TopicAndTablets.find(Message.GetTopicPath(Context->DatabasePath, topicReq.Name.value()));
+        auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
         for (auto partitionRequest: topicReq.Partitions) {
             if (topicIt == TopicAndTablets.end()) {
                 PendingResponses++;
@@ -386,7 +386,7 @@ void TKafkaOffsetCommitActor::AddPartitionResponse(EKafkaErrors error, const TSt
 void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx) {
     THashSet<TString> topicsToResolve;
     for (auto topicReq: Message->Topics) {
-        topicsToResolve.insert(Message.GetTopicPath(Context->DatabasePath, topicReq.Name.value()));
+        topicsToResolve.insert(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
     }
 
     auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(

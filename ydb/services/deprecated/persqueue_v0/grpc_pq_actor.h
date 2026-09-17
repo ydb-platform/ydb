@@ -494,10 +494,6 @@ private:
 
     TString PeerName;
     TString Database;
-    TString LogicalDatabase;
-    TString LogicalTopic;
-    bool TopicRewritten = false;
-    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
     TString RequestId;
     ui64 Cookie;
 
@@ -759,9 +755,6 @@ private:
     TString Session;
     TString PeerName;
     TString Database;
-    TString LogicalDatabase;
-    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
-    THashMap<TString, TString> ClientsideTopicNames;
     TString RequestId;
     TString UserAgent;
 

@@ -1,5 +1,4 @@
 #include "consumer_attributes.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/services/sqs_topic/queue_url/arn.h>
@@ -18,8 +17,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TString& queueName,
         const TString& /*consumerName*/,
         const TString& database,
-        EConsumerAttributeUsageTarget usageTarget,
-        const NGRpcService::IRequestCtxBaseMtSafe* request
+        EConsumerAttributeUsageTarget usageTarget
     ) {
         TQueueAttributes result;
 
@@ -75,34 +73,10 @@ namespace NKikimr::NSqsTopic::V1 {
                         if (!dlqUrl.has_value()) {
                             return std::unexpected(TString::Join("Invalid deadLetterTargetArn: ", dlqUrl.error()));
                         }
-                        if (request && request->HasActivePathRewriting()) {
-                            // An ARN supplies its own complete database/path;
-                            // it is never a database-relative topic spelling.
-                            auto resolved = request->NormalizePath(CanonizePath(JoinPath({dlqUrl->Database, dlqUrl->TopicPath})));
-                            if (resolved.IsFail()) {
-                                return std::unexpected(std::string(resolved.GetErrorMessage()));
-                            }
-                            const auto physicalDatabase = CanonizePath(database);
-                            if (resolved->Path.size() <= physicalDatabase.size() + 1
-                                || !resolved->Path.StartsWith(physicalDatabase)
-                                || resolved->Path[physicalDatabase.size()] != '/') {
-                                return std::unexpected("Rewritten DLQ path is outside the request database");
-                            }
-                            if (resolved->Outcome != NPathAliasing::EPathRewriteOutcome::Rewritten) {
-                                // Preserve legacy exact spelling and persisted
-                                // relative values for misses and identity rules.
-                                if (dlqUrl->Database != database) {
-                                    return std::unexpected(TString::Join("DLQ database '", dlqUrl->Database, "' does not match queue database '", database, "'"));
-                                }
-                                result.DeadLetterQueue = dlqUrl->TopicPath;
-                            } else {
-                                result.DeadLetterQueue = resolved->Path.substr(physicalDatabase.size() + 1);
-                            }
-                        } else if (dlqUrl->Database != database) {
+                        if (dlqUrl->Database != database) {
                             return std::unexpected(TString::Join("DLQ database '", dlqUrl->Database, "' does not match queue database '", database, "'"));
-                        } else {
-                            result.DeadLetterQueue = dlqUrl->TopicPath;
                         }
+                        result.DeadLetterQueue = dlqUrl->TopicPath;
                     }
                 } catch (...) {
                     return std::unexpected("Failed to parse RedrivePolicy");

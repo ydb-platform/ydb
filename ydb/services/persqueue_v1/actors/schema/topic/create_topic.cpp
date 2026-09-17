@@ -20,21 +20,14 @@ public:
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
 
-        NPQ::NSchema::TCreateTopicSettings settings{
+        auto request = *GetProtoRequest();
+        request.set_path(NormalizeTopicPath(request.path()));
+        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Request = *GetProtoRequest(),
+            .Request = std::move(request),
             .UserToken = GetUserToken(),
-        };
-        settings.Request.set_path(GetTopicPath());
-        settings.PathContext = GetFederatedPathContext();
-        settings.LogicalDatabase = GetLogicalDatabase();
-        for (auto& consumer : *settings.Request.mutable_consumers()) {
-            if (!ResolveConsumerSchemaReferences(consumer)) {
-                return;
-            }
-        }
-        Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), std::move(settings)));
+        }));
     }
 
 private:

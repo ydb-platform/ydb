@@ -17,7 +17,6 @@ ENDIF()
 ENDIF()
 
 SRCS(
-    path_aliasing.cpp
     browse_db.h
     browse_events.h
     browse.h
@@ -864,7 +863,6 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/mon
     ydb/core/node_whiteboard
-    ydb/core/path_aliasing/context
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view/common

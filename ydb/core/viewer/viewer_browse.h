@@ -1,7 +1,6 @@
 #include "browse.h"
 #include "browse_db.h"
 #include "json_handlers.h"
-#include "path_aliasing.h"
 #include "viewer.h"
 #include "wb_aggregate.h"
 
@@ -86,15 +85,6 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Recursive = FromStringWithDefault(params.Get("recursive"), false);
         TString path = params.Get("path");
-        auto resolvedPath = ResolveViewerSchemaPath(*AppData(ctx), path);
-        if (resolvedPath.IsFail()) {
-            ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            Die(ctx);
-            return;
-        }
-        path = resolvedPath.DetachResult();
         if (Recursive) {
             ParsePath(path, ctx);
         } else {

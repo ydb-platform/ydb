@@ -248,8 +248,11 @@ using TEvDeleteTestShardSetRequest =
 class TCreateTestShardSetRequest : public TRpcSchemeRequestActor<TCreateTestShardSetRequest, TEvCreateTestShardSetRequest> {
 public:
     using TBase = TRpcSchemeRequestActor<TCreateTestShardSetRequest, TEvCreateTestShardSetRequest>;
-    using TBase::TBase;
-    TString ResolvedPath;
+
+    explicit TCreateTestShardSetRequest(IRequestOpCtx* request)
+        : TBase(request)
+        , Path(Request_->NormalizePath(GetProtoRequest()->path()))
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
@@ -267,15 +270,13 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
+            pathPair = SplitPath(Request_->GetDatabaseName(), Path);
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
         const auto& workingDir = pathPair.first;
         const auto& name = pathPair.second;
-        ResolvedPath = Request_->HasActivePathRewriting()
-            ? JoinPath({workingDir, name}) : req->path();
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = this->CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
@@ -314,7 +315,7 @@ public:
         SetAuthToken(navigateRequest, *this->Request_);
         SetDatabase(navigateRequest.get(), *this->Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(ResolvedPath);
+        record->SetPath(Path);
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -357,6 +358,9 @@ public:
             default: TBase::StateWork(ev);
         }
     }
+
+private:
+    const TString Path;
 };
 
 class TDeleteTestShardSetRequest : public TRpcSchemeRequestActor<TDeleteTestShardSetRequest, TEvDeleteTestShardSetRequest> {
@@ -375,7 +379,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path());
+            pathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);

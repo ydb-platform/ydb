@@ -1,5 +1,4 @@
 #include "direct_read_actor.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include "helpers.h"
 #include "read_init_auth_actor.h"
@@ -253,10 +252,6 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
     PeerName = ev->Get()->PeerName;
 
     auto database = Request->GetDatabaseName().GetOrElse(TString());
-    const bool federation = !TopicsHandler.GetConverterFactory()->GetNoDCMode();
-    if (federation && Request->HasActivePathRewriting()) {
-        database = Request->GetLogicalDatabaseName().GetOrElse(TString());
-    }
 
     for (const auto& topic : init.topics_read_settings()) {
         const TString path = topic.path();
@@ -264,15 +259,9 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "empty topic in init request");
         }
 
-        if (federation) {
-            TopicsToResolve.insert(path);
-        } else {
-            auto resolved = NGRpcService::ResolveFstClassTopicSchemaPath(*Request, path);
-            if (resolved.IsFail()) {
-                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, resolved.GetErrorMessage());
-            }
-            TopicsToResolve.insert(resolved.DetachResult().Path);
-        }
+        TopicsToResolve.insert(TopicsHandler.GetConverterFactory()->GetNoDCMode()
+            ? Request->NormalizePath(path)
+            : path);
     }
 
     if (Request->GetSerializedToken().empty()) {
@@ -498,9 +487,7 @@ void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer,
-        Request->HasActivePathRewriting() && !TopicsHandler.GetConverterFactory()->GetNoDCMode()
-            ? Request->GetPathRewriteSettings().Context : nullptr));
+        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {

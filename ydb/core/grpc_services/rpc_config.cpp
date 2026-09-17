@@ -427,11 +427,6 @@ private:
     std::optional<TString> TargetDatabase;
 
     bool ResolveTargetDatabase() {
-        if (!ResolveDatabaseConfigMetadata(*Request_, *DatabaseConfig)) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid database configuration path",
-                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
-            return false;
-        }
         const auto& metadata = NYamlConfig::GetDatabaseMetadata(*DatabaseConfig);
 
         if (metadata.Database) {

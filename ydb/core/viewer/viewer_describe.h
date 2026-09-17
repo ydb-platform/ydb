@@ -18,7 +18,6 @@ class TJsonDescribe : public TViewerPipeClient {
     TRequestResponse<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
     bool ExpandSubElements = true;
-    TString ResolvedPath;
     NKikimrScheme::EStatus SchemeShardStatus = NKikimrScheme::EStatus::StatusSuccess;
 
     enum class EAskSchemeCache {
@@ -57,7 +56,7 @@ public:
 
     void FillParams(NKikimrSchemeOp::TDescribePath& record) {
         if (Params.Has("path")) {
-            record.SetPath(ResolvedPath);
+            record.SetPath(Params.Get("path"));
         }
         if (Params.Has("path_id")) {
             record.SetPathId(FromStringWithDefault<ui64>(Params.Get("path_id")));
@@ -110,7 +109,7 @@ public:
         entry.SyncVersion = false;
         if (Params.Has("path")) {
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-            entry.Path = SplitPath(ResolvedPath);
+            entry.Path = SplitPath(Params.Get("path"));
         } else if (Params.Has("path_id")) {
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
             entry.TableId = TTableId(GetSchemeShardId(), FromStringWithDefault<ui64>(Params.Get("path_id")));
@@ -136,9 +135,6 @@ public:
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
-            return;
-        }
-        if (!ResolveUserSchemaPath(Params.Get("path"), ResolvedPath)) {
             return;
         }
         if (Params.Has("path_id") || Params.Has("schemeshard_id")) {

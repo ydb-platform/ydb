@@ -316,15 +316,13 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-                importInfo->LogicalDatabase = request.GetRequest().GetLogicalDatabase();
-                importInfo->PathRewriteFingerprint = request.GetRequest().GetPathRewriteFingerprint();
 
                 if (request.HasUserSID()) {
                     importInfo->UserSID = request.GetUserSID();
                 }
 
                 TString explain;
-                if (!FillItems(*importInfo, settings, initialState == TImportInfo::EState::DownloadExportMetadata, explain)) {
+                if (!FillItems(*importInfo, settings, explain)) {
                     return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
                 }
             }
@@ -347,15 +345,13 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
-                importInfo->LogicalDatabase = request.GetRequest().GetLogicalDatabase();
-                importInfo->PathRewriteFingerprint = request.GetRequest().GetPathRewriteFingerprint();
 
                 if (request.HasUserSID()) {
                     importInfo->UserSID = request.GetUserSID();
                 }
 
                 TString explain;
-                if (!FillItems(*importInfo, settings, initialState == TImportInfo::EState::DownloadExportMetadata, explain)) {
+                if (!FillItems(*importInfo, settings, explain)) {
                     return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
                 }
             }
@@ -436,28 +432,18 @@ private:
 
     // S3-FS-specific FillItems
     template <typename TSettings>
-    bool FillItems(TImportInfo& importInfo, const TSettings& settings, bool needsManifest, TString& explain) {
+    bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
-        if (!importInfo.ValidatePathRewriteContext(explain)) {
-            return false;
-        }
         if (!importInfo.CompileExcludeRegexps(explain)) {
             return false;
         }
 
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
-            const TString& logicalPath = settings.items(itemIdx).destination_path();
-            TString dstPath = logicalPath;
-            if (!needsManifest && !importInfo.NormalizeDestinationPath(dstPath, explain)) {
-                return false;
-            }
+            const TString& dstPath = settings.items(itemIdx).destination_path();
 
-            // With aliases, a manifest item is not a complete destination yet.
-            // Validate the composed physical target atomically with all items.
-            if ((importInfo.PathRewriteFingerprint.empty() || !needsManifest)
-                && !ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
+            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
                 return false;
             }
 
@@ -467,7 +453,7 @@ private:
                 return false;
             }
 
-            if (!importInfo.IsExcludedFromImport(logicalPath)) {
+            if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
                 item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
                 item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePathDb(settings, itemIdx));
@@ -1229,11 +1215,6 @@ private:
 
         switch (importInfo->State) {
             case EState::DownloadExportMetadata: {
-                TString error;
-                if (!importInfo->ValidatePathRewriteContext(error)) {
-                    NIceDb::TNiceDb db(txc.DB);
-                    return CancelAndPersist(db, importInfo, -1, error, "invalid path rewrite context");
-                }
                 GetSchemaMapping(importInfo, ctx);
                 break;
             }

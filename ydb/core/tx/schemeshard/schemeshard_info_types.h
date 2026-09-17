@@ -3827,10 +3827,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TEncryptionIV> ExportIV;
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
-    // Present only for imports admitted through the path-aliasing boundary.
-    // Destinations are logical during DownloadExportMetadata, physical afterward.
-    TString LogicalDatabase;
-    TString PathRewriteFingerprint;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -3925,9 +3921,6 @@ public:
     bool CompileExcludeRegexps(TString& errorDescription);
 
     bool IsExcludedFromImport(const TString& path) const;
-
-    bool ValidatePathRewriteContext(TString& error) const;
-    bool NormalizeDestinationPath(TString& completePath, TString& error) const;
 
     explicit TImportInfo(
             const ui64 id,

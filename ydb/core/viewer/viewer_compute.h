@@ -2,7 +2,6 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
-#include "path_aliasing.h"
 #include "viewer_helper.h"
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
@@ -103,15 +102,6 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         Path = params.Get("path");
-        auto resolvedPath = ResolveViewerSchemaPath(*AppData(), Path);
-        if (resolvedPath.IsFail()) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", resolvedPath.GetErrorMessage()),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            TBase::PassAway();
-            return;
-        }
-        Path = resolvedPath.DetachResult();
         UptimeSecondsFilter = FromStringWithDefault<ui32>(params.Get("uptime"), 0);
         ProblemNodesFilter = FromStringWithDefault<bool>(params.Get("problems_only"), ProblemNodesFilter);
         TextFilter = params.Get("filter");

@@ -1,6 +1,5 @@
 #include "grpc_request_proxy.h"
 #include "rpc_calls.h"
-#include "rpc_common/rpc_common.h"
 
 #include "util/string/vector.h"
 #include "yql/essentials/minikql/mkql_type_ops.h"
@@ -113,11 +112,7 @@ public:
         //     Timeout = TDuration::MilliSeconds(userTimeoutMillisec);
         // }
 
-        TString table;
-        if (!ResolveRootSchemaPath(*GrpcRequest, Request->Gettable_name(), table)) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path", ctx);
-        }
-        ResolveTable(table, ctx);
+        ResolveTable(Request->Gettable_name(), ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -148,7 +143,7 @@ private:
         request->DatabaseName = GrpcRequest->GetDatabaseName().GetOrElse("");
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = NKikimr::SplitPath(table);
+        entry.Path = NKikimr::SplitPath(GrpcRequest->NormalizePath(table));
         if (entry.Path.empty()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx);
         }

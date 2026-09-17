@@ -64,9 +64,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!QueueUrl_.has_value()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
-            if (!this->ResolveQueueUrlPath(FullTopicPath_, QueueUrl_->Database)) {
-                return;
-            }
 
             PurgeSettings_ = MakePurgerSettings(ctx);
             if (!PurgeSettings_.Defined()) {

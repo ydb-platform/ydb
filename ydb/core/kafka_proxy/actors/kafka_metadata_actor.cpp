@@ -431,7 +431,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
 
     return Register(new TTopicLocationActor(
         SelfId(),
-        Message.GetTopicPath(Context->DatabasePath, topic),
+        NormalizePath(Context->DatabasePath, topic),
         Context->DatabasePath,
         GetUserSerializedToken(Context)));
 }
@@ -601,7 +601,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,
-        TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message, Message.GetResolvedTopics())
+        TMessagePtr<NKafka::TCreateTopicsRequestData>({}, message)
     ));
     CreateTopicRequests[actorId] = TTopicNameToIndex{topicName, index};
 }

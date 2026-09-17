@@ -39,12 +39,10 @@ public:
 
     bool ValidateRequest(TRequestProtoType& request) override {
         if (TBase::ValidateRequest(request)) {
-            const auto& logicalDatabase = this->PathRewrite.Context
-                ? this->PathRewrite.Context->GetLogicalDatabase().GetOrElse(Database) : Database;
-            if (logicalDatabase && request.path()) {
+            if (Database && request.path()) {
                 TString path = request.path();
                 if (!path.empty() && path[0] != '/') {
-                    path = logicalDatabase + "/" + path;
+                    path = Database + "/" + path;
                     request.set_path(path);
                 }
             }

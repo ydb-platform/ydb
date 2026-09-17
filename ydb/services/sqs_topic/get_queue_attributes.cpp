@@ -112,14 +112,6 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
-            if (Request_->HasActivePathRewriting()) {
-                // QueueArn identifies the caller's original URL, even when the
-                // resolved topic has a different database and leaf name.
-                OriginalQueueArn_ = MakeQueueArn(Cfg().GetYandexCloudMode(), Cfg().GetYandexCloudServiceRegion(), "", *QueueUrl_);
-            }
-            if (!ResolveQueueUrlPath(FullTopicPath_, QueueUrl_->Database)) {
-                return;
-            }
 
             if (auto attrReq = MakeAttributesList(); attrReq.has_value()) {
                 AttributesRequest = std::move(attrReq).value();
@@ -313,16 +305,6 @@ namespace NKikimr::NSqsTopic::V1 {
                             .Consumer = QueueUrl_->Consumer,
                             .Fifo = QueueUrl_->Fifo,
                         };
-                        if (Request_->HasActivePathRewriting()) {
-                            const auto database = CanonizePath(QueueUrl_->Database);
-                            const auto path = CanonizePath(dlq);
-                            if (dlq.StartsWith('/') && path.size() > database.size()
-                                && path.StartsWith(database) && path[database.size()] == '/') {
-                                // Topic API definitions may store an absolute
-                                // DLQ. ARN fields are database + relative path.
-                                dlqUrl.TopicPath = path.substr(database.size() + 1);
-                            }
-                        }
                         redrivePolicy["deadLetterTargetArn"] = MakeQueueArn(Cfg().GetYandexCloudMode(), Cfg().GetYandexCloudServiceRegion(), "", dlqUrl);
                     }
                 }
@@ -330,8 +312,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 AddAttribute(result, attrName, json);
             }
             if (const auto attrName = "QueueArn"sv; HasAttribute(attrName)) {
-                AddAttribute(result, attrName, OriginalQueueArn_ ? *OriginalQueueArn_
-                    : MakeQueueArn(Cfg().GetYandexCloudMode(), Cfg().GetYandexCloudServiceRegion(), "", *QueueUrl_));
+                AddAttribute(result, attrName, MakeQueueArn(Cfg().GetYandexCloudMode(), Cfg().GetYandexCloudServiceRegion(), "", *QueueUrl_));
             }
             return result;
         }
@@ -361,7 +342,6 @@ namespace NKikimr::NSqsTopic::V1 {
         TMaybe<NKikimrPQ::TPQTabletConfig::TConsumer> ConsumerConfig;
         NPQ::NMLP::TEvDescribeResponse::TPtr DescribeResponse;
         Ydb::Ymq::V1::GetQueueAttributesResult Result_;
-        TMaybe<TString> OriginalQueueArn_;
     };
 
     std::unique_ptr<NActors::IActor> CreateGetQueueAttributesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

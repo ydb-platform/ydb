@@ -10,10 +10,9 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 namespace {
 
 struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
-    TCreateTopicStrategy(const Ydb::PersQueue::V1::CreateTopicRequest& request, const TString& path)
+    TCreateTopicStrategy(const Ydb::PersQueue::V1::CreateTopicRequest& request)
         : Request(request)
     {
-        Request.set_path(path);
     }
 
     const TString& GetTopicName() const override {
@@ -29,7 +28,7 @@ struct TCreateTopicStrategy: public NPQ::NSchema::ICreateTopicStrategy {
         return ApplyChangesInt(database, Request, modifyScheme, targetConfig, localCluster);
     }
 
-    Ydb::PersQueue::V1::CreateTopicRequest Request;
+    const Ydb::PersQueue::V1::CreateTopicRequest Request;
 };
 
 class TCreateTopicActor: public TGrpcProxyActor<TCreateTopicActor, NGRpcService::TEvPQCreateTopicRequest> {
@@ -43,20 +42,12 @@ public:
 
     void DoAction() {
         Become(&TCreateTopicActor::StateWork);
-        auto strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest(), GetTopicPath());
-        for (auto& rule : *strategy->Request.mutable_settings()->mutable_read_rules()) {
-            if (!ResolveConsumerSchemaReferences(rule)) {
-                return;
-            }
-        }
 
         Register(NPQ::NSchema::CreateCreateTopicOperationActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::move(strategy),
-            .PathContext = GetFederatedPathContext(),
-            .LogicalDatabase = GetLogicalDatabase(),
+            .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest()),
         }));
     }
 

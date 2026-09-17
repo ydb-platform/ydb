@@ -4,7 +4,6 @@
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
 #include "fs_path_validation.h"
-#include "rpc_common/rpc_common.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -158,7 +157,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     struct TExportItemInfo {
         TString Destination;
-        TString LogicalPath;
         bool Resolved = false;
     };
 
@@ -250,44 +248,19 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString userSpecifiedPath = CanonizePath(
+                this->Request->NormalizePath(item.source_path()));
             TString fullPath;
-            TString logicalPath;
-            if (this->Request->HasActivePathRewriting()) {
-                const auto& base = LogicalCommonSourcePath;
-                const bool underBase = userSpecifiedPath.StartsWith(base)
-                    && userSpecifiedPath.size() > base.size() && userSpecifiedPath[base.size()] == '/';
-                const TString legacyCandidate = underBase || userSpecifiedPath == base
-                    ? userSpecifiedPath : base + userSpecifiedPath;
-                const TString absoluteCandidate = userSpecifiedPath.empty() && !item.source_path().empty()
-                    ? TString("/") : userSpecifiedPath;
-                logicalPath = item.source_path().StartsWith('/') ? absoluteCandidate : legacyCandidate;
-                auto resolved = this->Request->NormalizePath(logicalPath);
-                if (resolved.IsSuccess() && resolved->Outcome == NPathAliasing::EPathRewriteOutcome::NoMatch
-                    && logicalPath != legacyCandidate) {
-                    logicalPath = legacyCandidate;
-                    resolved = this->Request->NormalizePath(logicalPath);
-                }
-                if (resolved.IsFail()) {
-                    this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, resolved.GetErrorMessage());
-                    return false;
-                }
-                if (resolved->Outcome != NPathAliasing::EPathRewriteOutcome::Rewritten) {
-                    // Identity stops alias matching, not native path completion.
-                    logicalPath = legacyCandidate;
-                    resolved->Path = legacyCandidate;
-                }
-                fullPath = resolved.DetachResult().Path;
-            } else if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
+            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
             } else {
                 fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
             }
-            if (IsExcludedFromExport(this->Request->HasActivePathRewriting() ? logicalPath : fullPath)) {
+            if (IsExcludedFromExport(fullPath)) {
                 continue;
             }
             paths.emplace_back(fullPath);
-            auto [it, inserted] = ExportItems.insert({paths.back(), TExportItemInfo{.LogicalPath = logicalPath}});
+            auto [it, inserted] = ExportItems.insert({paths.back(), TExportItemInfo{}});
             if (!inserted) {
                 this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Duplicate export item source path: \"" << item.source_path() << "\"");
                 return false;
@@ -298,7 +271,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if constexpr (TTraits::HasSourcePath) {
             if (settings.items_size() == 0) { // expand all source path by default
                 paths.emplace_back(CommonSourcePath);
-                ExportItems.insert({CommonSourcePath, TExportItemInfo{.LogicalPath = LogicalCommonSourcePath}});
+                ExportItems.insert({CommonSourcePath, TExportItemInfo{}});
             }
         }
 
@@ -473,18 +446,16 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         }
                     }
                     const TString childPath = CanonizePath(TStringBuilder() << path << "/" << child.Name);
-                    const TString logicalChildPath = this->Request->HasActivePathRewriting()
-                        ? CanonizePath(TStringBuilder() << it->second.LogicalPath << "/" << child.Name) : TString();
                     TString destination;
                     if (it->second.Destination) {
                         destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
                     }
                     if (IsLikeDirectory(kind)) {
-                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination, .LogicalPath = logicalChildPath}});
+                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                     } else {
                         // We'll remove all unsupported children on ResolveExpandedPaths stage
-                        if (!IsExcludedFromExport(this->Request->HasActivePathRewriting() ? logicalChildPath : childPath)) {
-                            ExportItems.insert({childPath, TExportItemInfo{.Destination = destination, .LogicalPath = logicalChildPath}});
+                        if (!IsExcludedFromExport(childPath)) {
+                            ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                         }
                     }
                 }
@@ -558,42 +529,16 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));
     }
 
-    bool InitCommonSourcePath() {
+    void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
-            if (this->Request->HasActivePathRewriting() && CommonSourcePath.empty() && !settings.source_path().empty()) {
-                auto resolved = this->Request->NormalizePath("/");
-                if (resolved.IsFail()) {
-                    this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, resolved.GetErrorMessage());
-                    return false;
-                }
-                if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
-                    // Match '/' explicitly, but keep the canonical empty root
-                    // for relative-item completion and exclusion prefixes.
-                    LogicalCommonSourcePath.clear();
-                    CommonSourcePath = resolved.DetachResult().Path;
-                    return true;
-                }
-                if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Identity) {
-                    // All-slash source paths default to the request database.
-                    // Identity stops matching; the database is already resolved.
-                    LogicalCommonSourcePath = CanonizePath(this->Request->GetLogicalDatabaseName().GetOrElse(""));
-                    CommonSourcePath = CanonizePath(this->GetDatabaseName());
-                    return true;
-                }
-            }
+            // /Foo/Bar, but empty result for empty source_path
+            CommonSourcePath = CanonizePath(
+                this->Request->NormalizePath(settings.source_path()));
         }
         if (CommonSourcePath.empty()) {
-            CommonSourcePath = CanonizePath(this->Request->HasActivePathRewriting()
-                ? this->Request->GetLogicalDatabaseName().GetOrElse("") : this->GetDatabaseName());
+            CommonSourcePath = CanonizePath(this->GetDatabaseName());
         }
-        LogicalCommonSourcePath = CommonSourcePath;
-        if (!ResolveRootSchemaPath(*this->Request, LogicalCommonSourcePath, CommonSourcePath)) {
-            this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Invalid export source path");
-            return false;
-        }
-        return true;
     }
 
     bool ValidateEncryptionParameters() {
@@ -617,9 +562,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool IsExcludedFromExport(const TString& exportPath) const {
         const char* path = exportPath.c_str();
-        const auto& base = this->Request->HasActivePathRewriting() ? LogicalCommonSourcePath : CommonSourcePath;
-        if (exportPath.StartsWith(base) && exportPath.size() > base.size() && exportPath[base.size()] == '/') {
-            path += base.size() + 1; // prefix + /
+        if (HasCommonSourcePathPrefix(exportPath)) {
+            path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {
             if (regexp.Match(path)) {
@@ -639,9 +583,7 @@ public:
         }
 
         const auto& settings = request.settings();
-        if (!InitCommonSourcePath()) {
-            return;
-        }
+        InitCommonSourcePath();
 
         if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
@@ -759,7 +701,6 @@ private:
     EStage Stage = EStage::ResolvePaths;
     NSchemeCache::TDomainInfo::TPtr DomainInfo;
     TString CommonSourcePath; // Canonized source path
-    TString LogicalCommonSourcePath;
     THashMap<TString, TExportItemInfo> ExportItems;
     THashMap<TString, TExportItemInfo> DirectoryItems;
     std::vector<TRegExMatch> ExcludeRegexps;

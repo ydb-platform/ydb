@@ -27,7 +27,6 @@ public:
         , DatabaseName(databaseName)
         , SendResultCallback(sendResultCallback)
     {
-        SetPathRewriteSettings(NKikimr::NGRpcService::TPathRewriteSettings::Internal());
     };
 
     const TString path() const {
@@ -218,14 +217,12 @@ public:
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            ui32 partitionsNumber,
-            TString responseTopicPath = {})
+            ui32 partitionsNumber)
         : TAlterTopicActor<TCreatePartitionsActor, TKafkaTopicRequestCtx>(
             requester,
             userToken,
             topicPath,
-            databaseName,
-            std::move(responseTopicPath))
+            databaseName)
         , PartionsNumber(partitionsNumber)
     {
         YDB_LOG_DEBUG("Create partitions actor",
@@ -294,10 +291,9 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
         ctx.Register(new TCreatePartitionsActor(
             SelfId(),
             Context->Token.UserToken,
-            Message.GetTopicPathOrOriginal(topic.Name.value()),
+            topic.Name.value(),
             Context->DatabasePath,
-            topic.Count,
-            topic.Name.value()
+            topic.Count
         ));
 
         InflyTopics++;

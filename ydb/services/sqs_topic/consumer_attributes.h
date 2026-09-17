@@ -11,10 +11,6 @@
 #include <expected>
 #include <string>
 
-namespace NKikimr::NGRpcService {
-    class IRequestCtxBaseMtSafe;
-}
-
 namespace NKikimr::NSqsTopic::V1 {
 
     struct TQueueAttributes {
@@ -42,8 +38,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TString& queueName,
         const TString& consumerName,
         const TString& database,
-        EConsumerAttributeUsageTarget usageTarget,
-        const NGRpcService::IRequestCtxBaseMtSafe* request = nullptr
+        EConsumerAttributeUsageTarget usageTarget
     );
 
     std::expected<void, std::string> CompareWithExistingQueueAttributes(

@@ -43,18 +43,7 @@ public:
     {}
 
     void Bootstrap() {
-        TString database = Request->GetProtoRequest()->database();
-        if (const auto& normalizer = AppData()->PathNormalizer;
-            Request->GetPathRewriteSettings().Resources == EPathInputOrigin::Logical &&
-            normalizer && !normalizer->Empty()) {
-            const NPathAliasing::TPathContext context(*normalizer, database);
-            if (!context.GetError().empty()) {
-                Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, context.GetError()));
-                Reply(Ydb::StatusIds::BAD_REQUEST);
-                return;
-            }
-            database = context.GetDatabase().GetOrElse(TString{});
-        }
+        const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
         // request endpoints
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
             database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),

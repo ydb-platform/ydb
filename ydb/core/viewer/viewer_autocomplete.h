@@ -7,8 +7,6 @@
 
 #include <library/cpp/json/json_reader.h>
 
-#include <algorithm>
-
 namespace NKikimr::NViewer {
 
 using namespace NActors;
@@ -94,7 +92,7 @@ public:
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), Limit);
     }
 
-    bool RequestSchemeCacheNavigate() {
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate() {
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         for (const TString& path : Paths) {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -103,28 +101,10 @@ public:
             auto splittedPath = SplitPath(path);
             entry.Path = DatabasePath;
             entry.Path.insert(entry.Path.end(), splittedPath.begin(), splittedPath.end());
-            if (PathRewrite.Context) {
-                // The table operands and complete prefix directory are native
-                // scheme lookups; the unfinished completion word stays opaque.
-                auto logicalPath = SplitPath(PathRewrite.Context->GetLogicalDatabase().GetOrElse(Database));
-                logicalPath.insert(logicalPath.end(), splittedPath.begin(), splittedPath.end());
-                TString resolved;
-                if (!ResolveUserSchemaPath(CanonizePath(logicalPath), resolved)) {
-                    return false;
-                }
-                entry.Path = SplitPath(resolved);
-                // This endpoint has always confined lookups to its database.
-                if (entry.Path.size() < DatabasePath.size()
-                    || !std::equal(DatabasePath.begin(), DatabasePath.end(), entry.Path.begin())) {
-                    TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Rewritten path is outside the request database"));
-                    return false;
-                }
-            }
             request->ResultSet.emplace_back(entry);
         }
-        CacheResult = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
+        return MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(),
             new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
-        return true;
     }
 
     void Bootstrap() override {
@@ -134,9 +114,7 @@ public:
         ParseCgiParameters(Params);
         PrepareParameters();
         if (Database) {
-            if (!RequestSchemeCacheNavigate()) {
-                return;
-            }
+            CacheResult = MakeRequestSchemeCacheNavigate();
         } else {
             // autocomplete database list via console request
             ConsoleResult = MakeRequestConsoleListTenants();

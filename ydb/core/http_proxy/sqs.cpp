@@ -120,7 +120,7 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.SerializedUserToken,
                     Nothing(),
                     ctx.ActorSystem(),
-                    peerMetadata, false, {}, HttpContext.PathRewrite
+                    peerMetadata
                 );
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
@@ -185,7 +185,7 @@ namespace NKikimr::NHttpProxy {
                 HttpContext.SerializedUserToken = ev->Get()->SerializedUserToken;
 
                 if (TString databasePath = ev->Get()->Database.Path) {
-                    if (!AssignDatabasePath(ctx, databasePath, false)) {
+                    if (!AssignDatabasePath(ctx, databasePath)) {
                         return;
                     }
                 }
@@ -384,30 +384,14 @@ namespace NKikimr::NHttpProxy {
             }
 
             // Fill HttpContext.DatabasePath and reply with error is databases missmatch
-            bool AssignDatabasePath(const TActorContext& ctx, const TString& databasePath, bool logical = true) {
+            bool AssignDatabasePath(const TActorContext& ctx, const TString& databasePath) {
                 if (HttpContext.DatabasePath.empty()) {
                     HttpContext.DatabasePath = databasePath;
-                }
-                if (const TString error = HttpContext.InitializePathRewriting(*AppData(ctx)); !error.empty()) {
-                    ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, error,
-                        static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
-                    return false;
-                }
-                TString effectiveDatabase = databasePath;
-                if (logical && HttpContext.PathRewrite.Context) {
-                    const NPathAliasing::TPathContext databaseContext(*AppData(ctx)->PathNormalizer, databasePath);
-                    if (!databaseContext.GetError().empty()) {
-                        ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, databaseContext.GetError(),
-                            static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                } else {
+                    if (HttpContext.DatabasePath != databasePath) {
+                        ReplyWithYdbError(ctx, NYdb::EStatus::UNAUTHORIZED, "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                         return false;
                     }
-                    effectiveDatabase = databaseContext.GetDatabase().GetOrElse(TString{});
-                }
-                if (HttpContext.DatabasePath != effectiveDatabase) {
-                    ReplyWithYdbError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                        "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath,
-                        static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
-                    return false;
                 }
                 return true;
             }
@@ -448,11 +432,6 @@ namespace NKikimr::NHttpProxy {
                     if (TopicPath.empty()) {
                         return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                     }
-                }
-
-                if (const TString error = HttpContext.InitializePathRewriting(*AppData(ctx)); !error.empty()) {
-                    return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, error,
-                        static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
                 LOG_I("Got new request from database stream",

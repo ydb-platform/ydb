@@ -1169,9 +1169,6 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
-        if (!ResolveUserSchemaPath(FilterPath, FilterPath)) {
-            return;
-        }
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
             RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());

@@ -137,14 +137,11 @@ private:
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitializePathNormalization(AppData(ctx)->PathNormalizer);
+
         LogRequest(event);
 
-        IRequestProxyCtx* requestBaseCtx = event->Get();
-        if (const TString error = requestBaseCtx->InitializePathRewriteContext(*AppData(ctx)); !error.empty()) {
-            requestBaseCtx->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, error));
-            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            return;
-        }
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);

@@ -17,91 +17,13 @@ using namespace NYdb;
 using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
-enum class EExportRootAliasMode {
-    Disabled,
-    Unrelated,
-    Identity,
-    Rewritten,
-    AliasedDatabase,
-};
-
-template <EExportRootAliasMode Mode>
-class TPathAliasExportRootFixture : public TFsBackupTestFixture {
+class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
 public:
-    TPathAliasExportRootFixture() {
+    TPathAliasExplicitExportFixture() {
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
-        AppConfig().MutableFeatureFlags()->SetEnableExportFiltering(true);
-        if constexpr (Mode != EExportRootAliasMode::Disabled) {
-            auto addRule = [&](const char* pattern, const char* replacement) {
-                auto* rule = AppConfig().MutablePathRewriteConfig()->AddRules();
-                rule->SetPattern(pattern);
-                rule->SetReplacement(replacement);
-            };
-            if constexpr (Mode == EExportRootAliasMode::Unrelated) {
-                addRule("^/Never$", "/Root/DoesNotExist");
-            } else if constexpr (Mode == EExportRootAliasMode::Identity
-                                 || Mode == EExportRootAliasMode::AliasedDatabase) {
-                addRule("^/$", "/");
-                addRule("^/$", "/Root/DoesNotExist");
-                if constexpr (Mode == EExportRootAliasMode::AliasedDatabase) {
-                    addRule("^/alias(/|$)", "/Root\\1");
-                }
-            } else if constexpr (Mode == EExportRootAliasMode::Rewritten) {
-                addRule("^/$", "/Root/RecursiveFolderProcessing");
-                addRule("^/Table0$", "/Root/RecursiveFolderProcessing/Table0");
-                addRule("^/Root/RecursiveFolderProcessing$", "/Root/DoesNotExist");
-            }
-        }
-        if constexpr (Mode == EExportRootAliasMode::AliasedDatabase) {
-            // Configure rules before lazy server creation in YdbDriverConfig().
-            YdbDriverConfig().SetDatabase("/alias");
-        }
-    }
-
-    void CheckCommonSource(const TString& source, bool explicitRelativeItem = false) {
-        auto settings = MakeExportSettings(source);
-        if constexpr (Mode != EExportRootAliasMode::Rewritten) {
-            // Historically a root-only common source means the request database.
-            settings.AppendItem(NExport::TExportToFsSettings::TItem{
-                .Src = "RecursiveFolderProcessing/Table0", .Dst = "archive"});
-        } else {
-            if (explicitRelativeItem) {
-                settings.AppendItem(NExport::TExportToFsSettings::TItem{
-                    .Src = "Table0", .Dst = "archive"});
-            } else {
-                settings.AppendExcludeRegexp("^Table0$");
-            }
-        }
-        // A real root rewrite selects its directory, whose children are already
-        // resolved resources and must not be matched against aliases again.
-        auto future = YdbExportClient().ExportToFs(settings);
-        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "Export request did not complete");
-        WaitOpSuccess(future.ExtractValueSync());
-        if constexpr (Mode == EExportRootAliasMode::Rewritten) {
-            if (!explicitRelativeItem) {
-                UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "dir1" / "Table1" / "scheme.pb").Exists());
-                UNIT_ASSERT(!(TFsPath(GetTempDir().Path()) / "Table0").Exists());
-                return;
-            }
-        }
-        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "scheme.pb").Exists());
-    }
-};
-
-using TExportRootDisabledFixture = TPathAliasExportRootFixture<EExportRootAliasMode::Disabled>;
-using TExportRootUnrelatedFixture = TPathAliasExportRootFixture<EExportRootAliasMode::Unrelated>;
-using TExportRootIdentityFixture = TPathAliasExportRootFixture<EExportRootAliasMode::Identity>;
-using TExportRootRewrittenFixture = TPathAliasExportRootFixture<EExportRootAliasMode::Rewritten>;
-using TExportRootAliasedDatabaseFixture = TPathAliasExportRootFixture<EExportRootAliasMode::AliasedDatabase>;
-
-class TPathAliasIdentityBackupFixture : public TFsBackupTestFixture {
-public:
-    TPathAliasIdentityBackupFixture() {
-        AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
-        AppConfig().MutableFeatureFlags()->SetEnableExportFiltering(true);
-        auto* identity = AppConfig().MutablePathRewriteConfig()->AddRules();
-        identity->SetPattern("^/Table0$");
-        identity->SetReplacement("/Table0");
+        auto* alias = AppConfig().MutablePathRewriteConfig()->AddRules();
+        alias->SetPattern("^/export-alias$");
+        alias->SetReplacement("/Root/RecursiveFolderProcessing/Table0");
         auto* decoy = AppConfig().MutablePathRewriteConfig()->AddRules();
         decoy->SetPattern("^/Root/RecursiveFolderProcessing/Table0$");
         decoy->SetReplacement("/Root/DoesNotExist");
@@ -2069,50 +1991,14 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE_F(PathAliasingExportIdentity, TPathAliasIdentityBackupFixture) {
-    Y_UNIT_TEST(IdentityStopsRulesButPreservesCommonSourceGrammar) {
-        // The inherited fixture creates this physical table using canonical SQL.
-        // '/Table0' is historically relative to the export's common source.
-        // Its identity rule must not trigger the completed-candidate decoy.
+Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(ExplicitItemSourceIsRewrittenOnce) {
         auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
-        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/Table0", .Dst = "identity"});
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
         auto future = YdbExportClient().ExportToFs(settings);
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "Export request did not complete");
         WaitOpSuccess(future.ExtractValueSync());
-        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "identity" / "scheme.pb").Exists());
-    }
-}
-
-Y_UNIT_TEST_SUITE_F(PathAliasingExportRootDisabled, TExportRootDisabledFixture) {
-    Y_UNIT_TEST_TWIN(CommonSourceFallsBackToDatabase, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/");
-    }
-}
-
-Y_UNIT_TEST_SUITE_F(PathAliasingExportRootUnrelated, TExportRootUnrelatedFixture) {
-    Y_UNIT_TEST_TWIN(CommonSourceFallsBackToDatabase, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/");
-    }
-}
-
-Y_UNIT_TEST_SUITE_F(PathAliasingExportRootIdentity, TExportRootIdentityFixture) {
-    Y_UNIT_TEST_TWIN(CommonSourceFallsBackToDatabase, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/");
-    }
-}
-
-Y_UNIT_TEST_SUITE_F(PathAliasingExportRootRewritten, TExportRootRewrittenFixture) {
-    Y_UNIT_TEST_TWIN(CommonSourceSelectsRewrittenDirectory, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/");
-    }
-    Y_UNIT_TEST_TWIN(CommonSourceComposesRelativeChildFromLogicalRoot, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/", true);
-    }
-}
-
-Y_UNIT_TEST_SUITE_F(PathAliasingExportRootAliasedDatabase, TExportRootAliasedDatabaseFixture) {
-    Y_UNIT_TEST_TWIN(CommonSourceUsesEffectiveDatabaseAndLogicalItemBase, RepeatedSlashes) {
-        CheckCommonSource(RepeatedSlashes ? "////" : "/");
+        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "scheme.pb").Exists());
     }
 }
 

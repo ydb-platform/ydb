@@ -73,8 +73,6 @@ public:
                 .UserToken = Settings.UserToken,
                 .AccessRights = Settings.AccessRights,
                 .ForceSyncVersion = Settings.ForceSyncVersion,
-                .PathContext = Settings.PathContext,
-                .LogicalDatabase = Settings.LogicalDatabase,
             }));
     }
 

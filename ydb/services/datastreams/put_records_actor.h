@@ -310,9 +310,6 @@ namespace NKikimr::NDataStreams::V1 {
 
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::SendNavigateRequest(const TActorContext& ctx) {
-        if (!this->ResolveTopicPath()) {
-            return;
-        }
         auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(this->GetTopicPath());

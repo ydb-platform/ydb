@@ -1,5 +1,4 @@
 #include "write_session_actor.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 
 #include "codecs.h"
 #include "helpers.h"
@@ -408,6 +407,12 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
+    }
 
     if constexpr (Protocol == EProtocol::PQv1) {
         if (InitRequest.message_group_id().empty()) {
@@ -437,15 +442,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         }
     }
 
-    if (Request->HasActivePathRewriting() && !TopicsController.GetConverterFactory()->GetNoDCMode()) {
-        DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetLogicalDatabaseName().GetOrElse("/Root"));
-    } else {
-        auto resolvedTopic = NGRpcService::ResolveFstClassTopicSchemaPath(*Request, topic_path, "/Root");
-        if (resolvedTopic.IsFail()) {
-            return CloseSession(resolvedTopic.GetErrorMessage(), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        }
-        DiscoveryConverter = TopicsController.GetWriteTopicConverter(resolvedTopic->Path, Request->GetDatabaseName().GetOrElse("/Root"));
-    }
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(topic_path, Request->GetDatabaseName().GetOrElse("/Root"));
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
                 TStringBuilder() << "topic " << topic_path << " could not be recognized: " << DiscoveryConverter->GetReason(),
@@ -600,11 +597,7 @@ void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, boo
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
     }
-    auto request = MakeHolder<TEvDescribeTopicsRequest>(TVector<NPersQueue::TDiscoveryConverterPtr>{DiscoveryConverter});
-    if (Request->HasActivePathRewriting() && !TopicsController.GetConverterFactory()->GetNoDCMode()) {
-        request->PathContext = Request->GetPathRewriteSettings().Context;
-    }
-    ctx.Send(SchemeCache, request.Release(), 0, 0, std::move(traceId));
+    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({DiscoveryConverter}), 0, 0, std::move(traceId));
     if (needWaitSchema) {
         State = ES_WAIT_SCHEME;
     }
@@ -612,9 +605,6 @@ void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, boo
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ev->Get()->PathRewriteError.empty()) {
-        return CloseSession(ev->Get()->PathRewriteError, PersQueue::ErrorCode::BAD_REQUEST, ctx);
-    }
     auto& res = ev->Get()->Result;
     AFL_ENSURE(res->ResultSet.size() == 1);
 
@@ -797,12 +787,12 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
     }
 
     if constexpr (Protocol == EProtocol::PQv1) {
-        opts.WithTopicPath(Request->HasActivePathRewriting() ? FullConverter->GetPrimaryPath() : InitRequest.topic());
+        opts.WithTopicPath(InitRequest.topic());
     } else {
         if (Request->GetDatabaseName()) {
             opts.WithDatabase(*Request->GetDatabaseName());
         }
-        opts.WithTopicPath(Request->HasActivePathRewriting() ? FullConverter->GetPrimaryPath() : InitRequest.path());
+        opts.WithTopicPath(InitRequest.path());
         if (Request->GetSerializedToken()) {
             opts.WithToken(Request->GetSerializedToken());
         }

@@ -144,8 +144,6 @@ private:
 
     TAuthData ClientAuthData;
     TString DatabasePath;
-    TString LogicalDatabasePath;
-    std::shared_ptr<const NKikimr::NPathAliasing::TPathContext> PathContext;
     TString AuthDatabasePath;
 
     TString Ticket;

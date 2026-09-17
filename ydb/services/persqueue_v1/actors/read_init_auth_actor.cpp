@@ -14,9 +14,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
         const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
-        const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck,
-        std::shared_ptr<const NPathAliasing::TPathContext> pathContext,
-        THashMap<TString, TString> clientsideNames
+        const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
     : TBase(NKikimrServices::PQ_READ_PROXY)
     , ParentId(parentId)
@@ -30,8 +28,6 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , Token(token)
     , Counters(counters)
     , LocalCluster(localCluster)
-    , PathContext(std::move(pathContext))
-    , ClientsideNames(std::move(clientsideNames))
 {
     for (const auto& [path, converter] : topics.Topics) {
         Topics[path].DiscoveryConverter = converter;
@@ -57,16 +53,7 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
     }
 
-    auto request = MakeHolder<TEvDescribeTopicsRequest>(topics, true, showPrivate);
-    request->PathContext = PathContext;
-    if (PathContext) {
-        for (const auto& [path, holder] : Topics) {
-            if (holder.CdcStreamPath) {
-                request->ResolvedTopics.insert(path);
-            }
-        }
-    }
-    ctx.Send(MetaCacheId, request.Release());
+    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
@@ -143,16 +130,10 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return false;
     }
-    auto clientsideName = topicsIter->second.CdcStreamPath;
-    if (!PathContext || RewrittenTopics.contains(topicsIter->first)) {
-        if (const auto it = ClientsideNames.find(topicsIter->first); it != ClientsideNames.end()) {
-            clientsideName = it->second;
-        }
-    }
     topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
         pqDescr.GetPQTabletConfig(),
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
-        clientsideName
+        topicsIter->second.CdcStreamPath
     );
     AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
@@ -160,12 +141,6 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    if (!ev->Get()->PathRewriteError.empty()) {
-        return CloseSession(ev->Get()->PathRewriteError, PersQueue::ErrorCode::BAD_REQUEST, ctx);
-    }
-    // Keep proven aliases across CDC child rediscovery without treating every
-    // already-resolved child as a new rewrite.
-    RewrittenTopics.insert(ev->Get()->RewrittenTopics.begin(), ev->Get()->RewrittenTopics.end());
     LOG_D("Handle describe topics response");
 
     bool reDescribe = false;
@@ -321,8 +296,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
             holder.FolderId,
             holder.MeteringMode,
             holder.Partitions,
-            holder.GetPartitionGraph(),
-            RewrittenTopics.contains(name) || (!PathContext && ClientsideNames.contains(name))
+            holder.GetPartitionGraph()
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

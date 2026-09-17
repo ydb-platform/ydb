@@ -347,10 +347,17 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        Ydb::Table::CreateTableRequest requestWithNormalizedPaths;
+        if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
+            requestWithNormalizedPaths.CopyFrom(*req);
+            NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_ttl_settings(), *Request_);
+            req = &requestWithNormalizedPaths;
+        }
+
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -379,11 +386,6 @@ private:
             StatusIds::StatusCode code = StatusIds::SUCCESS;
             NYql::TIssues issues;
             if (MakeCreateColumnTable(*req, name, *modifyScheme, code, issues)) {
-                auto* description = modifyScheme->MutableCreateColumnTable();
-                if (description->HasTtlSettings() && description->GetTtlSettings().HasEnabled()
-                    && !ResolveTtlSchemaPaths(*Request_, *description->MutableTtlSettings()->MutableEnabled())) {
-                    return Reply(StatusIds::BAD_REQUEST, ctx);
-                }
                 ctx.Send(MakeTxProxyID(), proposeRequest.release());
             } else {
                 Reply(code, issues, ctx);
@@ -505,10 +507,6 @@ private:
             );
         }
 
-        if (tableDesc->HasTTLSettings() && tableDesc->GetTTLSettings().HasEnabled()
-            && !ResolveTtlSchemaPaths(*Request_, *tableDesc->MutableTTLSettings()->MutableEnabled())) {
-            return Reply(StatusIds::BAD_REQUEST, ctx);
-        }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 

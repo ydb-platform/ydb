@@ -57,9 +57,6 @@ class TJsonStorageStats : public TViewerPipeClient {
 
     TSubDomainKey SubDomainKey;
     std::vector<TString> Paths;
-    // Keep the requested spelling for response correlation and the resolved
-    // identity for all navigation and result lookups.
-    std::unordered_map<TString, TString> ResolvedPaths;
     EGroupBy GroupBy = EGroupBy::Path;
     bool UseHiveTablets = false;
     std::unordered_set<TString> StoragePoolNames;
@@ -88,11 +85,6 @@ public:
     }
 
     TString MakeFullPath(const TString& path) {
-        if (!ResolvedPaths.empty()) {
-            if (const auto it = ResolvedPaths.find(path); it != ResolvedPaths.end()) {
-                return it->second;
-            }
-        }
         if (Database.empty() || path.StartsWith("/")) {
             return path;
         }
@@ -185,23 +177,8 @@ public:
         if (Paths.empty() && GroupBy == EGroupBy::Path) {
             return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "No path specified"));
         }
-        if (PathRewrite.Context) {
-            const auto& logicalDatabase = PathRewrite.Context->GetLogicalDatabase().GetOrElse(Database);
-            for (const auto& path : Paths) {
-                TString candidate = path;
-                if (!logicalDatabase.empty() && !path.StartsWith('/')) {
-                    candidate = path.empty() || path == "." ? logicalDatabase : logicalDatabase + "/" + path;
-                }
-                TString resolved;
-                if (!ResolveUserSchemaPath(candidate, resolved)) {
-                    return;
-                }
-                ResolvedPaths.emplace(path, std::move(resolved));
-            }
-        }
         for (const auto& path : Paths) {
-            const auto& target = PathRewrite.Context ? ResolvedPaths.at(path) : path;
-            if (target.StartsWith("/") && !target.StartsWith(Database)) {
+            if (path.StartsWith("/") && !path.StartsWith(Database)) {
                 return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid path specified"));
            }
         }
@@ -228,12 +205,7 @@ public:
             StoragePools.emplace(std::make_pair(StaticStoragePool.GetKey().GetBoxId(), StaticStoragePool.GetKey().GetStoragePoolId()), StaticStoragePool);
         }
         for (const auto& path : Paths) {
-            const auto fullPath = MakeFullPath(path);
-            // Different aliases may name the same object. One result slot must
-            // have one outstanding request, while response entries stay intact.
-            if (!PathRewrite.Context || !SchemeShardResult.contains(fullPath)) {
-                RequestSchemeShard(fullPath);
-            }
+            RequestSchemeShard(MakeFullPath(path));
         }
         if (Paths.empty() && GroupBy == EGroupBy::TabletType) {
             if (UseHiveTablets) {

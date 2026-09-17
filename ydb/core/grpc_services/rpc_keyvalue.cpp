@@ -589,7 +589,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path(), true);
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -641,7 +641,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path());
+            pathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -671,13 +671,20 @@ public:
 template <typename TDerived>
 class TBaseKeyValueRequest {
 protected:
-    bool ResolveResourcePath(const TString& logicalPath, TString& physicalPath) {
-        auto self = static_cast<TDerived*>(this);
-        if constexpr (requires { self->Request_; }) {
-            return ResolveRootSchemaPath(*self->Request_, logicalPath, physicalPath);
+    static auto& GetRequestCtx(TDerived* self) {
+        if constexpr (requires { self->Request(); }) {
+            return self->Request();
         } else {
-            return ResolveRootSchemaPath(*self->Request, logicalPath, physicalPath);
+            return *self->Request;
         }
+    }
+
+    const TString& GetNormalizedPath() {
+        if (!NormalizedPath) {
+            auto* self = static_cast<TDerived*>(this);
+            NormalizedPath = GetRequestCtx(self).NormalizePath(self->GetProtoRequest()->path());
+        }
+        return *NormalizedPath;
     }
 
     void OnBootstrap() {
@@ -693,14 +700,9 @@ protected:
 
     void SendNavigateRequest() {
         auto self = static_cast<TDerived*>(this);
-        auto &rec = *self->GetProtoRequest();
-        TString path;
-        if (!ResolveResourcePath(rec.path(), path)) {
-            return self->Reply(StatusIds::BAD_REQUEST, "Invalid rewritten volume path", NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
-        }
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = req->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(path);
+        entry.Path = ::NKikimr::SplitPath(GetNormalizedPath());
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.SyncVersion = false;
@@ -771,6 +773,7 @@ protected:
 
 private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TMaybe<TString> NormalizedPath;
 };
 
 class TDescribeVolumeRequest
@@ -870,7 +873,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitRootSchemaPath(*Request_, req->path());
+            pathPair = SplitPath(GetNormalizedPath());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

@@ -46,8 +46,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/grpc_services/base
-    ydb/core/path_aliasing/context
     contrib/libs/grpc
     contrib/restricted/nlohmann_json
     library/cpp/string_utils/url

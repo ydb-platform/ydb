@@ -92,6 +92,7 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 public:
     explicit TReadRowsRPC(IRequestNoOpCtx* request)
         : Request(request)
+        , TablePath(Request->NormalizePath(GetProto()->path()))
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -272,7 +273,7 @@ public:
     }
 
     const TString& GetTable() {
-        return ResolvedTable;
+        return TablePath;
     }
 
     bool CheckAccess(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
@@ -331,9 +332,6 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        if (!ResolveRootSchemaPath(*Request, GetProto()->path(), ResolvedTable)) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten table path");
-        }
         StartTime = TAppData::TimeProvider->Now();
         if (!ResolveTable()) {
             return;
@@ -860,7 +858,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
-    TString ResolvedTable;
+    const TString TablePath;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

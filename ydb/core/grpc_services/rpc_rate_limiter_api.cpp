@@ -25,6 +25,8 @@ public:
 
     TRateLimiterRequest(IRequestOpCtx* msg)
         : TBase(msg)
+        , CoordinationNodePath(this->Request_->NormalizePath(
+            this->GetProtoRequest()->coordination_node_path()))
     {}
 
     static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
@@ -101,10 +103,6 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        if (!ResolveRootSchemaPath(*this->Request_, this->GetProtoRequest()->coordination_node_path(), CoordinationNodePath)) {
-            status = StatusIds::BAD_REQUEST;
-            return false;
-        }
         const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
 
         if (!GetCoordinationNodePath().StartsWith(databaseName)) {
@@ -119,16 +117,12 @@ public:
     }
 
 protected:
-    bool ResolveCoordinationNodePath() {
-        return ResolveRootSchemaPath(*this->Request_, this->GetProtoRequest()->coordination_node_path(), CoordinationNodePath);
-    }
-
     const TString& GetCoordinationNodePath() const {
         return CoordinationNodePath;
     }
 
 private:
-    TString CoordinationNodePath;
+    const TString CoordinationNodePath;
 };
 
 template <class TEvRequest>
@@ -455,9 +449,6 @@ public:
         TBase::Bootstrap(ctx);
 
         UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
-        if (!ResolveCoordinationNodePath()) {
-            return Reply(StatusIds::BAD_REQUEST, ctx);
-        }
 
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;

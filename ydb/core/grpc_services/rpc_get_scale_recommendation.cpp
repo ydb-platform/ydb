@@ -3,7 +3,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -19,11 +18,7 @@ public:
     using TRpcRequestActor::TRpcRequestActor;
 
     void Bootstrap(const TActorContext&) {
-        TString path;
-        if (!ResolveRootSchemaPath(*Request, GetProtoRequest()->path(), path)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid rewritten database path");
-        }
-        ResolveDatabase(path);
+        ResolveDatabase(GetProtoRequest()->path());
         this->Become(&TThis::StateWork);
     }
 

@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/path_aliasing/context
+    ydb/core/path_aliasing
     ydb/library/grpc/server
     library/cpp/string_utils/quote
     ydb/core/base

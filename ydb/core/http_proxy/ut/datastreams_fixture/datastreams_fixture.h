@@ -78,7 +78,6 @@ public:
         bool EnableTopicMessagesBatching : 1 = false;
         bool EnableAccessServiceV2Interface : 1 = false;
         bool TopicsAreFirstClassCitizen : 1 = true;
-        NKikimrConfig::TPathRewriteConfig PathRewriteConfig;
     };
 
     void InitAll(const TInitParameters initParameters);

@@ -23,11 +23,9 @@ public:
         Register(NPQ::NSchema::CreateRemoveConsumerActor(SelfId(), {
             .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
-            .Path = GetTopicPath(),
+            .Path = GetProtoRequest()->path(),
             .ConsumerName = GetProtoRequest()->consumer_name(),
             .UserToken = GetUserToken(),
-            .PathContext = GetFederatedPathContext(),
-            .LogicalDatabase = GetLogicalDatabase(),
         }));
     }
 

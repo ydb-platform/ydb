@@ -244,20 +244,15 @@ public:
             NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->NormalizePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
 private:
-    bool OnBeforeStart(const TActorContext& ctx) override {
-        if (!ResolveRootSchemaPath(*Request, GetProtoRequest(Request.get())->table(), ResolvedTable)) {
-            Request->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            Die(ctx);
-            return false;
-        }
+    void OnBeforeStart(const TActorContext& ctx) override {
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
-        return true;
     }
 
     void OnBeforePoison(const TActorContext&) override {
@@ -278,7 +273,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return ResolvedTable;
+        return TablePath;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -376,7 +371,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
-    TString ResolvedTable;
+    const TString TablePath;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -391,20 +386,15 @@ public:
             GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
+        , TablePath(Request->NormalizePath(GetProtoRequest(Request.get())->table()))
     {
     }
 
 private:
-    bool OnBeforeStart(const TActorContext& ctx) override {
-        if (!ResolveRootSchemaPath(*Request, GetProtoRequest(Request.get())->table(), ResolvedTable)) {
-            Request->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            Die(ctx);
-            return false;
-        }
+    void OnBeforeStart(const TActorContext& ctx) override {
         Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
-        return true;
     }
 
     void OnBeforePoison(const TActorContext&) override {
@@ -436,7 +426,7 @@ private:
     }
 
     const TString& GetTable() const override {
-        return ResolvedTable;
+        return TablePath;
     }
 
     const TString& GetSourceData() const override {
@@ -654,7 +644,7 @@ private:
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     const TString Database;
-    TString ResolvedTable;
+    const TString TablePath;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

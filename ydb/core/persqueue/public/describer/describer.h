@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/path_aliasing/context/path_context.h>
 
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -76,9 +75,6 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
-    // Server-owned provenance for federation names, before name parsing.
-    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
-    TString LogicalDatabase;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

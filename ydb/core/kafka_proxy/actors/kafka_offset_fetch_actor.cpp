@@ -44,9 +44,6 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
             GroupIdToIndex[group.GroupId.value()] = ui32(i);
         } else {
             for (const auto& topic: group.Topics) {
-                if (Message.GetResolvedTopics()) {
-                    UserTopicGroups.insert(group.GroupId.value());
-                }
                 ExtractPartitions(group.GroupId.value(), topic);
             }
         }
@@ -105,10 +102,8 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     TopicsToResponses[topicName].Reset(converted.Release());
     auto& topicGroupRequests = GroupRequests[topicName];
     for (const auto& [topicRequest, groupId] : topicGroupRequests) {
-        TString topicNameWithoutDb = Message.GetResolvedTopics()
-            ? topicName : GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
-        TString topicPath = Message.GetResolvedTopics()
-            ? topicName : NormalizePath(DatabasePath, topicNameWithoutDb);
+        TString topicNameWithoutDb = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
+        TString topicPath = NormalizePath(DatabasePath, topicNameWithoutDb);
         if (topicExists && Context->Config.GetAutoCreateConsumersEnable()) {
             auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
             bool consumerOnTopic = false;
@@ -241,18 +236,8 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
     }
 }
 
-TString TKafkaOffsetFetchActor::GetTopicKey(const TString& group, const TString& topic) const {
-    if (!Message.GetResolvedTopics()) {
-        return topic;
-    }
-    // Empty-topic OffsetFetch reads an existing assignment. Its persisted names
-    // are physical input, even if another group explicitly supplied the same text.
-    return UserTopicGroups.contains(group)
-        ? Message.GetTopicPath(DatabasePath, topic) : NormalizePath(DatabasePath, topic);
-}
-
 void TKafkaOffsetFetchActor::ExtractPartitions(const TString& group, const NKafka::TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics& topic) {
-    TString topicName = GetTopicKey(group, topic.Name.value());
+    TString topicName = topic.Name.value();
     if (!TopicToEntities.contains(topicName)) {
         TTopicEntities newEntities;
         TopicToEntities[topicName] = newEntities;
@@ -390,8 +375,8 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                                     TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics const &requestTopic,
                                     const TString& groupId) {
     TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topic;
-    TString topicName = GetTopicKey(groupId, requestTopic.Name.value());
-    topic.Name = requestTopic.Name;
+    TString topicName = requestTopic.Name.value();
+    topic.Name = topicName;
     if (TopicsToResponses[topicName]->Status == NONE_ERROR) {
         auto partitionsToOffsets = TopicsToResponses[topicName]->PartitionIdToOffsets;
         for (auto requestPartition: requestTopic.PartitionIndexes) {
@@ -462,7 +447,7 @@ NYdb::TParamsBuilder TKafkaOffsetFetchActor::BuildFetchAssignmentsParams(const s
 void TKafkaOffsetFetchActor::FillMapWithGroupRequests() {
     for (const auto& groupRequest : Message->Groups) {
         for (auto& topicRequest : groupRequest.Topics) {
-            GroupRequests[GetTopicKey(*groupRequest.GroupId, *topicRequest.Name)].emplace_back(topicRequest, *groupRequest.GroupId);
+            GroupRequests[*topicRequest.Name].emplace_back(topicRequest, *groupRequest.GroupId);
         }
     }
 }
@@ -470,7 +455,7 @@ void TKafkaOffsetFetchActor::FillMapWithGroupRequests() {
 void TKafkaOffsetFetchActor::RegisterOffsetsActor(const TString& topicName, const TActorContext& ctx) {
     const auto& entities = TopicToEntities[topicName];
     const auto actorId = ctx.Register(CreateTopicOffsetsActor(SelfId(), {
-        .Path = Message.GetResolvedTopics() ? topicName : NormalizePath(Context->DatabasePath, topicName),
+        .Path = NormalizePath(Context->DatabasePath, topicName),
         .Database = Context->DatabasePath,
         .Token = GetUserSerializedToken(Context),
         .SelectRowToken = GetUserSerializedToken(Context),

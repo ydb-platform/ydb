@@ -14,7 +14,6 @@ USE_RECIPE(ydb/public/sdk/cpp/tests/integration/path_aliasing/recipe/path_aliasi
 
 PEERDIR(
     ydb/public/api/protos
-    ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
@@ -31,7 +30,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/value
 )
 
-SRCS(path_aliasing_it.cpp)
+SRCS(path_aliasing_compact_it.cpp)
 
 END()
 

@@ -114,15 +114,12 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-        for (const TString& logicalPath : proto->path()) {
-            TString path;
-            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-            }
+        for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
         }
         tx->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
         if (proto->ignore_system_views()) {
@@ -254,15 +251,12 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
-        for (const TString& logicalPath : proto->path()) {
-            TString path;
-            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-            }
+        for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);
@@ -399,15 +393,12 @@ public:
         SetDatabase(req.Get(), Request());
 
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
-        for (const TString& logicalPath : proto->path()) {
-            TString path;
-            if (!ResolveRootSchemaPath(Request(), logicalPath, path)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
-            }
+        for (const TString& path : proto->path()) {
             if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
                 continue;
             }
-            tx->AddTables()->SetTablePath(path);
+            tx->AddTables()->SetTablePath(
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);

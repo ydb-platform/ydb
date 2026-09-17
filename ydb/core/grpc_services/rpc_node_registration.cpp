@@ -8,7 +8,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/nameservice.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/mind/node_broker.h>
 #include <ydb/core/protos/config.pb.h>
@@ -56,25 +55,6 @@ public:
             return;
         }
 
-        TString tenantPath = request->path();
-        if (request->has_path() && Request->HasActivePathRewriting()) {
-            const auto& context = Request->GetPathRewriteSettings().Context;
-            TString candidate = CanonizePath(tenantPath);
-            if (candidate.empty() && !tenantPath.empty()) {
-                candidate = "/";
-            }
-            auto resolved = context->NormalizePath(candidate);
-            if (resolved.IsFail()) {
-                Status = Ydb::StatusIds::BAD_REQUEST;
-                Request->RaiseIssue(NYql::TIssue(resolved.GetErrorMessage()));
-                SendReplyAndDie(ctx);
-                return;
-            }
-            if (resolved->Outcome == NPathAliasing::EPathRewriteOutcome::Rewritten) {
-                tenantPath = resolved->Path;
-            }
-        }
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeNodeBrokerID(), pipeConfig);
@@ -90,7 +70,7 @@ public:
         CopyNodeLocation(nodeBrokerRequest->Record.MutableLocation(), request->location());
         nodeBrokerRequest->Record.SetFixedNodeId(request->fixed_node_id());
         if (request->has_path()) {
-            nodeBrokerRequest->Record.SetPath(tenantPath);
+            nodeBrokerRequest->Record.SetPath(request->path());
         }
         nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
 

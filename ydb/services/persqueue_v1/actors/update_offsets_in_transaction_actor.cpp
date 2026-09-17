@@ -1,5 +1,4 @@
 #include "update_offsets_in_transaction_actor.h"
-#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/base/feature_flags.h>
 
 
@@ -57,12 +56,8 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
     ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
 
     for (const auto& topic : req->topics()) {
-        auto resolved = ResolveFullTopicSchemaPath(*Request_, topic.path());
-        if (resolved.IsFail()) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, resolved.GetErrorMessage(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
-        }
         auto* newTopic = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
-        newTopic->set_path(resolved->Path);
+        newTopic->set_path(Request_->NormalizePath(topic.path()));
 
         for (const auto& partition : topic.partitions()) {
             auto* newPartition = newTopic->add_partitions();

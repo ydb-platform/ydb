@@ -12,11 +12,10 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 namespace {
 
 struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
-    TAlterTopicStrategy(const Ydb::PersQueue::V1::AlterTopicRequest& request, TString&& database, const TString& path)
+    TAlterTopicStrategy(const Ydb::PersQueue::V1::AlterTopicRequest& request, TString&& database)
         : Request(request)
         , Database(std::move(database))
     {
-        Request.set_path(path);
     }
 
     const TString& GetTopicName() const override {
@@ -65,7 +64,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         return {};
     }
 
-    Ydb::PersQueue::V1::AlterTopicRequest Request;
+    const Ydb::PersQueue::V1::AlterTopicRequest Request;
     const TString Database;
 };
 
@@ -82,20 +81,12 @@ public:
         Become(&TAlterTopicActor::StateWork);
 
         auto database = GetDatabase();
-        auto strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), TString(database), GetTopicPath());
-        for (auto& rule : *strategy->Request.mutable_settings()->mutable_read_rules()) {
-            if (!ResolveConsumerSchemaReferences(rule)) {
-                return;
-            }
-        }
 
         Register(NPQ::NSchema::CreateAlterTopicOperationActor(SelfId(), {
             .Database = database,
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
-            .Strategy = std::move(strategy),
-            .PathContext = GetFederatedPathContext(),
-            .LogicalDatabase = GetLogicalDatabase(),
+            .Strategy = std::make_unique<TAlterTopicStrategy>(*GetProtoRequest(), std::move(database)),
         }));
     }
 

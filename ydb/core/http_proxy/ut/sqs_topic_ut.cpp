@@ -7,8 +7,6 @@
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 #include <ydb/services/sqs_topic/receipt.h>
-#include <ydb/services/sqs_topic/queue_url/arn.h>
-#include <ydb/services/sqs_topic/queue_url/utils.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
@@ -22,8 +20,6 @@
 #include <util/system/mutex.h>
 
 #include <memory>
-#include <initializer_list>
-#include <utility>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -43,38 +39,6 @@ using TFixture = THttpProxyTestMockForSQSTopic;
 
 
 namespace {
-    class TQueueAliasResponseFixture : public THttpProxyTestMock {
-    public:
-        void SetUp(NUnitTest::TTestContext&) override {
-            TInitParameters settings;
-            settings.EnableSqsTopic = true;
-            for (const auto& [pattern, replacement] : std::initializer_list<std::pair<const char*, const char*>>{
-                {"^/alias/Queue$", "/Root/Actual"},
-                {"^/alias/Dlq$", "/Root/DeadLetterQueue"},
-                {"^/alias$", "/Root"},
-            }) {
-                auto* rule = settings.PathRewriteConfig.AddRules();
-                rule->SetPattern(pattern);
-                rule->SetReplacement(replacement);
-            }
-            InitAll(settings);
-        }
-
-        NJson::TJsonValue Call(const TString& database, const TString& method, NJson::TJsonMap request) {
-            const auto response = SendHttpRequest(database, "AmazonSQS." + method, std::move(request),
-                FormAuthorizationStr("ru-central1", "sqs"));
-            UNIT_ASSERT_VALUES_EQUAL_C(response.HttpCode, 200, response.Body);
-            NJson::TJsonValue json;
-            UNIT_ASSERT(NJson::ReadJsonTree(response.Body, &json));
-            return json;
-        }
-
-        static TString LogicalQueueUrl() {
-            return NKikimr::NSqsTopic::PackQueueUrlPath({
-                .Database = "/alias", .TopicPath = "Queue", .Consumer = "ydb-sqs-consumer", .Fifo = false});
-        }
-    };
-
     class TNoAuthFixture: public THttpProxyTestMockForSQSTopic {
     public:
         void SetUp(NUnitTest::TTestContext& ctx) override {
@@ -528,60 +492,6 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
-    Y_UNIT_TEST_F(QueueArnKeepsLogicalCorrelationAcrossExactQueueRename, TQueueAliasResponseFixture) {
-        auto driver = MakeDriver(*this);
-        UNIT_ASSERT(CreateTopic(driver, "Actual", "ydb-sqs-consumer"));
-        const auto result = Call("/alias", "GetQueueAttributes", {
-            {"QueueUrl", LogicalQueueUrl()}, {"AttributeNames", NJson::TJsonArray{"QueueArn", "VisibilityTimeout"}}});
-        const TString arn = result["Attributes"]["QueueArn"].GetString();
-        const auto parsed = NKikimr::NSqsTopic::ParseQueueArn(arn);
-        UNIT_ASSERT(parsed.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(parsed->Database, "/alias");
-        UNIT_ASSERT_VALUES_EQUAL(parsed->TopicPath, "Queue");
-        UNIT_ASSERT_VALUES_EQUAL(parsed->Consumer, "ydb-sqs-consumer");
-        UNIT_ASSERT(!parsed->Fifo);
-        const auto repeated = Call(parsed->Database, "GetQueueAttributes", {
-            {"QueueUrl", NKikimr::NSqsTopic::PackQueueUrlPath(*parsed)},
-            {"AttributeNames", NJson::TJsonArray{"QueueArn", "VisibilityTimeout"}}});
-        UNIT_ASSERT_VALUES_EQUAL(repeated["Attributes"]["QueueArn"].GetString(), arn);
-        UNIT_ASSERT_VALUES_EQUAL(repeated["Attributes"]["VisibilityTimeout"].GetString(),
-            result["Attributes"]["VisibilityTimeout"].GetString());
-    }
-
-    Y_UNIT_TEST_F(StoredAbsoluteDlqRedrivePolicyCanBeReusedWithoutDoubleDatabase, TQueueAliasResponseFixture) {
-        auto driver = MakeDriver(*this);
-        UNIT_ASSERT(CreateDlqTopic(driver));
-        NYdb::NTopic::TCreateTopicSettings settings;
-        auto& consumer = settings.BeginAddSharedConsumer("ydb-sqs-consumer");
-        consumer.KeepMessagesOrder(false);
-        auto&& policy = consumer.BeginDeadLetterPolicy();
-        policy.Enable();
-        policy.BeginCondition().MaxProcessingAttempts(3).EndCondition();
-        policy.MoveAction("/Root/DeadLetterQueue");
-        policy.EndDeadLetterPolicy();
-        consumer.EndAddConsumer();
-        UNIT_ASSERT(CreateTopic(driver, "Actual", settings));
-        const auto result = Call("/alias", "GetQueueAttributes", {
-            {"QueueUrl", LogicalQueueUrl()}, {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}});
-        const TString redrive = result["Attributes"]["RedrivePolicy"].GetString();
-        NJson::TJsonValue returnedPolicy;
-        UNIT_ASSERT(NJson::ReadJsonTree(redrive, &returnedPolicy));
-        const auto parsed = NKikimr::NSqsTopic::ParseQueueArn(returnedPolicy["deadLetterTargetArn"].GetString());
-        UNIT_ASSERT(parsed.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(parsed->Database, "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(parsed->TopicPath, "DeadLetterQueue");
-        UNIT_ASSERT_VALUES_EQUAL(parsed->Consumer, "ydb-sqs-consumer");
-        UNIT_ASSERT_VALUES_EQUAL(returnedPolicy["maxReceiveCount"].GetInteger(), 3);
-        Call("/alias", "SetQueueAttributes", {
-            {"QueueUrl", LogicalQueueUrl()}, {"Attributes", NJson::TJsonMap{{"RedrivePolicy", redrive}}}});
-        const auto repeated = Call("/alias", "GetQueueAttributes", {
-            {"QueueUrl", LogicalQueueUrl()}, {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}});
-        NJson::TJsonValue repeatedPolicy;
-        UNIT_ASSERT(NJson::ReadJsonTree(repeated["Attributes"]["RedrivePolicy"].GetString(), &repeatedPolicy));
-        UNIT_ASSERT_VALUES_EQUAL(repeatedPolicy["deadLetterTargetArn"].GetString(), returnedPolicy["deadLetterTargetArn"].GetString());
-        UNIT_ASSERT_VALUES_EQUAL(repeatedPolicy["maxReceiveCount"].GetInteger(), 3);
-    }
-
 
         Y_UNIT_TEST_F(TestGetQueueUrlEmpty, TFixture) {
             auto json = GetQueueUrl({}, 400);

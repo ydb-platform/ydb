@@ -20,9 +20,7 @@ public:
     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                           TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
-                          const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck = false,
-                          std::shared_ptr<const NPathAliasing::TPathContext> pathContext = {},
-                          THashMap<TString, TString> clientsideNames = {});
+                          const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck = false);
 
     ~TReadInitAndAuthActor();
 
@@ -89,9 +87,6 @@ private:
     bool DoCheckACL;
 
     TString LocalCluster;
-    std::shared_ptr<const NPathAliasing::TPathContext> PathContext;
-    THashMap<TString, TString> ClientsideNames;
-    THashSet<TString> RewrittenTopics;
 };
 
 }

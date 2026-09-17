@@ -52,9 +52,7 @@ private:
             {
                 .UserToken = Settings.UserToken,
                 .AccessRights = NACLib::EAccessRights::RemoveSchema,
-                .ForceSyncVersion = true,
-                .PathContext = Settings.PathContext,
-                .LogicalDatabase = Settings.LogicalDatabase,
+                .ForceSyncVersion = true
             }));
     }
 

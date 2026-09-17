@@ -413,8 +413,6 @@ private:
     THashMap<TString, TTopicHolder::TPtr> Topics; // topic -> info
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
-    THashMap<TString, TString> LogicalTopicNames;
-    THashMap<TString, TString> PendingLogicalTopicNames;
     THashMap<TString, TVector<ui32>> TopicGroups;
     THashMap<TString, i64> ReadFromTimestamp;
     THashMap<TString, i64> MaxLagByTopic;

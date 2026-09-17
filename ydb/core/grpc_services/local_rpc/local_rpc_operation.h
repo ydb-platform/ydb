@@ -27,7 +27,6 @@ public:
         TMaybe<TString> Token;
         NThreading::TPromise<TLocalRpcOperationResult> Promise;
         TString OperationName = "local_rpc_operation";
-        NGRpcService::TPathRewriteSettings PathRewrite = NGRpcService::TPathRewriteSettings::Internal();
     };
 
     TOperationRequestExecuter(typename TRpc::TRequest&& proto, const TSettings& settings)
@@ -48,11 +47,6 @@ public:
             actorSystem->Send(selfId, new TEvents::TEvPoison());
         });
 
-        if (const TString error = Ctx->InitializePathRewriteContext(*AppData()); !error.empty()) {
-            Ctx->RaiseIssue(NYql::TIssue(error));
-            Ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-            return;
-        }
         RequestCreator(std::move(Ctx), *this);
     }
 
@@ -82,7 +76,6 @@ private:
             .TraceId = TString(operationSettings.TraceId_),
             .Deadline = TInstant::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(operationSettings.Deadline_.GetTimePoint().time_since_epoch()).count()),
             .ClientLostStatus = clientLostStatus,
-            .PathRewrite = settings.PathRewrite,
         });
 
         if (!operationSettings.TraceParent_.empty()) {

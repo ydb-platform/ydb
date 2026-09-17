@@ -21,10 +21,7 @@ void TJsonComputationGraph::Bootstrap() {
         }
         return ReplyAndPassAway(GetHTTPOK("image/svg+xml", NComputationGraphRenderer::ToSvg(*graph)));
     }
-    TString path;
-    if (!ResolveUserSchemaPath(Params.Get("path"), path)) {
-        return;
-    }
+    const TString path = Params.Get("path");
     if (!path) {
         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'path' is required"));
     }

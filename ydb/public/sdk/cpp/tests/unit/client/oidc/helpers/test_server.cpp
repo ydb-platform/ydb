@@ -185,6 +185,12 @@ void TOidcTestServer::Enqueue(TString body, HttpCodes status) {
     }
 }
 
+void TOidcTestServer::SetDiscoveryReply(TString body, HttpCodes status) {
+    with_lock (Mutex) {
+        DiscoveryReply = TReply{status, std::move(body)};
+    }
+}
+
 void TOidcTestServer::BlockTokenRepliesUntil(NThreading::TFuture<void> released) {
     with_lock (Mutex) {
         TokenReplyGate = std::move(released);
@@ -227,6 +233,9 @@ bool TOidcTestServer::TRequest::DoReply(const TReplyParams& params) {
             metadata["token_endpoint"] = Server.Issuer() + "/token";
             metadata["device_authorization_endpoint"] = Server.Issuer() + "/device";
             reply.Body = NJson::WriteJson(metadata, false);
+            if (Server.DiscoveryReply) {
+                reply = *Server.DiscoveryReply;
+            }
         } else {
             TRequestInfo request{TString(parsed.Path), TString(parsed.Method), TCgiParameters(body), {}};
             for (const auto& header : params.Input.Headers()) {

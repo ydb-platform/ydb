@@ -3,6 +3,7 @@
 
 #include "test_server.h"
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -10,6 +11,19 @@
 #include <future>
 
 using namespace NYdb;
+
+namespace {
+
+class TThrowingOidcFacility: public TQueuedOidcFacility {
+public:
+    void PostToResponseQueue(TPostTaskCb&& callback) override;
+};
+
+void TThrowingOidcFacility::PostToResponseQueue(TPostTaskCb&&) {
+    throw std::runtime_error("response queue unavailable");
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCredentials) {
 Y_UNIT_TEST(BearerTicketDoesNotChangeCachedToken) {
@@ -583,4 +597,134 @@ Y_UNIT_TEST(QueuedDeliveryNeverReturnsExpiredToken) {
     facility->RunTasks();
     UNIT_ASSERT(pending.HasException());
 }
+Y_UNIT_TEST(ResponseQueueFailureCompletesPendingFuture) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    auto facility = std::make_shared<TThrowingOidcFacility>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
+    config.Cacher(cache);
+    auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(pending.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(pending.GetValueSync(), std::exception, "response queue unavailable");
+}
+
+Y_UNIT_TEST(RejectsMissingRequiredCredentialsAndInvalidScopes) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    for (const TFlowConfig& flow : {
+             TFlowConfig{TStaticOidcConfig{}},
+             TFlowConfig{TClientOidcConfig{"", "secret", {}}},
+             TFlowConfig{TDeviceOidcConfig{"", {}}}}) {
+        config.FlowConfig = flow;
+        UNIT_ASSERT_EXCEPTION(CreateOidcProviderFactory(config), std::invalid_argument);
+    }
+    for (const std::string& scope : {"", "read write", "read\twrite", "read\nwrite", "read\"", "read\\", "read\x7f", "профиль"}) {
+        config.FlowConfig = TClientOidcConfig{"client", "secret", {scope}};
+        UNIT_ASSERT_EXCEPTION(CreateOidcProviderFactory(config), std::invalid_argument);
+    }
+}
+
+Y_UNIT_TEST(ClientIdentityNormalizesScopesButDistinguishesCredentials) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TClientOidcConfig{"client", "secret", {"write", "read", "read"}};
+    const auto identity = GetOidcClientIdentity(config);
+    auto& client = std::get<TClientOidcConfig>(config.FlowConfig);
+    client.Scopes = {"read", "write"};
+    UNIT_ASSERT_VALUES_EQUAL(GetOidcClientIdentity(config), identity);
+    client.ClientSecret = "other-secret";
+    UNIT_ASSERT(GetOidcClientIdentity(config) != identity);
+    config.FlowConfig = TStaticOidcConfig{"token", std::nullopt};
+    const auto staticIdentity = GetOidcClientIdentity(config);
+    std::get<TStaticOidcConfig>(config.FlowConfig).ExpiresAt = TInstant::Seconds(100);
+    UNIT_ASSERT(GetOidcClientIdentity(config) != staticIdentity);
+    const auto factory = CreateOidcProviderFactory(config);
+    UNIT_ASSERT(factory->CreateProvider() == factory->CreateProvider());
+}
+
+Y_UNIT_TEST(CachedTokenWithoutExpiryNeedsNoRefresh) {
+    TOidcTestServer server;
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    cache->Write({{"cached", std::nullopt}, std::nullopt});
+    auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer cached");
+    UNIT_ASSERT(provider->IsValid());
+    UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 0);
+}
+
+Y_UNIT_TEST(UnknownCachedLifetimeTriggersRefresh) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"fresh","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    cache->Write({{"unknown-expiry", std::nullopt}, TOAuthToken{"refresh", std::nullopt}});
+    auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer fresh");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests()[0].Form.Get("grant_type"), "refresh_token");
+}
+
+Y_UNIT_TEST(ExpiredRefreshTokenTriggersNewClientGrant) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"fresh","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    cache->Write({{"expired", TInstant::Seconds(1)}, TOAuthToken{"expired-refresh", TInstant::Seconds(1)}});
+    auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer fresh");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests()[0].Form.Get("grant_type"), "client_credentials");
+}
+
+Y_UNIT_TEST(TerminalRefreshErrorDoesNotStartNewGrant) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"error":"invalid_client"})", HTTP_UNAUTHORIZED);
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    cache->Write({{"expired", TInstant::Seconds(1)}, TOAuthToken{"refresh", std::nullopt}});
+    auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+    auto result = provider->GetAuthInfoAsync();
+    UNIT_ASSERT(result.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(result.GetValueSync(), std::exception, "invalid_client");
+    UNIT_ASSERT(!provider->IsValid());
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+}
+
+Y_UNIT_TEST(StopDuringCacheWriteDoesNotPublishToken) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
+    config.Cacher(cache);
+    auto provider = std::make_shared<NOidc::NPrivate::TStaticProvider>(config, std::weak_ptr<ICoreFacility>{}, true);
+    auto pending = provider->GetAuthInfoAsync();
+    auto worker = std::async(std::launch::async, [provider] { provider->Run(); });
+    const bool entered = cache->Entered.GetFuture().Wait(TDuration::Seconds(5));
+    provider->Stop();
+    cache->Release.TrySetValue();
+    worker.get();
+    UNIT_ASSERT(entered);
+    UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT(provider->GetAuthInfoAsync().HasException());
+    UNIT_ASSERT(!provider->IsValid());
+}
+
+Y_UNIT_TEST(FacilityExpiredDuringCacheWriteCompletesWithError) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
+    config.Cacher(cache);
+    auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+    const auto pending = provider->GetAuthInfoAsync();
+    const bool entered = cache->Entered.GetFuture().Wait(TDuration::Seconds(5));
+    facility.reset();
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(entered);
+    UNIT_ASSERT(pending.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT(!provider->IsValid());
+}
+
 } // Y_UNIT_TEST_SUITE(TOidcCredentials)

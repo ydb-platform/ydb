@@ -48,8 +48,8 @@ These quantities can be approximately related by the ratio:
 Database Storage = Tablet Storage × RF × Overhead
 ```
 
-In all calculations:<br/>
-1 KB = 1000 byte, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;<br/>
+In all calculations:
+1 KB = 1000 byte, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;
 1 KiB = 1024 byte, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
 
 ## Estimating Required Equipment {#hardware-estimation}
@@ -87,9 +87,7 @@ To estimate the required equipment, perform the following steps.
    SlotSize = (DriveSize - 28.08 GB) / ExpectedSlotCount
    ```
 
-
     <!-- 1 (SysLog) + 5 (SysReserveSize) + 200 (MaxCommonLogChunks) = -->
-
     <!-- 206 chunks (130 MiB each: 128 MiB payload + 2 MiB overhead) ≈ 28.08 GB -->
 
    About 28.08 GB of PDisk capacity is reserved for system needs; the remaining space is evenly distributed among slots.
@@ -161,6 +159,7 @@ Suppose there are `TotalPDisks` physical disks with a capacity of `DriveSize` ea
    ```
 
    Here `MaxSlotsInRack` is the maximum number of slots in one failure domain (rack or server): for a homogeneous cluster `DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `max_i(DisksPerRack_i × ExpectedSlotCount)`.
+
 3. Number of storage groups:
 
    ```text
@@ -205,6 +204,7 @@ Suppose you need to place 100 TB of data (Tablet Storage) in a cluster with faul
 6. Next, we will select a specific cluster configuration, providing a reserve of empty slots to ensure fault tolerance. To do this, we will consider various equipment options and evaluate compliance with the minimum requirements, taking into account that for mode `block-4-2` at least 8 failure domains (servers or racks) are required, and for stable practical operation 10 or more are recommended:
 
    - Let's take 10 racks with 12 disks each. In one rack, 12 × 16 = 192 slots, TotalSlots = 1 920. MinEmptySlots = ⌈192 + 0.027 × 1 920⌉ = 244. EmptySlots = 1 920 − 1 784 = 136. 136 < 244 — the minimum requirements are not met. It is easy to verify that 10 racks with 14 disks each are sufficient: TotalSlots = 2 240, MinEmptySlots = ⌈224 + 0.027 × 2 240⌉ = 285, EmptySlots = 2 240 − 1 784 = 456 > 285.
+
    - You can choose a server as the failure domain and consider 30 servers with 4 disks each. In one failure domain, 4 × 16 = 64 slots, TotalSlots = 1 920. MinEmptySlots = ⌈64 + 0.027 × 1 920⌉ = 116. EmptySlots = 1 920 − 1 784 = 136 > 116 — the minimum requirements are met.
 
 Thus, to store 100 TB of data in mode `block-4-2` on SSD disks with a capacity of 3.2 TB, you will need 10 racks with 14 disks each (140 disks) or 30 servers with 4 disks each (120 disks).

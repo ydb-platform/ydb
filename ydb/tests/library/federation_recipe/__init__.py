@@ -3,17 +3,12 @@ import os
 import signal
 import time
 import grpc
-from concurrent import futures
 
 import ydb
 import ydb.coordination
 
-from ydb.public.api.grpc import (
-    ydb_discovery_v1_pb2_grpc,
-    ydb_federation_discovery_v1_pb2_grpc,
-    ydb_rate_limiter_v1_pb2_grpc,
-)
-from ydb.public.api.protos import ydb_federation_discovery_pb2, ydb_rate_limiter_pb2, ydb_status_codes_pb2
+from ydb.public.api.grpc import ydb_rate_limiter_v1_pb2_grpc
+from ydb.public.api.protos import ydb_rate_limiter_pb2
 import yatest.common
 from yatest.common import process
 from library.python import port_manager
@@ -25,6 +20,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
 
+
+PRE_INSTALLED_ACCOUNTS = ("prod", "test")
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +69,9 @@ def _exec_queries(pool, queries):
 
 
 class LogbrokerFederation(object):
-    def __init__(self, accounts, ydb_cluster_names=("cluster_a", "cluster_b"), MockFederationDiscovery: bool = False):
+    def __init__(self, ydb_cluster_names=("cluster_a", "cluster_b")):
         logger.info("Setup federation recipe")
         assert len(ydb_cluster_names) > 0
-        self.__accounts = tuple(accounts)
-        assert self.__accounts, "At least one account is required"
         self.__clusters = {}
         self.__cluster_ports = {}
         self.__port_allocators = {}
@@ -84,114 +79,10 @@ class LogbrokerFederation(object):
         self.__cm_pid = None
         self.__cm_stderr_file = None
         self.__cm_endpoint = None
-        self.__mock_federation_discovery = MockFederationDiscovery
-        self.__discovery_server = None
-        self.__discovery_executor = None
-        self.__discovery_endpoint = None
 
         for name in ydb_cluster_names:
             self.__clusters[name] = None
             self.__port_allocators[name] = KikimrPortManagerPortAllocator(self.__port_manager)
-
-    @property
-    def cm_endpoint(self):
-        return self.__cm_endpoint
-
-    @property
-    def discovery_endpoint(self):
-        return self.__discovery_endpoint
-
-    @property
-    def ydb_cluster_endpoints(self):
-        return {name: f"localhost:{port}" for name, port in self.__cluster_ports.items()}
-
-    def stop_cluster(self, name):
-        # Keep static nodes running to preserve in-memory storage.
-        cluster = self.__clusters[name]
-        for node in list(cluster.slots.values()):
-            node.stop()
-
-    def start_cluster(self, name):
-        cluster = self.__clusters[name]
-        for node in list(cluster.slots.values()):
-            node.start()
-
-    @staticmethod
-    def _forward_to_cm(method, request, context):
-        # Keep database/auth metadata and the caller's deadline intact.
-        try:
-            response, call = method.with_call(
-                request,
-                metadata=context.invocation_metadata(),
-                timeout=context.time_remaining(),
-            )
-        except grpc.RpcError as error:
-            context.set_trailing_metadata(error.trailing_metadata() or ())
-            context.abort(error.code(), error.details())
-        context.send_initial_metadata(call.initial_metadata() or ())
-        context.set_trailing_metadata(call.trailing_metadata() or ())
-        return response
-
-    def _start_mock_federation_discovery(self):
-        federation = self
-        accounts = self.__accounts
-
-        class DiscoveryService(ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer):
-            def ListEndpoints(self, request, context):
-                # Ordinary SDK clients need CM's endpoints before loading metadata.
-                with grpc.insecure_channel(federation.cm_endpoint) as channel:
-                    stub = ydb_discovery_v1_pb2_grpc.DiscoveryServiceStub(channel)
-                    return federation._forward_to_cm(stub.ListEndpoints, request, context)
-
-        # class SchemeService(ydb_scheme_v1_pb2_grpc.SchemeServiceServicer):
-        #     def DescribePath(self, request, context):
-        #         # KQP determines the external entity type before discovering clusters.
-        #         with grpc.insecure_channel(federation.cm_endpoint) as channel:
-        #             stub = ydb_scheme_v1_pb2_grpc.SchemeServiceStub(channel)
-        #             return federation._forward_to_cm(stub.DescribePath, request, context)
-
-        class FederationDiscoveryService(ydb_federation_discovery_v1_pb2_grpc.FederationDiscoveryServiceServicer):
-            def ListFederationDatabases(self, request, context):
-                database = dict(context.invocation_metadata()).get("x-ydb-database", "")
-                response = ydb_federation_discovery_pb2.ListFederationDatabasesResponse()
-                response.operation.ready = True
-                if database not in tuple(f"/logbroker-federation/{account}" for account in accounts):
-                    response.operation.status = ydb_status_codes_pb2.StatusIds.BAD_REQUEST
-                    response.operation.issues.add(message=f"Unknown federation database: {database!r}")
-                    return response
-
-                result = ydb_federation_discovery_pb2.ListFederationDatabasesResult(
-                    control_plane_endpoint=federation.cm_endpoint,
-                    self_location=next(iter(federation.ydb_cluster_endpoints)),
-                )
-                for name, endpoint in federation.ydb_cluster_endpoints.items():
-                    result.federation_databases.add(
-                        name=name,
-                        id=name,
-                        path=f"/Root{database}",
-                        endpoint=endpoint,
-                        location=name,
-                        status=ydb_federation_discovery_pb2.DatabaseInfo.AVAILABLE,
-                        weight=100,
-                    )
-                response.operation.status = ydb_status_codes_pb2.StatusIds.SUCCESS
-                response.operation.result.Pack(result)
-                logger.info("Federation discovery for %s: %s", database, result)
-                return response
-
-        port = self.__port_manager.get_port()
-        self.__discovery_executor = futures.ThreadPoolExecutor(max_workers=4)
-        self.__discovery_server = grpc.server(self.__discovery_executor)
-        ydb_discovery_v1_pb2_grpc.add_DiscoveryServiceServicer_to_server(DiscoveryService(), self.__discovery_server)
-        # ydb_scheme_v1_pb2_grpc.add_SchemeServiceServicer_to_server(SchemeService(), self.__discovery_server)
-        ydb_federation_discovery_v1_pb2_grpc.add_FederationDiscoveryServiceServicer_to_server(
-            FederationDiscoveryService(), self.__discovery_server,
-        )
-        if not self.__discovery_server.add_insecure_port(f"[::]:{port}"):
-            raise RuntimeError(f"Failed to bind federation discovery port {port}")
-        self.__discovery_server.start()
-        self.__discovery_endpoint = f"localhost:{port}"
-        logger.info("Federation discovery listening on port %s", port)
 
     def _start_single_ydb(self, name):
         logger.info("Start ydb cluster {}".format(name))
@@ -226,7 +117,8 @@ class LogbrokerFederation(object):
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):
-        for account in self.__accounts:
+        databases_to_create = list(PRE_INSTALLED_ACCOUNTS) + ["admin"]
+        for account in databases_to_create:
             logger.info("Setup cluster {}, create database: {}".format(name, account))
             cluster.create_database(
                 "/Root/logbroker-federation/{}".format(account),
@@ -306,7 +198,7 @@ class LogbrokerFederation(object):
                     scheme_client.make_directory(part)
                 except ydb.SchemeError:
                     pass  # already exists
-            for account in self.__accounts:
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                 kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
                 try:
                     driver.coordination_client.create_node(
@@ -337,7 +229,7 @@ class LogbrokerFederation(object):
                     prefetch_coefficient=-1.0,
                 )),
             ]
-            for account in self.__accounts:
+            for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                 kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
                 account_resources = list(_resources)
                 for resource_path, drr in account_resources:
@@ -427,7 +319,7 @@ class LogbrokerFederation(object):
                          {now_ms}, {now_ms}, 'admin', 'admin');
                 """.format(now_ms=now_ms))
 
-                for account_name in self.__accounts:
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                     pool.execute_with_retries("""
                         --!syntax_v1
                         UPSERT INTO `/Root/Accounts`
@@ -482,7 +374,7 @@ class LogbrokerFederation(object):
                     ))
 
                 all_quota_clusters = list(self.__cluster_ports.keys())
-                for account_name in self.__accounts:
+                for account_name in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                     for quota_cluster in all_quota_clusters:
                         pool.execute_with_retries("""
                             --!syntax_v1
@@ -516,7 +408,7 @@ class LogbrokerFederation(object):
         logger.info("Waiting for CM at {}".format(cm_endpoint))
         driver_config = ydb.DriverConfig(
             endpoint=cm_endpoint,
-            database="/Root/logbroker-federation/{}".format(self.__accounts[0]),
+            database="/Root/logbroker-federation/{}".format(PRE_INSTALLED_ACCOUNTS[0]),
         )
 
         for cluster_name, cluster_port in cluster_ports.items():
@@ -534,7 +426,7 @@ class LogbrokerFederation(object):
         else:
             raise RuntimeError("CM did not become ready within 60s")
 
-        for account in self.__accounts:
+        for account in PRE_INSTALLED_ACCOUNTS:
             database = "/logbroker-federation/{}".format(account)
             driver_config = ydb.DriverConfig(endpoint=cm_endpoint, database=database)
             with ydb.Driver(driver_config) as driver:
@@ -664,25 +556,15 @@ class LogbrokerFederation(object):
         _setenv("CM_PORT", str(grpc_port))
         logger.info("CM started on port {}".format(grpc_port))
 
-    def start(self, args=None):
+    def start(self, args):
         for name in list(self.__clusters.keys()):
             cluster, port = self._start_single_ydb(name)
             self._setup_ydb_cluster(name, cluster, port)
         self._start_cm()
         self._setup_cm_topics_consumers(self.__cluster_ports)
         time.sleep(20)
-        if self.__mock_federation_discovery:
-            self._start_mock_federation_discovery()
 
-    def stop(self, args=None):
-        if self.__discovery_server is not None:
-            self.__discovery_server.stop(grace=0).wait()
-            self.__discovery_server = None
-        if self.__discovery_executor is not None:
-            self.__discovery_executor.shutdown(wait=True)
-            self.__discovery_executor = None
-        self.__discovery_endpoint = None
-
+    def stop(self, args):
         if self.__cm_pid is not None:
             logger.info('Stopping CM, pid = {}'.format(self.__cm_pid))
             try:

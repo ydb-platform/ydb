@@ -675,11 +675,14 @@ class StreamingTestBase(TestYdsBase):
 
     def get_query_state(self, kikimr: Kikimr, query_name: str):
         path = f"{kikimr.get_database_name()}/{query_name}"
-        result_sets = kikimr.ydb_client.query(f"""
+        result_sets = kikimr.ydb_client.query(
+            f"""
             SELECT Status, RetryCount, Issues
             FROM `.sys/streaming_queries`
             WHERE Path = "{path}";
-        """, timeout=10)
+        """,
+            timeout=10,
+        )
         assert len(result_sets) == 1, result_sets
         assert len(result_sets[0].rows) == 1, result_sets[0].rows
         return result_sets[0].rows[0]

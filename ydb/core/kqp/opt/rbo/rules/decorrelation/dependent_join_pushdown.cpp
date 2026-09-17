@@ -48,6 +48,28 @@ TVector<TInfoUnit> MissingDomainColumns(const TVector<TInfoUnit>& dependencies, 
     return result;
 }
 
+bool NeedsNullSafeEncoding(const TIntrusivePtr<IOperator>& leftInput, const TInfoUnit& leftKey,
+                           const TIntrusivePtr<IOperator>& rightInput, const TInfoUnit& rightKey) {
+    // Only ok if the keys are domain keys, which are always the same.
+    Y_ENSURE(leftKey == rightKey, "Null-safe join keys must name the same column, got "
+                                      << leftKey.GetFullName() << " and " << rightKey.GetFullName());
+    const auto* leftInputType = leftInput->Type;
+    const auto* rightInputType = rightInput->Type;
+
+    if (leftInputType && rightInputType) {
+        return IsNullableIU(leftInput, leftKey) || IsNullableIU(rightInput, rightKey);
+    }
+    if (leftInputType) {
+        return IsNullableIU(leftInput, leftKey);
+    }
+    if (rightInputType) {
+        return IsNullableIU(rightInput, rightKey);
+    }
+
+    // If types are unknown it's safe to keep null, because for non optional column there are no nulls.
+    return true;
+}
+
 // Here is a special case for count(*). count(*) with empty keys returns 0 on empty input, but with group by keys we can lost those values.
 // So, we make left join to restore columns and apply coalesce (column, 0).
 TIntrusivePtr<IOperator> RestoreEmptyGroupCounts(const TIntrusivePtr<TOpDependentJoin>& dependentJoin, const TIntrusivePtr<TOpAggregate>& aggregate,
@@ -93,9 +115,7 @@ TIntrusivePtr<IOperator> RestoreEmptyGroupCounts(const TIntrusivePtr<TOpDependen
 
     return MakeIntrusive<TOpMap>(join, pos, resultElements);
 }
-
 } // anonymous namespace
-
 
 // Domain projection is a distinct on free variables.
 TIntrusivePtr<TOpAggregate> MakeDomainProjection(const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& columns, TPositionHandle pos) {
@@ -134,7 +154,7 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> MakeNullSafeJoinKeys(TIntrusivePtr<IOpe
     };
 
     for (const auto& [leftKey, rightKey] : joinKeys) {
-        if (!IsNullableIU(leftInput, leftKey) && !IsNullableIU(rightInput, rightKey)) {
+        if (!NeedsNullSafeEncoding(leftInput, leftKey, rightInput, rightKey)) {
             result.emplace_back(leftKey, rightKey);
             continue;
         }

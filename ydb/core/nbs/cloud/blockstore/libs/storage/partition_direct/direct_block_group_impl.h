@@ -26,6 +26,8 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,11 +130,6 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
-
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -232,6 +229,10 @@ private:
         const TEvSyncResult& response,
         size_t segmentCount);
 
+    void OnNewPBufferKey(TPBufferKey pBufferKey);
+    [[nodiscard]] std::optional<TPBufferKey> ComputeSafeBarrierForErase() const;
+    void PBufferCleanup();
+
     void DoBarrierEraseFromPBuffer(
         THostIndex hostIndex,
         ui64 lsn,
@@ -291,6 +292,8 @@ private:
 
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
+
+    std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;
 

@@ -654,21 +654,23 @@ private:
     //   WaitWriteTx — all-unknown (incl. empty Transactions). Does not advance
     //       PlanStep/PlanTxId. Leadership fence: a WRITE_TX of current _txinfo
     //       that *completes after* enqueue (piggyback / complete-after).
-    //       EndWriteTxs success → Ready. Fail → PoisonPill, never Ready.
+    //       Ready when WriteTxFenceEpoch > EnqueuedAtFenceEpoch (lazily at send).
+    //       Fail → PoisonPill, never Ready.
     //   Ready — send when this entry is the queue head.
     //
     // Known:   WaitTxExecuted → Ready
     // Unknown: WaitWriteTx    → Ready
     //
-    // WRITE_TX optimization: any successful WRITE_TX (started for a fence *or*
-    // for propose/delete/…) marks every WaitWriteTx Ready, including entries
-    // that arrived while the request was in flight. One KV cycle instead of
-    // start-after (Pending/InFlight), which would start a second write for late
-    // arrivals. A retransmit of an already Ready unknown is a new WaitWriteTx
-    // and does start another WRITE_TX (previous cycle already completed) —
-    // unless step <= LastAckedPlanStep, which never enqueues.
-    // canProcess keys off WaitWriteTx only, so a known WaitTxExecuted head
+    // WRITE_TX optimization: a successful WRITE_TX (fence *or* propose/delete)
+    // increments WriteTxFenceEpoch. Every WaitWriteTx enqueued at a lower epoch
+    // becomes Ready, including those that arrived while the request was in
+    // flight — one KV cycle instead of start-after (Pending/InFlight).
+    // WaitWriteTxUnfencedCount is the number of WaitWriteTx still at the
+    // current epoch; canProcess keys off it so a known WaitTxExecuted head
     // cannot busy-loop WRITE_TX.
+    // A retransmit of an already-fenced unknown is a new WaitWriteTx at the
+    // current epoch and does start another WRITE_TX — unless step <=
+    // LastAckedPlanStep, which never enqueues.
     struct TPlanStepAckEntry {
         enum class EState {
             WaitTxExecuted,
@@ -682,12 +684,18 @@ private:
         EState State = EState::WaitWriteTx;
         // Last known TxId from this PlanStep; undefined for all-unknown.
         TMaybe<ui64> LastTxId;
+        // WaitWriteTx only: Ready once WriteTxFenceEpoch > this.
+        ui64 EnqueuedAtFenceEpoch = 0;
     };
     TDeque<TPlanStepAckEntry> PlanStepAckQueue;
 
+    // Successful WRITE_TX cycles in this incarnation. Not persisted.
+    ui64 WriteTxFenceEpoch = 0;
+    // WaitWriteTx entries with EnqueuedAtFenceEpoch == WriteTxFenceEpoch.
+    ui64 WaitWriteTxUnfencedCount = 0;
+
     void SendReadyPlanStepAcks(const TActorContext& ctx);
     void MarkPlanStepAcksReadyForTx(ui64 txId);
-    void MarkPlanStepAcksReadyAfterWriteTx();
     bool HasWaitWriteTxPlanStepAck() const;
 };
 

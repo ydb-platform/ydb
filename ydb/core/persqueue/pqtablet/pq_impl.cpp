@@ -3594,10 +3594,17 @@ void TPersQueue::SendDeferredReadSetAcks(const TActorContext& ctx)
 void TPersQueue::SendReadyPlanStepAcks(const TActorContext& ctx)
 {
     // Early exit at the first non-Ready: only the Ready prefix may be sent.
-    // A WaitTxExecuted/WaitWriteTx head blocks later Ready entries so the
-    // mediator sees arrival order. Cannot skip the head or scan past it.
-    while (!PlanStepAckQueue.empty() &&
-           PlanStepAckQueue.front().State == TPlanStepAckEntry::EState::Ready) {
+    // A WaitTxExecuted/unfenced WaitWriteTx head blocks later Ready entries
+    // so the mediator sees arrival order. Cannot skip the head or scan past it.
+    while (!PlanStepAckQueue.empty()) {
+        auto& front = PlanStepAckQueue.front();
+        if (front.State == TPlanStepAckEntry::EState::WaitWriteTx &&
+            front.EnqueuedAtFenceEpoch < WriteTxFenceEpoch) {
+            front.State = TPlanStepAckEntry::EState::Ready;
+        }
+        if (front.State != TPlanStepAckEntry::EState::Ready) {
+            break;
+        }
         auto entry = std::move(PlanStepAckQueue.front());
         PlanStepAckQueue.pop_front();
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send PlanStep ack",
@@ -3622,32 +3629,11 @@ void TPersQueue::MarkPlanStepAcksReadyForTx(ui64 txId)
     }
 }
 
-void TPersQueue::MarkPlanStepAcksReadyAfterWriteTx()
-{
-    // Full scan, no early exit: WaitWriteTx is not a prefix. Known
-    // WaitTxExecuted and already-Ready unknown sit between them.
-    // WRITE_TX optimization (piggyback / complete-after): this successful
-    // cycle fences every WaitWriteTx now in the queue, including those that
-    // arrived while the request was in flight — one KV write instead of a
-    // second start-after write for late arrivals.
-    for (auto& entry : PlanStepAckQueue) {
-        if (entry.State == TPlanStepAckEntry::EState::WaitWriteTx) {
-            entry.State = TPlanStepAckEntry::EState::Ready;
-        }
-    }
-}
-
 bool TPersQueue::HasWaitWriteTxPlanStepAck() const
 {
-    // Early exit on the first WaitWriteTx: one is enough to start WRITE_TX.
-    // Cannot return false at WaitTxExecuted/Ready — a WaitWriteTx may sit
-    // behind a known head, so absence is known only after a full scan.
-    for (const auto& entry : PlanStepAckQueue) {
-        if (entry.State == TPlanStepAckEntry::EState::WaitWriteTx) {
-            return true;
-        }
-    }
-    return false;
+    // Unfenced WaitWriteTx may sit behind a known head; the count is the
+    // presence check without scanning the queue.
+    return WaitWriteTxUnfencedCount > 0;
 }
 
 void TPersQueue::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)
@@ -3858,7 +3844,8 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     CreateSupportivePartitionActors(ctx);
     SendDeferredReadSetAcks(ctx);
 
-    MarkPlanStepAcksReadyAfterWriteTx();
+    ++WriteTxFenceEpoch;
+    WaitWriteTxUnfencedCount = 0;
     SendReadyPlanStepAcks(ctx);
 
     WriteTxsInProgress = false;
@@ -4030,7 +4017,9 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
             .Event = std::move(ev),
             .State = TPlanStepAckEntry::EState::WaitWriteTx,
             .LastTxId = Nothing(),
+            .EnqueuedAtFenceEpoch = WriteTxFenceEpoch,
         });
+        ++WaitWriteTxUnfencedCount;
         TryWriteTxs(ctx);
     }
 

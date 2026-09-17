@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
             const std::vector<TString> data4 = { "4", "5" };
             setup.AsyncOutputWrite(data4); // This write should be deduplicated
 
-            auto result = PQReadUntil(topicName, 4);
+            auto result = PQReadUntil(topicName, 5);
             const std::vector<TString> expected = { "1", "2", "3", "4", "5" };
             UNIT_ASSERT_EQUAL(result, expected);
         }

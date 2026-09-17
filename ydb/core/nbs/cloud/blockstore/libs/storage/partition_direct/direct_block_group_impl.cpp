@@ -1134,8 +1134,7 @@ void TDirectBlockGroup::PBufferCleanup()
 
     auto span = TraceService->CreateRootSpan("NbsPartition.PBufferCleanup");
     for (THostIndex h = 0; h < Connections.GetSlotCount(); ++h) {
-        const ui64* lastSent = LastSentBarrierByPBufferHost.FindPtr(h);
-        if (lastSent && cleanupBound <= *lastSent) {
+        if (cleanupBound <= LastSentBarrierByPBufferHost[h]) {
             continue;
         }
         LastSentBarrierByPBufferHost[h] = cleanupBound;

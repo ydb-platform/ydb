@@ -26,6 +26,8 @@
 
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,7 +293,7 @@ private:
     TDBGConnections Connections;
     TVector<TVChunkWeakPtr> VChunks;
 
-    TMap<THostIndex, ui64> LastSentBarrierByPBufferHost;
+    std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;
     TDirectBlockGroupCounters Counters;
 

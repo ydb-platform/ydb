@@ -10,8 +10,6 @@ items:
   include:
     path: streaming-query/toc_p.yaml
     mode: link
-- name: Architecture
-  href: architecture.md
 - name: Connecting to a database
   href: connect.md
 - name: Schema objects
@@ -47,3 +45,5 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
+- name: Architecture
+  href: architecture.md

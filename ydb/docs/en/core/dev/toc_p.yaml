@@ -29,6 +29,8 @@ items:
   href: vector-indexes-kmeans-tree-type.md
 - name: Fulltext indexes
   href: fulltext-indexes.md
+- name: JSON indexes
+  href: json-indexes.md
 - name: Local indexes
   href: local-indexes/index.md
   include:
@@ -39,8 +41,6 @@ items:
   include:
     mode: link
     path: query-execution-optimization/toc_p.yaml
-- name: Resource consumption management
-  href: resource-consumption-management.md
 - name: Batch upload
   href: batch-upload.md
 - name: Paging
@@ -55,3 +55,5 @@ items:
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
+- name: Resource consumption management
+  href: resource-consumption-management.md

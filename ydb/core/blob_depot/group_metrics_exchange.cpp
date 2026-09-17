@@ -130,6 +130,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 
+        UpdateAgentsBlockingGC();
+
         if (Config.HasVirtualGroupId() && !MetricsQ.empty()) {
             const TMonotonic now = TActivationContext::Monotonic();
             const TMonotonic left = now - Window;
@@ -161,6 +163,26 @@ namespace NKikimr::NBlobDepot {
             TActivationContext::Schedule(Window, new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
+    }
+
+    // An agent that is gone but still holds issued blob sequence numbers keeps TChannelInfo::GivenIdRanges from
+    // advancing, which pins GetLeastExpectedBlobId and therefore stops trash collection on that channel for the
+    // rest of this tablet generation. Nothing reclaims those ranges today (see TEvPrivate::EvCheckExpiredAgents),
+    // so surface the condition: a value that stays above zero means garbage is accumulating.
+    void TBlobDepot::UpdateAgentsBlockingGC() {
+        ui64 count = 0;
+        for (const auto& [nodeId, agent] : Agents) {
+            if (agent.Connection) {
+                continue;
+            }
+            for (const auto& [channel, range] : agent.GivenIdRanges) {
+                if (!range.IsEmpty()) {
+                    ++count;
+                    break;
+                }
+            }
+        }
+        TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_BLOCKING_GC] = count;
     }
 
 } // NKikimr::NBlobDepot

@@ -247,19 +247,38 @@ namespace NKikimr::NBlobDepot {
 
         for (const auto& item : record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
-            if (blobSeqId.Generation == generation) {
-                Y_ABORT_UNLESS(blobSeqId.Channel < Channels.size());
-                auto& channel = Channels[blobSeqId.Channel];
+            if (blobSeqId.Generation != generation) {
+                continue;
+            } else if (blobSeqId.Channel >= Channels.size()) {
+                YDB_LOG_ERROR("TEvDiscardSpoiledBlobSeq names a channel out of range",
+                    {"marker", "BDT97"},
+                    {"id", GetLogId()},
+                    {"blobSeqId", blobSeqId});
+                continue;
+            }
 
-                const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+            auto& channel = Channels[blobSeqId.Channel];
+            auto& agentRange = agent.GivenIdRanges[blobSeqId.Channel];
+            const ui64 value = blobSeqId.ToSequentialNumber();
 
-                const ui64 value = blobSeqId.ToSequentialNumber();
-                agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
-                Channels[blobSeqId.Channel].GivenIdRanges.RemovePoint(value);
+            // RemovePoint aborts on a point we do not hold, and these items come off the wire: an id that was
+            // already committed, reclaimed, or simply repeated within this message must not take the tablet down.
+            if (!agentRange.GetPoint(value) || !channel.GivenIdRanges.GetPoint(value)) {
+                YDB_LOG_WARN("TEvDiscardSpoiledBlobSeq names a BlobSeqId we do not hold",
+                    {"marker", "BDT98"},
+                    {"id", GetLogId()},
+                    {"agentId", agent.Connection->NodeId},
+                    {"blobSeqId", blobSeqId});
+                continue;
+            }
 
-                if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
-                    Data->OnLeastExpectedBlobIdChange(blobSeqId.Channel);
-                }
+            const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
+
+            agentRange.RemovePoint(value);
+            channel.GivenIdRanges.RemovePoint(value);
+
+            if (channel.GetLeastExpectedBlobId(generation) != leastExpectedBlobIdBefore) {
+                Data->OnLeastExpectedBlobIdChange(blobSeqId.Channel);
             }
         }
 

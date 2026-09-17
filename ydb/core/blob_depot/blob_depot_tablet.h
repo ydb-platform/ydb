@@ -80,6 +80,9 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
+        // Upper bound on how many blob sequence numbers one TEvAllocateIds may claim; agents ask for 100 at a time
+        static constexpr ui32 MaxBlobSeqIdsPerAllocation = 1000;
+
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
@@ -97,6 +100,12 @@ namespace NKikimr::NBlobDepot {
             std::optional<TConnection> Connection;
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
+            bool SupportsIdRangeExpiry = false;
+
+            // Channel -> highest step whose blob sequence numbers were reclaimed while this agent was away. Handed
+            // to the agent in every TEvRegisterAgentResult (not just the first one after the expiry: the result may
+            // be lost with the pipe, and re-applying it is a no-op) and kept for the rest of this generation.
+            THashMap<ui8, ui32> ExpiredSteps;
 
             THashMap<ui8, TGivenIdRange> GivenIdRanges;
 
@@ -185,6 +194,10 @@ namespace NKikimr::NBlobDepot {
         // gone or has been superseded by a newer connection of the same agent
         TAgent *FindAgent(const TActorId& pipeServerId);
         void ResetAgent(ui32 nodeId, TAgent& agent);
+        void ScheduleCheckExpiredAgents();
+        void HandleCheckExpiredAgents();
+        void ExpireAgent(ui32 nodeId, TAgent& agent);
+        bool CheckExpiredAgentsScheduled = false;
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
@@ -472,6 +485,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
+        void UpdateAgentsBlockingGC();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

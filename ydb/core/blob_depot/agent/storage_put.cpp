@@ -38,11 +38,14 @@ namespace NKikimr::NBlobDepot {
                 if (!IsInFlight && !LocatorInFlight) {
                     return;
                 }
+                // Latch this before RemoveBlobSeqFromInFlight(), which clears IsInFlight. An id the tablet has
+                // already reclaimed must not be handed back -- it no longer holds a point for it.
+                const bool returnBlobSeqId = IsInFlight && !Agent.IsBlobSeqIdExpired(BlobSeqId);
                 if (IsInFlight) {
                     RemoveBlobSeqFromInFlight();
                 }
                 NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
-                if (IsInFlight) {
+                if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());
                 }
                 if (LocatorInFlight) {
@@ -272,7 +275,8 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
                 const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
-                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration);
+                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration ||
+                    Agent.IsBlobSeqIdExpired(BlobSeqId));
             }
 
             void OnUpdateBlock() override {
@@ -339,6 +343,10 @@ namespace NKikimr::NBlobDepot {
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else if (Agent.IsBlobSeqIdExpired(BlobSeqId)) {
+                    // we were disconnected long enough for the tablet to reclaim this id and it may already have
+                    // collected the blob we have just written, so this put cannot be committed
+                    EndWithError(NKikimrProto::ERROR, "BlobSeqId was reclaimed by BlobDepot while agent was disconnected");
                 } else if (!IssueUncertainWrites) { // proceed to second phase
                     IssueCommitBlobSeq(false);
                     RemoveBlobSeqFromInFlight();

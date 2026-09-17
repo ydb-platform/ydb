@@ -38,6 +38,7 @@ namespace NKikimr::NBlobDepot {
                 agentIt->second.Connection.reset();
                 TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] -= 1;
                 agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
+                ScheduleCheckExpiredAgents();
             }
         }
         PipeServers.erase(it);
@@ -109,6 +110,7 @@ namespace NKikimr::NBlobDepot {
             ResetAgent(nodeId, agent);
         }
         agent.AgentInstanceId = req.GetAgentInstanceId();
+        agent.SupportsIdRangeExpiry = req.GetSupportsIdRangeExpiry();
 
         OnAgentConnect(agent);
 
@@ -136,6 +138,15 @@ namespace NKikimr::NBlobDepot {
 
         if (Config.HasName()) {
             record->SetName(Config.GetName());
+        }
+
+        // The agent applies these before it resumes serving queries, so anything it still holds down there is
+        // dropped rather than committed against blobs we may already have collected.
+        for (const auto& [channel, step] : agent.ExpiredSteps) {
+            auto *item = record->AddInvalidatedSteps();
+            item->SetChannel(channel);
+            item->SetGeneration(Executor()->Generation());
+            item->SetInvalidatedStep(step);
         }
 
         TActivationContext::Send(response.release());
@@ -194,10 +205,22 @@ namespace NKikimr::NBlobDepot {
             {"pipeServerId", ev->Recipient});
 
         const ui32 generation = Executor()->Generation();
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, ev->Get()->Record.GetChannelKind(), generation);
+        const auto channelKind = ev->Get()->Record.GetChannelKind();
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, channelKind, generation);
 
-        std::vector<ui8> channels(ev->Get()->Record.GetCount());
-        if (PickChannels(record->GetChannelKind(), channels)) {
+        // Both of these come straight off the wire. A kind we have no channels configured for would trip the
+        // Y_ABORT_UNLESS inside PickChannels, and an unbounded Count would let a single request size a vector and
+        // burn that many sequence numbers. Replying without a range is a case the agent already handles
+        // (TChannelKind::ProcessQueriesWaitingForId), so degrade to that instead of trusting the peer.
+        std::vector<ui8> channels(Min<ui32>(ev->Get()->Record.GetCount(), MaxBlobSeqIdsPerAllocation));
+
+        if (!ChannelKinds.contains(channelKind)) {
+            YDB_LOG_ERROR("TEvAllocateIds for a channel kind this BlobDepot has no channels for",
+                {"marker", "BDT95"},
+                {"id", GetLogId()},
+                {"channelKind", int(channelKind)},
+                {"pipeServerId", ev->Recipient});
+        } else if (PickChannels(channelKind, channels)) {
             auto *givenIdRange = record->MutableGivenIdRange();
 
             THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
@@ -289,6 +312,98 @@ namespace NKikimr::NBlobDepot {
             }
         }
         agent.InvalidatedStepInFlight.clear();
+    }
+
+    void TBlobDepot::ScheduleCheckExpiredAgents() {
+        if (!std::exchange(CheckExpiredAgentsScheduled, true)) {
+            // A single timer for all agents: they share ExpirationTimeout, so the worst an agent waits is twice it
+            TActivationContext::Schedule(ExpirationTimeout, new IEventHandle(TEvPrivate::EvCheckExpiredAgents, 0,
+                SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    void TBlobDepot::HandleCheckExpiredAgents() {
+        CheckExpiredAgentsScheduled = false;
+
+        const TInstant now = TActivationContext::Now();
+        bool morePending = false;
+
+        // Collected first and expired afterwards: ExpireAgent unblocks garbage collection, which walks Agents of
+        // its own accord (TData::HandleTrash), and we would rather not be iterating it at the same time.
+        std::vector<ui32> expired;
+
+        for (auto& [nodeId, agent] : Agents) {
+            if (agent.Connection) {
+                continue; // it is back
+            } else if (!agent.SupportsIdRangeExpiry) {
+                continue; // we have no way to make this agent drop the ids, so we must keep them reserved
+            }
+
+            bool holdsRanges = false;
+            for (const auto& [channel, range] : agent.GivenIdRanges) {
+                if (!range.IsEmpty()) {
+                    holdsRanges = true;
+                    break;
+                }
+            }
+            if (!holdsRanges) {
+                continue;
+            }
+
+            if (agent.ExpirationTimestamp <= now) {
+                expired.push_back(nodeId);
+            } else {
+                morePending = true;
+            }
+        }
+
+        for (const ui32 nodeId : expired) {
+            ExpireAgent(nodeId, GetAgent(nodeId));
+        }
+
+        if (morePending) {
+            ScheduleCheckExpiredAgents();
+        }
+    }
+
+    void TBlobDepot::ExpireAgent(ui32 nodeId, TAgent& agent) {
+        Y_ABORT_UNLESS(!agent.Connection);
+        Y_ABORT_UNLESS(agent.SupportsIdRangeExpiry);
+
+        const ui32 generation = Executor()->Generation();
+
+        for (const auto& [channelIndex, range] : agent.GivenIdRanges) {
+            if (range.IsEmpty()) {
+                continue;
+            }
+            Y_ABORT_UNLESS(channelIndex < Channels.size());
+            TChannelInfo& channel = Channels[channelIndex];
+            Y_ABORT_UNLESS(channel.NextBlobSeqId);
+
+            // Everything this agent could still be holding on this channel -- free ids and writes in flight alike --
+            // was issued below NextBlobSeqId, so ordering it to drop that whole step range covers all of it.
+            ui32& step = agent.ExpiredSteps[channelIndex];
+            step = Max(step, TBlobSeqId::FromSequentalNumber(channelIndex, generation, channel.NextBlobSeqId - 1).Step);
+
+            // Ids issued from now on have to survive that trim, exactly as TData::HandleTrash arranges when it
+            // invalidates a step; otherwise a freshly allocated id could share the step we just told them to drop.
+            auto next = TBlobSeqId::FromSequentalNumber(channelIndex, generation, channel.NextBlobSeqId);
+            if (next.Step <= step) {
+                next.Step = step + 1;
+                next.Index = 0;
+                channel.NextBlobSeqId = next.ToSequentialNumber();
+            }
+
+            YDB_LOG_WARN("reclaiming blob sequence range of an expired agent",
+                {"marker", "BDT96"},
+                {"id", GetLogId()},
+                {"agentId", nodeId},
+                {"channel", int(channelIndex)},
+                {"invalidatedStep", step},
+                {"nextBlobSeqId", channel.NextBlobSeqId});
+        }
+
+        ResetAgent(nodeId, agent); // releases the ranges and lets garbage collection move on
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {

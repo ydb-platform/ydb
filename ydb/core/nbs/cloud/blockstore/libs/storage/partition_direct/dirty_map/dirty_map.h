@@ -202,8 +202,6 @@ private:
     using TInflightDDiskSyncMap =
         TBlockRangeMap<ui64, TInflightDDiskSync, TBlockRange16>;
 
-    static constexpr ui32 DDiskNotTouched = Max<ui32>();
-
     void ResizeHosts(size_t newHostCount);
 
     [[nodiscard]] THostMask FilterLocations(
@@ -270,7 +268,7 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
-    // Changes when a DDisk is first touched or its behind/ahead map changes.
+    // Changes when behind/ahead map changes.
     ui32 StateGeneration = 0;
     // Last persisted DDisks states generation.
     ui32 PersistedStateGeneration = 0;

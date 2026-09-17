@@ -27,6 +27,7 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
         UNIT_ASSERT(touchedVChunks.Get(1023));
         UNIT_ASSERT(touchedVChunks.Get(1024));
         UNIT_ASSERT(!touchedVChunks.Get(1));
+        UNIT_ASSERT_VALUES_EQUAL(3, touchedVChunks.GetCount());
     }
 
     Y_UNIT_TEST(ShouldLoadMaskChunk)
@@ -42,6 +43,15 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
 
         UNIT_ASSERT(!touchedVChunks.Get(0));
         UNIT_ASSERT(touchedVChunks.Get(TTouchedVChunks::VChunksPerMask));
+        UNIT_ASSERT_VALUES_EQUAL(1, touchedVChunks.GetCount());
+
+        mask = TString(TTouchedVChunks::MaskSize, 0);
+        mask[0] = 3;
+        touchedVChunks.Load({
+            .VChunkStartIndex = TTouchedVChunks::VChunksPerMask,
+            .Mask = std::move(mask),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(2, touchedVChunks.GetCount());
     }
 
     Y_UNIT_TEST(ShouldGetTouchedVChunksForRegion)
@@ -85,8 +95,31 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
             chunks[0].Mask.size());
         UNIT_ASSERT(touchedVChunks.IsSaveInProgress());
 
-        touchedVChunks.Add(2, NThreading::NewPromise<EPersistResult>());
+        auto savingBitPromise = NThreading::NewPromise<EPersistResult>();
+        auto savingBitFuture = savingBitPromise.GetFuture();
+        UNIT_ASSERT(!touchedVChunks.Add(1, std::move(savingBitPromise)));
+        UNIT_ASSERT(!touchedVChunks.HasPendingChanges());
+
+        auto pendingBitPromise = NThreading::NewPromise<EPersistResult>();
+        auto pendingBitFuture = pendingBitPromise.GetFuture();
+        UNIT_ASSERT(!touchedVChunks.Add(2, std::move(pendingBitPromise)));
+
+        auto duplicatePendingBitPromise =
+            NThreading::NewPromise<EPersistResult>();
+        auto duplicatePendingBitFuture = duplicatePendingBitPromise.GetFuture();
+        UNIT_ASSERT(
+            !touchedVChunks.Add(2, std::move(duplicatePendingBitPromise)));
+
+        UNIT_ASSERT(!savingBitFuture.HasValue());
+        UNIT_ASSERT(!pendingBitFuture.HasValue());
+        UNIT_ASSERT(!duplicatePendingBitFuture.HasValue());
+
         touchedVChunks.OnSaveCompleted();
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            savingBitFuture.GetValue());
+        UNIT_ASSERT(!pendingBitFuture.HasValue());
+        UNIT_ASSERT(!duplicatePendingBitFuture.HasValue());
         UNIT_ASSERT(touchedVChunks.HasPendingChanges());
 
         chunks = touchedVChunks.BeginSave();
@@ -96,6 +129,12 @@ Y_UNIT_TEST_SUITE(TTouchedVChunksTest)
         UNIT_ASSERT(touchedVChunks.Get(2));
 
         touchedVChunks.OnSaveCompleted();
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            pendingBitFuture.GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EPersistResult::Success,
+            duplicatePendingBitFuture.GetValue());
         UNIT_ASSERT(!touchedVChunks.HasPendingChanges());
     }
 }

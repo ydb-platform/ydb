@@ -163,7 +163,6 @@ private:
     // VDisk touch state.
     void Touch();
     [[nodiscard]] bool IsTouched() const;
-    [[nodiscard]] bool NeedPersistTouched() const;
     void DoPersistTouched();
     void OnTouchedPersisted();
 

@@ -1317,6 +1317,100 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         runtime->FilterFunction = {};
     }
 
+    Y_UNIT_TEST(ShouldCommitVChunkTouchedBeforeFirstFlush)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(
+            env,
+            EWriteMode::DirectWrite,
+            TDuration::Seconds(1),
+            /*pbufferCleanupLsnStep=*/0,
+            /*syncRequestsBatchSize=*/1);
+        const ui64 partition = CreatePartitionTablet(env);
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        bool touchedRequestReleased = false;
+        bool touchedCommitObserved = false;
+        size_t flushRequestCount = 0;
+        size_t dirtyMapPersistRequestCount = 0;
+        std::unique_ptr<IEventHandle> blockedTouchedRequest;
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            const auto type = ev->GetTypeRewrite();
+            if (type ==
+                    TEvPartitionDirectPrivate::TEvSetVChunkTouched::EventType &&
+                !touchedRequestReleased)
+            {
+                UNIT_ASSERT(!blockedTouchedRequest);
+                blockedTouchedRequest = std::move(ev);
+                return false;
+            } else if (
+                type == TEvTablet::TEvCommitResult::EventType &&
+                touchedRequestReleased)
+            {
+                const auto* msg = ev->Get<TEvTablet::TEvCommitResult>();
+                if (msg->TabletID == partition) {
+                    touchedCommitObserved = true;
+                }
+            } else if (type == NDDisk::TEvSync::EventType) {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++flushRequestCount;
+            } else if (
+                type ==
+                TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::EventType)
+            {
+                UNIT_ASSERT(touchedCommitObserved);
+                ++dirtyMapPersistRequestCount;
+            }
+            return true;
+        };
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            0,
+            NUnitTest::RandomString(DefaultBlockSize, 1));
+        env.Sim(TDuration::Seconds(5));
+
+        UNIT_ASSERT(blockedTouchedRequest);
+        UNIT_ASSERT_VALUES_EQUAL(0, flushRequestCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMapPersistRequestCount);
+
+        touchedRequestReleased = true;
+        runtime->Send(
+            std::move(blockedTouchedRequest),
+            env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(touchedCommitObserved);
+
+        WriteBlock(
+            env,
+            loadActorAdapter,
+            edge,
+            1,
+            NUnitTest::RandomString(DefaultBlockSize, 2));
+        env.Sim(TDuration::Seconds(10));
+
+        // Dirty-map state reflecting the write can only be produced after a
+        // flush response, so observing the real flush after the touched
+        // transaction commits proves the required persistence order.
+        UNIT_ASSERT_C(flushRequestCount > 0, "first flush was not started");
+
+        runtime->FilterFunction = {};
+        StopFastPathService(env, partition, edge);
+    }
+
     Y_UNIT_TEST(ShouldBatchVChunkConfigUpdates)
     {
         TEnvironmentSetup env{{

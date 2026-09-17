@@ -29,6 +29,9 @@ public:
     // Returns whether vchunkIndex has a touched bit.
     [[nodiscard]] bool Get(ui32 vChunkIndex) const;
 
+    // Returns the number of touched vchunks.
+    [[nodiscard]] size_t GetCount() const;
+
     // ITouchedProvider implementation.
     [[nodiscard]] TRegionVChunks GetTouchedVChunks(
         ui32 startVChunkIndex) const override;
@@ -61,6 +64,7 @@ private:
     TSet<ui32> SavingMasks;
     TVector<TPersistResultPromise> SavingPromises;
     TVector<TPersistResultPromise> PendingPromises;
+    size_t Count = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

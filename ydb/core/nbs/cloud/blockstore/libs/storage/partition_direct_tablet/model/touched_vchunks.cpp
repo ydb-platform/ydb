@@ -13,6 +13,15 @@ TString MakeEmptyMask()
     return TString(TTouchedVChunks::MaskSize, 0);
 }
 
+size_t CountBits(TStringBuf mask)
+{
+    size_t result = 0;
+    for (const char byte: mask) {
+        result += ::NBitMapPrivate::CountBitsPrivate(static_cast<ui8>(byte));
+    }
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace
@@ -31,6 +40,11 @@ bool TTouchedVChunks::Get(ui32 vChunkIndex) const
            (1u << (bitIndex % 8));
 }
 
+size_t TTouchedVChunks::GetCount() const
+{
+    return Count;
+}
+
 TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 startVChunkIndex) const
 {
     TRegionVChunks result;
@@ -44,10 +58,12 @@ TRegionVChunks TTouchedVChunks::GetTouchedVChunks(ui32 startVChunkIndex) const
 
 bool TTouchedVChunks::Add(ui32 vChunkIndex, TPersistResultPromise promise)
 {
-    const bool saveInProgress = IsSaveInProgress();
     if (Get(vChunkIndex)) {
-        if (saveInProgress) {
+        const ui32 maskIndex = GetMaskIndex(vChunkIndex);
+        if (PendingMasks.contains(maskIndex)) {
             PendingPromises.push_back(std::move(promise));
+        } else if (SavingMasks.contains(maskIndex)) {
+            SavingPromises.push_back(std::move(promise));
         } else {
             promise.TrySetValue(EPersistResult::Success);
         }
@@ -64,10 +80,11 @@ bool TTouchedVChunks::Add(ui32 vChunkIndex, TPersistResultPromise promise)
     const ui8 byte = static_cast<ui8>(Masks[maskIndex][byteIndex]);
     Masks[maskIndex][byteIndex] =
         static_cast<char>(byte | (1u << (bitIndex % 8)));
+    ++Count;
     PendingMasks.insert(maskIndex);
     PendingPromises.push_back(std::move(promise));
 
-    return !saveInProgress;
+    return !IsSaveInProgress();
 }
 
 void TTouchedVChunks::Load(TChunk chunk)
@@ -79,6 +96,8 @@ void TTouchedVChunks::Load(TChunk chunk)
     if (Masks.size() <= maskIndex) {
         Masks.resize(maskIndex + 1, MakeEmptyMask());
     }
+    Count -= CountBits(Masks[maskIndex]);
+    Count += CountBits(chunk.Mask);
     Masks[maskIndex] = std::move(chunk.Mask);
 }
 

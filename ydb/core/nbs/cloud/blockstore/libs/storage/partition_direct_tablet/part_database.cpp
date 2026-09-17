@@ -139,7 +139,9 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVChunkConfigs& out)
             const ui32 vChunkIndex = parsedConfig.GetVChunkIndex();
             out[vChunkIndex] = std::move(parsedConfig);
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;
@@ -197,7 +199,9 @@ bool TPartitionDatabase::ReadAllDirtyMapStates(TDirtyMapStateProtos& out)
             out[it.GetValue<TTable::VChunkIndex>()] =
                 it.GetValue<TTable::State>();
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;
@@ -235,7 +239,9 @@ bool TPartitionDatabase::ReadAllTouchedVChunks(TTouchedVChunks& out)
                 .Mask = it.GetValue<TTable::Mask>(),
             });
         }
-        it.Next();
+        if (!it.Next()) {
+            return false;   // not ready
+        }
     }
 
     return true;

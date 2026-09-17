@@ -787,6 +787,37 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
         UNIT_ASSERT_C(after > before, TStringBuilder() << "sync point counter: before=" << before << " after=" << after);
     }
+
+    Y_UNIT_TEST(DistinctLimitSyncPoint_IncrementsScanCounter_TrivialReader) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("TRIVIAL");
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto sessionRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionRes.IsSuccess(), sessionRes.GetIssues().ToString());
+        auto session = sessionRes.GetSession();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT 10
+        )";
+
+        const i64 before = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        const auto collected = CollectStreamResult(it);
+        UNIT_ASSERT_C(collected.RowsCount > 0, collected.ResultSetYson);
+
+        const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
+        UNIT_ASSERT_C(after > before, TStringBuilder() << "TRIVIAL reader sync point counter: before=" << before << " after=" << after);
+    }
 };
 
 } // namespace NKikimr::NKqp

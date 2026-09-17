@@ -126,6 +126,8 @@ public:
     NCommon::TConfSetting<ui64, Static> HybridSearchFactor;
     NCommon::TConfSetting<double, Static> HybridSearchK;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+    NCommon::TConfSetting<bool, Static> EnableStreamingAggregation;
+    NCommon::TConfSetting<TString, Static> StreamingAggregationStateTablePath;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;

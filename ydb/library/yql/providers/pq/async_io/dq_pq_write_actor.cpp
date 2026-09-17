@@ -95,7 +95,6 @@ struct TEvPrivate {
 
 class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr ui32 STATE_VERSION = 1;
-    static constexpr ui32 MAX_MESSAGE_SIZE = 1_MB;
     static constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
     using TBase = TActor<TDqPqWriteActor>;
@@ -719,12 +718,6 @@ private:
             SINK_LOG_T("Received data for sending: " << data);
 
             const auto messageSize = GetItemSize(data);
-            if (messageSize > MAX_MESSAGE_SIZE) {
-                Fail(TStringBuilder() << "Max message size for YDS is " << MAX_MESSAGE_SIZE
-                    << " bytes but received message with size of " << messageSize << " bytes");
-                return false;
-            }
-
             FreeSpace -= messageSize;
             Buffer.PushMessage(std::move(data));
             return true;

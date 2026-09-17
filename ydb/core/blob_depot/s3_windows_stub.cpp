@@ -37,6 +37,28 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT("S3 is not supported on Windows");
     }
 
+<<<<<<< HEAD
+=======
+    void TS3Manager::NotifyPutSlowDown() {
+        Y_ABORT("S3 is not supported on Windows");
+    }
+
+    void TS3Manager::OnS3WriteInFlightAdded(ui32 /*count*/) {
+        Y_ABORT("S3 is not supported on Windows");
+    }
+
+    void TS3Manager::OnS3WriteInFlightRemoved(bool /*success*/) {
+        Y_ABORT("S3 is not supported on Windows");
+    }
+
+    void TS3Manager::OnS3WritesInFlightAbandoned(ui32 /*count*/) {
+        Y_ABORT("S3 is not supported on Windows");
+    }
+
+    // called unconditionally on every pipe server disconnect, so it must not abort here
+    void TS3Manager::DropPendingPrepareWrites(const TActorId& /*pipeServerId*/) {}
+
+>>>>>>> a4405989561 (Fix hanging BlobDepot pipeline (#53160))
     void TS3Manager::OnKeyWritten(const TData::TKey& /*key*/, const TValueChain& /*valueChain*/) {}
 
     void TS3Manager::OnDataLoaded() {}

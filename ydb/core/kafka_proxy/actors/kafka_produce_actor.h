@@ -22,7 +22,7 @@ using namespace NKikimrClient;
 // information about all the topics needed to process the request.
 //
 // The connection processes one in-flight Kafka request at a time, so this actor also processes
-// one Produce request at a time. Incoming requests are queued until the current request is answered.
+// one Produce request at a time.
 //
 class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
                         , public TKafkaExceptionHandler<TKafkaProduceActor> {
@@ -59,8 +59,6 @@ private:
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx);
 
-    void EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
-
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
     void FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage);
@@ -76,7 +74,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleInit);
 
-            HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
+            HFunc(TEvKafka::TEvProduceRequest, Handle);
 
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
@@ -113,7 +111,7 @@ private:
     }
 
     // Logic
-    void ProcessRequests(const TActorContext& ctx);
+    void StartPendingRequest(const TActorContext& ctx);
     void ProcessRequest(std::shared_ptr<TPendingRequest> pendingRequest, const TActorContext& ctx);
 
     void SendResults(const TActorContext& ctx);
@@ -136,7 +134,6 @@ private:
     TString ClientDC;
 
     ui64 Cookie = 0;
-    TDeque<TEvKafka::TEvProduceRequest::TPtr> Requests;
 
     struct TPendingRequest {
         using TPtr = std::shared_ptr<TPendingRequest>;

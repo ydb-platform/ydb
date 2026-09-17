@@ -599,8 +599,6 @@ namespace {
             i32 producerEpoch = 2;
 
             SendProduce({}, producerId, producerEpoch, 1);
-            SendProduce({}, producerId, producerEpoch, 2);
-
             {
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
                 UNIT_ASSERT(response);
@@ -608,6 +606,8 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
                     NKafka::EKafkaErrors::NONE_ERROR);
             }
+
+            SendProduce({}, producerId, producerEpoch, 2);
             {
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
                 UNIT_ASSERT(response);
@@ -625,17 +625,16 @@ namespace {
             SetSchemeCacheReplyTopicNotFound();
 
             SendProduce(TransactionalId, producerId, producerEpoch + 0);
-            SendProduce(TransactionalId, producerId, producerEpoch + 1);
-            SendProduce(TransactionalId, producerId, producerEpoch + 2);
-
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
 
+            SendProduce(TransactionalId, producerId, producerEpoch + 1);
             response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
 
+            SendProduce(TransactionalId, producerId, producerEpoch + 2);
             response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);

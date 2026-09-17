@@ -258,10 +258,6 @@ void TKafkaProduceActor::CleanWriter(const TTopicPartition& topicPartition, cons
     Send(writerId, new TEvents::TEvPoison());
 }
 
-void TKafkaProduceActor::EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& /*ctx*/) {
-    Requests.push_back(request);
-}
-
 void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
     auto now = ctx.Now();
     auto* navigate = ev.Get()->Get()->Request.Get();
@@ -312,7 +308,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     YDB_LOG_TRACE("Produce actor: HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr) was completed successfully",
         {LogPrefix()});
 
-    ProcessRequests(ctx);
+    StartPendingRequest(ctx);
 }
 
 void TKafkaProduceActor::FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage) {
@@ -466,26 +462,31 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TP
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx) {
-    Requests.push_back(request);
-    ProcessRequests(ctx);
+    if (PendingRequest) {
+        YDB_LOG_ERROR("Produce actor: Another request is already in flight",
+            {LogPrefix()},
+            {"pendingCorrelationId", PendingRequest->Request->Get()->CorrelationId},
+            {"correlationId", request->Get()->CorrelationId});
+        auto response = std::make_shared<TProduceResponseData>();
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(
+            request->Get()->CorrelationId, response, EKafkaErrors::UNKNOWN_SERVER_ERROR));
+        return;
+    }
+
+    PendingRequest = std::make_shared<TPendingRequest>(request);
+    StartPendingRequest(ctx);
 }
 
-void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
-    if (&TKafkaProduceActor::StateWork != CurrentStateFunc()) {
+void TKafkaProduceActor::StartPendingRequest(const TActorContext& ctx) {
+    if (!PendingRequest || &TKafkaProduceActor::StateWork != CurrentStateFunc()) {
         return;
     }
 
-    if (PendingRequest || Requests.empty()) {
-        return;
-    }
-
-    if (NeedTopicInitialization(Requests.front())) {
+    if (NeedTopicInitialization(PendingRequest->Request)) {
         ProcessInitializationRequests(ctx);
         return;
     }
 
-    PendingRequest = std::make_shared<TPendingRequest>(Requests.front());
-    Requests.pop_front();
     ProcessRequest(PendingRequest, ctx);
 }
 
@@ -869,12 +870,15 @@ EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {
 
 void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     if (!PendingRequest) {
-        ProcessRequests(ctx);
         return;
     }
 
     auto expireTime = ctx.Now() - REQUEST_EXPIRATION_INTERVAL;
     auto pendingRequest = PendingRequest;
+    if (pendingRequest->StartTime == TInstant::Zero()) {
+        // Topic describe is still in progress; the expiration timer starts in ProcessRequest.
+        return;
+    }
     YDB_LOG_TRACE("Produce actor: Sending results",
         {LogPrefix()},
         {"expirationTime", expireTime});
@@ -988,7 +992,6 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         }
 
     PendingRequest.reset();
-    ProcessRequests(ctx);
 }
 
 void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx) {

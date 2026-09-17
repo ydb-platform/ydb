@@ -937,14 +937,11 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                     partitionResponse.ErrorMessage = result.ErrorMessage;
 
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
-                } else if (expired) {
-                    YDB_LOG_ERROR("Partition write expired",
-                        {LogPrefix()});
-                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
-                    partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
-                    metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
-                    partitionResponse.ErrorMessage = TStringBuilder() << "No answer from partition writer for " << REQUEST_EXPIRATION_INTERVAL << " seconds";
-                } else {
+                } else if (result.Value) {
+                    // Apache Kafka DelayedProduce expires per partition: partitions that already
+                    // finished keep NONE (or their local error). Only still-pending partitions
+                    // stay REQUEST_TIMED_OUT. Do not rewrite a completed write after the 30s
+                    // request timer fires.
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
                         YDB_LOG_TRACE("Produce actor: Partition result success",
@@ -979,6 +976,13 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.ErrorMessage = msg->GetError().Reason;
                         }
                     }
+                } else {
+                    YDB_LOG_ERROR("Partition write expired",
+                        {LogPrefix()});
+                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                    partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
+                    partitionResponse.ErrorMessage = TStringBuilder() << "No answer from partition writer for " << REQUEST_EXPIRATION_INTERVAL << " seconds";
                 }
             }
         }

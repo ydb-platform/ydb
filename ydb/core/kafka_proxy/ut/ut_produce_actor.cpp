@@ -87,7 +87,7 @@ namespace {
                 Ctx.ConstructInPlace();
 
                 Ctx->Prepare();
-                PQTabletPrepare({.partitions=2}, {}, *Ctx);
+                PQTabletPrepare({.partitions=4}, {}, *Ctx);
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
@@ -107,14 +107,24 @@ namespace {
             }
 
             void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0, i64 baseTimestamp = 0, i64 timestampDelta = 0, ECompressionType compression = ECompressionType::NONE) {
+                SendProduceToPartitions({partitionIndex}, transactionalId, producerId, producerEpoch, baseSequence, baseTimestamp, timestampDelta, compression);
+            }
+
+            void SendProduceToPartitions(
+                    const std::vector<i32>& partitionIndexes,
+                    TMaybe<TString> transactionalId = {},
+                    ui64 producerId = 0,
+                    ui16 producerEpoch = 0,
+                    i32 baseSequence = 0,
+                    i64 baseTimestamp = 0,
+                    i64 timestampDelta = 0,
+                    ECompressionType compression = ECompressionType::NONE) {
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
                 }
                 NKafka::TProduceRequestData::TTopicProduceData topicData;
                 topicData.Name = "my-topic";
-                NKafka::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
-                partitionData.Index = partitionIndex;
                 NKafka::TKafkaRecords records(std::in_place);
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
@@ -131,8 +141,12 @@ namespace {
 
                 const TString serializedRecords = WriteKafkaRecordBatch(*records);
                 auto recordsBuffer = std::make_shared<TBuffer>(serializedRecords.data(), serializedRecords.size());
-                partitionData.Records = TKafkaRawBytes(recordsBuffer->data(), recordsBuffer->size());
-                topicData.PartitionData.push_back(partitionData);
+                for (i32 partitionIndex : partitionIndexes) {
+                    NKafka::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
+                    partitionData.Index = partitionIndex;
+                    partitionData.Records = TKafkaRawBytes(recordsBuffer->data(), recordsBuffer->size());
+                    topicData.PartitionData.push_back(partitionData);
+                }
                 message->TopicData.push_back(topicData);
                 auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -378,6 +392,96 @@ namespace {
 
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
+        }
+
+        Y_UNIT_TEST(OnWriteExpired_CompletedPartitionKeepsNONE_ERROR) {
+            SendProduce({}, 0, 0, 0, 0);
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0, 1}, false));
+
+            ui32 writeResponses = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* writeRequest = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    if (writeRequest->Record.GetPartitionRequest().GetPartition() == 1) {
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (input->Recipient == ActorId && input->CastAsLocal<TEvPartitionWriter::TEvWriteResponse>()) {
+                    ++writeResponses;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduceToPartitions({0, 1});
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeResponses]() {
+                return writeResponses > 0;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(31));
+            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvKafka::TEvWakeup()));
+
+            auto response = GrabProduceResponse();
+            const auto produceResponse = std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response);
+            UNIT_ASSERT(produceResponse);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[1].Index, 1);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[1].ErrorCode,
+                NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
+        }
+
+        Y_UNIT_TEST(OnWriteExpired_TwoCompletedAndTwoTimedOutPartitions) {
+            SendProduce({}, 0, 0, 0, 0);
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0, 1, 2, 3}, false));
+
+            ui32 writeResponses = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* writeRequest = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    const ui32 partition = writeRequest->Record.GetPartitionRequest().GetPartition();
+                    if (partition == 1 || partition == 3) {
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (input->Recipient == ActorId && input->CastAsLocal<TEvPartitionWriter::TEvWriteResponse>()) {
+                    ++writeResponses;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduceToPartitions({0, 1, 2, 3});
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeResponses]() {
+                return writeResponses >= 2;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            Ctx->Runtime->AdvanceCurrentTime(TDuration::Seconds(31));
+            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, new TEvKafka::TEvWakeup()));
+
+            auto response = GrabProduceResponse();
+            const auto produceResponse = std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response);
+            UNIT_ASSERT(produceResponse);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses.size(), 1);
+            const auto& partitionResponses = produceResponse->Responses[0].PartitionResponses;
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[1].Index, 1);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[1].ErrorCode, NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[2].Index, 2);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[2].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[3].Index, 3);
+            UNIT_ASSERT_VALUES_EQUAL(partitionResponses[3].ErrorCode, NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
         }
 
         Y_UNIT_TEST(OnProduce_andPipeDisconnected) {

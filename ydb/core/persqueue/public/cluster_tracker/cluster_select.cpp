@@ -130,10 +130,16 @@ TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
                --!syntax_v1
                CREATE TABLE IF NOT EXISTS `%s` (
                    name Utf8,
-                   balancer Utf8,
-                   local Bool,
                    enabled Bool,
+                   local Bool,
+                   balancer Utf8,
                    weight Uint64,
+                   advisable Bool,
+                   kikimrHost Utf8,
+                   kikimrMessageBusMaxInFlight Int32,
+                   kikimrMessageBusMaxMessageSize Int64,
+                   kikimrPort Int32,
+                   zookeeperAddress Utf8,
                    fnx Bool,
                    PRIMARY KEY (name)
                );

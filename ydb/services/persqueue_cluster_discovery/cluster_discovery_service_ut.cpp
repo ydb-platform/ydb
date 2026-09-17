@@ -799,20 +799,21 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         return request;
     }
 
-    static const auto* RequestGetClustersList(TTestActorRuntime& actorSystem) {
+    static bool RequestGetClustersListSuccess(TTestActorRuntime& actorSystem) {
         const TActorId sender = actorSystem.AllocateEdgeActor();
         actorSystem.Send(new IEventHandle(
             NPQ::NClusterTracker::MakeClusterTrackerID(),
             sender,
             new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList()));
         TAutoPtr<IEventHandle> handle;
-        return actorSystem.GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse>(handle);
+        const auto* event = actorSystem.GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Success;
     }
 
     static bool WaitForGetClustersListFailure(TTestActorRuntime& actorSystem, size_t attempts = 40) {
         for (size_t i = 0; i < attempts; ++i) {
-            const auto event = RequestGetClustersList(actorSystem);
-            if (!event->Success) {
+            if (!RequestGetClustersListSuccess(actorSystem)) {
                 return true;
             }
             Sleep(TDuration::MilliSeconds(100));

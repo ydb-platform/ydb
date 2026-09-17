@@ -1800,8 +1800,11 @@ void KqpRm::ArenaDeficitWhenBrokerRefuses() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 1);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 0);
 
-    // 400 + 49'500 <= 50'000: the growth goes through on the free
+    // 400 + 49'500 <= 50'000, so the growth the resource broker refused goes through on the next pass; a free
+    // does not ask again itself, or a node under memory pressure would ask once per released allocation
     rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    AssertResourceBrokerSensors(0, 400, 0, 0, 1);
+    TickArenaAdjust();
     AssertResourceBrokerSensors(0, 49'900, 0, 0, 2);
     AssertResourceManagerStats(rm, qml - 400 - 49'500, 98);
     AssertArenaSensors(49'500, 49'500, 0);
@@ -1847,8 +1850,9 @@ void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
 
-    // the per tx memory returned by tx1 makes room for the headroom: 47'500 + 2'000 <= 50'000
+    // the per tx memory returned by tx1 makes room for the headroom: 47'500 + 2'000 <= 50'000, taken by the pass
     rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 1'000});
+    TickArenaAdjust();
     AssertResourceBrokerSensors(0, 49'500, 0, 1, 2);
     AssertResourceManagerStats(rm, qml - 49'500, 98);
     AssertArenaSensors(49'500, 47'500, 0);
@@ -2278,8 +2282,9 @@ void KqpRm::ArenaGrowthCapLeavesRoomForRunningQueries() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrows"), 1);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0); // the resource broker was not asked past the cap
 
-    // the memory tx1 returns raises the cap: the growth that stayed pending goes through
+    // the memory tx1 returns raises the cap, and the pass takes the growth that was withheld
     rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.Memory = 600});
+    TickArenaAdjust();
     AssertArenaSensors(600, 600, 0);
     AssertResourceBrokerSensors(0, 600, 0, 1, 2); // the delta task merged into the arena task counts as finished
     AssertResourceManagerStats(rm, 400, 100);

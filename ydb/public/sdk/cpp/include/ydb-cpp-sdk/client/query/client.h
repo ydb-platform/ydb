@@ -138,9 +138,10 @@ public:
     //! The callback may be invoked more than once and must honor the idempotency configured in settings.
     TStatus RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
-    //! Executes a query with retries for up to timeout, using isIndempotent to select safe retry behavior.
+    //! Executes a query with retries for up to timeout. isIdempotent specifies whether the operation is
+    //! idempotent and can therefore be retried safely.
     TAsyncExecuteQueryResult RetryQuery(const std::string& query, const TTxControl& txControl,
-        TDuration timeout, bool isIndempotent);
+        TDuration timeout, bool isIdempotent);
 
     //! Starts asynchronous execution of a script without parameters.
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const std::string& script,

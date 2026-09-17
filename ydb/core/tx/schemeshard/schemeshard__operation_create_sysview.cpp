@@ -177,11 +177,12 @@ public:
             return result;
         }
 
-        if (!NKikimrSysView::ESysViewType_IsValid(sysViewDescription.GetType())) {
+        if (!sysViewDescription.HasType() || !NKikimrSysView::ESysViewType_IsValid(sysViewDescription.GetType())) {
             errStr = TStringBuilder()
                 << "error: unsupported system view type "
                 << static_cast<uint32_t>(sysViewDescription.GetType());
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
         }
 
         auto guard = context.DbGuard();

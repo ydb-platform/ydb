@@ -488,6 +488,35 @@ void TCacheTest::SystemViews() {
     UNIT_ASSERT(sysViewType == NKikimrSysView::EPartitionStats);
 
     TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
+
+    // A newer SchemeShard may publish an enum value unknown to this binary.
+    // It must not be interpreted as the proto2 default (EPartitionStats).
+    const TString query = Sprintf(R"((
+        (let key '('('PathId (Uint64 '%lu))))
+        (let row '('('SysViewType (Uint32 '1000000)) '('AlterVersion (Uint64 '100))))
+        (return (AsList (UpdateRow 'SysView key row)))
+    ))", tableId.PathId.LocalPathId);
+    NKikimrMiniKQL::TResult result;
+    TString error;
+    const auto status = LocalMiniKQL(*Context, RootSchemeshardTabletId, query, result, error);
+    UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+    RebootTablet(*Context, RootSchemeshardTabletId, Context->AllocateEdgeActor());
+    const auto subscriber = Context->AllocateEdgeActor();
+    Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(subscriber, "/Root/.sys/partition_stats", 1, false);
+    while (true) {
+        auto update = Context->GrabEdgeEvent<TSchemeBoardEvents::TEvNotifyUpdate>(subscriber);
+        const NKikimrScheme::TEvDescribeSchemeResult& description = update->Get()->DescribeSchemeResult;
+        UNIT_ASSERT(description.GetPathDescription().HasSysViewDescription());
+        if (!description.GetPathDescription().GetSysViewDescription().HasType()) {
+            break;
+        }
+    }
+    // Emulate an older node starting with no cached schema from before rollback.
+    Context->Send(SchemeCache, {}, new TEvents::TEvPoisonPill());
+    BootSchemeCache();
+    TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::PathNotTable,
+                 TString(), TNavigate::OpTable, false, true, true);
+    TestResolve(tableId, TResolve::EStatus::PathErrorUnknown);
 }
 
 void TCacheTest::CheckSystemViewAccess() {

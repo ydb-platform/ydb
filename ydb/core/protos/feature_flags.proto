@@ -395,4 +395,6 @@ message TFeatureFlags {
     // databases. Without it nothing compiles WASM modules to native code:
     // dinodes only ever compile what this tablet assigns them.
     optional bool EnableWasmCompileController = 332 [default = false];
+    // Gates both ColumnShard decommission legs; EnableCutHistory governs channels 0/1 instead.
+    optional bool EnableColumnshardGroupDecommission = 333 [default = false];
 }

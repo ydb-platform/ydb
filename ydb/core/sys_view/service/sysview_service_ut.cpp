@@ -234,7 +234,7 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(req.ServiceCountersSize(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
                 UNIT_ASSERT_VALUES_EQUAL((int)req.GetDetailedCounters(0).GetService(),
-                    (int)NKikimrSysView::TABLETS);
+                                         (int)NKikimrSysView::TABLETS);
                 UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
             }
 

@@ -22,8 +22,6 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
 
-#include <atomic>
-
 namespace NKikimr::NOlap {
 class IDataReader;
 }
@@ -43,63 +41,26 @@ private:
 
     std::optional<TFetchingScriptCursor> CursorStep;
 
-private:
-    struct TPrevNodeState {
-        ui32 NodeId = 0;
-        bool Pending = false;
-        bool Failed = false;
-        bool Defined = false;
-    };
-
-    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
-
-    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
-    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
-    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
-    // the immutable compiled graph.
-    TString StartCategoryName;
-    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
-    std::atomic<TPrevNodeState> PrevNode = {};
-
-    TString RenderCategoryName(const TPrevNodeState& state) const {
-        if (!state.Defined) {
-            return StartCategoryName;
-        }
-        AFL_VERIFY(Program);
-        auto it = Program->GetNodes().find(state.NodeId);
-        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
-        return it->second->GetProcessor()->GetSignalCategoryName();
-    }
-
 public:
-    void SetStartCategoryName(TString&& name) {
-        StartCategoryName = std::move(name);
-    }
-
-    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<TExecutionResult>& conclusion) {
-        PrevNode.store(
-            TPrevNodeState{ .NodeId = nodeId, .Pending = conclusion.IsSuccess() && conclusion->IsPending(), .Failed = conclusion.IsFail(),
-                .Defined = true }, std::memory_order_release);
-    }
-
-    TString GetPrevCategoryName() const {
-        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
-    }
-
     struct TPrevNodeTracing {
         TString CategoryName;
         TString ExecutionResult;
     };
 
-    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
-    // load keeps the pair consistent.
-    TPrevNodeTracing GetPrevNodeTracing() const {
-        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
-        TString executionResult;
-        if (state.Defined) {
-            executionResult = state.Failed ? "Fail" : (state.Pending ? "Pending" : "Done");
-        }
-        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+private:
+    TPrevNodeTracing PrevNode;
+
+public:
+    void SetPrevNodeTracing(const TString& categoryName, const TString& executionResult) {
+        PrevNode = TPrevNodeTracing{ .CategoryName = categoryName, .ExecutionResult = executionResult };
+    }
+
+    const TString& GetPrevCategoryName() const {
+        return PrevNode.CategoryName;
+    }
+
+    const TPrevNodeTracing& GetPrevNodeTracing() const {
+        return PrevNode;
     }
 
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);

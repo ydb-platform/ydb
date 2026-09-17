@@ -88,7 +88,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
-    const auto prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
+    const auto& prevTracing = source->GetExecutionContext().GetPrevNodeTracing();
     const TString tracingName = prevTracing.CategoryName + " - " + currentCategoryName;
     const TString tracingExecutionResult = prevTracing.ExecutionResult + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
@@ -278,7 +278,7 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
 
         const TString executionResult = conclusion.IsFail() ? "Fail" : conclusion->DebugString();
         ReportTracing(source, visitor->MutableContext().GetResources(), executionDuration, executionResult, nodeId, categoryName, processor);
-        executionContext.SetPrevNodeTracing(nodeId, conclusion);
+        executionContext.SetPrevNodeTracing(categoryName, executionResult);
         if (conclusion.IsFail()) {
             executionContext.OnFailedProgramStepExecution();
             return conclusion;

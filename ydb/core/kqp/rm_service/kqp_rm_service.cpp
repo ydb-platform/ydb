@@ -846,14 +846,17 @@ public:
         // has to keep the fast path shut, or its demand sits above a published ceiling with nothing to act on it
         Arena.GrowWanted = target > Arena.Size;
         const ui64 cap = ArenaSizeCapLocked();
-        if (target > Arena.Size) {
-            // grow no further than the node total allows, and never shrink through this branch
-            return Min(target, Max(Arena.Size, cap));
+        // The arena may hold what it backs, and beyond that only what the node total leaves it. A node total that
+        // has dropped, or transactions that have taken more of it, therefore pull the arena down even while the
+        // band is asking for a bigger one, and it keeps backing its own demand, so that the resource broker is
+        // never told less than the node is really using.
+        ui64 planned = Min(target, Max(used, cap));
+        if (planned > Arena.Size) {
+            // growing, on the other hand, stops at the node total: the resource broker would grant the first task
+            // of an idle queue whatever its size
+            planned = Max(Arena.Size, Min(planned, cap));
         }
-        // the cap applies to a shrink as well: a node total that has dropped, or transactions that have taken more
-        // of it, leave the arena holding memory it is no longer entitled to. It keeps backing its own demand, so
-        // that the resource broker is never told less than the node is really using.
-        return Min(target, Max(used, cap));
+        return planned;
     }
 
     // Never under Lock: the resource broker calls are made outside it. One adjuster at a time, a concurrent caller

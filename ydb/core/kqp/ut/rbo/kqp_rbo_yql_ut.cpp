@@ -43,9 +43,12 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <algorithm>
+#include <array>
 #include <ctime>
+#include <optional>
 #include <regex>
 #include <fstream>
+#include <utility>
 
 namespace {
 
@@ -2438,6 +2441,270 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(Params, ColumnStore) {
         TestParams(ColumnStore);
+    }
+
+    constexpr std::array<i64, 7> SqlInLookupValues = {-1, 0, 1, 2, 3, 10, 2147483648LL};
+
+    TKikimrSettings SqlInSettings(bool columnStore = false) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(columnStore);
+        return TKikimrSettings(appConfig).SetWithSampleTables(false);
+    }
+
+    TString SqlInPeepholePragma(bool peephole) {
+        return TStringBuilder()
+            << "PRAGMA ydb.EnableNewRBOPhysicalStagePeephole = \"" << (peephole ? "true" : "false") << "\";\n";
+    }
+
+    TString SqlInFunction(bool ansi) {
+        // YqlSelect does not support the ANSI IN pragma. Set the callable option
+        // explicitly so both modes exercise the new RBO physical lowering.
+        return TStringBuilder()
+            << "$in = ($items, $lookup) -> { RETURN Yql::SqlIn($items, $lookup, "
+            << (ansi ? "AsTuple(AsTuple(AsAtom('ansi')))" : "AsTuple()") << "); };\n";
+    }
+
+    void CreateSqlInTable(TKikimrRunner& kikimr) {
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/sql_in` (
+                id Int64 NOT NULL,
+                value Int64,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 id : SqlInLookupValues) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("value").OptionalInt64(id == 10 ? std::nullopt : std::optional<i64>(id))
+                .EndStruct();
+        }
+        rows.EndList();
+        const auto upsert = client.BulkUpsert("/Root/sql_in", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+    }
+
+    std::optional<bool> ExpectedSqlIn(std::optional<double> lookup, const TVector<std::optional<i64>>& items, bool ansi) {
+        if (!lookup) {
+            return ansi && items.empty() ? std::optional<bool>(false) : std::nullopt;
+        }
+        if (std::find(items.begin(), items.end(), lookup) != items.end()) {
+            return true;
+        }
+        if (ansi && std::find(items.begin(), items.end(), std::nullopt) != items.end()) {
+            return std::nullopt;
+        }
+        return false;
+    }
+
+    TValue MakeSqlInListParameter(EPrimitiveType primitive, bool optional, const TVector<std::optional<i64>>& items) {
+        TTypeBuilder type;
+        type.BeginList();
+        if (optional) {
+            type.BeginOptional();
+        }
+        type.Primitive(primitive);
+        if (optional) {
+            type.EndOptional();
+        }
+        type.EndList();
+
+        TValueBuilder value(type.Build());
+        value.BeginList();
+        for (const auto& item : items) {
+            value.AddListItem();
+            if (!item) {
+                value.EmptyOptional();
+                continue;
+            }
+            if (optional) {
+                value.BeginOptional();
+            }
+            switch (primitive) {
+                case EPrimitiveType::Int64: value.Int64(*item); break;
+                case EPrimitiveType::Int32: value.Int32(*item); break;
+                case EPrimitiveType::Uint64: value.Uint64(*item); break;
+                default: UNIT_FAIL("Unexpected test parameter type");
+            }
+            if (optional) {
+                value.EndOptional();
+            }
+        }
+        return value.EndList().Build();
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInScalarListParameters, Ansi) {
+        TKikimrRunner kikimr(SqlInSettings());
+        CreateSqlInTable(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        for (const auto& [primitive, optional] : {
+            std::pair{EPrimitiveType::Int64, false},
+            std::pair{EPrimitiveType::Int64, true},
+            std::pair{EPrimitiveType::Int32, false},
+            std::pair{EPrimitiveType::Uint64, true},
+        }) {
+            TVector<TVector<std::optional<i64>>> lists = {{}, {1, 3, 3}, {7}, {0}};
+            if (primitive == EPrimitiveType::Int32) {
+                // 2147483648 must not wrap to a matching Int32 key.
+                lists.push_back({-2147483648LL});
+            }
+            if (optional) {
+                lists.push_back({1, std::nullopt});
+                lists.push_back({std::nullopt});
+            }
+            for (const auto& items : lists) {
+                const auto value = MakeSqlInListParameter(primitive, optional, items);
+                const auto params = TParamsBuilder().AddParam("$items", value).Build();
+                for (bool peephole : {true, false}) {
+                    const TString query = TStringBuilder() << SqlInPeepholePragma(peephole)
+                        << "DECLARE $items AS " << value.GetType().ToString() << ";\n"
+                        << SqlInFunction(Ansi)
+                        << R"(
+                            SELECT id,
+                                $in($items, id) AS found,
+                                NOT $in($items, id) AS missing,
+                                $in($items, value) AS nullable_found,
+                                NOT $in($items, value) AS nullable_missing,
+                                $in($items, CAST(id AS Double) + 0.5) AS fractional_found,
+                                NOT $in($items, CAST(id AS Double) + 0.5) AS fractional_missing
+                            FROM `/Root/sql_in`
+                            ORDER BY id;
+                        )";
+                    const auto result = session.ExecuteDataQuery(
+                        query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                    const auto& resultSet = result.GetResultSet(0);
+                    UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), SqlInLookupValues.size());
+
+                    // Check the result types, including the non-nullable ANSI case.
+                    for (size_t column = 1; column < 7; ++column) {
+                        const bool nullable = column == 3 || column == 4 || (Ansi && optional);
+                        UNIT_ASSERT_VALUES_EQUAL_C(resultSet.GetColumnsMeta()[column].Type.ToString(),
+                            nullable ? "Bool?" : "Bool", query);
+                    }
+                    TResultSetParser parser(resultSet);
+                    for (i64 id : SqlInLookupValues) {
+                        UNIT_ASSERT(parser.TryNextRow());
+                        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt64(), id);
+                        for (size_t column = 1; column < 7; ++column) {
+                            const bool nullableValue = column == 3 || column == 4;
+                            const auto lookup = nullableValue && id == 10 ? std::nullopt
+                                : std::optional<double>(id + (column >= 5 ? 0.5 : 0.0));
+                            auto expected = ExpectedSqlIn(lookup, items, Ansi);
+                            if (column % 2 == 0 && expected) {
+                                expected = !*expected;
+                            }
+                            const bool nullable = nullableValue || (Ansi && optional);
+                            const auto actual = nullable ? parser.ColumnParser(column).GetOptionalBool()
+                                : std::optional<bool>(parser.ColumnParser(column).GetBool());
+                            UNIT_ASSERT_C(actual == expected,
+                                query << "\nid=" << id << ", column=" << column << ", list size=" << items.size());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInLiteralCollections, Ansi) {
+        TKikimrRunner kikimr(SqlInSettings());
+        CreateSqlInTable(kikimr);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        TString baseline;
+        for (bool peephole : {true, false}) {
+            const TString query = SqlInPeepholePragma(peephole) + SqlInFunction(Ansi) + R"(
+                SELECT id,
+                    $in((1, 2), value) AS small_tuple,
+                    NOT $in((1, 2, 3, 4, 5, 6), value) AS large_tuple,
+                    $in([1, 2, 3, 4, 5, 6], value) AS large_list,
+                    NOT $in(AsList(), value) AS empty_list,
+                    $in((1, NULL), value) AS nullable_tuple,
+                    $in(AsTuple(), value) AS empty_tuple,
+                    $in([NULL], value) AS null_list,
+                    $in([1, 2, 3, 4, 5, 6], NULL) AS null_lookup
+                FROM `/Root/sql_in` ORDER BY id;
+            )";
+            const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+            const TString actual = FormatResultSetYson(result.GetResultSet(0));
+            if (peephole) {
+                baseline = actual;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(actual, baseline);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(SqlInParameterizedFilterAndAggregate, ColumnStore) {
+        TKikimrRunner kikimr(SqlInSettings(ColumnStore));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const TString schema = TStringBuilder() << R"(
+            CREATE TABLE `/Root/inforg8025` (
+                id Int64 NOT NULL,
+                _period Int64,
+                _fld8026rref String,
+                _fld8027rref String,
+                _fld8028rref String,
+                _fld543 String,
+                PRIMARY KEY (id)
+            )
+        )" << (ColumnStore ? "WITH (STORE = COLUMN);" : ";");
+        const auto scheme = session.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 id : {1, 2, 3, 4}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("id").Int64(id)
+                .AddMember("_period").Int64(id)
+                .AddMember("_fld8026rref").String("group")
+                .AddMember("_fld8027rref").String("included")
+                .AddMember("_fld8028rref").String(id == 3 ? "excluded" : "allowed")
+                .AddMember("_fld543").String("tenant")
+                .EndStruct();
+        }
+        const auto upsert = client.BulkUpsert("/Root/inforg8025", rows.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        const auto params = TParamsBuilder()
+            .AddParam("$const_0").Int64(3).Build()
+            .AddParam("$const_1").BeginList().AddListItem().String("included").EndList().Build()
+            .AddParam("$const_2").BeginList().AddListItem().OptionalString("excluded")
+                .AddListItem().OptionalString(std::nullopt).EndList().Build()
+            .AddParam("$const_3").String("tenant").Build()
+            .AddParam("$const_4").String("group").Build()
+            .Build();
+        for (bool peephole : {true, false}) {
+            const TString query = SqlInPeepholePragma(peephole) + R"(
+                DECLARE $const_0 AS Int64;
+                DECLARE $const_1 AS List<String>;
+                DECLARE $const_2 AS List<String?>;
+                DECLARE $const_3 AS String;
+                DECLARE $const_4 AS String;
+
+                SELECT t1._fld8026rref AS __ydb_aggregate_0, MAX(t1._period) AS __ydb_aggregate_1
+                FROM `/Root/inforg8025` AS t1
+                WHERE t1._period <= $const_0
+                    AND t1._fld8027rref IN $const_1
+                    AND t1._fld8028rref NOT IN $const_2
+                    AND t1._fld543 = $const_3
+                    AND t1._fld8026rref = $const_4
+                GROUP BY t1._fld8026rref;
+            )";
+            const auto result = session.ExecuteDataQuery(
+                query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["group"];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     void TestMultiConsumer(bool columnTables) {

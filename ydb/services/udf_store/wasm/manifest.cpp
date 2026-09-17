@@ -12,6 +12,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <array>
 #include <memory>
 
 namespace NKikimr::NUdfStore::NWasm {
@@ -20,8 +21,8 @@ namespace {
 
 constexpr ui32 MaxManifestTypeDepth = 32;
 // Keep malformed input from making the recursive YQL parser recurse too deeply.
-// This is deliberately much larger than the semantic type depth: parentheses
-// used by callables and Decimal parameters do not contribute to this limit.
+// This is deliberately much larger than the semantic type depth, while counting
+// all syntax delimiters that can make the parser recurse: <, (, and [.
 constexpr ui32 MaxManifestLexicalNesting = 256;
 
 using namespace NYql;
@@ -39,7 +40,8 @@ struct TParsedType {
 };
 
 void ValidateTypeLexicalNesting(TStringBuf type) {
-    ui32 nesting = 0;
+    std::array<char, MaxManifestLexicalNesting> delimiters;
+    size_t nesting = 0;
     bool quoted = false;
     for (size_t i = 0; i < type.size(); ++i) {
         const char c = type[i];
@@ -51,11 +53,24 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
             }
         } else if (c == '\'') {
             quoted = true;
-        } else if (c == '<') {
-            Y_ENSURE(++nesting <= MaxManifestLexicalNesting,
+        } else if (c == '<' || c == '(' || c == '[') {
+            Y_ENSURE(nesting < delimiters.size(),
                 "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
-        } else if (c == '>' && nesting) {
-            --nesting;
+            delimiters[nesting++] = c;
+        } else if (c == '>' || c == ')' || c == ']') {
+            // In the type grammar, the '>' in the callable arrow is not a
+            // closing delimiter.
+            if (c == '>' && i > 0 && type[i - 1] == '-') {
+                continue;
+            }
+            if (nesting) {
+                const char opening = delimiters[nesting - 1];
+                if ((c == '>' && opening == '<') ||
+                    (c == ')' && opening == '(') ||
+                    (c == ']' && opening == '[')) {
+                    --nesting;
+                }
+            }
         }
     }
 }

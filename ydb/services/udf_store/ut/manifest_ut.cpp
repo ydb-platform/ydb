@@ -96,9 +96,16 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
         UNIT_ASSERT(Type("Int64" + TString(32, '?')));
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("Int64" + TString(33, '?')), yexception, "Type nesting exceeds");
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("(" + nested + ")->Int64"), yexception, "Type nesting exceeds");
+        TString nestedCallable = "Int64";
+        for (ui32 i = 0; i < 16; ++i) { nestedCallable = "(" + nestedCallable + ")->Int64"; }
+        UNIT_ASSERT(Type(nestedCallable));
         TString hostile;
         for (size_t i = 0; i < 10000; ++i) { hostile += "List<"; }
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type(hostile), yexception, "Type lexical nesting exceeds");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Type(TString(10000, '(')), yexception, "Type lexical nesting exceeds");
+        TString mixedHostile;
+        for (size_t i = 0; i < 300; ++i) { mixedHostile += "List<("; }
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Type(mixedHostile), yexception, "Type lexical nesting exceeds");
     }
     Y_UNIT_TEST(ErrorsNameFunctionFieldAndPosition) {
         const TString manifest = R"({"module_type":"module","module_kind":"wasm","module_name":"Test",

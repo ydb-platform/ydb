@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard_cut_history.cpp
     columnshard.cpp
     columnshard__init.cpp
     columnshard__locks.cpp
@@ -106,6 +107,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_cut_history
     ut_rw
     ut_schema
     backup

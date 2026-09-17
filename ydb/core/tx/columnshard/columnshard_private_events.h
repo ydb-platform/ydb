@@ -94,10 +94,13 @@ struct TEvPrivate {
 
         EvRetryConfigSubscription,
 
+        EvContinueCutHistory,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvContinueCutHistory: NActors::TEventLocal<TEvContinueCutHistory, EvContinueCutHistory> {};
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     private:

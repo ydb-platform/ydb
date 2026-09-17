@@ -148,6 +148,10 @@ public:
         return result;
     }
 
+    bool HasGCInFlight() const {
+        return CurrentGCAction && CurrentGCAction->IsInProgress();
+    }
+
     void StartGC(const std::shared_ptr<IBlobsGCAction>& action) {
         AFL_VERIFY(CurrentGCAction == action);
         AFL_VERIFY(!!action && action->IsInProgress());

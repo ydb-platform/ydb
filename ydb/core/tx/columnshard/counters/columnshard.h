@@ -102,6 +102,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FutureIndexationInputBytes;
     NMonitoring::TDynamicCounters::TCounterPtr IndexationInputBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
+    NMonitoring::THistogramPtr CutHistoryScanDurationMs;
+    NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
@@ -260,6 +263,15 @@ public:
 
     void IndexationInput(const ui64 size) const {
         IndexationInputBytes->Add(size);
+    }
+
+    void OnCutHistoryScanFinished(const TDuration duration) const {
+        CutHistoryScanDurationMs->Collect(duration.MilliSeconds());
+    }
+
+    void OnCutHistoryRequestSent(const TDuration duration) const {
+        CutHistoryRequestsSent->Inc();
+        CutHistoryWaitDurationMs->Collect(duration.MilliSeconds());
     }
 
     void OnIndexMetadataLimit(const ui64 limit) const {

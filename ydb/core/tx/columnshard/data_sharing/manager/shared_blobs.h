@@ -7,6 +7,8 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TStorageSharedBlobsManager {
@@ -46,6 +48,14 @@ public:
         : StorageId(storageId)
         , SelfTabletId(tabletId)
     {
+    }
+
+    bool HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
+        const auto matches = [&](const auto& blob) {
+            const auto& id = blob.first.GetLogoBlobId();
+            return id.TabletID() == (ui64)SelfTabletId && id.Channel() == channel && id.Generation() >= from && id.Generation() < to;
+        };
+        return AnyOf(BorrowedBlobIds, matches) || AnyOf(SharedBlobIds, matches);
     }
 
     bool IsTrivialLinks() const {

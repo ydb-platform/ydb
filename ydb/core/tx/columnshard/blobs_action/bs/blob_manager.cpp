@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
@@ -505,6 +507,16 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
         account(i.first);
     }
     return result;
+}
+
+bool TBlobManager::HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
+    const auto matches = [&](const TLogoBlobID& id) {
+        return id.TabletID() == (ui64)SelfTabletId && id.Channel() == channel && id.Generation() >= from && id.Generation() < to;
+    };
+    const auto deletedMatches = [&](const auto& blob) {
+        return matches(blob.first.GetLogoBlobId());
+    };
+    return AnyOf(BlobsToKeep, matches) || AnyOf(BlobsToDelete, deletedMatches) || AnyOf(BlobsToDeleteDelayed, deletedMatches);
 }
 
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {

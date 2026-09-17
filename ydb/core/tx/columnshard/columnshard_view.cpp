@@ -790,6 +790,12 @@ TString TTxMonitoring::RenderMainPage() {
         html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all portions on shard") << "</h3>";
     }
 
+    html << "<h3>CutHistory requests sent this boot (latest 64; Hive confirmation is not tracked)</h3><pre>";
+    for (const auto& request : Self->RecentCutHistoryRequests) {
+        html << TEscapeHtml(request) << "\n";
+    }
+    html << "</pre>";
+
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
     auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();

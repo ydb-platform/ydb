@@ -34,6 +34,11 @@ public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
         const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
 
+    bool CanCutHistory(const ui32 channel, const ui32 from, const ui32 to) const {
+        return !GetStopped() && !HasGCInFlight() && Manager->HasCollectedThrough(to) && !Manager->HasBlobsInRange(channel, from, to) &&
+               !GetSharedBlobs()->HasBlobsInRange(channel, from, to);
+    }
+
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return Manager->HasToDelete(blobId, tabletId);
     }

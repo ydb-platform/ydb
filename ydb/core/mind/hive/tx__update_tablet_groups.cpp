@@ -286,12 +286,8 @@ public:
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute tablet not changed",
                 {"logPrefix", GetLogPrefix()},
                 {"tabletId", tablet->Id});
-<<<<<<< HEAD
-            if (hasEmptyChannel) {
-=======
             NotifyCancel(tablet);
-            if (hasEmptyChannel || tablet->HasUnconfirmedStorage()) {
->>>>>>> 83f678c361c (fix tracking cancelled reassigns (#53236))
+            if (hasEmptyChannel) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
                 newTabletState = ETabletState::GroupAssignment;
             } else {

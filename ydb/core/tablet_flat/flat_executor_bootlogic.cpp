@@ -330,7 +330,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
 TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
     Y_ENSURE(Result_->Database, "Looks like booting hasn't been done");
-    if (AppData()->FeatureFlags.GetEnableCutHistory()) {
+    if (Result_->GcLogic && Result_->GcLogic->IsCutHistoryEnabled()) {
         for (const auto& [tableId, table] : Result_->Database->GetScheme().Tables) {
             for (const auto& part : Result_->Database->GetTableParts(tableId)) {
                 if (!part) {
@@ -347,7 +347,7 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
                     }
                 }
             }
-            if (Result_->GcLogic && !Result_->Database->GetTableColdParts(tableId).empty()) {
+            if (!Result_->Database->GetTableColdParts(tableId).empty()) {
                 for (const auto& [_, room] : table.Rooms) {
                     Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
                     for (auto channel : room.Blobs) {

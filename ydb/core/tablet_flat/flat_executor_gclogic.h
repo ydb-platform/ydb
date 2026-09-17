@@ -60,6 +60,14 @@ public:
 
     THistoryCutter HistoryCutter;
 
+    // Cutting history is only safe when HistoryCutter knows about every blob that is still
+    // referenced, and boot only feeds it with the blobs of already existing parts when the
+    // feature flag is set (see TExecutorBootLogic::ExtractState). So the flag is latched
+    // once, before boot discovers anything, and the same value gates both discovery and
+    // cutting: switching EnableCutHistory on under a running tablet takes effect on its
+    // next boot, never in the middle of the current one.
+    bool IsCutHistoryEnabled() const { return CutHistoryEnabled; }
+
     // Marks dropped by the sentinel guard since the last drain; the executor moves
     // this into the GcSentinelDroppedMarks cumulative counter on its periodic
     // counters update (open item 7).
@@ -91,6 +99,7 @@ public:
 
     TIntrospection IntrospectStateSize() const;
 protected:
+    const bool CutHistoryEnabled;
     const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
     const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     const ui32 Generation;

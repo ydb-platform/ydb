@@ -1579,7 +1579,11 @@ void TTablet::SendBarriersForCutHistory() {
 
     std::unordered_set<ui32> seenGroups;
     auto allHistoryIt = channelHistory.begin();
-    bool sentHardGc = false;
+    // The same group may back several of the entries we are about to cut. One hard barrier per
+    // entry would put several barriers on that group, and a retry could deliver the lower one
+    // last, which reads as a barrier decrease. Collapse them into the highest one per group: it
+    // collects everything the lower ones would have.
+    TMap<ui32, ui32> hardBarriers; // group -> collect generation
     for (const auto* historyEntry : historyToCut) {
         while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
             seenGroups.insert(allHistoryIt->GroupID);
@@ -1587,22 +1591,27 @@ void TTablet::SendBarriersForCutHistory() {
         }
         if (!seenGroups.contains(historyEntry->GroupID)) {
             const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
-            ++GcInFly;
-            SendToBSProxy(SelfId(), historyEntry->GroupID,
-                new TEvBlobStorage::TEvCollectGarbage(
-                    tabletId, gen, ++GcCounter, channelId,
-                    true,
-                    nextFromGeneration - 1, Max<ui32>(),
-                    nullptr, nullptr, TInstant::Max(),
-                    false, TWriteSource::GcLogChannel, true
-                )
-            );
-            sentHardGc = true;
+            auto& collectGeneration = hardBarriers[historyEntry->GroupID];
+            collectGeneration = Max(collectGeneration, nextFromGeneration - 1);
         }
         CutHistoryStatus = ECutHistoryStatus::SentBarrier;
         ++allHistoryIt;
     }
-    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && !sentHardGc) {
+
+    for (const auto& [groupId, collectGeneration] : hardBarriers) {
+        ++GcInFly;
+        SendToBSProxy(SelfId(), groupId,
+            new TEvBlobStorage::TEvCollectGarbage(
+                tabletId, gen, ++GcCounter, channelId,
+                true,
+                collectGeneration, Max<ui32>(),
+                nullptr, nullptr, TInstant::Max(),
+                false, TWriteSource::GcLogChannel, true
+            )
+        );
+    }
+
+    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && hardBarriers.empty()) {
         SendCutTabletHistory();
     }
 }

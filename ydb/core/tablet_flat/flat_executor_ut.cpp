@@ -7934,6 +7934,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     }
 
+    Y_UNIT_TEST(TestDoNotCutHistoryEnabledAfterBoot) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[1].History.emplace_back(1, 0);
+                info->Channels[1].History.emplace_back(2, 1);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(false);
+        TRowsModel data;
+        unsigned wasCutHistory = 0;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                ++wasCutHistory;
+                ev.Reset();
+            }
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(3000));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        // Booting with the flag off means nothing feeds the history cutter with the blobs of
+        // already existing parts, so this tablet generation must never cut anything.
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env.WaitForWakeUp();
+
+        appData.FeatureFlags.SetEnableCutHistory(true);
+
+        // Every row is a separate commit, so this forces plenty of log snapshots, i.e. plenty
+        // of chances for the GC logic to confirm and cut.
+        env.SendSync(data.MakeRows(3000));
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(wasCutHistory, 0u);
+
+        // The flag is latched at boot, so it only takes effect on the next one.
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
+    }
+
     Y_UNIT_TEST(TestCutTabletHistorySystemChannel) {
         struct TTestStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
@@ -8158,10 +8220,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         }, 0, &starter);
 
         env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
-        for (auto b : barriers) {
-            Cerr << b << Endl;
-        }
-        UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{0, 1}));
+        // Both cut entries live in the same group, so their barriers (generations 0 and 1)
+        // collapse into the higher one instead of racing each other on retries.
+        UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{1}));
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 }

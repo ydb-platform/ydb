@@ -419,7 +419,7 @@ public:
         }
     }
 
-    void FillTableInfos(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;

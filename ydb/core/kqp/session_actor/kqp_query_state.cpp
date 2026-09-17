@@ -91,7 +91,7 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     return true;
 }
 
-void TKqpQueryState::FillTableInfos(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos) {
+void TKqpQueryState::FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos) {
     for (const auto& view : infos) {
         const auto& pathId = view.GetTableId();
         const auto schemaVersion = view.GetSchemaVersion();
@@ -111,8 +111,8 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     // The physical plan only names the tables it actually reads, so a query served entirely
     // from an index leaves the table it logically reads out of the set. Take the logical
     // tables too, otherwise a change to such a table never invalidates the compiled query.
-    FillTableInfos(PreparedQuery->GetPhysicalQuery().GetTableInfos());
-    FillTableInfos(PreparedQuery->GetPhysicalQuery().GetViewInfos());
+    FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetTableInfos());
+    FiilTablesAndViews(PreparedQuery->GetPhysicalQuery().GetViewInfos());
 
     auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = Database;

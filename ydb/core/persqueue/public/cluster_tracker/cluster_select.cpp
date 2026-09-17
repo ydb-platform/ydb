@@ -66,7 +66,6 @@ TVector<TString> ParseFnxClusterCsv(TStringBuf csv) {
     StringSplitter(csv).SplitBySet(",;").SkipEmpty().Collect(&names);
     for (auto& name : names) {
         name = StripString(name);
-        name.to_lower();
     }
     names.erase(
         std::remove_if(names.begin(), names.end(), [](const TString& name) { return name.empty(); }),
@@ -78,18 +77,13 @@ std::vector<TClustersList::TCluster> SelectClustersForBalancer(const TClustersLi
     THashSet<TString> extraFnx;
     const TString host = NormalizeDiscoveryHost(authority);
     if (const auto it = list.Balancers.find(host); it != list.Balancers.end()) {
-        for (auto name : it->second) {
-            name.to_lower();
-            extraFnx.insert(std::move(name));
-        }
+        extraFnx.insert(it->second.begin(), it->second.end());
     }
 
     std::vector<TClustersList::TCluster> visible;
     visible.reserve(list.Clusters.size());
     for (const auto& cluster : list.Clusters) {
-        TString name = cluster.Name;
-        name.to_lower();
-        if (!cluster.IsFnx || extraFnx.contains(name)) {
+        if (!cluster.IsFnx || extraFnx.contains(cluster.Name)) {
             visible.push_back(cluster);
         }
     }

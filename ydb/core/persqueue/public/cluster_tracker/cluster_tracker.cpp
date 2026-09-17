@@ -390,7 +390,6 @@ private:
 
         while (parser.TryNextRow()) {
             TString name = TString(parser.ColumnParser(0).GetOptionalUtf8().value_or(""));
-            name.to_lower();
             const TString csv = TString(parser.ColumnParser(1).GetOptionalUtf8().value_or(""));
             if (!name.empty()) {
                 clustersList->Balancers[name] = ParseFnxClusterCsv(csv);

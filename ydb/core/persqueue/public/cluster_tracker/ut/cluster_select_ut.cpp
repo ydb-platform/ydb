@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
     Y_UNIT_TEST(ParseFnxClusterCsv) {
         UNIT_ASSERT(ParseFnxClusterCsv("").empty());
         UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv("myt"), TVector<TString>{"myt"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv("MYT,  klg ,"), (TVector<TString>{"myt", "klg"}));
+        UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv("myt,  klg ,"), (TVector<TString>{"myt", "klg"}));
         UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv("myt;vla"), (TVector<TString>{"myt", "vla"}));
         UNIT_ASSERT_VALUES_EQUAL(ParseFnxClusterCsv(",,;"), TVector<TString>{});
     }
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         TClustersList onlyFnx;
         onlyFnx.Clusters.push_back(MakeCluster("myt", true));
         UNIT_ASSERT(SelectClustersForBalancer(onlyFnx, "logbroker.yandex.net").empty());
-        onlyFnx.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"MYT"};
+        onlyFnx.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt"};
         UNIT_ASSERT_VALUES_EQUAL(
             names(SelectClustersForBalancer(onlyFnx, "logbroker-fnx.yandex.net")),
             (TVector<TString>{"myt"}));

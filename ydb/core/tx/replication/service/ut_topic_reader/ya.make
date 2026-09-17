@@ -8,6 +8,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 PEERDIR(
+    ydb/core/testlib/basics
     ydb/core/tx/replication/ut_helpers
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/src/client/topic

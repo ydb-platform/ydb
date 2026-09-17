@@ -2388,6 +2388,11 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetTraceIds(in.trace_ids());
 
     if (in.has_resolved_timestamps_interval()) {
+        if (in.resolved_timestamps_interval().seconds() < 1) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Resolved timestamps interval must be at least 1 second";
+            return false;
+        }
         out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());
     }
 

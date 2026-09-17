@@ -104,7 +104,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 4
+                                    }
+                                ],
                                 "Name": "Upsert",
                                 "Path": "/local/base_write_multi_usage_key_script_script/Temp",
                                 "SinkType": "KqpTableSink",

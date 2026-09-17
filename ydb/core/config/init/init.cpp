@@ -843,7 +843,7 @@ void ApplyMainYamlConfig(
             target.emplace(std::move(key), std::move(value));
         }
     }
-    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig);
+    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig, yamlConfigs.AllowUnknownFields);
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }

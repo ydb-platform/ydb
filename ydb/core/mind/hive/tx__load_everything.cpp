@@ -40,6 +40,8 @@ public:
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
 
+        Self->ResetTotalResourceValues();
+
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
 
@@ -63,6 +65,7 @@ public:
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
             auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
+            auto groupRowset = db.Table<Schema::Group>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -80,7 +83,8 @@ public:
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
                     || !operationsRowset.IsReady()
-                    || !bridgePileRowset.IsReady())
+                    || !bridgePileRowset.IsReady()
+                    || !groupRowset.IsReady())
                 return false;
         }
 
@@ -492,6 +496,11 @@ public:
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {
+                    if (tablet.NodeId != 0) {
+                        // A lock suppresses local execution; discard stale placement from older versions.
+                        tablet.NodeId = 0;
+                        db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0);
+                    }
                     TNodeId nodeId = tablet.LockedToActor.NodeId();
                     auto it = Self->Nodes.find(nodeId);
                     if (it == Self->Nodes.end()) {
@@ -501,7 +510,7 @@ public:
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                        tablet.BecomeUnknown(&it->second);
                     }
                 }
 
@@ -522,10 +531,12 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                    if (tablet.IsDeleting()
+                            || !tablet.LockedToActor
+                            || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
+                    {
                         tablet.BecomeStopped();
                     }
-                    tablet.BecomeStopped();
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {
@@ -539,6 +550,8 @@ public:
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
+                tablet.ConfirmedStorageVersion =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())

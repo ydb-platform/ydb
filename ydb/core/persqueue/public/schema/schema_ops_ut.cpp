@@ -618,6 +618,13 @@ Y_UNIT_TEST(CreateAttributeEdgeCases) {
         request.mutable_partitioning_settings()->set_min_active_partitions(-3);
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "positive");
     }
+
+    {
+        auto request = MakeCreateTopicRequest("/Root/topic_too_many_parts");
+        request.mutable_partitioning_settings()->set_min_active_partitions(
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "less than");
+    }
 }
 
 Y_UNIT_TEST(AlterSharedDlqSetDeleteAndEmptyMoveRejected) {
@@ -905,7 +912,7 @@ Y_UNIT_TEST(AlterRejectsNegativeSpeedsAndHugePartitions) {
 
     expectBad([](auto& r) {
         r.mutable_alter_partitioning_settings()->set_set_min_active_partitions(
-            static_cast<i64>(Max<ui32>()));
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
     }, "less than");
 
     expectBad([](auto& r) {
@@ -1038,7 +1045,7 @@ Y_UNIT_TEST(AlterEnableAutopartitioningAndServiceConsumerGuards) {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
         request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(
-            static_cast<i64>(Max<ui32>()));
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
         AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "less than");
     }
 

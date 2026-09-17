@@ -1,13 +1,19 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
+
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
@@ -30,13 +36,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[nodiscard]] constexpr ui64 BlocksPerRegion(ui32 blockSize = DefaultBlockSize)
-{
-    return RegionSize / blockSize;
-}
-
 constexpr ui64 DefaultStripeSize = 512_KB;
-constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
+constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
@@ -726,7 +727,7 @@ void ShouldWriteAndReadBlocksInDifferentRegions(
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blocksPerRegion = BlocksPerRegion(blockSize);
+    const ui64 blocksPerRegion = GetRegionBlockCount(blockSize, MaxVChunkSize);
     const ui64 blockCount = 3 * blocksPerRegion;
     auto partition = CreatePartitionTablet(env, blockCount, blockSize);
 
@@ -802,7 +803,8 @@ void RandomWrites(EWriteMode writeMode)
 
     auto scopedService = SetupStorage(env, writeMode);
 
-    const ui64 blockCount = 3 * BlocksPerRegion();
+    const ui64 blockCount =
+        3 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize);
     auto partition = CreatePartitionTablet(env, blockCount);
 
     const TActorId& edge = runtime->AllocateEdgeActor(
@@ -940,6 +942,53 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldPublishAndRevokeFrontendMetadata)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        scopedService.reset();
+        auto config = CreateNbsConfig(EWriteMode::DirectWrite);
+        config.MutableNbsFrontendConfig()->SetEnabled(true);
+        scopedService = std::make_unique<TScopedNbsService>(config);
+        auto blockStore = GetNbsService()->Frontend->GetBlockStore();
+        auto mount = [&]
+        {
+            auto request = std::make_shared<
+                NNbs1CompatApi::NBlockStore::NProto::TMountVolumeRequest>();
+            request->SetDiskId("test-volume");
+            request->MutableHeaders()->SetClientId("frontend-test");
+            return blockStore
+                ->MountVolume(MakeIntrusive<TCallContext>(), std::move(request))
+                .GetValueSync();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+
+        WaitForTabletBoot(env);
+        auto volumeConfig = CreateVolumeConfig(32768);
+        volumeConfig.SetStorageMediaKind(NProto::STORAGE_MEDIA_SSD);
+        const auto update = SendUpdateVolumeConfig(env, volumeConfig, 1);
+        UNIT_ASSERT(update.GetStatus() == NKikimrBlockStore::OK);
+        env.Sim(TDuration::Seconds(10));
+        const auto response = mount();
+        UNIT_ASSERT(!HasError(response));
+        UNIT_ASSERT(!response.GetSessionId().empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            response.GetVolume().GetDiskId(),
+            "test-volume");
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlockSize(), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetVolume().GetBlocksCount(), 32768);
+
+        const auto edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        StopFastPathService(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL(mount().GetError().GetCode(), E_NOT_FOUND);
+    }
+
     Y_UNIT_TEST(MultipleInit)
     {
         {
@@ -1004,8 +1053,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const ui64 partition = CreatePartitionTablet(
             env,
-            4 * BlocksPerRegion() + 1   // blockCount
-        );
+            4 * GetRegionBlockCount(DefaultBlockSize, MaxVChunkSize) + 1);
 
         const TActorId& edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -2011,7 +2059,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
-    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    Y_UNIT_TEST(ShouldReplyOkToNewerVolumeConfig)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -2024,9 +2072,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto volumeConfig = CreateVolumeConfig(32768);
         volumeConfig.SetVersion(1);
         const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
-        UNIT_ASSERT(
-            response.GetStatus() ==
-            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
@@ -2648,8 +2694,14 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         const TString& html = response->Get()->Html;
         UNIT_ASSERT(!html.empty());
-        UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
-        UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<h3>Overview</h3>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            TStringBuilder() << "<td>TabletId</td><td>" << tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Disk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Region size");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Regions");
     }
 
     Y_UNIT_TEST(ChaosMonitoringPageUpdatesNodeState)
@@ -3157,22 +3209,19 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 }
             }
             if (captureWipeTraffic) {
-                if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
-                    const auto& record =
-                        ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
-                    // Partition wipe sends Max<ui64>(); background cleanup uses
-                    // a finite watermark and must not be counted here.
-                    if (record.GetLsn() == Max<ui64>()) {
-                        pendingWipeBarriers.insert({ev->Sender, ev->Cookie});
-                    }
+                if (type == NDDisk::TEvUnregisterPersistentBuffer::EventType) {
+                    pendingWipeBarriers.insert({ev->Sender, ev->Cookie});
                 }
-                if (type == NDDisk::TEvErasePersistentBufferResult::EventType) {
+                if (type ==
+                    NDDisk::TEvUnregisterPersistentBufferResult::EventType)
+                {
                     const TTransportCookie key{
                         ev->GetRecipientRewrite(),
                         ev->Cookie};
                     if (pendingWipeBarriers.contains(key)) {
                         const auto& record =
-                            ev->Get<NDDisk::TEvErasePersistentBufferResult>()
+                            ev->Get<
+                                  NDDisk::TEvUnregisterPersistentBufferResult>()
                                 ->Record;
                         if (record.GetStatus() ==
                             NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
@@ -3230,7 +3279,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, deallocateRequestCount);
         UNIT_ASSERT(!deallocateBeforeWipeDone);
         UNIT_ASSERT(!deleteChunksBeforeWipeDone);
-        UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupsCount, deallocateOpSize);
+        UNIT_ASSERT_VALUES_EQUAL(VChunkPerRegionCount, deallocateOpSize);
         UNIT_ASSERT(!deallocateOpMalformed);
 
         UNIT_ASSERT(!TryGetLoadActorAdapterActorId(env, partition, edge));
@@ -3241,12 +3290,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             0,
             NUnitTest::RandomString(DefaultBlockSize, 7));
 
-        // Every unique allocated PBuffer got a Max-lsn barrier erase and
-        // replied OK.
+        // Each allocated PB registration is retired before deallocating the
+        // DBG.
         UNIT_ASSERT_VALUES_EQUAL_C(
-            UniqueDDiskCount(allocatedPBuffers),
+            allocatedPBuffers.size(),
             wipeBarrierOks.size(),
-            "wipe barrier-erase OK replies vs unique allocated PBuffers");
+            "unregister OK replies vs allocated PB registrations");
         UNIT_ASSERT_C(
             pendingWipeBarriers.empty(),
             "unanswered wipe barrier-erase keys: "
@@ -3410,7 +3459,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
     }
 
-    Y_UNIT_TEST(ShouldFailDeleteWhenPBufferEraseIsOverloaded)
+    Y_UNIT_TEST(ShouldSucceedDeleteWhenPBufferEraseIsOverloaded)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -3427,16 +3476,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
         {
             const ui32 type = ev->GetTypeRewrite();
-            if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
-                const auto& record =
-                    ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
-                if (record.GetLsn() == Max<ui64>()) {
-                    wipeCookies.insert({ev->Sender, ev->Cookie});
-                }
+            if (type == NDDisk::TEvUnregisterPersistentBuffer::EventType) {
+                wipeCookies.insert({ev->Sender, ev->Cookie});
                 return true;
             }
             if (!injectOverload ||
-                type != NDDisk::TEvErasePersistentBufferResult::EventType)
+                type != NDDisk::TEvUnregisterPersistentBufferResult::EventType)
             {
                 return true;
             }
@@ -3446,7 +3491,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             if (!wipeCookies.contains(key)) {
                 return true;
             }
-            auto* msg = ev->Get<NDDisk::TEvErasePersistentBufferResult>();
+            auto* msg = ev->Get<NDDisk::TEvUnregisterPersistentBufferResult>();
             if (msg->Record.GetStatus() !=
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
             {
@@ -3468,14 +3513,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __LINE__);
         Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
 
+        // A single OVERLOADED reply is transparently retried by the cleanup
+        // actor, so the delete must still succeed on the first call.
         const auto error = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            E_REJECTED,
-            error.GetCode(),
-            FormatError(error));
-
-        const auto error2 = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
     }
 
     Y_UNIT_TEST(ShouldFailDeleteWhenDDiskDeleteChunksIsUndelivered)

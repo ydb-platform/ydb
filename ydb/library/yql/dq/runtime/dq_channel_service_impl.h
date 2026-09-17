@@ -10,6 +10,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <atomic>
+
 // Flow control design principles
 //
 // 1. There are several ui64 counters which grow monotonically
@@ -244,7 +246,7 @@ public:
     // quota manager, no TEvChannelUpdateV2 round trip as for TOutputDescriptor. Must be called
     // under Mutex, together with the Max/Min getters below, to keep the window consistent
     void RefreshMemoryPressure() {
-        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->GetMemoryAvailability() < 0);
     }
 
     ui64 GetMaxInflightBytes() const {
@@ -327,7 +329,7 @@ public:
 
     // must be called only if IsQuotaAssigned() is true
     bool AllocateQuota(ui64 bytes) {
-        return QuotaManager->AllocateQuota(bytes);
+        return QuotaManager->AllocateQuota(bytes, /* isOptional = */ false);
     }
 
     // must be called only for the bytes allocated by AllocateQuota
@@ -527,7 +529,7 @@ public:
 
     // Must be called under QueueMutex - QuotaManager is (re)assigned under the same mutex
     void RefreshMemoryPressure() {
-        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->IsReasonableToUseSpilling());
+        MemoryPressure.store(EnableSpillingBackpressure && QuotaManager && QuotaManager->GetMemoryAvailability() < 0);
     }
 
     bool IsFinished();
@@ -684,11 +686,12 @@ public:
         SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
         auto now = TInstant::Now();
         LastPeerActivity.store(now);
+        LastQueueProgress.store(now);
         LastCleanup = now;
     }
 
     virtual ~TNodeState();
-    void FailDescriptors();
+    void FailDescriptors(const TString& reason);
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -704,12 +707,15 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
-    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    // the reason is needed only where there is no peer to compare against, i.e. for the session teardown
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
+    void FailOutputs(const TString& reason);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
-    void SendFromWaiters(ui64 deltaBytes);
+    void SendFromWaiters();
+    // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
+    ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
@@ -753,6 +759,10 @@ public:
     std::atomic<ui64> WaitersQueueSize = 0;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation = 1;
+    // when the Queue last moved: a pop, a push into an empty Queue, or the resend of a reconciliation.
+    // Written under Mutex; atomic for the mon page. The age of the front is not the same thing: on a slow
+    // link every message is old by the time it is confirmed while the Queue keeps moving all along
+    std::atomic<TInstant> LastQueueProgress;
     std::atomic<ui64> WaiterBytes = 0;
     std::atomic<ui64> WaiterMessages = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
@@ -801,6 +811,9 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
+    // A debug session discovers its peer only here, so that a test can register every one it needs first
+    void StartSession();
+
     void PauseChannelData();
     void ResumeChannelData();
     void PauseChannelAck();
@@ -814,6 +827,14 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
+    // Lose the data message with this SeqNo, 0 for none. Applied where the message would be delivered
+    // rather than where it arrives, so one already pending can be named and the loss owes nothing to timing
+    std::atomic<ui64> DropDataSeqNo = 0;
+    // Lose the acks confirming up to this SeqNo, 0 for none. Only an OK one: a RESEND is what the peer is
+    // waiting for, and losing it would stall the session rather than the channel
+    std::atomic<ui64> DropOkAckUpToSeqNo = 0;
+    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    std::atomic<ui64> PendingDataCount = 0;
     std::atomic<double> DataLossProbability;
     std::atomic<ui64> DataLossCount;
     std::atomic<double> AckLossProbability;
@@ -1290,6 +1311,7 @@ public:
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
@@ -1323,34 +1345,48 @@ public:
         if (NodeState->ShouldLooseData()) {
             return;
         }
-        if (NodeState->ChannelDataPaused.load()) {
+        // pending too, or it would overtake what arrived before it and a replay would deliver more than
+        // it was asked for
+        if (NodeState->ChannelDataPaused.load() || !PendingChannelData.empty()) {
             PendingChannelData.emplace(ev.Release());
-        } else {
-            while (!PendingChannelData.empty()) {
-                NodeState->HandleData(PendingChannelData.front());
-                PendingChannelData.pop();
-            }
-            if (NodeState->IsNullMode()) {
-                NodeState->HandleNullMode(ev);
-            } else {
-                NodeState->HandleData(ev);
-            }
+            NodeState->PendingDataCount++;
+            return;
         }
+        DeliverChannelData(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (NodeState->ShouldLooseAck()) {
             return;
         }
-        if (NodeState->ChannelAckPaused.load()) {
+        if (NodeState->ChannelAckPaused.load() || !PendingChannelAck.empty()) {
             PendingChannelAck.emplace(ev.Release());
-        } else {
-            while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
-                PendingChannelAck.pop();
-            }
-            NodeState->HandleAck(ev);
+            return;
         }
+        DeliverChannelAck(ev);
+    }
+
+    // whether the message was delivered: the one named by DropDataSeqNo is lost instead
+    bool DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        if (auto seqNo = NodeState->DropDataSeqNo.load(); seqNo && ev->Get()->Record.GetSeqNo() == seqNo) {
+            NodeState->DropDataSeqNo.store(0);
+            return false;
+        }
+        if (NodeState->IsNullMode()) {
+            NodeState->HandleNullMode(ev);
+        } else {
+            NodeState->HandleData(ev);
+        }
+        return true;
+    }
+
+    void DeliverChannelAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        if (auto seqNo = NodeState->DropOkAckUpToSeqNo.load(); seqNo && record.GetSeqNo() <= seqNo
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, a RESEND is never dropped
+        }
+        NodeState->HandleAck(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1372,26 +1408,29 @@ public:
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
         auto maxCount = ev->Get()->MaxCount;
 
-        if (!NodeState->ChannelDataPaused.load()) {
+        // An exact count ignores the pause on purpose - reaching one state and stopping there is what a
+        // test needs - and counts delivered data alone: not a message lost to DropDataSeqNo, and not the
+        // acks, which have a queue and a pause of their own. It stops where it is told only while the
+        // session is paused; a running queue drains its remainder below.
+        if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                if (NodeState->IsNullMode()) {
-                    NodeState->HandleNullMode(PendingChannelData.front());
-                } else {
-                    NodeState->HandleData(PendingChannelData.front());
-                }
+                auto delivered = DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
+                NodeState->PendingDataCount--;
+                if (delivered && maxCount && --maxCount == 0) {
+                    break;
                 }
+            }
+            // an arrival joins the pending ones to keep the order, so without this every later message
+            // would park behind the remainder for good, with no pause set to explain it
+            if (!PendingChannelData.empty() && !NodeState->ChannelDataPaused.load()) {
+                NodeState->ProcessPending(0);
             }
         }
         if (!NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
+                DeliverChannelAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
-                }
             }
         }
     }

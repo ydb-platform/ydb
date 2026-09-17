@@ -13,6 +13,9 @@ class TKeyValueCopyBlobActor : public TActorBootstrapped<TKeyValueCopyBlobActor>
     TLogoBlobID NewBlobId;
     ui64 RequestUid = 0;
 
+    TVector<ui32> YellowMoveChannels;
+    TVector<ui32> YellowStopChannels;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -136,6 +139,35 @@ public:
         Become(&TThis::StatePut);
     }
 
+    void CheckYellow(const TStorageStatusFlags &statusFlags, ui32 currentGroup) {
+        if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+            for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                if (currentGroup == group) {
+                    YellowMoveChannels.push_back(channel);
+                }
+            }
+            SortUnique(YellowMoveChannels);
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: yellow move channels",
+                {"marker", "KVCB10"},
+                {"keyValue", TabletInfo->TabletID},
+                {"yellowMoveChannels", YellowMoveChannels});
+        }
+        if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+            for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                if (currentGroup == group) {
+                    YellowStopChannels.push_back(channel);
+                }
+            }
+            SortUnique(YellowStopChannels);
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: yellow stop channels",
+                {"marker", "KVCB11"},
+                {"keyValue", TabletInfo->TabletID},
+                {"yellowStopChannels", YellowStopChannels});
+        }
+    }
+
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
         ui32 newGroupId = TabletInfo->GroupFor(NewBlobId.Channel(), NewBlobId.Generation());
 
@@ -163,20 +195,22 @@ public:
             return;
         }
 
-        // TODO: more error handing
+        CheckYellow(ev->Get()->StatusFlags, newGroupId);
 
         ReplySuccess();
     }
 
     void ReplySuccess() {
         Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
-            TEvKeyValue::TEvBlobCopied::EResult::OK, BlobId, NewBlobId, RequestUid));
+            TEvKeyValue::TEvBlobCopied::EResult::OK, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
         PassAway();
     }
 
     void ReplyNodata() {
         Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
-            TEvKeyValue::TEvBlobCopied::EResult::NODATA, BlobId, NewBlobId, RequestUid));
+            TEvKeyValue::TEvBlobCopied::EResult::NODATA, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
         PassAway();
     }
 

@@ -2,6 +2,7 @@
 #include "local_topic_client_helpers.h"
 #include "local_topic_io_session_common.h"
 
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -444,7 +445,7 @@ private:
                         if (decompressedMsg.Meta) {
                             offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
                             seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
-                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
+                            createTime = TInstant::MilliSeconds(NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, decompressedMsg.Meta->TimestampDelta));
                         }
 
                         messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();

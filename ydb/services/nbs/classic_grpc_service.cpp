@@ -1,4 +1,5 @@
 #include "classic_grpc_service.h"
+#include "classic_grpc_service_factory.h"
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -8,12 +9,19 @@
 
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_request.h>
+#include <ydb/library/grpc/server/logger.h>
 
 namespace NKikimr::NGRpcService {
 
     using namespace NYdb::NBS::NNbs1CompatApi::NBlockStore;
 
     ////////////////////////////////////////////////////////////////////////////////
+
+    TIntrusivePtr<NYdbGrpc::IGRpcService> CreateClassicNbsGrpcService(
+        IBlockStorePtr blockStore)
+    {
+        return MakeIntrusive<TClassicNbsGrpcService>(std::move(blockStore));
+    }
 
     TClassicNbsGrpcService::TClassicNbsGrpcService(IBlockStorePtr blockStore)
         : BlockStore(std::move(blockStore))
@@ -24,6 +32,7 @@ namespace NKikimr::NGRpcService {
         grpc::ServerCompletionQueue* cq,
         NYdbGrpc::TLoggerPtr logger)
     {
+        Logger = logger;
         SetupIncomingRequests(cq, std::move(logger));
     }
 
@@ -33,6 +42,8 @@ namespace NKikimr::NGRpcService {
     {
         using TRequest = typename TMethod::TRequest;
         using TResponse = typename TMethod::TResponse;
+
+        GRPC_LOG_DEBUG(Logger, "ClassicNbsGrpc incoming request: %s", TMethod::Name);
 
         const auto* typedRequest =
             static_cast<const TRequest*>(requestContext->GetRequest());
@@ -44,6 +55,10 @@ namespace NKikimr::NGRpcService {
             *response->MutableError() = NYdb::NBS::MakeError(
                 NYdb::NBS::E_ARGUMENT,
                 "internal field should not be set by client");
+            GRPC_LOG_INFO(Logger, "%s RequestId=%llu Error=%s",
+                TMethod::Name,
+                static_cast<unsigned long long>(typedRequest->GetHeaders().GetRequestId()),
+                NYdb::NBS::FormatError(response->GetError()).c_str());
             requestContext->Reply(response);
             return;
         }

@@ -8,6 +8,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NSchemeShard {
 
 static constexpr ui32 DefaultMaxShardsInFlight = 32;
@@ -24,7 +26,9 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
         const auto& settings = request.GetSettings();
-        LOG_N("DoExecute " << request.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "DoExecute",
+            {"record", request.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvIndexBuilder::TEvCreateResponse>(request.GetTxId());
 
@@ -194,7 +198,7 @@ public:
             // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
             // in build_index__progress.cpp.
             const auto classification = NTableIndex::ClassifyFulltextRowId(
-                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
+                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes.AsMap(), indexDesc, explain);
             auto enableRowIdMode = [&]() {
                 indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
                 // Fulltext index builds always carry a TFulltextIndexDescription. JSON index builds
@@ -581,3 +585,5 @@ ITransaction* TSchemeShard::CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TP
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

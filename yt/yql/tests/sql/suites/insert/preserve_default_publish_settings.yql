@@ -1,0 +1,7 @@
+/* ytfile can not */
+
+USE plato;
+
+INSERT INTO Output
+SELECT *
+FROM Input;

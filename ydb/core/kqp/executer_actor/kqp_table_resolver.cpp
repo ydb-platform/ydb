@@ -458,6 +458,16 @@ private:
 
                         TablePathsById.emplace(stageInfo.Meta.TableId, stageInfo.Meta.TablePath);
 
+                        if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                            if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                                auto& navEntry = requestNavigate->ResultSet.emplace_back();
+                                navEntry.TableId = stageInfo.Meta.TableId;
+                                navEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                                navEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                            }
+                            TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
+                        }
+
                         auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                         entry.UserData = EncodeStageInfo(stageInfo);
                         AFL_ENSURE(operation == TKeyDesc::ERowOperation::Update); // CTAS is Update operation

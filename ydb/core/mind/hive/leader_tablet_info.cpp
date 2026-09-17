@@ -200,6 +200,15 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
     return previousOwner;
 }
 
+void TLeaderTabletInfo::RestoreLockedTabletMetrics() {
+    if (Hive.CurrentConfig.GetLockedTabletsSendMetrics()
+            && IsLockedToActor()
+            && !IsDeleting())
+    {
+        BecomeUnknown(&Hive.GetNode(LockedToActor.NodeId()));
+    }
+}
+
 void TLeaderTabletInfo::AcquireAllocationUnits() {
     for (const auto& channel : TabletStorageInfo->Channels) {
         if (!channel.History.empty()) {

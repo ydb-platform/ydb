@@ -287,6 +287,15 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
+        if (HasOlderOverlap(pBufferKey, item->Range)) {
+            // Overlapping records are erased in ascending order, one at a
+            // time. Otherwise the older record may survive on a PBuffer after
+            // the newer one is erased everywhere, and after a restart it is
+            // restored and flushed over the newer data.
+            ReadyToErase.insert(pBufferKey);
+            continue;
+        }
+
         if (!CheckEraseAbility(item->Range, val)) {
             ReadyToErase.insert(pBufferKey);
             continue;
@@ -1106,6 +1115,24 @@ bool TBlocksDirtyMap::HasOlderUnflushedOverlap(
                 state == TInflightInfo::EState::PBufferErasing ||
                 state == TInflightInfo::EState::PBufferErased;
             if (overlap.Key < pBufferKey && !onDDisk) {
+                found = true;
+                return TInflightMap::EEnumerateContinuation::Stop;
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+    return found;
+}
+
+bool TBlocksDirtyMap::HasOlderOverlap(
+    TPBufferKey pBufferKey,
+    TBlockRange16 range)
+{
+    bool found = false;
+    Inflight.EnumerateOverlapping(
+        range,
+        [&](TInflightMap::TFindItem& overlap)
+        {
+            if (overlap.Key < pBufferKey) {
                 found = true;
                 return TInflightMap::EEnumerateContinuation::Stop;
             }

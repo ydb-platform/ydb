@@ -224,6 +224,10 @@ private:
         TPBufferKey pBufferKey,
         TBlockRange16 range);
 
+    [[nodiscard]] bool HasOlderOverlap(
+        TPBufferKey pBufferKey,
+        TBlockRange16 range);
+
     [[nodiscard]] bool CheckEraseAbility(
         TBlockRange16 range,
         TInflightInfo& inflightInfo);

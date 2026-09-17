@@ -464,12 +464,19 @@ public:
                         options.PlainDataChunks = cfg->PlainDataChunks;
                         options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
                         options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
+                        if (cfg->PhysicalChunkSize) {
+                            options.PhysicalChunkSizeBytes = cfg->PhysicalChunkSize;
+                        }
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
+                            // Keep the configured mode, only shrink the chunk to fit a small disk.
+                            if (options.PhysicalChunkSizeBytes) {
+                                options.PhysicalChunkSizeBytes = NPDisk::SmallDiskMaximumChunkSize;
+                            }
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);

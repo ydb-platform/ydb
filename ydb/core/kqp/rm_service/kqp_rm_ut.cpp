@@ -36,6 +36,7 @@ using namespace NResourceBroker;
 namespace {
 
 constexpr ui64 KQP_QUEUE_MEMORY_LIMIT = 50'000;
+constexpr ui64 TOTAL_MEMORY_LIMIT = 100'000;
 
 TTenantTestConfig MakeTenantTestConfig() {
     TTenantTestConfig cfg = {
@@ -101,7 +102,7 @@ TResourceBrokerConfig MakeResourceBrokerTestConfig() {
     task->SetDefaultDuration(TDuration::Seconds(5).GetValue());
 
     config.MutableResourceLimit()->AddResource(10);
-    config.MutableResourceLimit()->AddResource(100'000);
+    config.MutableResourceLimit()->AddResource(TOTAL_MEMORY_LIMIT);
 
     return config;
 }
@@ -240,6 +241,15 @@ public:
 
     i64 RmRate(const TString& name) {
         return GetServiceCounters(Counters, "kqp")->GetCounter(name, true)->Val();
+    }
+
+    TIntrusivePtr<NResourceBroker::IResourceBroker> GetInstantBroker(ui32 nodeInd = 0) {
+        auto edge = Runtime->AllocateEdgeActor(nodeInd);
+        Runtime->Send(new IEventHandle(ResourceBrokers[nodeInd], edge,
+            new TEvResourceBroker::TEvResourceBrokerRequest), nodeInd, true);
+        auto response = Runtime->GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(edge);
+        UNIT_ASSERT(response);
+        return response->Get()->ResourceBroker;
     }
 
     // runs the periodic arena pass of the resource manager actor, which gives back a surplus the lock-free path
@@ -442,6 +452,7 @@ public:
         UNIT_TEST(ArenaGrowthCapLeavesRoomForRunningQueries);
         UNIT_TEST(ArenaMixesExternalMemoryAndUnits);
         UNIT_TEST(ArenaAbsorbsChurn);
+        UNIT_TEST(ArenaReleasesIdleReservation);
     UNIT_TEST_SUITE_END();
 
     void SingleTask();
@@ -502,6 +513,7 @@ public:
     void ArenaGrowthCapLeavesRoomForRunningQueries();
     void ArenaMixesExternalMemoryAndUnits();
     void ArenaAbsorbsChurn();
+    void ArenaReleasesIdleReservation();
 
 private:
     THolder<TTestBasicRuntime> Runtime;
@@ -1675,15 +1687,15 @@ void KqpRm::ArenaHysteresis() {
         AssertResourceManagerStats(rm, 550, 100);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
 
-        // free 450 > 300: shrunk to 0 + 200, and the idle arena keeps that
+        // the arena backs nothing any more, so the pass gives the whole of it back
         TickArenaAdjust();
-        AssertResourceBrokerSensors(0, 200, 0, 1, 1);
-        AssertResourceManagerStats(rm, 800, 100);
-        AssertArenaSensors(200, 0, 0);
+        AssertResourceBrokerSensors(0, 0, 0, 2, 0);
+        AssertResourceManagerStats(rm, 1000, 100);
+        AssertArenaSensors(0, 0, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
 
         TickArenaAdjust();
-        AssertResourceBrokerSensors(0, 200, 0, 1, 1);
+        AssertResourceBrokerSensors(0, 0, 0, 2, 0);
         UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
     }
 
@@ -1847,19 +1859,19 @@ void KqpRm::ArenaGrowRetriesWithDeficitOnly() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
 
     TickArenaAdjust();
-    AssertResourceBrokerSensors(0, 2'000, 0, 1, 2);
-    AssertResourceManagerStats(rm, qml - 2'000, 99);
-    AssertArenaSensors(2'000, 0, 0);
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    AssertResourceManagerStats(rm, qml, 99);
+    AssertArenaSensors(0, 0, 0);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 1);
 
     rm->FreeResources(*tx1, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1});
-    AssertResourceBrokerSensors(0, 2'000, 0, 1, 2);
-    AssertResourceManagerStats(rm, qml - 2'000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 2, 1);
+    AssertResourceManagerStats(rm, qml, 100);
 
     tx1.Reset();
     tx2.Reset();
-    AssertResourceBrokerSensors(0, 2'000, 0, 2, 1);
-    AssertResourceManagerStats(rm, qml - 2'000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, 3, 0);
+    AssertResourceManagerStats(rm, qml, 100);
 }
 
 // Demand accepted before the resource broker is attached is charged and in deficit; the arena task is created
@@ -2125,11 +2137,12 @@ void KqpRm::ArenaChargePublished() {
     Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
     CheckSnapshot(0, {{700, 99}, {1000, 100}}, rm);
 
-    // the idle arena keeps its 300 while in band
+    // the free empties the arena without the lock, so the node total follows on the periodic pass
     rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = 100});
     AssertResourceManagerStats(rm, 700, 100);
-    Runtime->DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
-    CheckSnapshot(0, {{700, 100}, {1000, 100}}, rm);
+    TickArenaAdjust();
+    AssertResourceManagerStats(rm, 1000, 100);
+    CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm);
 }
 
 // A raised resource broker queue limit lets a refused arena growth through: the resource manager is subscribed
@@ -2342,12 +2355,50 @@ void KqpRm::ArenaAbsorbsChurn() {
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
     UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaGrowFailures"), 0);
 
-    // the free leaves the arena exactly at the top of the band, so even the periodic pass has nothing to give back
+    // the last free empties the arena, which the periodic pass then gives back whole
     rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
-    TickArenaAdjust();
     AssertResourceBrokerSensors(0, 300, 0, 0, 1);
-    AssertArenaSensors(300, 0, 0);
-    UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/ArenaShrinks"), 0);
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The resource broker admits a task larger than its own total limit only while nothing at all is running, so an
+// arena that outlived its demand would block such a task for good
+void KqpRm::ArenaReleasesIdleReservation() {
+    StartRms({MakeArenaConfig(0, 100, 300), MakeKqpResourceManagerConfig()});
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+    auto broker = GetInstantBroker();
+    const TActorId client = Runtime->AllocateEdgeActor();
+    const auto oversized = [&](ui64 taskId) {
+        return TEvResourceBroker::TEvSubmitTask(taskId, "oversized",
+            {0, TOTAL_MEMORY_LIMIT + 1}, "unknown", 0, {});
+    };
+
+    // nothing has run yet, so the task is admitted over the limit
+    UNIT_ASSERT(broker->SubmitTaskInstant(oversized(1), client));
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(1), client));
+
+    {
+        auto tx = MakeTx(1, rm);
+        UNIT_ASSERT(rm->AllocateResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100}));
+        AssertResourceBrokerSensors(0, 300, 0, 0, 1);
+        UNIT_ASSERT(!broker->SubmitTaskInstant(oversized(2), client)); // the arena task is running
+
+        rm->FreeResources(*tx, 1, NRm::TKqpResourcesRequest{.ExternalMemory = 100});
+    }
+
+    // the free took the lock-free path, so the arena still holds its task until the periodic pass
+    UNIT_ASSERT(!broker->SubmitTaskInstant(oversized(3), client));
+    TickArenaAdjust();
+    AssertResourceBrokerSensors(0, 0, 0, 1, 0);
+    AssertArenaSensors(0, 0, 0);
+
+    UNIT_ASSERT(broker->SubmitTaskInstant(oversized(4), client));
+    UNIT_ASSERT(broker->FinishTaskInstant(TEvResourceBroker::TEvFinishTask(4), client));
 }
 
 // The arena charges the node total only: the pool of a tx sees the memory requests of the tx, not its prepay

@@ -349,7 +349,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
         operations->SetTrackProducerId(Opts.TrackProducerId);
         auto* topics = operations->AddTopics();
-        topics->set_path(Opts.TopicPath);
+        topics->set_path(ResolvePathToDatabase(Opts.Database, Opts.TopicPath));
         auto* partitions = topics->add_partitions();
         partitions->set_partition_id(PartitionId);
 

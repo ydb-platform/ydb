@@ -2,6 +2,7 @@
 
 #include <ydb/library/backup/proto/proto.h>
 
+#include <util/folder/pathsplit.h>
 #include <util/generic/map.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
@@ -61,6 +62,18 @@ TString RelPathFromAbsolute(TString db, TString path) {
     db.push_back('/');
     path = path.erase(0, Min(path.size(), db.size()));
     return path ? path : "/";
+}
+
+TString ResolveBackupPath(const TString& database, const TString& path) {
+    TPathSplitUnix databaseParts(database);
+    Y_ENSURE(databaseParts.IsAbsolute && !databaseParts.empty(),
+        "absolute database path is required for backup metadata, database# " << database.Quote());
+    TPathSplitUnix pathParts(path);
+    if (pathParts.IsAbsolute) {
+        return pathParts.Reconstruct();
+    }
+    databaseParts.AppendMany(pathParts.begin(), pathParts.end());
+    return databaseParts.Reconstruct();
 }
 
 namespace {

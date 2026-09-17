@@ -25,6 +25,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/util/rope.h>
@@ -343,6 +344,9 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        return NKikimr::ResolvePathToDatabase(GetDatabaseName().GetOrElse(TString()), path);
+    }
 };
 
 class IRequestCtxBase

@@ -1,6 +1,7 @@
 LIBRARY(commands)
 
 SRCS(
+    ydb_echo.cpp
     ydb_root.cpp
     ydb_update.cpp
     ydb_version.cpp

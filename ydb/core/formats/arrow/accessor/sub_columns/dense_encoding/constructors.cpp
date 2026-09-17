@@ -104,7 +104,7 @@ TConclusion<std::shared_ptr<arrow::Array>> TDictionaryDenseConstructor::Deserial
     ui32 dictLength;
     memcpy(&dictLength, dictionaryBlob.data(), sizeof(dictLength));
     const TStringBuf dictBlob(dictionaryBlob.data() + sizeof(ui32), dictionaryBlobSize - sizeof(ui32));
-    return DeserializeBinaryArray(dictBlob, dictLength, GetCompressionCodec(externalInfo));
+    return DeserializeBinaryLikeArray(dictBlob, dictLength, externalInfo.GetColumnType(), GetCompressionCodec(externalInfo));
 }
 
 TConclusion<std::shared_ptr<arrow::Array>> BuildDictionaryOnlyValues(

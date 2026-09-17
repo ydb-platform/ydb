@@ -4490,6 +4490,79 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_FAIL("Incremental backup did not reach successful completion");
     }
 
+    Y_UNIT_TEST_TWIN(RestoreAdmissionOwnsStateAndRollback, WithUid) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        PrepareDirs(runtime, env, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultIncrementalCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto submit = [&](ui64 id, const TString& ddl) {
+            auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(id, TTestTxConfig::SchemeShard);
+            auto* tx = request->Record.AddTransaction();
+            tx->SetWorkingDir("/MyRoot");
+            tx->SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreBackupCollection);
+            tx->MutableRestoreBackupCollection()->SetName(".backups/collections/MyCollection1");
+            if (WithUid) {
+                tx->MutableOperationIdempotency()->SetUid("restore:admission");
+                tx->MutableOperationIdempotency()->SetOriginalDdl(ddl);
+            }
+            const auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request.Release());
+            return runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender)->Get()->Record;
+        };
+
+        TControlWrapper redoLimit;
+        TControlBoard::RegisterSharedControl(redoLimit, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        redoLimit.Reset(200, 1, 4096);
+        redoLimit = 1;
+        const ui64 rejectedId = ++txId;
+        const auto rejected = submit(rejectedId, "RESTORE `MyCollection1`;");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), NKikimrScheme::StatusSchemeError, rejected.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetReason(), "local tx commit redo size");
+        TestGetBackupCollectionRestore(runtime, rejectedId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        redoLimit = 200;
+
+        const ui64 originalId = ++txId;
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> copy(runtime, [originalId](const auto& event) {
+            return event->Get()->Record.GetTxId() == originalId;
+        });
+        const TString ddl = "RESTORE  `MyCollection1`;";
+        const auto admitted = submit(originalId, ddl);
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        runtime.WaitFor("restore copy proposed", [&] { return !copy.empty(); });
+        const auto before = TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot");
+        UNIT_ASSERT(before.GetBackupCollectionRestore().GetProgress() != Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetBackupCollectionRestore(runtime, rejectedId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        const auto after = TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot");
+        UNIT_ASSERT(after.GetBackupCollectionRestore().GetProgress() != Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId, Ydb::StatusIds::PRECONDITION_FAILED);
+        if (WithUid) {
+            const auto replay = submit(++txId, ddl);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+        }
+        copy.Stop().Unblock();
+        env.TestWaitNotification(runtime, originalId);
+        UNIT_ASSERT_VALUES_EQUAL(PollRestoreUntilDone(runtime, env, "/MyRoot"), Ydb::StatusIds::SUCCESS);
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetBackupCollectionRestore(runtime, originalId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
     Y_UNIT_TEST_TWIN(IdempotencyRestoreForgetWaitsForFinalization, Reboot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

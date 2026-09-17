@@ -50,17 +50,10 @@ void TSchemeShard::BindSchemeOperationUid(const TOperationUidKey& key, ui64 id,
             break;
         }
         case EOperationUidKind::Restore: {
-            Y_ABORT_UNLESS(!IncrementalRestoreStates.contains(id));
-            auto& info = IncrementalRestoreStates[id];
+            auto& info = IncrementalRestoreStates.at(id);
             info.Uid = key.second;
             info.OriginalDdl = ddl;
             info.UserSID = userSID;
-            info.OriginalOperationId = id;
-            const auto& name = tx.GetRestoreBackupCollection().GetName();
-            const auto path = TPath::Resolve(name.StartsWith('/') ? name : tx.GetWorkingDir() + "/" + name, this);
-            Y_ABORT_UNLESS(path.IsResolved());
-            info.BackupCollectionPathId = path.Base()->PathId;
-            info.AwaitingInitialRestore = true;
             break;
         }
         default:
@@ -92,12 +85,7 @@ void TSchemeShard::PersistSchemeOperationUidKey(NIceDb::TNiceDb& db, const TOper
             db.Table<T>().Key(id).Update(
                 NIceDb::TUpdate<T::Uid>(info.Uid),
                 NIceDb::TUpdate<T::OriginalDdl>(info.OriginalDdl),
-                NIceDb::TUpdate<T::UserSID>(info.UserSID),
-                NIceDb::TUpdate<T::BackupCollectionPathOwnerId>(info.BackupCollectionPathId.OwnerId),
-                NIceDb::TUpdate<T::BackupCollectionPathId>(info.BackupCollectionPathId.LocalPathId),
-                NIceDb::TUpdate<T::State>(static_cast<ui32>(info.State)),
-                NIceDb::TUpdate<T::CurrentIncrementalIdx>(info.CurrentIncrementalIdx),
-                NIceDb::TUpdate<T::AwaitingInitialRestore>(info.AwaitingInitialRestore));
+                NIceDb::TUpdate<T::UserSID>(info.UserSID));
             break;
         }
         default:

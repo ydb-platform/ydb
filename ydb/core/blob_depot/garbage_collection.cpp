@@ -285,6 +285,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
+        if (Self->BlocksManager->IsTabletDeleted(id.TabletID())) {
+            // the tablet has been deleted for good, so every channel of it counts as fully collected
+            // even though we may never see the matching hard barrier
+            *underSoft = *underHard = true;
+            return;
+        }
         const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;

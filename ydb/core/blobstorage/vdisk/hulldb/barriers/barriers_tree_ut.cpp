@@ -160,6 +160,42 @@ namespace NKikimr {
             UNIT_ASSERT(essence.Keep(TKeyBlock(tabletId), TMemRecBlock(Max<ui32>()), {}, false, true).KeepIndex);
         }
 
+        Y_UNIT_TEST(MarkTabletsDeletedBulk) {
+            TWriter writer;
+            NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
+            TMaybe<NBarriers::TCurrentBarrier> soft;
+            TMaybe<NBarriers::TCurrentBarrier> hard;
+
+            const ui64 deletedTablet1 = 100;
+            const ui64 deletedTablet2 = 200;
+            const ui64 aliveTablet = 300;
+            const ui32 channel = 4;
+
+            for (ui64 tabletId : {deletedTablet1, deletedTablet2, aliveTablet}) {
+                writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 1, false), 14, 100);
+            }
+            // make one of the channels dead the old way, it must be purged as well
+            writer.Write(memView, TKeyBarrier(deletedTablet1, channel, 15, 2, true), Max<ui32>(), Max<ui32>());
+
+            memView.MarkTabletsDeleted({deletedTablet1, deletedTablet2});
+            // marking the same tablets again must be a no-op
+            memView.MarkTabletsDeleted({deletedTablet1, deletedTablet2});
+
+            NBarriers::TMemViewSnap snap = memView.GetSnapshot();
+            UNIT_ASSERT(snap.IsTabletDeleted(deletedTablet1));
+            UNIT_ASSERT(snap.IsTabletDeleted(deletedTablet2));
+            UNIT_ASSERT(!snap.IsTabletDeleted(aliveTablet));
+
+            for (ui64 tabletId : {deletedTablet1, deletedTablet2}) {
+                snap.GetBarrier(tabletId, channel, soft, hard);
+                UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+            }
+
+            snap.GetBarrier(aliveTablet, channel, soft, hard);
+            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+            UNIT_ASSERT(hard.Empty());
+        }
+
         Y_UNIT_TEST(MarkTabletDeletedIgnoresLaterBarriers) {
             TWriter writer;
             NBarriers::TTree tree(writer.GetCache0(), VDiskLogPrefix);

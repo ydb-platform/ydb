@@ -69,7 +69,7 @@ namespace NKikimr {
         void ForEachDeletedTablet(TCallback&& callback) const {
             Y_ABORT_UNLESS(Initialized);
             for (const auto& [tabletId, gen] : PersistentBlocks) {
-                if (gen.Generation == Max<ui32>()) {
+                if (NGc::CompleteDelBlock(gen.Generation)) {
                     callback(tabletId);
                 }
             }

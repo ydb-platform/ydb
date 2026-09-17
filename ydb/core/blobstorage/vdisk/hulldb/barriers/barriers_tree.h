@@ -44,6 +44,7 @@ namespace NKikimr {
         public:
             TIndexKey() = default;
             explicit TIndexKey(ui64 tabletId, ui8 channel);
+            ui64 GetTabletId() const { return TabletId; }
             size_t Hash() const;
             bool operator ==(const TIndexKey &v) const;
             void Output(IOutputStream &str) const;
@@ -87,6 +88,9 @@ namespace NKikimr {
                     const TKeyBarrier &key,
                     const TMemRecBarrier &memRec);
             void MarkTabletDeleted(ui64 tabletId);
+            // Bulk version for marking many tablets at once (VDisk start); it makes a single
+            // pass over the index instead of probing all 256 channels of every tablet.
+            void MarkTabletsDeleted(const THashSet<ui64> &tabletIds);
             bool IsTabletDeleted(ui64 tabletId) const;
             void GetBarrier(
                     ui64 tabletId,
@@ -174,6 +178,7 @@ namespace NKikimr {
                         const TKeyBarrier &key,
                         const TMemRecBarrier &memRec);
                 void MarkTabletDeleted(bool gcOnlySynced, ui64 tabletId);
+                void MarkTabletsDeleted(bool gcOnlySynced, const THashSet<ui64> &tabletIds);
                 bool Shared() const;
                 bool NeedRollUp() const;
                 TMemViewSnap GetSnapshot() const;
@@ -187,6 +192,7 @@ namespace NKikimr {
             TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced);
             void Update(const TKeyBarrier &key, const TMemRecBarrier &memRec);
             void MarkTabletDeleted(ui64 tabletId);
+            void MarkTabletsDeleted(const THashSet<ui64> &tabletIds);
             TMemViewSnap GetSnapshot();
         };
 

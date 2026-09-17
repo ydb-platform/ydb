@@ -1,5 +1,7 @@
 #include "barriers_tree.h"
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
     namespace NBarriers {
 
@@ -119,6 +121,31 @@ namespace NKikimr {
             UnlockWrite();
         }
 
+        void TTree::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            LockWrite();
+
+            THashSet<ui64> added;
+            for (ui64 tabletId : tabletIds) {
+                if (DeadTablets.insert(tabletId).second) {
+                    added.insert(tabletId);
+                }
+            }
+
+            if (!added.empty()) {
+                // One pass over the index, not 256 probes per tablet: this is called once per
+                // VDisk start with every tablet ever completely deleted on this group, and that
+                // set only grows.
+                EraseNodesIf(Index, [&added](const auto &item) {
+                    return added.contains(item.first.GetTabletId());
+                });
+                EraseNodesIf(Dead, [&added](const TIndexKey &key) {
+                    return added.contains(key.GetTabletId());
+                });
+            }
+
+            UnlockWrite();
+        }
+
         bool TTree::IsTabletDeleted(ui64 tabletId) const {
             LockRead();
             const bool deleted = DeadTablets.contains(tabletId);
@@ -222,6 +249,15 @@ namespace NKikimr {
             }
         }
 
+        void TMemView::TTreeWithLog::MarkTabletsDeleted(bool gcOnlySynced, const THashSet<ui64> &tabletIds) {
+            if (Shared()) {
+                DeletedTabletsLog.insert(DeletedTabletsLog.end(), tabletIds.begin(), tabletIds.end());
+            } else {
+                RollUp(gcOnlySynced);
+                Tree->MarkTabletsDeleted(tabletIds);
+            }
+        }
+
         bool TMemView::TTreeWithLog::Shared() const {
             return Tree.use_count() > 1;
         }
@@ -254,6 +290,14 @@ namespace NKikimr {
         void TMemView::MarkTabletDeleted(ui64 tabletId) {
             Active->MarkTabletDeleted(GCOnlySynced, tabletId);
             Passive->MarkTabletDeleted(GCOnlySynced, tabletId);
+            if (Active->Shared() && !Passive->Shared()) {
+                Active.swap(Passive);
+            }
+        }
+
+        void TMemView::MarkTabletsDeleted(const THashSet<ui64> &tabletIds) {
+            Active->MarkTabletsDeleted(GCOnlySynced, tabletIds);
+            Passive->MarkTabletsDeleted(GCOnlySynced, tabletIds);
             if (Active->Shared() && !Passive->Shared()) {
                 Active.swap(Passive);
             }

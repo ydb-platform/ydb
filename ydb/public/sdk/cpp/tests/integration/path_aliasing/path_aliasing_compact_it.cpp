@@ -162,8 +162,10 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             Check(Await(alias.MakeDirectory(A("directory"))));
             Check(Await(canonical.DescribePath(P("directory"))));
 
-            Check(Await(alias.MakeDirectory(Name + "/relative")));
-            Check(Await(canonical.DescribePath(P("relative"))));
+            const auto aliasedRelative = Await(alias.MakeDirectory(Name + "/relative"));
+            const auto canonicalRelative = Await(canonical.MakeDirectory(Name + "/relative"));
+            EXPECT_FALSE(aliasedRelative.IsSuccess());
+            EXPECT_EQ(aliasedRelative.GetStatus(), canonicalRelative.GetStatus());
 
             EXPECT_FALSE(Await(alias.DescribePath("/kfrontend/" + Name)).IsSuccess());
         }
@@ -176,10 +178,12 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             auto physicalSession = GetSession(canonical);
 
             Check(Await(session.CreateTable("/short-table", TableDescription())));
+            Check(Await(session.CreateTable(A("table_b"), TableDescription())));
             Check(Await(physicalSession.DescribeTable(P("table"))));
             Check(Await(alias.BulkUpsert(A("table"), Row(1, "/kfront/literal"))));
+            Check(Await(alias.BulkUpsert(A("table_b"), Row(1, "/kfront/literal"))));
 
-            Check(Await(session.CopyTables({{A("table"), A("copy_a")}, {A("table"), A("copy_b")}})));
+            Check(Await(session.CopyTables({{A("table"), A("copy_a")}, {A("table_b"), A("copy_b")}})));
             Check(Await(session.RenameTables({{A("copy_a"), A("renamed_a")}, {A("copy_b"), A("renamed_b")}})));
             for (const char* leaf : {"table", "renamed_a", "renamed_b"}) {
                 auto result = Await(canonical.ReadRows(P(leaf), Keys(1)));
@@ -268,7 +272,7 @@ namespace NYdb::inline Dev::NPathAliasingTests {
                     continue;
                 }
                 if (auto* start = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                    EXPECT_EQ(start->GetPartitionSession()->GetTopicPath(), A("topic"));
+                    EXPECT_EQ(start->GetPartitionSession()->GetTopicPath(), Name + "/topic");
                     start->Confirm();
                 } else if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                     ASSERT_EQ(data->GetMessages().size(), 1);
@@ -306,7 +310,7 @@ namespace NYdb::inline Dev::NPathAliasingTests {
             WaitOperation(Await(importer.ImportFromFs(NImport::TImportFromFsSettings()
                                                           .BasePath(base)
                                                           .DestinationPath(A("restored"))
-                                                          .AppendItem({"archive", "table"}))));
+                                                          .AppendItem({"archive", A("restored/table")}))));
             NTable::TTableClient canonicalTable(*Canonical);
             auto restored = Await(canonicalTable.ReadRows(P("restored/table"), Keys(1)));
             Check(restored);

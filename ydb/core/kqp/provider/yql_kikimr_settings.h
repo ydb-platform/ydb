@@ -50,6 +50,8 @@ public:
 
     NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
 
+    NCommon::TConfSetting<bool, Static> KqpDisablePessimisticLocks;
+
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
     NCommon::TConfSetting<TString, Static> _DefaultCluster;

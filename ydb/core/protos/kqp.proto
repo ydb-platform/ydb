@@ -941,6 +941,9 @@ message TKqpTableSinkSettings {
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
     optional bool CollectAffectedRows = 30;
+    // Do not take pessimistic locks (EvLock) for this query (ReadCommittedRW with
+    // PRAGMA kikimr.KqpDisablePessimisticLocks="true").
+    optional bool DisablePessimisticLocks = 31;
 }
 
 message TReadVectorTopK {

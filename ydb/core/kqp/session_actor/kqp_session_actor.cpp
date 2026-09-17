@@ -347,7 +347,12 @@ public:
             "Cannot send to workload manager: PoolConfig is already resolved");
 
         QueryState->AdmissionSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Basic,
-            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::Admission, NWilson::EFlags::AUTO_END);
+            QueryState->KqpSessionSpan.GetTraceId(), {
+                .Name = "Queued",
+                .Phase = "Admission",
+                .ActorType = "TKqpSessionActor",
+                .PeerActorType = "WorkloadService",
+            }, NWilson::EFlags::AUTO_END);
         QueryState->AdmissionSpan.Attribute("ydb.pool_id", QueryState->UserRequestContext->PoolId);
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
@@ -1277,7 +1282,12 @@ public:
             {"logPrefix", LogPrefix()},
             {"traceId", TraceId()});
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
-            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::PersistentSnapshot);
+            QueryState->KqpSessionSpan.GetTraceId(), {
+                .Name = "Acquire persistent snapshot",
+                .Phase = "Snapshot",
+                .ActorType = "TKqpSessionActor",
+                .PeerActorType = "TSnapshotManagerActor",
+            });
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -1297,7 +1307,12 @@ public:
 
     void AcquireMvccSnapshot() {
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
-            QueryState->KqpSessionSpan.GetTraceId(), EQueryTracePhase::SessionSnapshot);
+            QueryState->KqpSessionSpan.GetTraceId(), {
+                .Name = "Acquire snapshot",
+                .Phase = "Snapshot",
+                .ActorType = "TKqpSessionActor",
+                .PeerActorType = "TSnapshotManagerActor",
+            });
         YDB_LOG_DEBUG("Acquire mvcc snapshot",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},

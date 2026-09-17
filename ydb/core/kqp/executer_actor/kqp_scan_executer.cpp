@@ -241,7 +241,11 @@ private:
             {"traceId", TraceId()});
 
         ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ScanExecuterRunTasks,
-            ExecuterSpan.GetTraceId(), EQueryTracePhase::RunTasks, NWilson::EFlags::AUTO_END);
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Run tasks",
+                .Phase = "RunTasks",
+                .Component = "DqExecution",
+            }, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteScanTx()) {
             return;

@@ -192,7 +192,7 @@ private:
             settings
         );
 
-        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Request_->GetWilsonTraceId())) {
+        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
             return ReplyFinishStream("Couldn't send request to KqpProxy");
         }
     }

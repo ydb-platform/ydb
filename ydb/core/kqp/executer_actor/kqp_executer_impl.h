@@ -343,7 +343,12 @@ protected:
                 {"shardIdsCount", shardIds.size()},
                 {"traceId", TraceId()});
             ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ExecuterShardsResolve,
-                ExecuterSpan.GetTraceId(), EQueryTracePhase::ResolveShards, NWilson::EFlags::AUTO_END);
+                ExecuterSpan.GetTraceId(), {
+                    .Name = "Locate shards",
+                    .Phase = "ResolveShards",
+                    .ActorType = "TKqpShardsResolver",
+                    .Component = "KqpExecuter.Prepare",
+                }, NWilson::EFlags::AUTO_END);
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -1246,7 +1251,12 @@ protected:
         }
 
         ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ExecuterTableResolve,
-            ExecuterSpan.GetTraceId(), EQueryTracePhase::ResolveTables, NWilson::EFlags::AUTO_END);
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Resolve tables",
+                .Phase = "ResolveTables",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+            }, NWilson::EFlags::AUTO_END);
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false, ExecuterStateSpan.GetTraceId());
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);

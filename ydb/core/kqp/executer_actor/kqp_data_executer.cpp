@@ -924,7 +924,13 @@ private:
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
             ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterAcquireSnapshot,
-                ExecuterSpan.GetTraceId(), EQueryTracePhase::Snapshot);
+                ExecuterSpan.GetTraceId(), {
+                    .Name = "Acquire snapshot",
+                    .Phase = "Snapshot",
+                    .ActorType = "TKqpDataExecuter",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "TLongTxService",
+                });
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
             Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
                 0, 0, ExecuterStateSpan.GetTraceId());
@@ -995,7 +1001,11 @@ private:
         StartStreamingQueriesActors();
         StartCheckpointCoordinator();
         ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterRunTasks,
-            ExecuterSpan.GetTraceId(), EQueryTracePhase::RunTasks, NWilson::EFlags::AUTO_END);
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Run tasks",
+                .Phase = "RunTasks",
+                .Component = "DqExecution",
+            }, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteTasks()) {
             return;

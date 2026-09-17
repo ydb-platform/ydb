@@ -3739,3 +3739,4 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
+

@@ -485,7 +485,13 @@ private:
 
         if (!ResolvingNamesFinished) {
             MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-                NWilson::TTraceId(TraceId), EQueryTracePhase::ResolveMetadata, NWilson::EFlags::AUTO_END);
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, MetadataSpan.GetTraceId());
             Become(&TKqpTableResolver::ResolveNamesState);
@@ -494,14 +500,26 @@ private:
 
         if (requestNavigate->ResultSet.size()) {
             MetadataSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-                NWilson::TTraceId(TraceId), EQueryTracePhase::ResolveMetadata, NWilson::EFlags::AUTO_END);
+                NWilson::TTraceId(TraceId), {
+                    .Name = "Metadata",
+                    .Phase = "ResolveMetadata",
+                    .ActorType = "TKqpTableResolver",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "SchemeCache",
+                }, NWilson::EFlags::AUTO_END);
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()),
                 0, 0, MetadataSpan.GetTraceId());
         } else {
             NavigationFinished = true;
         }
         PartitioningSpan = MakeQueryPhaseTraceSpan(TComponentTracingLevels::TQueryProcessor::Detailed,
-            NWilson::TTraceId(TraceId), EQueryTracePhase::ResolvePartitioning, NWilson::EFlags::AUTO_END);
+            NWilson::TTraceId(TraceId), {
+                .Name = "Partitioning",
+                .Phase = "ResolvePartitioning",
+                .ActorType = "TKqpTableResolver",
+                .Component = "KqpExecuter.Prepare",
+                .PeerActorType = "SchemeCache",
+            }, NWilson::EFlags::AUTO_END);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request),
             0, 0, PartitioningSpan.GetTraceId());
         Become(&TKqpTableResolver::ResolveKeysState);

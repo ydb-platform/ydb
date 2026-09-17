@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
                 "Commit", NWilson::EFlags::NONE, runtime.GetActorSystem(0));
             NKqp::TCommitTracePhase phase;
             ui32 counted = 0;
-            phase.Start(parent, NKqp::EQueryTracePhase::CommitPrepareShards, [&] {
+            phase.Start(parent, {"Prepare shards", "CommitPrepareShards", "TKqpBufferWriteActor", nullptr, "DataShard"}, [&] {
                 ++counted;
                 return NKqp::NQueryTraceSettings::MAX_SHARD_EVENTS + 10;
             });

@@ -23,25 +23,12 @@ struct TQueryTraceDescription {
     TString Operation;
 };
 
-enum class EQueryTracePhase {
-    Admission,
-    ResolveTables,
-    ResolveShards,
-    ResolveMetadata,
-    ResolvePartitioning,
-    Snapshot,
-    SessionSnapshot,
-    PersistentSnapshot,
-    RunTasks,
-    BufferLookup,
-    Write,
-    WaitForWrites,
-    FlushEffects,
-    Commit,
-    CommitPrepareShards,
-    CommitApplyShards,
-    CommitCoordinator,
-    Rollback,
+struct TQueryTraceSpanDescription {
+    const char* Name;
+    const char* Phase;
+    const char* ActorType;
+    const char* Component = nullptr;
+    const char* PeerActorType = nullptr;
 };
 
 enum class EMetadataTraceOperation {
@@ -50,7 +37,7 @@ enum class EMetadataTraceOperation {
 };
 
 NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
-    EQueryTracePhase phase, NWilson::TFlags flags = NWilson::EFlags::NONE,
+    const TQueryTraceSpanDescription& description, NWilson::TFlags flags = NWilson::EFlags::NONE,
     NActors::TActorSystem* actorSystem = nullptr);
 
 TQueryTraceDescription DescribeQueryTrace(NKikimrKqp::EQueryType queryType,
@@ -93,8 +80,8 @@ private:
 class TCommitTracePhase {
 public:
     template<class TCountShards>
-    void Start(const NWilson::TSpan& parent, EQueryTracePhase phase, TCountShards&& countShards) {
-        if (StartSpan(parent, phase)) {
+    void Start(const NWilson::TSpan& parent, const TQueryTraceSpanDescription& description, TCountShards&& countShards) {
+        if (StartSpan(parent, description)) {
             Span_.Attribute("ydb.shards", static_cast<i64>(countShards()));
         }
     }
@@ -102,7 +89,7 @@ public:
     void End(Ydb::StatusIds::StatusCode status);
 
 private:
-    bool StartSpan(const NWilson::TSpan& parent, EQueryTracePhase phase);
+    bool StartSpan(const NWilson::TSpan& parent, const TQueryTraceSpanDescription& description);
 
 private:
     NWilson::TSpan Span_;

@@ -35,6 +35,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_shared_reading_
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming/generic py3test.sole chunk
+ydb/tests/fq/streaming/logbroker py3test.sole chunk
 ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_replace_node[kikimr0]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution

@@ -383,7 +383,10 @@ namespace {
 
         return TAnalyzeSettings{
             .TablePath = TString(analyze.Table()),
-            .Columns = std::move(columns)
+            .Columns = std::move(columns),
+            .SampleRate = analyze.SampleRate()
+                ? FromString<double>(analyze.SampleRate().Cast<TCoDouble>().Literal().Value())
+                : 1.0,
         };
     }
 

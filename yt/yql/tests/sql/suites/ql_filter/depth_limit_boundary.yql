@@ -1,0 +1,51 @@
+/* ytfile can not */
+
+PRAGMA yt.UseQLFilter;
+
+/* 43 predicates: depth 3 + 42 OR levels = 45. */
+SELECT a
+FROM plato.Input
+WHERE
+    a = -101 OR
+    b = 101 OR
+    d = 102 OR
+    b = 103 OR
+    d = 104 OR
+    b = 105 OR
+    d = 106 OR
+    b = 107 OR
+    d = 108 OR
+    b = 109 OR
+    d = 110 OR
+    b = 111 OR
+    d = 112 OR
+    b = 113 OR
+    d = 114 OR
+    b = 115 OR
+    d = 116 OR
+    b = 117 OR
+    d = 118 OR
+    b = 119 OR
+    d = 120 OR
+    b = 121 OR
+    d = 122 OR
+    b = 123 OR
+    d = 124 OR
+    b = 125 OR
+    d = 126 OR
+    b = 127 OR
+    d = 128 OR
+    b = 129 OR
+    d = 130 OR
+    b = 131 OR
+    d = 132 OR
+    b = 133 OR
+    d = 134 OR
+    b = 135 OR
+    d = 136 OR
+    b = 137 OR
+    d = 138 OR
+    b = 139 OR
+    d = 140 OR
+    b = 141 OR
+    d = 142;

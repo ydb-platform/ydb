@@ -27,6 +27,11 @@ public:
             .WithSchema(Schema)
             .Build();
     }
+
+    ESchemaChangeResult ParseSchemaChange(const NChangeExchange::IChangeRecord&,
+            NKikimrReplication::TSchemaChange&, TString&) const override {
+        return ESchemaChangeResult::NotSchemaChange;
+    }
 };
 
 class TSerializer: public NReplication::NService::IChangeRecordSerializer {

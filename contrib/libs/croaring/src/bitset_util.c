@@ -573,43 +573,73 @@ const uint8_t vbmi2_table[64] = {
     16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
     32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
     48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
+// Reference:
+// https://lemire.me/blog/2022/05/10/faster-bitset-decoding-using-intel-avx-512/
+//
+// One VPCOMPRESSB (AVX-512 VBMI2) turns a whole 64-bit word into the (up to
+// 64) byte-sized positions of its set bits in a single shot; the positions are
+// then widened 16 at a time with VPMOVZXBD and added to a running base vector.
+//
+// Two details matter for speed. Each block is stored under a mask derived from
+// BZHI(-1, popcount), so a store writes exactly the values it produced: the
+// caller needs no padding past the values it asked for, and no store bandwidth
+// goes to values nobody wants. And only the ceil(popcount/16) blocks that
+// carry a value are computed at all -- bitset containers are usually well
+// under half full, so the later blocks are almost always skipped.
 size_t bitset_extract_setbits_avx512(const uint64_t *words, size_t length,
                                      uint32_t *vout, size_t outcapacity,
                                      uint32_t base) {
     if (outcapacity == 0) return 0;
-    uint32_t *out = (uint32_t *)vout;
+    uint32_t *out = vout;
     uint32_t *initout = out;
     uint32_t *safeout = out + outcapacity;
-    __m512i base_v = _mm512_set1_epi32(base);
-    __m512i index_table = _mm512_loadu_si512(vbmi2_table);
+    // base_v holds the value of bit 0 of the word being decoded.
+    __m512i base_v = _mm512_set1_epi32((int)base);
+    const __m512i inc_v = _mm512_set1_epi32(64);
+    const __m512i index_table = _mm512_loadu_si512(vbmi2_table);
     size_t i = 0;
 
-    for (; (i < length) && ((out + 64) < safeout); i += 1) {
+    for (; i < length; i++) {
         uint64_t v = words[i];
-        __m512i vec = _mm512_maskz_compress_epi8(v, index_table);
-
-        uint8_t advance = (uint8_t)roaring_hamming(v);
-
-        __m512i vbase =
-            _mm512_add_epi32(base_v, _mm512_set1_epi32((int)(i * 64)));
-        __m512i r1 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(vec, 0));
-        __m512i r2 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(vec, 1));
-        __m512i r3 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(vec, 2));
-        __m512i r4 = _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(vec, 3));
-
-        r1 = _mm512_add_epi32(r1, vbase);
-        r2 = _mm512_add_epi32(r2, vbase);
-        r3 = _mm512_add_epi32(r3, vbase);
-        r4 = _mm512_add_epi32(r4, vbase);
-        _mm512_storeu_si512((__m512i *)out, r1);
-        _mm512_storeu_si512((__m512i *)(out + 16), r2);
-        _mm512_storeu_si512((__m512i *)(out + 32), r3);
-        _mm512_storeu_si512((__m512i *)(out + 48), r4);
-
-        out += advance;
+        if (v != 0) {
+            size_t advance = (size_t)roaring_hamming(v);
+            if (out + advance > safeout) break;
+            __m512i vec = _mm512_maskz_compress_epi8((__mmask64)v, index_table);
+            // BZHI(-1, advance): advance is in [1, 64] here, so the shift is
+            // well defined.
+            uint64_t bits = ~UINT64_C(0) >> (64 - advance);
+            _mm512_mask_storeu_epi32(
+                out, (__mmask16)bits,
+                _mm512_add_epi32(
+                    base_v, _mm512_cvtepu8_epi32(_mm512_castsi512_si128(vec))));
+            if (advance > 16) {
+                _mm512_mask_storeu_epi32(
+                    out + 16, (__mmask16)(bits >> 16),
+                    _mm512_add_epi32(base_v,
+                                     _mm512_cvtepu8_epi32(
+                                         _mm512_extracti32x4_epi32(vec, 1))));
+                if (advance > 32) {
+                    _mm512_mask_storeu_epi32(
+                        out + 32, (__mmask16)(bits >> 32),
+                        _mm512_add_epi32(
+                            base_v, _mm512_cvtepu8_epi32(
+                                        _mm512_extracti32x4_epi32(vec, 2))));
+                    if (advance > 48) {
+                        _mm512_mask_storeu_epi32(
+                            out + 48, (__mmask16)(bits >> 48),
+                            _mm512_add_epi32(
+                                base_v,
+                                _mm512_cvtepu8_epi32(
+                                    _mm512_extracti32x4_epi32(vec, 3))));
+                    }
+                }
+            }
+            out += advance;
+        }
+        base_v = _mm512_add_epi32(base_v, inc_v);
     }
 
-    base += i * 64;
+    base += (uint32_t)(i * 64);
 
     for (; (i < length) && (out < safeout); ++i) {
         uint64_t w = words[i];
@@ -628,48 +658,53 @@ size_t bitset_extract_setbits_avx512(const uint64_t *words, size_t length,
     return out - initout;
 }
 
-// Reference:
-// https://lemire.me/blog/2022/05/10/faster-bitset-decoding-using-intel-avx-512/
+// Same kernel as bitset_extract_setbits_avx512, writing 16-bit values, so the
+// blocks hold 32 values instead of 16. This one is only worth calling on
+// reasonably dense input: see array_container_from_bitset.
 size_t bitset_extract_setbits_avx512_uint16(const uint64_t *array,
                                             size_t length, uint16_t *vout,
                                             size_t capacity, uint16_t base) {
     if (capacity == 0) return 0;
-    uint16_t *out = (uint16_t *)vout;
+    uint16_t *out = vout;
     uint16_t *initout = out;
     uint16_t *safeout = vout + capacity;
 
-    __m512i base_v = _mm512_set1_epi16(base);
-    __m512i index_table = _mm512_loadu_si512(vbmi2_table);
+    __m512i base_v = _mm512_set1_epi16((short)base);
+    const __m512i inc_v = _mm512_set1_epi16(64);
+    const __m512i index_table = _mm512_loadu_si512(vbmi2_table);
     size_t i = 0;
 
-    for (; (i < length) && ((out + 64) < safeout); i++) {
+    for (; i < length; i++) {
         uint64_t v = array[i];
-        __m512i vec = _mm512_maskz_compress_epi8(v, index_table);
-
-        uint8_t advance = (uint8_t)roaring_hamming(v);
-
-        __m512i vbase =
-            _mm512_add_epi16(base_v, _mm512_set1_epi16((short)(i * 64)));
-        __m512i r1 = _mm512_cvtepi8_epi16(_mm512_extracti32x8_epi32(vec, 0));
-        __m512i r2 = _mm512_cvtepi8_epi16(_mm512_extracti32x8_epi32(vec, 1));
-
-        r1 = _mm512_add_epi16(r1, vbase);
-        r2 = _mm512_add_epi16(r2, vbase);
-
-        _mm512_storeu_si512((__m512i *)out, r1);
-        _mm512_storeu_si512((__m512i *)(out + 32), r2);
-        out += advance;
+        if (v != 0) {
+            size_t advance = (size_t)roaring_hamming(v);
+            if (out + advance > safeout) break;
+            __m512i vec = _mm512_maskz_compress_epi8((__mmask64)v, index_table);
+            uint64_t bits = ~UINT64_C(0) >> (64 - advance);
+            _mm512_mask_storeu_epi16(
+                out, (__mmask32)bits,
+                _mm512_add_epi16(
+                    base_v, _mm512_cvtepu8_epi16(_mm512_castsi512_si256(vec))));
+            if (advance > 32) {
+                _mm512_mask_storeu_epi16(
+                    out + 32, (__mmask32)(bits >> 32),
+                    _mm512_add_epi16(base_v,
+                                     _mm512_cvtepu8_epi16(
+                                         _mm512_extracti64x4_epi64(vec, 1))));
+            }
+            out += advance;
+        }
+        base_v = _mm512_add_epi16(base_v, inc_v);
     }
 
-    base += i * 64;
+    base = (uint16_t)(base + i * 64);
 
     for (; (i < length) && (out < safeout); ++i) {
         uint64_t w = array[i];
         while ((w != 0) && (out < safeout)) {
             int r =
                 roaring_trailing_zeroes(w);  // on x64, should compile to TZCNT
-            uint32_t val = r + base;
-            memcpy(out, &val, sizeof(uint16_t));
+            *out = (uint16_t)(r + base);
             out++;
             w &= (w - 1);
         }

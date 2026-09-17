@@ -17,6 +17,7 @@ public:
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
     static bool CanBuildWindow(const TOpWindow& window);
+    static bool UsesWholePartition(const TOpWindow& window);
 
 private:
     void Prepare(const TVector<TInfoUnit>& inputs);
@@ -29,6 +30,11 @@ private:
 
     TExprNode::TPtr BuildChain(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildChainLambda(bool update) const;
+    TExprNode::TPtr BuildAccumulator(const TOpWindowFunc& func, ui32 funcIndex, TExprNode::TPtr itemArg, TExprNode::TPtr previousState,
+                                     TExprNode::TPtr sortKeyChanged, TVector<std::pair<TString, TExprNode::TPtr>>& stateMembers) const;
+    TExprNode::TPtr BuildWholePartition(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildFoldLambda(bool update) const;
+    TExprNode::TPtr BuildExpandFromStructs(TExprNode::TPtr list) const;
     TExprNode::TPtr BuildExpandFromChain(TExprNode::TPtr chained) const;
 
     TString AccumulatorName(ui32 funcIndex) const;
@@ -38,6 +44,9 @@ private:
     TExprNode::TPtr Member(TExprNode::TPtr from, const TString& name) const;
     TExprNode::TPtr BuildStruct(const TVector<std::pair<TString, TExprNode::TPtr>>& members) const;
     TExprNode::TPtr BuildSumCastTarget(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildAvgAccumulatorDataType(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildAvgAccumulatorType(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
     TExprNode::TPtr MakeOptional(TExprNode::TPtr value, bool alreadyOptional) const;
     TExprNode::TPtr BuildUint64(ui64 value) const;
 
@@ -47,4 +56,5 @@ private:
     const TStructExprType* InputStruct = nullptr;
     TVector<TInfoUnit> OutputLayout;
     bool NeedsPeerKey = false;
+    bool WholePartition = false;
 };

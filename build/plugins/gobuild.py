@@ -1,7 +1,8 @@
 import itertools
 from hashlib import md5
 import os
-from _common import rootrel_arc_src, tobuilddir
+import posixpath
+from _common import resolve_common_const, rootrel_arc_src, tobuilddir
 import ymake
 
 runtime_cgo_path = os.path.join('runtime', 'cgo')
@@ -188,15 +189,33 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
 
     if add_fmt:
         resolved_go_files = []
-        go_source_files = [] if is_test_module and unit.get(['GO_TEST_FOR_DIR']) else go_files
+        go_source_files = []
+        if not (is_test_module and unit.get('GO_TEST_FOR_DIR')):
+            go_source_files = list(go_files)
+            # ALL_GO_SRCS() fills _ALL_GO_FILES via _GLOB, but SRCS($_ALL_GO_FILES)
+            # reaches _GO_SRCS_VALUE only after this plugin has run, so the module
+            # would silently lose its gofmt checks. Include the globbed files even
+            # when explicit SRCS are present.
+            all_go_files = unit.get('_ALL_GO_FILES')
+            if all_go_files:
+                go_source_files.extend(all_go_files.split())
         for path in itertools.chain(go_source_files, go_test_files, go_xtest_files):
             if path.endswith('.go'):
-                resolved = unit.resolve_arc_path([path])
-                if resolved != path and need_lint(resolved):
-                    resolved_go_files.append(resolved)
+                # resolve_arc_path leaves $-prefixed paths unchanged, including
+                # source variables. An unresolved relative path returns an empty
+                # string; a generated file may resolve to $B. Accept only sources.
+                resolved = resolve_common_const(path.replace('\\', '/'))
+                if resolved.startswith('${CURDIR}/'):
+                    resolved = unit_path + '/' + resolved[len('${CURDIR}/') :]
+                if not resolved.startswith('$S/'):
+                    resolved = unit.resolve_arc_path([resolved])
+                if resolved.startswith('$S/'):
+                    resolved = posixpath.normpath(resolved)
+                    if resolved.startswith('$S/') and need_lint(resolved):
+                        resolved_go_files.append(resolved)
         if resolved_go_files:
             basedirs = {}
-            for f in resolved_go_files:
+            for f in dict.fromkeys(resolved_go_files):
                 basedir = os.path.dirname(f)
                 if basedir not in basedirs:
                     basedirs[basedir] = []

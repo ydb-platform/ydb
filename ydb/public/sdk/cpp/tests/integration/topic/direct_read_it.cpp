@@ -1579,7 +1579,7 @@ TEST_F(DirectReadSession, NoRetryDirectReadSession) {
     public:
         TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
         void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
-        NThreading::TPromise<void>& GotClosedEvent;
+        NThreading::TPromise<void> GotClosedEvent;
     };
 
     auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));
@@ -1610,7 +1610,7 @@ TEST_F(DirectReadSession, RetryDirectReadSession) {
     public:
         TControlCallbacks(NThreading::TPromise<void>& gotClosedEvent) : GotClosedEvent(gotClosedEvent) {}
         void AbortSession(TSessionClosedEvent&&) override { GotClosedEvent.SetValue(); }
-        NThreading::TPromise<void>& GotClosedEvent;
+        NThreading::TPromise<void> GotClosedEvent;
     };
 
     auto session = setup.GetDirectReadSession(std::make_shared<TControlCallbacks>(gotClosedEvent));

@@ -45,6 +45,7 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/graph/api/shard.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -1363,6 +1364,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
                 } else if (type == TTabletTypes::GraphShard) {
                     bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
+                } else if (type == TTabletTypes::WasmCompileController) {
+                    bootstrapperActorId = Boot(ctx, type, &NUdfStore::CreateWasmCompileController, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

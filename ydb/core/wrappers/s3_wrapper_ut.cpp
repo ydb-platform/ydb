@@ -14,11 +14,6 @@
 
 #include <util/string/printf.h>
 
-#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
-
-#include <atomic>
-#include <thread>
-
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NWrappers;

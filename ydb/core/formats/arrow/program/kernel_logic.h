@@ -136,19 +136,14 @@ public:
         return std::make_shared<TToStringKernel>(*kernels.front());
     }
 
-    static TString GetClassNameStatic() {
-        return "ToString";
-    }
-
     virtual TString GetClassName() const override {
-        return GetClassNameStatic();
+        return ToString(NYql::TKernelRequestBuilder::EUnaryOp::ToString);
     }
 
     virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
         return PreservesOriginalAddress ? std::optional<ui32>(0) : std::nullopt;
     }
 
-    static const inline auto Registrator = TFactory::TRegistrator<TToStringKernel>(GetClassNameStatic());
 };
 
 class TLogicMatchString: public IKernelLogic {

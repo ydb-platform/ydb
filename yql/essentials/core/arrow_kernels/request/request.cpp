@@ -37,6 +37,7 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
         case EUnaryOp::Size:
         case EUnaryOp::Minus:
         case EUnaryOp::Abs:
+        case EUnaryOp::ToString:
             Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, {arg}));
             break;
     }
@@ -236,13 +237,6 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
 
     Y_ENSURE(outType->IsSameType(*scalarApply.GetStaticType()));
     Items_.emplace_back(scalarApply);
-    return Items_.size() - 1;
-}
-
-ui32 TKernelRequestBuilder::AddToString(const TTypeAnnotationNode* argType, const TTypeAnnotationNode* retType) {
-    const TGuard<TScopedAlloc> allocGuard(Alloc_);
-    const auto arg = MakeArg(argType);
-    Items_.emplace_back(Pb_.BlockFunc("ToString", MakeType(retType), {arg}));
     return Items_.size() - 1;
 }
 

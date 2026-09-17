@@ -15,7 +15,8 @@ public:
         Size,
         Minus,
         Abs,
-        Just
+        Just,
+        ToString
     };
 
     enum class EBinaryOp {
@@ -54,7 +55,6 @@ public:
     // (json/json?,utf8)->bool/bool?
     ui32 JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     ui32 JsonValue(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
-    ui32 AddToString(const TTypeAnnotationNode* argType, const TTypeAnnotationNode* retType);
     TString Serialize();
 
 private:

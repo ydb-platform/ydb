@@ -109,6 +109,7 @@ message TProgram {
             optional uint32 KernelIdx = 4;
             optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
             optional string KernelName = 6;
+            optional uint32 YqlUnaryOperationId = 7; // TKernelRequestBuilder::EUnaryOp
         }
 
         message TExternalFunction {

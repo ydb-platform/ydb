@@ -640,9 +640,9 @@ TTypedColumn CompileYqlKernelToString(const TTypedColumn& argument, TKqpOlapComp
     auto *const command = ctx.CreateAssignCmd();
     auto *const function = command->MutableFunction();
     function->AddArguments()->SetId(argument.Id);
-    function->SetKernelIdx(ctx.GetKernelRequestBuilder().AddToString(argument.Type, resultType));
+    function->SetKernelIdx(ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::ToString, argument.Type, resultType));
     function->SetFunctionType(TProgram::YQL_KERNEL);
-    function->SetKernelName("ToString");
+    function->SetYqlUnaryOperationId((ui32)TKernelRequestBuilder::EUnaryOp::ToString);
     return {command->GetColumn().GetId(), resultType};
 }
 

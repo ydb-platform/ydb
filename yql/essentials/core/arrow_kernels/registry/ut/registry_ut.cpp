@@ -270,7 +270,7 @@ Y_UNIT_TEST(TestToString) {
     const auto blockOptStringType = ctx.MakeType<TBlockExprType>(
         ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
     UNIT_ASSERT_VALUES_EQUAL(
-        b.AddToString(blockOptUtf8Type, blockOptStringType),
+        b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::ToString, blockOptUtf8Type, blockOptStringType),
         0);
     const auto kernels = LoadKernels(b.Serialize(), *functionRegistry, nodeFactory, MakeLangVersion(2025, 2));
     UNIT_ASSERT_VALUES_EQUAL(kernels.size(), 1);

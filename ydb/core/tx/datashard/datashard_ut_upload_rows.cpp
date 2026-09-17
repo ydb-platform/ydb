@@ -147,6 +147,43 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
     }
 
+    Y_UNIT_TEST(TestUploadRowsDoesNotReturnUnavailableAfterCommittedWrite) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+
+        const auto tabletId = GetTableShards(server, sender, "/Root/table-1").at(0);
+        THolder<IEventHandle> blockedResponse;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvUploadRowsResponse>(
+            [&](TEvDataShard::TEvUploadRowsResponse::TPtr& ev) {
+                if (blockedResponse || ev->Get()->Record.GetStatus() != NKikimrTxDataShard::TError::OK) {
+                    return;
+                }
+
+                blockedResponse.Reset(ev.Release());
+            });
+
+        auto uploadSender = DoStartUploadRows(runtime, "/Root/table-1", {{1, 10}});
+        WaitFor(runtime, [&] { return bool(blockedResponse); }, "blocked upload rows response");
+        observer.Remove();
+
+        RebootTablet(runtime, tabletId, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table-1`"),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }");
+
+        DoWaitUploadRows(runtime, uploadSender, Ydb::StatusIds::UNDETERMINED);
+    }
+
     Y_UNIT_TEST(TestUploadRowsDropColumnRace) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));

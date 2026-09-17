@@ -1222,7 +1222,9 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+        const auto err = ev->Get()->NotDelivered ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNDETERMINED;
+
+        SetError(TUploadStatus(err, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
             Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
@@ -1298,12 +1300,21 @@ private:
         }
     }
 
-    void SetError(const TUploadStatus& status) {
-        if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
-            return;
+    void SetError(const TUploadStatus& s) {
+        switch (Status.GetCode()) {
+            //most strong errors.
+            case ::Ydb::StatusIds::UNDETERMINED:
+            case ::Ydb::StatusIds::INTERNAL_ERROR:
+                return;
+            default:
+                if (s.GetCode() == ::Ydb::StatusIds::UNDETERMINED ||
+                    s.GetCode() == ::Ydb::StatusIds::INTERNAL_ERROR ||
+                    Status.GetCode() == ::Ydb::StatusIds::SUCCESS) {
+                    Status = s;
+                } else {
+                    return;
+                }
         }
-
-        Status = status;
     }
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {

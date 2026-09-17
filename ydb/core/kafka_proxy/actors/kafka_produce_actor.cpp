@@ -410,7 +410,6 @@ void TKafkaProduceActor::InvalidateTopic(const TString& path, bool deleted, cons
     }
 
     SendResults(ctx);
-    ProcessRequests(ctx);
 }
 
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx) {
@@ -476,47 +475,31 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
         return;
     }
 
-    if (ProcessingRequests) {
+    if (PendingRequest || Requests.empty()) {
         return;
     }
 
-    if (Requests.empty()) {
+    if (NeedTopicInitialization(Requests.front())) {
+        ProcessInitializationRequests(ctx);
         return;
     }
 
-    ProcessingRequests = true;
-    Y_DEFER { ProcessingRequests = false; };
-
-    auto canProcess = EnqueueInitialization();
-    while (canProcess--) {
-        PendingRequests.push_back(std::make_shared<TPendingRequest>(Requests.front()));
-        Requests.pop_front();
-
-        ProcessRequest(PendingRequests.back(), ctx);
-    }
-
-    ProcessInitializationRequests(ctx);
+    PendingRequest = std::make_shared<TPendingRequest>(Requests.front());
+    Requests.pop_front();
+    ProcessRequest(PendingRequest, ctx);
 }
 
-size_t TKafkaProduceActor::EnqueueInitialization() {
-    size_t canProcess = 0;
-    bool requireInitialization = false;
-
-    for(const auto& e : Requests) {
-        auto r = e->Get()->Request;
-        for(const auto& topicData : r->TopicData) {
-            const auto& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
-            if (!Topics.contains(topicPath)) {
-                requireInitialization = true;
-                TopicsForInitialization.insert(topicPath);
-            }
-        }
-        if (!requireInitialization) {
-            ++canProcess;
+bool TKafkaProduceActor::NeedTopicInitialization(const TEvKafka::TEvProduceRequest::TPtr& request) {
+    bool need = false;
+    auto r = request->Get()->Request;
+    for (const auto& topicData : r->TopicData) {
+        const auto& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
+        if (!Topics.contains(topicPath)) {
+            TopicsForInitialization.insert(topicPath);
+            need = true;
         }
     }
-
-    return canProcess;
+    return need;
 }
 
 struct TParsedProduceRecords {
@@ -731,7 +714,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
     }
 }
 
-void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx) {
+void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& /*ctx*/) {
     auto r = request->Get();
     auto cookie = r->Cookie;
 
@@ -744,16 +727,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
     }
 
     auto& cookieInfo = it->second;
-    auto& expectedCookies = cookieInfo.Request->WaitAcceptingCookies;
-    expectedCookies.erase(cookie);
-
-    if (expectedCookies.empty()) {
-        ProcessRequests(ctx);
-    } else {
-        YDB_LOG_WARN("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected",
-            {LogPrefix()},
-            {"expected", JoinSeq(", ", expectedCookies)});
-    }
+    cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
 }
 
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
@@ -894,26 +868,27 @@ EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {
 }
 
 void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
+    if (!PendingRequest) {
+        ProcessRequests(ctx);
+        return;
+    }
+
     auto expireTime = ctx.Now() - REQUEST_EXPIRATION_INTERVAL;
+    auto pendingRequest = PendingRequest;
     YDB_LOG_TRACE("Produce actor: Sending results",
         {LogPrefix()},
-        {"queueSize", PendingRequests.size()},
         {"expirationTime", expireTime});
 
-    // We send the results in the order of receipt of the request
-    while (!PendingRequests.empty()) {
-        auto pendingRequest = PendingRequests.front();
+    // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
+    bool expired = expireTime > pendingRequest->StartTime;
 
-        // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
-        bool expired = expireTime > pendingRequest->StartTime;
-
-        if (!expired && !pendingRequest->WaitResultCookies.empty()) {
-            YDB_LOG_TRACE("Skipping sending results",
-                {LogPrefix()},
-                {"expired", expired},
-                {"waitResultCookies", JoinSeq(", ", pendingRequest->WaitResultCookies)});
-            return;
-        }
+    if (!expired && !pendingRequest->WaitResultCookies.empty()) {
+        YDB_LOG_TRACE("Skipping sending results",
+            {LogPrefix()},
+            {"expired", expired},
+            {"waitResultCookies", JoinSeq(", ", pendingRequest->WaitResultCookies)});
+        return;
+    }
 
         auto request = pendingRequest->Request->Get()->Request;
         auto correlationId = pendingRequest->Request->Get()->CorrelationId;
@@ -1012,9 +987,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             Cookies.erase(cookie);
         }
 
-        PendingRequests.pop_front();
-    }
-
+    PendingRequest.reset();
     ProcessRequests(ctx);
 }
 

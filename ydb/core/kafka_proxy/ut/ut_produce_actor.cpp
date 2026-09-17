@@ -255,6 +255,9 @@ namespace {
             TActorId firstPartitionWriterId = writeRequestReceiver;
             AssertCorrectOptsInPartitionWriter(firstPartitionWriterId, {producerId, producerEpoch}, TransactionalId);
 
+            auto firstResponse = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
             // produce with new epoch
             SendProduce(TransactionalId, producerId, producerEpoch + 1);
 
@@ -351,6 +354,9 @@ namespace {
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
             TActorId firstPartitionWriterId = writeRequestReceiver;
             AssertCorrectOptsInPartitionWriter(firstPartitionWriterId, {producerId, producerEpoch}, {});
+
+            auto firstResponse = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
 
             // produce with new epoch
             SendProduce({}, producerId, producerEpoch + 1);
@@ -533,8 +539,7 @@ namespace {
             };
             Ctx->Runtime->SetObserverFunc(observer);
 
-            SendProduce({}, 1, 0, 1);
-            SendProduce({}, 1, 0, 2);
+            SendProduceToPartitions({0, 0}, {}, 1, 0, 1);
 
             TDispatchOptions options;
             options.CustomFinalCondition = [&writes]() {
@@ -553,16 +558,15 @@ namespace {
                 std::move(record));
             Ctx->Runtime->Send(new IEventHandle(writes[0].ProduceActor, Ctx->Edge, ev.Release()));
 
-            auto first = GrabProduceResponse();
-            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(
-                std::dynamic_pointer_cast<NKafka::TProduceResponseData>(first->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+            auto response = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
+            const auto produceResponse = std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response);
+            UNIT_ASSERT(produceResponse);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[0].ErrorCode,
                 NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
-
-            auto second = GrabProduceResponse();
-            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(
-                std::dynamic_pointer_cast<NKafka::TProduceResponseData>(second->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+            UNIT_ASSERT_VALUES_EQUAL(produceResponse->Responses[0].PartitionResponses[1].ErrorCode,
                 NKafka::EKafkaErrors::UNKNOWN_SERVER_ERROR);
         }
 

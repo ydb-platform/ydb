@@ -21,8 +21,8 @@ using namespace NKikimrClient;
 // When a request to write to an unknown topic arrives, the actor changes the state to Init until it receives
 // information about all the topics needed to process the request.
 //
-// Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
-// The order of responses to requests is also guaranteed.
+// The connection processes one in-flight Kafka request at a time, so this actor also processes
+// one Produce request at a time. Incoming requests are queued until the current request is answered.
 //
 class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
                         , public TKafkaExceptionHandler<TKafkaProduceActor> {
@@ -118,7 +118,7 @@ private:
 
     void SendResults(const TActorContext& ctx);
 
-    size_t EnqueueInitialization();
+    bool NeedTopicInitialization(const TEvKafka::TEvProduceRequest::TPtr& request);
     void ProcessInitializationRequests(const TActorContext& ctx);
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
@@ -160,7 +160,7 @@ private:
 
         TInstant StartTime;
     };
-    TDeque<TPendingRequest::TPtr> PendingRequests;
+    TPendingRequest::TPtr PendingRequest;
 
     struct TCookieInfo {
         TString TopicPath;
@@ -206,8 +206,6 @@ private:
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
-
-    bool ProcessingRequests = false;
 };
 
 }

@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>

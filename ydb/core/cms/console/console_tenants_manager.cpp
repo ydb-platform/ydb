@@ -498,6 +498,9 @@ public:
             if (Tenant->IsGraphShardEnabled) {
                 subdomain.SetGraphShard(true);
             }
+            if (Tenant->IsWasmCompileControllerEnabled) {
+                subdomain.SetExternalWasmCompileController(true);
+            }
         }
 
         if (SharedTenant) {
@@ -528,6 +531,9 @@ public:
             }
             if (Tenant->IsGraphShardEnabled) {
                 subdomain.SetGraphShard(true);
+            }
+            if (Tenant->IsWasmCompileControllerEnabled) {
+                subdomain.SetExternalWasmCompileController(true);
             }
         }
         if (tablets) {

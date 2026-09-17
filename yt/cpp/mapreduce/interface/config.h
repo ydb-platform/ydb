@@ -158,6 +158,11 @@ struct TConfig
     bool ForceIpV6;
     bool UseHosts;
 
+    /// @brief Use https if no schema was provided in proxy url.
+    bool PreferHttps;
+
+    bool UseTLS;
+
     TDuration HostListUpdateInterval;
 
     TNode Spec;
@@ -229,6 +234,14 @@ struct TConfig
 
     // @brief Minimum byte size for files to undergo deduplication at upload
     i64 CacheUploadDeduplicationThreshold;
+
+    /// @brief Take a shared lock on the file cache directory during operation preparation.
+    ///
+    /// Prevents periodic cleaners from removing the cache directory between its creation and operation files upload to the cache.
+    ///
+    /// Only non-default file storages are locked.
+    /// The default one is expected to be protected on the cluster side.
+    bool LockFileStorage = false;
 
     bool MountSandboxInTmpfs;
 

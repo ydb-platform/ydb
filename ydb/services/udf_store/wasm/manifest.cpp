@@ -1,4 +1,5 @@
 #include "manifest.h"
+#include <ydb/public/lib/udf/manifest/manifest.h>
 #include "registry_helpers.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -313,8 +314,7 @@ TWasmUdfDescriptor ParseFunctionDescriptor(
         ythrow yexception()
             << "type_config_callable is only supported under objects[].methods, not functions[]";
     }
-    if (descriptor.CallingConvention == EWasmCallingConvention::Bridge
-        && descriptor.Binding == EWasmUdfBinding::TypeConfigCallable)
+    if (descriptor.CallingConvention == EWasmCallingConvention::Bridge && descriptor.Binding == EWasmUdfBinding::TypeConfigCallable)
     {
         ythrow yexception()
             << "calling_convention=bridge is incompatible with type_config_callable"
@@ -368,8 +368,7 @@ TWasmObjectDescriptor ParseObjectDescriptor(const NJson::TJsonValue& objectNode)
     if (!objectNode.Has("create_export")) {
         ythrow yexception() << "Missing objects[].create_export";
     }
-    if (!objectNode.Has("methods") || !objectNode["methods"].IsArray()
-        || objectNode["methods"].GetArray().empty())
+    if (!objectNode.Has("methods") || !objectNode["methods"].IsArray() || objectNode["methods"].GetArray().empty())
     {
         ythrow yexception() << "objects[].methods must be a non-empty array";
     }
@@ -425,8 +424,7 @@ void ExpandObjectsIntoFunctions(
                     << "Duplicate YQL function name '" << method.Name
                     << "' from objects[].methods (names must be unique across functions/objects)";
             }
-            if (moduleCc == EWasmCallingConvention::Bridge
-                && method.Binding == EWasmUdfBinding::TypeConfigCallable)
+            if (moduleCc == EWasmCallingConvention::Bridge && method.Binding == EWasmUdfBinding::TypeConfigCallable)
             {
                 ythrow yexception()
                     << "calling_convention=bridge is incompatible with type_config_callable"
@@ -454,8 +452,7 @@ void ExpandObjectsIntoFunctions(
             if (descriptor.Binding == EWasmUdfBinding::Plain) {
                 descriptor.ExportName = method.Export;
             }
-            if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable
-                && descriptor.CreateExport.empty())
+            if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable && descriptor.CreateExport.empty())
             {
                 ythrow yexception()
                     << "type_config_callable method '" << method.Name
@@ -474,6 +471,10 @@ void ExpandObjectsIntoFunctions(
 } // namespace
 
 TWasmManifest ParseManifest(TStringBuf manifestJson) {
+    const auto common = NYdb::NUdfManifest::Parse(manifestJson);
+    if (common.Type != NYdb::NUdfManifest::EModuleType::Module || common.Kind != NYdb::NUdfManifest::EModuleKind::Wasm) {
+        ythrow yexception() << "Expected a WASM module manifest";
+    }
     NJson::TJsonValue root;
     if (!NJson::ReadJsonTree(manifestJson, &root, true)) {
         ythrow yexception() << "Failed to parse wasm manifest JSON";

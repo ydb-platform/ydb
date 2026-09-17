@@ -41,6 +41,7 @@ public:
         std::optional<ui64> NonceRandNum = std::nullopt;
         bool UseRdmaAllocator = false;
         bool EnablePDiskSpaceColorOverride = false;
+        bool EnableTightPDiskSpaceColors = false;
     };
 
 private:
@@ -107,6 +108,7 @@ public:
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->FeatureFlags.SetEnablePDiskSpaceColorOverride(Settings.EnablePDiskSpaceColorOverride);
+        pDiskConfig->FeatureFlags.SetEnableTightPDiskSpaceColors(Settings.EnableTightPDiskSpaceColors);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         pDiskConfig->NonceRandNum = Settings.NonceRandNum;

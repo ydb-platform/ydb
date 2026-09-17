@@ -383,7 +383,10 @@ namespace {
 
         return TAnalyzeSettings{
             .TablePath = TString(analyze.Table()),
-            .Columns = std::move(columns)
+            .Columns = std::move(columns),
+            .SampleRate = analyze.SampleRate()
+                ? FromString<double>(analyze.SampleRate().Cast<TCoDouble>().Literal().Value())
+                : 1.0,
         };
     }
 
@@ -3116,9 +3119,9 @@ public:
                                         setting.Value().Cast<TCoInterval>().Literal().Value()
                                     );
 
-                                    if (value <= 0) {
+                                    if (value < static_cast<i64>(TDuration::Seconds(1).MicroSeconds())) {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                                            TStringBuilder() << name << " must be positive"));
+                                            TStringBuilder() << name << " must be at least 1 second"));
                                         return SyncError();
                                     }
 

@@ -2451,6 +2451,7 @@ roaring_container_iterator_t container_init_iterator_last(const container_t *c,
  * Moves the iterator to the next entry. Returns true and sets `value` if a
  * value is present.
  */
+CROARING_ALLOW_UNALIGNED
 inline bool container_iterator_next(const container_t *c, uint8_t typecode,
                                     roaring_container_iterator_t *it,
                                     uint16_t *value) {
@@ -2519,6 +2520,7 @@ inline bool container_iterator_next(const container_t *c, uint8_t typecode,
  * Moves the iterator to the previous entry. Returns true and sets `value` if a
  * value is present.
  */
+CROARING_ALLOW_UNALIGNED
 inline bool container_iterator_prev(const container_t *c, uint8_t typecode,
                                     roaring_container_iterator_t *it,
                                     uint16_t *value) {

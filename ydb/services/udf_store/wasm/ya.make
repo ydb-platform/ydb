@@ -29,6 +29,7 @@ CFLAGS(
 )
 
 PEERDIR(
+    ydb/public/lib/udf/manifest
     ydb/services/udf_store/wasm/abi
     ydb/library/wasm/api
     ydb/library/wasm/engine

@@ -55,12 +55,10 @@ def _to_date32(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
         pb.int32_value = value
 
 
-def _from_datetime_number(
-    x: typing.Union[float, datetime], table_client_settings: table.TableClientSettings
-) -> typing.Union[float, datetime]:
+def _from_datetime_number(x: int, table_client_settings: table.TableClientSettings) -> typing.Union[int, datetime]:
     if table_client_settings is not None and table_client_settings._native_datetime_in_result_sets:
-        # x is float when native_datetime_in_result_sets is True
-        return datetime.utcfromtimestamp(typing.cast(float, x))
+        # x is the raw Unix timestamp (seconds) from uint32_value/int64_value
+        return _EPOCH + timedelta(seconds=x)
     return x
 
 

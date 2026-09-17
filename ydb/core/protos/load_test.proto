@@ -236,6 +236,7 @@ message TEvLoadTestRequest {
         optional uint32 EraseRatio = 9 [default = 10];
 
         optional EMeasureType MeasureType = 10 [default = WRITE];
+        optional uint64 RandomSeed = 11;
     }
 
     message TVDiskLoad {

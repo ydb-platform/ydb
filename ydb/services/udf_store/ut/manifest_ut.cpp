@@ -8,6 +8,7 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
 
 Y_UNIT_TEST(ParseValidManifest) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "LocalUdf",
         "calling_convention": "unversioned_value",
         "functions": [
@@ -35,6 +36,7 @@ Y_UNIT_TEST(ParseValidManifest) {
 
 Y_UNIT_TEST(ParseRequiredLibraries) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "LocalUdf",
         "functions": [
             {
@@ -54,6 +56,7 @@ Y_UNIT_TEST(ParseRequiredLibraries) {
 
 Y_UNIT_TEST(ParseObjectsTypeConfigCallable) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Prefix",
         "calling_convention": "unversioned_value",
         "required_libraries": ["sdk"],
@@ -94,6 +97,7 @@ Y_UNIT_TEST(ParseObjectsTypeConfigCallable) {
 
 Y_UNIT_TEST(ParseObjectsPlainSnapshot) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Ctx",
         "objects": [
             {
@@ -126,6 +130,7 @@ Y_UNIT_TEST(ParseObjectsPlainSnapshot) {
 
 Y_UNIT_TEST(SynthesizeNewObjectNameForSecondObject) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Multi",
         "objects": [
             {
@@ -169,6 +174,7 @@ Y_UNIT_TEST(SynthesizeNewObjectNameForSecondObject) {
 
 Y_UNIT_TEST(RejectTypeConfigOnPlainFunctions) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
         "functions": [
             {
@@ -190,6 +196,7 @@ Y_UNIT_TEST(RejectWideLeafUnderUnversionedValue) {
     // int32 has no TUnversionedValue slot, so it can only travel over the
     // bridge. Rejecting it here beats failing on the first row.
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
         "calling_convention": "unversioned_value",
         "functions": [
@@ -205,6 +212,7 @@ Y_UNIT_TEST(RejectWideLeafUnderUnversionedValue) {
 
 Y_UNIT_TEST(RejectContainerResultUnderUnversionedValue) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
         "functions": [
             {
@@ -224,6 +232,7 @@ Y_UNIT_TEST(RejectContainerResultUnderUnversionedValue) {
 Y_UNIT_TEST(RejectWideTypeInObjectMethod) {
     // Object methods are always unversioned_value, whatever the module says.
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
         "calling_convention": "bridge",
         "objects": [
@@ -247,6 +256,7 @@ Y_UNIT_TEST(RejectWideTypeInObjectMethod) {
 
 Y_UNIT_TEST(AcceptWideTypesUnderBridge) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Good",
         "calling_convention": "bridge",
         "functions": [
@@ -271,6 +281,7 @@ Y_UNIT_TEST(AcceptWideTypesUnderBridge) {
 
 Y_UNIT_TEST(AcceptWideTypesUnderPerFunctionBridgeOverride) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Mixed",
         "calling_convention": "unversioned_value",
         "functions": [
@@ -297,6 +308,7 @@ Y_UNIT_TEST(RejectDeeplyNestedType) {
     }
     const TString manifest = TStringBuilder()
         << R"({
+            "module_type": "module", "module_kind": "wasm",
             "module_name": "Deep",
             "calling_convention": "bridge",
             "functions": [{
@@ -313,6 +325,7 @@ Y_UNIT_TEST(RejectDuplicateFunctionName) {
     // function sink twice, so which of the two YQL called was decided by the
     // order they happened to be written in.
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Dup",
         "functions": [
             {
@@ -337,6 +350,7 @@ Y_UNIT_TEST(RejectDuplicateFunctionName) {
 
 Y_UNIT_TEST(RejectFunctionNameTakenByAnObjectMethod) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Clash",
         "functions": [
             {
@@ -370,6 +384,7 @@ Y_UNIT_TEST(RejectFunctionNameTakenByAnObjectMethod) {
 
 Y_UNIT_TEST(AcceptDistinctFunctionNames) {
     const TString manifest = R"({
+        "module_type": "module", "module_kind": "wasm",
         "module_name": "Fine",
         "functions": [
             {
@@ -392,4 +407,4 @@ Y_UNIT_TEST(AcceptDistinctFunctionNames) {
     UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].Name, "g");
 }
 
-} // Y_UNIT_TEST_SUITE
+} // Y_UNIT_TEST_SUITE(TWasmManifestTest)

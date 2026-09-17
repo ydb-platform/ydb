@@ -31,10 +31,9 @@ using namespace NThreading;
 
 namespace {
 
-ui32 CheckedVChunkBlockSize(ui32 blockSize, ui64 vChunkSize)
+ui32 CheckedVChunkBlockSize(ui32 blockSize)
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
-    Y_ABORT_UNLESS(vChunkSize % blockSize == 0);
     return blockSize;
 }
 
@@ -69,8 +68,8 @@ TVChunk::TVChunk(
     , DiskDescription(diskDescription)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , BlockSize(CheckedVChunkBlockSize(blockSize, vChunkSize))
-    , BlocksCount(vChunkSize / BlockSize)
+    , BlockSize(CheckedVChunkBlockSize(blockSize))
+    , BlocksCount(GetVChunkBlockCount(BlockSize, vChunkSize))
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
         .DiskId = DiskDescription.DiskId,
@@ -80,7 +79,11 @@ TVChunk::TVChunk(
         .VChunkIndex = vChunkConfig.GetVChunkIndex()
      }}
     , VChunkConfig(vChunkConfig)
-    , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(VChunkConfig, BlockSize, BlocksCount))
+    , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
+          DirectBlockGroup->GetArenaAllocatorPool(),
+          VChunkConfig,
+          BlockSize,
+          BlocksCount))
 {
     // ActorSystem thread
 
@@ -144,7 +147,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -203,7 +206,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     const TBlockRange64 regionRange = TranslateToRegion(
         *request->Headers.VolumeConfig,
         request->Headers.Range);
-    const TBlockRange64 vchunkRange =
+    const TBlockRange16 vchunkRange =
         TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
 
     LOG_DEBUG(
@@ -309,20 +312,6 @@ TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
     return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
 }
 
-TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
-}
-
-TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
-}
-
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -359,6 +348,18 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
+}
+
+TDirtyMapStats TVChunk::GetDirtyMapStats() const
+{
+    return BlocksDirtyMap->GetStats();
+}
+
+TDirtyMapHostStats TVChunk::GetDirtyMapHostStats(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetHostStats(hostIndex);
 }
 
 TVChunkSnapshot TVChunk::BuildMonSnapshot()
@@ -441,28 +442,28 @@ void TVChunk::OnBelatedWriteBlocksResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TBlockRange64> TVChunk::GetFreshRange(THostIndex host) const
+std::optional<TBlockRange16> TVChunk::GetFreshRange(THostIndex host) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->GetFreshRange(host);
 }
 
-TReadHint TVChunk::MakeReadHint(TBlockRange64 range)
+TReadHint TVChunk::MakeReadHint(TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return BlocksDirtyMap->MakeReadHint(range);
 }
 
-TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange64 range, THostMask mask)
+TRangeLock TVChunk::MakeDDiskRangeLock(TBlockRange16 range, THostMask mask)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     return TRangeLock(BlocksDirtyMap, range, mask);
 }
 
-TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange64 range)
+TSyncHint TVChunk::BeginRangeSync(THostIndex host, TBlockRange16 range)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -591,7 +592,7 @@ void TVChunk::OnStopped()
 
 void TVChunk::DoReadBlocksLocal(
     TTracedPromise<TReadBlocksLocalResponse> promise,
-    TBlockRange64 vchunkRange,
+    TBlockRange16 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     std::shared_ptr<NWilson::TSpan> span)

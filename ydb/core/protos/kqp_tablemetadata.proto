@@ -31,9 +31,8 @@ message TEncoding {
 
 message TDefaultExpression {
     optional string ExprText = 1;
-    optional string Context = 2;
-    repeated string Dependencies = 3;
-    optional bool Stored = 4 [default = false];
+    repeated string Dependencies = 2;
+    optional bool Stored = 3 [default = false];
 }
 
 message TKqpColumnMetadataProto {

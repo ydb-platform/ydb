@@ -238,6 +238,7 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
+<<<<<<< HEAD
     virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;
 
     // The lowest lsn that must be preserved across all vchunks of this
@@ -247,6 +248,8 @@ public:
     virtual NThreading::TFuture<std::optional<ui64>>
     GatherSafeBarrierForErase() = 0;
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
     // Get a list of all entries in PBuffers belonging to a given vChunkIndex.
     virtual NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) = 0;

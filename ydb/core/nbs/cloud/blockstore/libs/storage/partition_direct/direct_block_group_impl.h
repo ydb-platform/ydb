@@ -22,6 +22,8 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/mind/bscontroller/types.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,11 +152,14 @@ public:
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
+<<<<<<< HEAD
     void BarrierEraseFromPBuffer(ui64 lsn) override;
 
     NThreading::TFuture<std::optional<ui64>>
     GatherSafeBarrierForErase() override;
 
+=======
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
 
@@ -279,6 +284,10 @@ private:
         const TEvSyncResult& response,
         size_t segmentCount);
 
+    void OnNewPBufferKey(TPBufferKey pBufferKey);
+    [[nodiscard]] std::optional<TPBufferKey> ComputeSafeBarrierForErase() const;
+    void PBufferCleanup();
+
     void DoBarrierEraseFromPBuffer(
         THostIndex hostIndex,
         ui64 lsn,
@@ -329,6 +338,8 @@ private:
     TVector<TDDiskConnection> PBufferConnections;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
+
+    std::array<ui64, MaxHostCount> LastSentBarrierByPBufferHost{};
     TOracle Oracle;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used

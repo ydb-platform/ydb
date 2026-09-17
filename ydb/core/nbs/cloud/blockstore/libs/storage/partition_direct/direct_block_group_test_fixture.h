@@ -1,7 +1,18 @@
 #pragma once
 
+<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
+=======
+#include "base_test_fixture.h"
+#include "direct_block_group_impl.h"
+#include "partition_direct_service_mock.h"
+#include "vchunk.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -23,6 +34,23 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+<<<<<<< HEAD
+=======
+    NProto::TStorageServiceConfig StorageServiceConfig;
+    TDiskDescription DiskDescription{
+        .DiskId = "disk-id",
+        .TabletId = 100,
+        .Generation = 1};
+    TVolumeConfigPtr VolumeConfig = std::make_shared<TVolumeConfig>(
+        "disk-id",
+        DefaultBlockSize,
+        65536,   // blockCount
+        1024,    // blocksPerStripe
+        DefaultVChunkSize);
+    std::shared_ptr<TTraceServiceMock> TraceService =
+        std::make_shared<TTraceServiceMock>();
+    std::shared_ptr<TPartitionDirectServiceMock> Service;
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
     // Mock services created by RunAndGetInitialReady(). Kept alive for the
     // whole test because TDirectBlockGroup::Run() stores a raw pointer to the
     // service.
@@ -104,6 +132,30 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const TExecutorPtr& executor,
         const NThreading::TFuture<void>& future,
         TDuration timeout = DefaultWaitFutureTimeout);
+<<<<<<< HEAD
+=======
+
+    // Sets all response Promises for update configs requests. Returns executed
+    // requests count.
+    size_t ReplyUpdateRequests();
+
+    // Waits until the vchunk has restored its dirty map.
+    void WaitDirtyMapReady(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TVChunk>& vchunk);
+
+    // Writes one block through the vchunk and waits for the reply.
+    void WriteBlock(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TVChunk>& vchunk,
+        ui64 blockIndex);
+
+    // Waits until the transport has sent `count` barrier erases.
+    void WaitBarrierErases(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<NTransport::TStorageTransportMock>& transport,
+        size_t count);
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

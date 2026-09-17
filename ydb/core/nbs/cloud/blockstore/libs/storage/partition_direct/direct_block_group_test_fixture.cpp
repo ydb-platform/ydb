@@ -1,8 +1,14 @@
 #include "direct_block_group_test_fixture.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
 
 namespace {
@@ -83,7 +89,7 @@ TDBGFixture::MakeDirectBlockGroup(
     return std::make_shared<TDirectBlockGroup>(
         CreateArenaAllocator(),
         Runtime->GetActorSystem(0),
-        std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
+        std::make_shared<TStorageConfig>(StorageServiceConfig),
         executor,
         "disk-1",
         1,
@@ -172,4 +178,64 @@ void TDBGFixture::WaitReady(
     UNIT_ASSERT(future.HasValue());
 }
 
+<<<<<<< HEAD
+=======
+size_t TDBGFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(Service->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
+void TDBGFixture::WaitDirtyMapReady(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TVChunk>& vchunk)
+{
+    UNIT_ASSERT(DoExecutorAndRuntimeWorkWithPredicate(
+        executor,
+        [&] { return TBaseFixture::IsDirtyMapReady(*vchunk); },
+        DefaultWaitFutureTimeout));
+}
+
+void TDBGFixture::WriteBlock(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TVChunk>& vchunk,
+    ui64 blockIndex)
+{
+    TString buffer(DefaultBlockSize, 'w');
+    auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = VolumeConfig,
+        .RequestId = 1,
+        .Range = TBlockRange64::WithLength(blockIndex, 1)});
+    request->Sglist =
+        TGuardedSgList(TSgList{TBlockDataRef{buffer.data(), buffer.size()}});
+
+    const auto response = WaitFuture(
+        executor,
+        vchunk->WriteBlocksLocal(
+            MakeIntrusive<TCallContext>(),
+            std::move(request),
+            NWilson::TTraceId::NewTraceId(
+                NWilson::TTraceId::MAX_VERBOSITY,
+                NWilson::TTraceId::MAX_TIME_TO_LIVE)),
+        DefaultWaitFutureTimeout);
+    UNIT_ASSERT_C(!HasError(response.Error), FormatError(response.Error));
+}
+
+void TDBGFixture::WaitBarrierErases(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<NTransport::TStorageTransportMock>& transport,
+    size_t count)
+{
+    UNIT_ASSERT_C(
+        DoExecutorAndRuntimeWorkWithPredicate(
+            executor,
+            [&] { return transport->BarrierErases.size() >= count; },
+            DefaultWaitFutureTimeout),
+        "barrier erases sent: " << transport->BarrierErases.size());
+}
+
+>>>>>>> 3b287e3de3d (NBS-7459: own PBuffer cleanup in DirectBlockGroup (#52414))
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -1,9 +1,12 @@
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -337,6 +340,20 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(f.Controller->GetTTLFinishedCounter().Val());
         UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTTLFinishedCounter().Val(), f.Controller->GetTTLStartedCounter().Val());
         f.Drive();
+        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        ui32 livePortions = 0;
+        for (const auto& [_, granule] : index.GetTables()) {
+            for (const auto& [_, portion] : granule->GetPortions()) {
+                if (portion->HasRemoveSnapshot()) {
+                    continue;
+                }
+                ++livePortions;
+                const auto& schema = portion->GetSchema(index.GetVersionedIndex())->GetIndexInfo();
+                UNIT_ASSERT_VALUES_EQUAL(portion->GetColumnStorageId(1, schema), CanonizePath(warm.Name));
+                UNIT_ASSERT_VALUES_EQUAL(portion->GetIndexStorageId(3000, schema), NOlap::IStoragesManager::DefaultStorageId);
+            }
+        }
+        UNIT_ASSERT(livePortions);
         const auto oldBlobs = f.LiveOldBlobs();
         UNIT_ASSERT_C(!oldBlobs.empty(), "DEFAULT index must remain after column payload eviction");
         auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {

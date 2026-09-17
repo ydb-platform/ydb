@@ -3275,7 +3275,13 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
                 status = NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
                 break;
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
-                if ((rejectReasons & ERejectReasons::WrongState) != ERejectReasons::None) {
+                // A shard that is in the process of being dropped (e.g. the old
+                // impl table of an index being atomically replaced) is a transient
+                // wrong-shard-state condition: the client must re-resolve and retry,
+                // exactly like the pre/offline case above. Reporting it as a fatal
+                // STATUS_INTERNAL_ERROR makes it non-retryable and surfaces spurious
+                // 500s to concurrent writers during the swap.
+                if ((rejectReasons & (ERejectReasons::WrongState | ERejectReasons::Dropping)) != ERejectReasons::None) {
                     status = NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE;
                 } else {
                     status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;

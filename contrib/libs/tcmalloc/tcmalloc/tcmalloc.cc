@@ -339,6 +339,74 @@ extern "C" size_t MallocExtension_Internal_ReleaseMemoryToSystem(
                           /*reason=*/PageReleaseReason::kReleaseMemoryToSystem);
 }
 
+// Diagnostic branch: bounded, allocation-free quarantine for small objects.
+// Hash collisions evict entries; this is deliberately best-effort detection.
+namespace {
+constexpr size_t kFreeCheckSlots = 4096;
+constexpr size_t kFreeCheckMaxSize = 32 * 1024;
+constexpr size_t kFreeCheckBytes = 64;
+struct FreeCheckSlot {
+  absl::base_internal::SpinLock lock{
+      absl::kConstInit, absl::base_internal::SCHEDULE_KERNEL_ONLY};
+  void* ptr = nullptr;
+  size_t size_class = 0;
+};
+ABSL_CONST_INIT FreeCheckSlot free_check_slots[kFreeCheckSlots];
+
+size_t FreeCheckIndex(void* ptr) {
+  uintptr_t value = reinterpret_cast<uintptr_t>(ptr) >> 3;
+  value ^= value >> 17;
+  value *= uintptr_t{0x9e3779b97f4a7c15ULL};
+  return (value >> 32) & (kFreeCheckSlots - 1);
+}
+
+void FreeCheckPoison(void* ptr, size_t size, bool verify) {
+  // Volatile accesses ensure the verification reloads potentially stale memory.
+  auto* words = static_cast<volatile uintptr_t*>(ptr);
+  // Small size classes are aligned and sized in multiples of a machine word.
+  const size_t length = size / sizeof(uintptr_t);
+  const size_t count = std::min(length, kFreeCheckBytes / sizeof(uintptr_t));
+  for (size_t i = 0; i < count; ++i) {
+    const size_t offsets[] = {i, length - 1 - i};
+    for (size_t offset : offsets) {
+      const uintptr_t expected = uintptr_t{0xa5a5a5a5a5a5a5a5ULL} ^
+          reinterpret_cast<uintptr_t>(ptr) ^
+          (offset * uintptr_t{0x9e3779b97f4a7c15ULL});
+      if (verify) {
+        if (words[offset] != expected) {
+          TC_BUG("Free check: write after free at %p, offset=%zu, size=%zu",
+                 ptr, offset * sizeof(uintptr_t), size);
+        }
+      } else {
+        words[offset] = expected;
+      }
+    }
+  }
+}
+
+// Returns an evicted object for actual deallocation, or nullptr if none.
+void* FreeCheckQuarantine(void* ptr, size_t* size_class) {
+  const size_t size = tc_globals.sizemap().class_to_size(*size_class);
+  if (size > kFreeCheckMaxSize || IsSelSanMemory(ptr)) return ptr;
+  FreeCheckSlot& slot = free_check_slots[FreeCheckIndex(ptr)];
+  absl::base_internal::SpinLockHolder holder(&slot.lock);
+  if (slot.ptr == ptr) {
+    TC_BUG("Free check: double free of %p, size=%zu", ptr, size);
+  }
+  void* evicted = slot.ptr;
+  const size_t evicted_class = slot.size_class;
+  if (evicted != nullptr) {
+    FreeCheckPoison(evicted,
+                    tc_globals.sizemap().class_to_size(evicted_class), true);
+  }
+  FreeCheckPoison(ptr, size, false);
+  slot.ptr = ptr;
+  slot.size_class = *size_class;
+  *size_class = evicted_class;
+  return evicted;
+}
+}  // namespace
+
 extern "C" void MallocExtension_EnableForkSupport() {
   Static::EnableForkSupport();
 }
@@ -348,6 +416,7 @@ void TCMallocPreFork() {
     return;
   }
 
+  for (auto& slot : free_check_slots) slot.lock.Lock();
   if (Static::CpuCacheActive()) {
     Static::cpu_cache().AcquireInternalLocks();
   }
@@ -392,6 +461,7 @@ void TCMallocPostFork() {
   }
   ThreadCache::ReleaseInternalLocks();
   Static::sampled_allocation_recorder().ReleaseInternalLocks();
+  for (auto& slot : free_check_slots) slot.lock.Unlock();
 }
 
 extern "C" void MallocExtension_SetSampleUserDataCallbacks(
@@ -616,6 +686,8 @@ FreeSmallSlow(void* ptr, size_t size_class) {
 
 static inline ABSL_ATTRIBUTE_ALWAYS_INLINE void FreeSmall(void* ptr,
                                                           size_t size_class) {
+  ptr = FreeCheckQuarantine(ptr, &size_class);
+  if (ptr == nullptr) return;
   if (!IsExpandedSizeClass(size_class)) {
     TC_ASSERT(IsNormalMemory(ptr) || IsSelSanMemory(ptr), "ptr=%p", ptr);
   } else {

@@ -1,0 +1,7 @@
+UNITTEST()
+
+ALLOCATOR(TCMALLOC_TC)
+
+SRCS(free_check_ut.cpp)
+
+END()

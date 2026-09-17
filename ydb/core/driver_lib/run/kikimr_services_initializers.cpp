@@ -44,6 +44,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/interconnect_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
@@ -769,8 +770,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
 
-            if (settings.V2.Enable) {
+            if (settings.V2.Threads) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // This is keyed on Threads, not on Settings.V2.Enable: Enable only gates handshake
+                // negotiation and can be flipped later by a cluster config update, so the engine has to be
+                // in place beforehand. Zero Threads means the node never runs v2, whatever Enable says.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
                 // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
@@ -783,6 +787,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                 });
             }
+            // Follows cluster config updates and flips Settings.V2.Enable on this Common, so that switching
+            // the cluster to interconnect v2 does not need a restart. Registered unconditionally: it also
+            // warns when v2 is turned on for a node that has no engine to run it (see above).
+            setup->LocalServices.emplace_back(TActorId(), TActorSetupCmd(
+                NConsole::CreateInterconnectConfigurator(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
+
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();

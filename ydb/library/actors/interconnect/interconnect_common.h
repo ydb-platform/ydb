@@ -33,6 +33,35 @@ namespace NActors {
         IC_MSG_ZEROCOPY,
     };
 
+    // std::atomic<bool> that survives the by-value copies of TInterconnectSettings made during setup.
+    // Used for settings that are flipped at runtime (by a cluster config update) while other threads
+    // read them; relaxed ordering is enough, as such a flag publishes no other state along with it.
+    class TAtomicFlag {
+        std::atomic<bool> Value;
+
+    public:
+        TAtomicFlag(bool value = false)
+            : Value(value)
+        {}
+
+        TAtomicFlag(const TAtomicFlag& other)
+            : Value(bool(other))
+        {}
+
+        TAtomicFlag& operator=(const TAtomicFlag& other) {
+            return *this = bool(other);
+        }
+
+        TAtomicFlag& operator=(bool value) {
+            Value.store(value, std::memory_order_relaxed);
+            return *this;
+        }
+
+        operator bool() const {
+            return Value.load(std::memory_order_relaxed);
+        }
+    };
+
     // Effective dead-peer timeout when TInterconnectSettings::DeadPeer is left unset.
     static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
 
@@ -90,8 +119,13 @@ namespace NActors {
 
         struct TV2 {
             // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
-            // v2 is used only when both peers have this enabled and encryption is not in effect.
-            bool Enable = false;
+            // v2 is used only when both peers have this enabled, encryption is not in effect, and the v2
+            // engine is running on this node (see Threads).
+            //
+            // This is the only v2 setting that can be changed at runtime: a cluster config update flips it
+            // (see TInterconnectConfigurator in ydb/core/cms/console) while handshake actors read it. It
+            // affects new handshakes only -- sessions already established keep the version they negotiated.
+            TAtomicFlag Enable = false;
             bool ChecksumEvents = false;
             // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
             // When the kernel poller is pegged (~100% CPU) while shard workers still have headroom, disable this
@@ -100,8 +134,11 @@ namespace NActors {
             // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
             // serialization cost off the engine's shard worker thread).
             bool EnablePreserializeEvents = false;
-            // Number of worker threads.
-            ui32 Threads = 4;
+            // Number of worker threads. Zero (the default) means the v2 engine is not started on this node
+            // at all, and v2 is never negotiated no matter what Enable says. Changing it requires a restart,
+            // so a cluster that wants to switch to v2 online is deployed with Threads set first, and flips
+            // Enable afterwards.
+            ui32 Threads = 0;
             // io_uring rings per v2 shard worker (default 1). Each ring may have its own SQPOLL thread, so this
             // scales kernel submission-polling independently of the number of serialization workers.
             ui32 RingsPerShard = 1;
@@ -229,9 +266,10 @@ namespace NActors {
 
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
-        // Shared v2 io_uring data-plane engine for the node (created once at startup when v2 + io_uring
-        // are enabled, and bound to the actor system once it exists). Sessions fetch it and call it
-        // directly.
+        // Shared v2 io_uring data-plane engine for the node (created once at startup when Settings.V2.Threads
+        // is non-zero and io_uring is available, and bound to the actor system once it exists). Sessions
+        // fetch it and call it directly. Its presence -- not Settings.V2.Enable -- is what makes v2 possible
+        // at all here; the handshake checks both.
         TIntrusivePtr<IUringEngine> UringEngineV2;
 
         // Out-of-line so translation units that construct/destroy Common do not need the complete

@@ -655,6 +655,80 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(TInsertNoLocksWithDisablePessimisticLocks) {
+        TReadCommittedTakesLocks tester(R"(
+            PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted"))", 0, 2, 0);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TUpdateWhereNoLocksWithDisablePessimisticLocks) {
+        TReadCommittedTakesLocks tester(R"(
+            PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+            UPDATE `/Root/Test` SET Comment = "Updated" WHERE Name == "Paul")", 1, 2, 0);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TDisablePessimisticLocksNotReadCommitted) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/LockPragmaTest` (
+                        Key Uint32 NOT NULL,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    );
+                )"), TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    INSERT INTO `/Root/LockPragmaTest` (Key, Value) VALUES (1u, "test");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().find("KqpDisablePessimisticLocks") != TString::npos,
+                result.GetIssues().ToString());
+        }
+
+        {
+            // Any value of the pragma is rejected for non-ReadCommitted isolation.
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="false";
+                    INSERT INTO `/Root/LockPragmaTest` (Key, Value) VALUES (2u, "test");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().find("KqpDisablePessimisticLocks") != TString::npos,
+                result.GetIssues().ToString());
+        }
+
+        {
+            // Pragma is not allowed to affect other queries: without the pragma line locks are taken as usual.
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/LockPragmaTest` (Key, Value) VALUES (3u, "test");
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     // Verifies that a read-only SELECT via a secondary index under ReadCommittedRW
     // issues TEvRead requests carrying a non-zero LockTxId and LockMode == PESSIMISTIC_NONE,
     class TReadCommittedSelectTakesLocks : public TTableDataModificationTester {

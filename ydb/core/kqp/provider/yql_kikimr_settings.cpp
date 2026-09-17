@@ -69,6 +69,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
+    REGISTER_SETTING(*this, KqpDisablePessimisticLocks);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);

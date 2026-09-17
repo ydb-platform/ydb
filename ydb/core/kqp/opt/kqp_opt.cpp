@@ -58,6 +58,10 @@ TKqpOptimizeContext::TKqpOptimizeContext(const TString& cluster, const TIntrusiv
     YQL_ENSURE(Tables);
 }
 
+bool TKqpOptimizeContext::NeedPessimisticLocks() const {
+    return UsePessimisticLocks && !Config->KqpDisablePessimisticLocks.Get().GetOrElse(false);
+}
+
 std::shared_ptr<NJson::TJsonValue> TKqpOptimizeContext::GetOverrideStatistics() {
     if (!Config->OptOverrideStatistics.Get()) {
         return std::shared_ptr<NJson::TJsonValue>();

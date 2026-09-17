@@ -36,6 +36,7 @@ namespace NKikimr::NGRpcService {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
             AddRule(config, "^/alias$", "/Root/kfront");
+            AddRule(config, "^/discovery-alias$", "/Root/kfront");
             AddRule(config, "^/Root/kfront$", "/Root/missing");
             AddRule(config, "^/volume-(alias|inspect)$", "/Root/kfront/Volume");
             AddRule(config, "^/Root/kfront/Volume$", "/Root/kfront/Wrong");
@@ -163,11 +164,11 @@ namespace NKikimr::NGRpcService {
                     Call(*stub, &TDiscovery::ListEndpoints, request, header));
             };
 
-            const auto expected = EndpointIdentities(list("/Root/kfront", "/Root/kfront"));
+            const auto expected = EndpointIdentities(list("/alias", "/discovery-alias"));
             UNIT_ASSERT(!expected.empty());
-            UNIT_ASSERT(EndpointIdentities(list("/Root/kfront", "/alias")) == expected);
-            UNIT_ASSERT(EndpointIdentities(list("", "/alias")) == expected);
-            UNIT_ASSERT(EndpointIdentities(list("/alias", "/Root/kfront")) == expected);
+            UNIT_ASSERT(EndpointIdentities(list("/alias", "/alias")) == expected);
+            UNIT_ASSERT(EndpointIdentities(list("", "/discovery-alias")) == expected);
+            UNIT_ASSERT(EndpointIdentities(list("/discovery-alias", "/alias")) == expected);
         }
 
         Y_UNIT_TEST(NativeStorageRewritesOnlyExplicitResourcePaths) {

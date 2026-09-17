@@ -139,6 +139,8 @@ TProtocol::~TProtocol() = default;
 NJson::TJsonValue TProtocol::Request(const std::string& endpoint, const TCgiParameters* form, bool authenticate, TInstant deadline) {
     Cancellation.ThrowIfCancellationRequested();
     if (HttpJob != nullptr && !HttpJob->Ready()) {
+        // Keep at most one in-flight request per provider. Replacing a timed-out
+        // job could accumulate detached workers while DNS or TLS is blocked.
         throw TError("previous HTTP request is still stopping", true, {});
     }
     HttpJob.reset();
@@ -227,8 +229,17 @@ void TProtocol::Discover() {
     const auto metadata = Request(discovery + "/.well-known/openid-configuration", nullptr, false, TInstant::Max());
     // Only the discovery request path is normalized; the issuer identifier
     // must match exactly (OpenID Connect Discovery 1.0, sections 4.1 and 4.3).
-    if (String(metadata, "issuer", true) != Config.Issuer) {
-        throw TError("discovery issuer mismatch", false, {});
+    const auto advertisedIssuer = String(metadata, "issuer", true);
+    if (advertisedIssuer != Config.Issuer) {
+        try {
+            // Reject userinfo, queries and control characters before including
+            // an untrusted metadata value in diagnostics.
+            ParseUrl(advertisedIssuer, true);
+        } catch (const std::invalid_argument&) {
+            throw TError("discovery issuer mismatch: invalid advertised issuer URL", false, {});
+        }
+        throw TError("discovery issuer mismatch: configured '" + Config.Issuer +
+            "', advertised '" + advertisedIssuer + "'", false, {});
     }
     auto tokenEndpoint = String(metadata, "token_endpoint", true);
     auto deviceEndpoint = String(metadata, "device_authorization_endpoint", false);

@@ -67,8 +67,56 @@ Y_UNIT_TEST(JwtExpiryHandlesMissingAndInvalidPayloads) {
         UNIT_ASSERT(!JwtExpiry(token));
     }
     UNIT_ASSERT_VALUES_EQUAL(*JwtExpiry(Jwt(R"({"exp":0})")), TInstant::Zero());
-    UNIT_ASSERT_EXCEPTION(JwtExpiry(Jwt(R"({"exp":-1})")), TError);
-    UNIT_ASSERT_EXCEPTION(JwtExpiry(Jwt(R"({"exp":"tomorrow"})")), TError);
+    UNIT_ASSERT_VALUES_EQUAL(*JwtExpiry(Jwt(R"({"exp":-1})")), TInstant::Zero());
+    for (const auto& payload : {R"({"exp":"tomorrow"})", R"({"exp":null})",
+             R"({"exp":true})", R"({"exp":18446744073709551615})"}) {
+        UNIT_ASSERT(!JwtExpiry(Jwt(payload)));
+    }
+}
+
+Y_UNIT_TEST(UrlErrorsIdentifyIssuerOrEndpoint) {
+    for (const bool issuer : {false, true}) {
+        const std::string role = issuer ? "issuer" : "endpoint";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseUrl("https://user:secret@example.com", issuer),
+            std::invalid_argument, "invalid " + role + " URL");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ParseUrl("http://example.com", issuer),
+            std::invalid_argument, role + " requires HTTPS");
+    }
+}
+
+Y_UNIT_TEST(DiscoveryMismatchReportsIssuerIdentifiers) {
+    TOidcTestServer server;
+    auto metadata = Metadata(server);
+    metadata["issuer"] = server.Issuer() + "/";
+    server.SetDiscoveryReply(NJson::WriteJson(metadata, false), HTTP_OK);
+    const auto config = server.ClientConfig();
+    NThreading::TCancellationTokenSource cancellation;
+    TProtocol protocol(config, cancellation.Token());
+    UNIT_ASSERT_EXCEPTION_CONTAINS(protocol.ClientGrant(), TError,
+        "configured '" + config.Issuer + "', advertised '" + config.Issuer + "/'");
+    UNIT_ASSERT(server.Requests().empty());
+}
+
+Y_UNIT_TEST(InvalidAdvertisedIssuerDoesNotLeakSecrets) {
+    for (const auto& issuer : {"https://user:private-token@example.com",
+             "https://example.com?token=private-token", "https://example.com/#private-token"}) {
+        TOidcTestServer server;
+        auto metadata = Metadata(server);
+        metadata["issuer"] = issuer;
+        server.SetDiscoveryReply(NJson::WriteJson(metadata, false), HTTP_OK);
+        const auto config = server.ClientConfig();
+        NThreading::TCancellationTokenSource cancellation;
+        TProtocol protocol(config, cancellation.Token());
+        try {
+            protocol.ClientGrant();
+            UNIT_FAIL("expected an invalid advertised issuer error");
+        } catch (const TError& error) {
+            const std::string message = error.what();
+            UNIT_ASSERT_STRING_CONTAINS(message, "discovery issuer mismatch: invalid advertised issuer URL");
+            UNIT_ASSERT(message.find("private-token") == std::string::npos);
+        }
+        UNIT_ASSERT(server.Requests().empty());
+    }
 }
 
 Y_UNIT_TEST(RejectsInvalidDiscoveryFields) {

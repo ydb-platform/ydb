@@ -180,12 +180,19 @@ bool TRefreshingProviderBase::WaitForRefresh(const TTokenCache& current) {
     if (*current.AccessToken.ExpiresAt <= now) {
         return true;
     }
+    // Preserve short lifetimes: a fixed multi-second floor could delay refresh
+    // until after expiry. Never reinterpret a known expiry as an unknown one.
     return Wait(std::max((*current.AccessToken.ExpiresAt - now) / 2, TDuration::MilliSeconds(1)));
 }
 
 void TProviderBase::Write(const TTokenCache& tokens) const {
-    if (Config.Cacher_) {
-        Config.Cacher_->Write(tokens);
+    try {
+        if (Config.Cacher_) {
+            Config.Cacher_->Write(tokens);
+        }
+    } catch (...) {
+        // Persistence is optional; keep the acquired token usable in memory.
+        // User-supplied exception messages may contain credentials.
     }
 }
 
@@ -220,12 +227,18 @@ void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::opt
     }
     auto completion = [pending, token = std::move(token), error, callbackLifetime]() mutable {
         Y_UNUSED(callbackLifetime);
-        if (error) {
-            SetException(pending, error);
-        } else if (!token->IsValid(TInstant::Now())) {
-            SetException(pending, std::make_exception_ptr(TError("access token expired before delivery", false, {})));
-        } else {
-            pending.TrySetValue("Bearer " + token->Token);
+        try {
+            if (error) {
+                SetException(pending, error);
+            } else if (!token->IsValid(TInstant::Now())) {
+                SetException(pending, std::make_exception_ptr(TError("access token expired before delivery", false, {})));
+            } else {
+                pending.TrySetValue("Bearer " + token->Token);
+            }
+        } catch (...) {
+            // Covers both preparation failures and subscribers throwing after
+            // settlement. Neither may escape into the response queue executor.
+            SetException(pending, std::current_exception());
         }
     };
     try {
@@ -297,7 +310,12 @@ void TProviderBase::CancelDeliveries() {
 }
 
 std::optional<TTokenCache> TProviderBase::ReadCache() const {
-    return Config.Cacher_ ? Config.Cacher_->Read() : std::nullopt;
+    try {
+        return Config.Cacher_ ? Config.Cacher_->Read() : std::nullopt;
+    } catch (...) {
+        // A broken cache must not prevent a fresh authorization attempt.
+        return std::nullopt;
+    }
 }
 
 TProtocol& TRefreshingProviderBase::GetProtocol() {

@@ -76,7 +76,6 @@ TStepAction::TStepAction(
     }
 }
 
-NO_SANITIZE_THREAD
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
     const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
     const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const ui64 reservedMemory) const {
@@ -248,7 +247,6 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #undef PROGRAM_PROBE_TAIL
 }
 
-NO_SANITIZE_THREAD
 TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto& executionContext = source->MutableExecutionContext();

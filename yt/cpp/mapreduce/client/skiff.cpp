@@ -216,7 +216,10 @@ void Deserialize(NSkiff::TSkiffSchemaPtr& schema, const TNode& node)
             case EWireType::RepeatedVariant16:
                 return CreateRepeatedVariant16Schema(std::move(children));
             default:
-                return CreateSimpleTypeSchema(wireType);
+                if (IsSimpleType(wireType)) {
+                    return CreateSimpleTypeSchema(wireType);
+                }
+                ythrow yexception() << "Wire type '" << wireType << "' is not yet supported in Skiff schema";
         }
     };
 

@@ -7,6 +7,9 @@ SPLIT_FACTOR(8)
 TEST_SRCS(
     test_ydb_bench.py
     test_ydb_telemetry.py
+    test_monitoring_settings.py
+    test_metrics_export.py
+    test_grafana.py
     test_hosts.py
     test_run_index.py
     test_cluster_templates.py

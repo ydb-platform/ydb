@@ -19,7 +19,6 @@ def isolate_dstool_client_state(monkeypatch):
     monkeypatch.setattr(common, 'connection_params', common.ConnectionParams())
     monkeypatch.setattr(common, 'bad_hosts', set())
     monkeypatch.setattr(common, 'cache', {})
-    monkeypatch.setattr(common, 'name_cache', {})
     monkeypatch.delenv('YDB_TOKEN', raising=False)
     monkeypatch.delenv('IAM_TOKEN', raising=False)
     yield

@@ -176,48 +176,53 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot& root, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
 
-    SubmitInitialPlanTrace(root, rboCtx);
+    for (auto & rootPtr : roots) {
+        auto & root = *rootPtr;
+        SubmitInitialPlanTrace(root, rboCtx);
 
-    if (needToLog) {
-        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
-    }
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+        }
 
-    for (const auto& stage : Stages) {
-        if (rboCtx.NeedToLog()) {
-            rboCtx.TraceLog.stage(std::string(stage->StageName.c_str()));
+        for (const auto& stage : Stages) {
+            if (rboCtx.NeedToLog()) {
+                rboCtx.TraceLog.stage(std::string(stage->StageName.c_str()));
+            }
+            YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
+            if (stage->NeedsInitialProps()) {
+                ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
+            }
+            if (needToLog) {
+                YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
+            }
+            stage->RunStage(root, rboCtx);
+            if (needToLog) {
+                YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+            }
         }
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
-        if (stage->NeedsInitialProps()) {
-            ComputeRequiredProps(root, stage->Props, rboCtx, stage->StageName);
-        }
+
+        auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
+            | ERuleProperties::RequireLiveness;
+        ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
         if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx);
-        }
-        stage->RunStage(root, rboCtx);
-        if (needToLog) {
-            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+            YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
-        | ERuleProperties::RequireLiveness;
-    ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
-    if (needToLog) {
-        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
-    }
 
     ui64 counter = 0;
     THashMap<IOperator*, ui32> operatorIds;
-    rboCtx.ExecutionJson = root.GetExecutionJson(counter, operatorIds);
-    rboCtx.ExplainJson = root.GetExplainJson(counter, operatorIds);
+    // FIXME: Generate JSON for the first plan only
+    rboCtx.ExecutionJson = roots[0]->GetExecutionJson(counter, operatorIds);
+    rboCtx.ExplainJson = roots[0]->GetExplainJson(counter, operatorIds);
 
-    return ConvertToPhysical(root, rboCtx);
+    return ConvertToPhysical(roots, rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

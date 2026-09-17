@@ -1,4 +1,6 @@
 {
+  "module_type": "module",
+  "module_kind": "wasm",
   "module_name": "WithHelpers",
   "calling_convention": "unversioned_value",
   "module_extension": "wat",

@@ -1357,7 +1357,7 @@ private:
 
 class TOpRoot: public IUnaryOperator {
 public:
-    TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder);
+    TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder, const TVector<TString>& queryColumns = {});
     virtual TString ToString(TExprContext& ctx) override;
     virtual TString GetExplainName() const override { return "Root"; }
 
@@ -1396,7 +1396,9 @@ public:
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
-    TVector<TString> ColumnOrder;
+    const TVector<TString> ColumnOrder;
+    const TVector<TString> QueryColumns;
+
 
 protected:
     void ComputeOutputIUs() override;

@@ -101,7 +101,7 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
-    TIntrusivePtr<TOpRoot> OpRoot;
+    TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;
 };
 

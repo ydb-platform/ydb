@@ -271,6 +271,8 @@ Creating and populating a table based on the results of the `SELECT` query. For 
 
 {% endlist %}
 
+{% endif %}
+
 {% else %}
 
 {% if feature_column_container_type == true %}

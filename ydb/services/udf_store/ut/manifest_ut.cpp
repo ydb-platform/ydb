@@ -106,6 +106,17 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
         TString mixedHostile;
         for (size_t i = 0; i < 300; ++i) { mixedHostile += "List<("; }
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type(mixedHostile), yexception, "Type lexical nesting exceeds");
+        TString returnHostile;
+        for (size_t i = 0; i < 10000; ++i) { returnHostile += "()->"; }
+        returnHostile += "Int64";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Type(returnHostile), yexception, "Type lexical nesting exceeds");
+        TString siblings = "Tuple<";
+        for (size_t i = 0; i < 300; ++i) {
+            if (i) { siblings += ","; }
+            siblings += "()->Int64";
+        }
+        siblings += ">";
+        UNIT_ASSERT(Type(siblings));
     }
     Y_UNIT_TEST(ErrorsNameFunctionFieldAndPosition) {
         const TString manifest = R"({"module_type":"module","module_kind":"wasm","module_name":"Test",

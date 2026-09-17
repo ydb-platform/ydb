@@ -22,7 +22,8 @@ namespace {
 constexpr ui32 MaxManifestTypeDepth = 32;
 // Keep malformed input from making the recursive YQL parser recurse too deeply.
 // This is deliberately much larger than the semantic type depth, while counting
-// all syntax delimiters that can make the parser recurse: <, (, and [.
+// all syntax delimiters that can make the parser recurse: <, (, [, and -> return
+// type chains.
 constexpr ui32 MaxManifestLexicalNesting = 256;
 
 using namespace NYql;
@@ -40,8 +41,13 @@ struct TParsedType {
 };
 
 void ValidateTypeLexicalNesting(TStringBuf type) {
-    std::array<char, MaxManifestLexicalNesting> delimiters;
+    struct TFrame {
+        char Opening = 0;
+        ui32 Arrows = 0;
+    };
+    std::array<TFrame, MaxManifestLexicalNesting + 1> frames;
     size_t nesting = 0;
+    size_t total = 0;
     bool quoted = false;
     for (size_t i = 0; i < type.size(); ++i) {
         const char c = type[i];
@@ -54,9 +60,11 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
         } else if (c == '\'') {
             quoted = true;
         } else if (c == '<' || c == '(' || c == '[') {
-            Y_ENSURE(nesting < delimiters.size(),
+            Y_ENSURE(total < MaxManifestLexicalNesting,
                 "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
-            delimiters[nesting++] = c;
+            frames[++nesting].Opening = c;
+            frames[nesting].Arrows = 0;
+            ++total;
         } else if (c == '>' || c == ')' || c == ']') {
             // In the type grammar, the '>' in the callable arrow is not a
             // closing delimiter.
@@ -64,13 +72,23 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
                 continue;
             }
             if (nesting) {
-                const char opening = delimiters[nesting - 1];
+                const char opening = frames[nesting].Opening;
                 if ((c == '>' && opening == '<') ||
                     (c == ')' && opening == '(') ||
                     (c == ']' && opening == '[')) {
+                    total -= 1 + frames[nesting].Arrows;
                     --nesting;
                 }
             }
+        } else if (c == ',') {
+            total -= frames[nesting].Arrows;
+            frames[nesting].Arrows = 0;
+        } else if (c == '-' && i + 1 < type.size() && type[i + 1] == '>') {
+            ++i;
+            Y_ENSURE(total < MaxManifestLexicalNesting,
+                "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
+            ++frames[nesting].Arrows;
+            ++total;
         }
     }
 }

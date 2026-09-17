@@ -475,17 +475,6 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TNodeMap<THashMap<ui32, TNodeMultiSet>> stageOutputConsumers;
-    for (const auto& [node, nodeConsumers] : consumersMap) {
-        if (auto output = TMaybeNode<TDqOutput>(node)) {
-            const auto index = FromString<ui32>(output.Cast().Index().Value());
-            auto& equivalents = stageOutputConsumers[output.Cast().Stage().Raw()][index];
-            for (auto* consumer : nodeConsumers) {
-                equivalents.insert(consumer);
-            }
-        }
-    }
-
     // rewrite only 1 (any of) multi-used connection at a time
     std::optional<TMultiUsedConnection> multiUsedConnection;
     TDeque<TExprNode::TPtr> precomputes;
@@ -535,14 +524,6 @@ IGraphTransformer::TStatus DqReplicateStageMultiOutput(TExprNode::TPtr input, TE
                         return false;
                     }
                     auto output = connection.Output();
-                    const auto outputIndex = FromString<ui32>(output.Index().Value());
-                    const auto& equivalentOutputConsumers = stageOutputConsumers.at(output.Stage().Raw()).at(outputIndex);
-                    if (equivalentOutputConsumers.size() > 1) {
-                        // same stage output can be referenced by different TDqOutput nodes
-                        multiUsedConnection.emplace(connection, consumers);
-                        multiUsedConnection->Output.ConstructInPlace(output, equivalentOutputConsumers);
-                        return false;
-                    }
                     const auto& outputConsumers = GetConsumers(output, consumersMap);
                     if (outputConsumers.size() > 1) {
                         // connection has single consumer, but it's output has multiple ones

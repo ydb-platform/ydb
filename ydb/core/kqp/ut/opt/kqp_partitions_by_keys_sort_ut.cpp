@@ -17,7 +17,9 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     TStringBuilder query;
-    query << "--!syntax_v1\n" << selectBody;
+    query << "--!syntax_v1\n"
+          << "PRAGMA ydb.HashJoinMode = 'grace';\n"
+          << selectBody;
 
     auto result = session.ExplainDataQuery(query).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -52,7 +54,9 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
     TKikimrRunner kikimr(appConfig);
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
-    const TString query = TStringBuilder() << "--!syntax_v1\n" << selectBody;
+    const TString query = TStringBuilder() << "--!syntax_v1\n"
+        << "PRAGMA ydb.HashJoinMode = 'grace';\n"
+        << selectBody;
 
     auto explain = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
         NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();

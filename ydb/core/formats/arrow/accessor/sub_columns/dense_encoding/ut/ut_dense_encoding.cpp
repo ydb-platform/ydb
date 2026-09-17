@@ -15,6 +15,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -71,7 +72,8 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
             const TString encoded = EncodeLengths(values);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui8>(encoded[0]), width);
             UNIT_ASSERT_VALUES_EQUAL(encoded.size(), 1u + width * values.size());
-            const TVector<ui32> decoded = DecodeLengths(encoded, values.size());
+            const TVector<ui8> encodedBytes(encoded.begin(), encoded.end());
+            const TVector<ui32> decoded = DecodeLengths(encodedBytes, values.size());
             UNIT_ASSERT_VALUES_EQUAL(decoded.size(), values.size());
             for (size_t i = 0; i < values.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(decoded[i], values[i]);
@@ -118,10 +120,28 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         const std::vector<std::optional<TString>> withNulls = {
             TString("alpha"), std::nullopt, TString(""), TString("a longer string value"), std::nullopt, TString("z") };
         const std::vector<std::optional<TString>> dense = { TString("a"), TString("bb"), TString("ccc"), TString("dddd") };
+        const std::vector<std::optional<TString>> mediumLengths = { TString(300, 'a'), std::nullopt, TString("b") };
+        const std::vector<std::optional<TString>> wideLengths = { TString(300, 'a'), std::nullopt, TString(65536, 'b') };
         for (const auto& codec : { ZstdCodec(), RawCodec() }) {
             CheckStringArrayRoundTrip(withNulls, codec);
             CheckStringArrayRoundTrip(dense, codec);
+            CheckStringArrayRoundTrip(mediumLengths, codec);
+            CheckStringArrayRoundTrip(wideLengths, codec);
             CheckStringArrayRoundTrip({}, codec);
+        }
+    }
+
+    Y_UNIT_TEST(BinaryNullValueBytesRoundTrip) {
+        // "X" bytes correspond to a null value.
+        // The restored copy may (in current implementation, will) have dense bytes with "X" omitted, it restores only logical representation, not physical.
+        const auto physical = MakeBinary({ "alpha", "X", "omega" });
+        auto validity = std::shared_ptr<arrow::Buffer>(TStatusValidator::GetValid(arrow::AllocateBuffer(1)));
+        validity->mutable_data()[0] = 0b101;
+        const auto data = arrow::ArrayData::Make(
+            arrow::binary(), physical->length(), { validity, physical->value_offsets(), physical->value_data() }, 1);
+        const arrow::BinaryArray array(data);
+        for (const auto& codec : { ZstdCodec(), RawCodec() }) {
+            CheckBinaryArrayRoundTrip(array, codec);
         }
     }
 

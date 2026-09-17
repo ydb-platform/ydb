@@ -165,6 +165,15 @@ message TFamilyDescription {
     optional EColumnCacheMode ColumnCacheMode = 11;
 }
 
+message TTierDescription {
+    optional uint32 Id = 1;
+    optional string Name = 2;
+    optional EColumnCodec Codec = 3;
+    optional int32 CodecLevel = 4;
+    optional EColumnCacheMode CacheMode = 5;
+    optional TStorageSettings StorageConfig = 6;
+}
+
 message TFastSplitSettings {
     optional uint64 SizeThreshold = 1;
     optional uint64 RowCountThreshold = 2;
@@ -229,6 +238,7 @@ message TPartitionConfig {
     optional uint32 UniqueIndexKeySize = 29;
     // For fulltext indexes - to determine if the table is an impl table of an index
     optional ESpecialTableType SpecialTableType = 30;
+    repeated TTierDescription Tiers = 31;
 }
 
 message TByKeyFilterPrefix {

@@ -33,6 +33,8 @@ private:
     bool AlterTableAlterColumn(const TRule_alter_table_alter_column& node, TAlterTableParameters& params);
     bool AlterTableAddFamily(const TRule_family_entry& node, TAlterTableParameters& params);
     bool AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node, TAlterTableParameters& params);
+    bool AlterTableAddTier(const TRule_tier_entry& node, TAlterTableParameters& params);
+    bool AlterTableAlterTier(const TRule_alter_table_alter_tier& node, TAlterTableParameters& params);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);

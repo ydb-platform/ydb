@@ -231,6 +231,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TVector<TCoStatistics> statistics;
     TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
+    TMaybeNode<TExprList> tiers;
     TVector<TCoNameValueTuple> tableSettings;
     TVector<TCoNameValueTuple> alterActions;
     TMaybeNode<TCoAtom> tableType;
@@ -337,6 +338,9 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "columnFamilies") {
                 YQL_ENSURE(tuple.Value().Maybe<TExprList>());
                 columnFamilies = tuple.Value().Cast<TExprList>();
+            } else if (name == "tiers") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                tiers = tuple.Value().Cast<TExprList>();
             } else if (name == "tableSettings") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
@@ -394,6 +398,10 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
     }
 
+    if (!tiers.IsValid()) {
+        tiers = Build<TExprList>(ctx, node.Pos()).Done();
+    }
+
     TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Temporary = temporary;
@@ -409,6 +417,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Statistics = stats;
     ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
+    ret.Tiers = tiers;
     ret.TableSettings = tableProfileSettings;
     ret.AlterActions = alterTableActions;
     ret.TableType = tableType;

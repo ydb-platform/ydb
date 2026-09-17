@@ -21,6 +21,7 @@ namespace Table {
 
 class StorageSettings;
 class ColumnFamily;
+class Tier;
 class CreateTableRequest;
 class Changefeed;
 class ChangefeedDescription;
@@ -1038,6 +1039,23 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
+//! Represents tier description
+class TTierDescription {
+public:
+    explicit TTierDescription(const Ydb::Table::Tier& desc);
+
+    const Ydb::Table::Tier& GetProto() const;
+
+    const std::string& GetName() const;
+    std::optional<std::string> GetData() const;
+    std::optional<ETierCompression> GetCompression() const;
+    std::optional<ETierCacheMode> GetCacheMode() const;
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
 enum class EStoreType {
     Row = 0,
     Column = 1
@@ -1135,6 +1153,9 @@ public:
 
     // Returns column families of the table
     const std::vector<TColumnFamilyDescription>& GetColumnFamilies() const;
+
+    // Returns tiers of the table
+    const std::vector<TTierDescription>& GetTiers() const;
 
     // Attributes
     const std::unordered_map<std::string, std::string>& GetAttributes() const;

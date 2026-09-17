@@ -2095,6 +2095,52 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
     return true;
 }
 
+bool TSqlTranslation::FillTierSettingsEntry(const TRule_family_settings_entry& settingNode, TTierEntry& tier) {
+    TIdentifier id = IdEx(settingNode.GetRule_an_id1(), *this);
+    const TRule_family_setting_value& value = settingNode.GetRule_family_setting_value3();
+    if (to_lower(id.Name) == "data") {
+        if (!StoreString(value, tier.Data, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "compression") {
+        if (!StoreString(value, tier.Compression, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "compression_level") {
+        if (!StoreInt(value, tier.CompressionLevel, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "cache_mode") {
+        if (!StoreString(value, tier.CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else {
+        Ctx_.Error() << "Unknown table setting: " << id.Name;
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::FillTierSettings(const TRule_family_settings& settingsNode, TTierEntry& tier) {
+    // family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
+    if (settingsNode.HasBlock2()) {
+        auto& settings = settingsNode.GetBlock2();
+        if (!FillTierSettingsEntry(settings.GetRule_family_settings_entry1(), tier)) {
+            return false;
+        }
+        for (auto& block : settings.GetBlock2()) {
+            if (!FillTierSettingsEntry(block.GetRule_family_settings_entry2(), tier)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs)
 {
     switch (node.Alt_case()) {
@@ -2223,29 +2269,43 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             break;
         }
         case TRule_create_table_entry::kAltCreateTableEntry5: {
+            if (isCreateTableAs) {
+                Ctx_.Error() << "Tiers are not supported for CREATE TABLE AS";
+                return false;
+            }
+            // tier_entry
+            auto& tier_entry = node.GetAlt_create_table_entry5().GetRule_tier_entry1();
+            TTierEntry tier(IdEx(tier_entry.GetRule_an_id2(), *this));
+            if (!FillTierSettings(tier_entry.GetRule_family_settings3(), tier)) {
+                return false;
+            }
+            params.Tiers.push_back(tier);
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry6: {
             // changefeed
-            auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
+            auto& changefeed = node.GetAlt_create_table_entry6().GetRule_changefeed1();
             TSqlExpression expr(*this);
             if (!CreateChangefeed(changefeed, expr, params.Changefeeds)) {
                 return false;
             }
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry6: {
+        case TRule_create_table_entry::kAltCreateTableEntry7: {
             if (!isCreateTableAs) {
                 Ctx_.Error() << "Column requires a type";
                 return false;
             }
             // an_id_schema
-            const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
+            const TString name(Id(node.GetAlt_create_table_entry7().GetRule_an_id_schema1(), *this));
             const TPosition pos(Context().Pos());
 
             params.Columns.push_back({.Pos = pos, .Name = name, .Nullable = true});
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry7: {
+        case TRule_create_table_entry::kAltCreateTableEntry8: {
             // table_statistics
-            auto& table_statistics = node.GetAlt_create_table_entry7().GetRule_table_statistics1();
+            auto& table_statistics = node.GetAlt_create_table_entry8().GetRule_table_statistics1();
             if (!CreateTableStatistics(table_statistics, params.Statistics)) {
                 return false;
             }

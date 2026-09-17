@@ -1358,6 +1358,34 @@ public:
             opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
 
+        THashSet<TString> tierNames;
+
+        if (Params_.Tiers) {
+            auto tiers = Y();
+            for (const auto& tier : Params_.Tiers) {
+                if (!tierNames.insert(tier.Name.Name).second) {
+                    ctx.Error(tier.Name.Pos) << "Tier " << tier.Name.Name << " specified more than once";
+                    return false;
+                }
+                auto tierDesc = Y();
+                tierDesc = L(tierDesc, Q(Y(Q("name"), BuildQuotedAtom(tier.Name.Pos, tier.Name.Name))));
+                if (tier.Data) {
+                    tierDesc = L(tierDesc, Q(Y(Q("data"), tier.Data)));
+                }
+                if (tier.Compression) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression"), tier.Compression)));
+                }
+                if (tier.CompressionLevel) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression_level"), tier.CompressionLevel)));
+                }
+                if (tier.CacheMode) {
+                    tierDesc = L(tierDesc, Q(Y(Q("cache_mode"), tier.CacheMode)));
+                }
+                tiers = L(tiers, Q(tierDesc));
+            }
+            opts = L(opts, Q(Y(Q("tiers"), Q(tiers))));
+        }
+
         auto columns = Y();
         THashSet<TString> columnsWithDefaultValue;
         auto columnsDefaultValueSettings = Y();
@@ -1934,6 +1962,50 @@ public:
                 columnFamilies = L(columnFamilies, Q(familyDesc));
             }
             actions = L(actions, Q(Y(Q("alterColumnFamilies"), Q(columnFamilies))));
+        }
+
+        if (Params_.AddTiers) {
+            auto tiers = Y();
+            for (const auto& tier : Params_.AddTiers) {
+                auto tierDesc = Y();
+                tierDesc = L(tierDesc, Q(Y(Q("name"), BuildQuotedAtom(tier.Name.Pos, tier.Name.Name))));
+                if (tier.Data) {
+                    tierDesc = L(tierDesc, Q(Y(Q("data"), tier.Data)));
+                }
+                if (tier.Compression) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression"), tier.Compression)));
+                }
+                if (tier.CompressionLevel) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression_level"), tier.CompressionLevel)));
+                }
+                if (tier.CacheMode) {
+                    tierDesc = L(tierDesc, Q(Y(Q("cache_mode"), tier.CacheMode)));
+                }
+                tiers = L(tiers, Q(tierDesc));
+            }
+            actions = L(actions, Q(Y(Q("addTiers"), Q(tiers))));
+        }
+
+        if (Params_.AlterTiers) {
+            auto tiers = Y();
+            for (const auto& tier : Params_.AlterTiers) {
+                auto tierDesc = Y();
+                tierDesc = L(tierDesc, Q(Y(Q("name"), BuildQuotedAtom(tier.Name.Pos, tier.Name.Name))));
+                if (tier.Data) {
+                    tierDesc = L(tierDesc, Q(Y(Q("data"), tier.Data)));
+                }
+                if (tier.Compression) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression"), tier.Compression)));
+                }
+                if (tier.CompressionLevel) {
+                    tierDesc = L(tierDesc, Q(Y(Q("compression_level"), tier.CompressionLevel)));
+                }
+                if (tier.CacheMode) {
+                    tierDesc = L(tierDesc, Q(Y(Q("cache_mode"), tier.CacheMode)));
+                }
+                tiers = L(tiers, Q(tierDesc));
+            }
+            actions = L(actions, Q(Y(Q("alterTiers"), Q(tiers))));
         }
 
         if (Params_.TableSettings.IsSet()) {

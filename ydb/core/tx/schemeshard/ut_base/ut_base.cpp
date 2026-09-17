@@ -3035,6 +3035,90 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         })_");
     }
 
+    Y_UNIT_TEST(CreateAlterTableWithTiers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table1"
+                        Columns { Name: "key1"       Type: "Uint32"}
+                        Columns { Name: "Value"      Type: "Utf8"}
+                        KeyColumnNames: ["key1"]
+                        UniformPartitionsCount: 2
+                        PartitionConfig {
+                            NamedCompactionPolicy : "UserTableDefault"
+                            Tiers {
+                                Name: "cold"
+                                Codec: ColumnCodecLZ4
+                                CacheMode: ColumnCacheModeTryKeepInMemory
+                            }
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+
+        auto t1 = DescribePath(runtime, "/MyRoot/Table1", true);
+        UNIT_ASSERT_VALUES_EQUAL(t1.GetPathDescription().GetTable().GetPartitionConfig().TiersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(t1.GetPathDescription().GetTable().GetPartitionConfig().GetTiers(0).GetName(), "cold");
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto t2 = DescribePath(runtime, "/MyRoot/Table1", true);
+        UNIT_ASSERT_VALUES_EQUAL(t1.DebugString(), t2.DebugString());
+
+        // find-or-create by name: alters existing "cold" tier and adds a new "archive" one
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table1"
+                        PartitionConfig {
+                            Tiers {
+                                Name: "cold"
+                                Codec: ColumnCodecPlain
+                            }
+                            Tiers {
+                                Name: "archive"
+                                Codec: ColumnCodecLZ4
+                            }
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+
+        auto t3 = DescribePath(runtime, "/MyRoot/Table1", true);
+        const auto& tiers = t3.GetPathDescription().GetTable().GetPartitionConfig().GetTiers();
+        UNIT_ASSERT_VALUES_EQUAL(tiers.size(), 2);
+        for (const auto& tier : tiers) {
+            if (tier.GetName() == "cold") {
+                UNIT_ASSERT_VALUES_EQUAL(tier.GetCodec(), NKikimrSchemeOp::ColumnCodecPlain);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), "archive");
+                UNIT_ASSERT_VALUES_EQUAL(tier.GetCodec(), NKikimrSchemeOp::ColumnCodecLZ4);
+            }
+        }
+
+        // tiers must survive a SchemeShard reboot after ALTER too, not just after CREATE
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto t4 = DescribePath(runtime, "/MyRoot/Table1", true);
+        UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString());
+    }
+
+    Y_UNIT_TEST(CreateTableWithTierZSTDRejected) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table1"
+                        Columns { Name: "key1"       Type: "Uint32"}
+                        Columns { Name: "Value"      Type: "Utf8"}
+                        KeyColumnNames: ["key1"]
+                        PartitionConfig {
+                            NamedCompactionPolicy : "UserTableDefault"
+                            Tiers {
+                                Name: "cold"
+                                Codec: ColumnCodecZSTD
+                            }
+                        })_", {NKikimrScheme::StatusInvalidParameter});
+    }
+
     Y_UNIT_TEST(DependentOps) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

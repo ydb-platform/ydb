@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/tiers.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
@@ -162,6 +163,41 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
             } else {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Unknown cache mode '" << family.CacheMode.GetRef() << "' for a column family";
+                return false;
+            }
+        }
+    }
+
+    for (const auto& tier : metadata->Tiers) {
+        auto* tierProto = proto.add_tiers();
+        tierProto->set_name(tier.Name);
+        if (tier.Data) {
+            tierProto->mutable_data()->set_media(tier.Data.GetRef());
+        }
+        if (tier.Compression) {
+            if (to_lower(tier.Compression.GetRef()) == "off") {
+                tierProto->set_compression(Ydb::Table::Tier::COMPRESSION_NONE);
+            } else if (to_lower(tier.Compression.GetRef()) == "lz4") {
+                tierProto->set_compression(Ydb::Table::Tier::COMPRESSION_LZ4);
+            } else if (to_lower(tier.Compression.GetRef()) == "zstd") {
+                tierProto->set_compression(Ydb::Table::Tier::COMPRESSION_ZSTD);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown compression '" << tier.Compression.GetRef() << "' for a tier";
+                return false;
+            }
+        }
+        if (tier.CompressionLevel) {
+            tierProto->set_compression_level(tier.CompressionLevel.GetRef());
+        }
+        if (tier.CacheMode) {
+            if (to_lower(tier.CacheMode.GetRef()) == "regular") {
+                tierProto->set_cache_mode(Ydb::Table::Tier::CACHE_MODE_REGULAR);
+            } else if (to_lower(tier.CacheMode.GetRef()) == "in_memory") {
+                tierProto->set_cache_mode(Ydb::Table::Tier::CACHE_MODE_IN_MEMORY);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown cache mode '" << tier.CacheMode.GetRef() << "' for a tier";
                 return false;
             }
         }
@@ -439,6 +475,18 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     }
 
     if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
+        return false;
+    }
+
+    TTierManager tiers(tableDesc.MutablePartitionConfig());
+
+    for (const auto& tierSettings : createTableProto.tiers()) {
+        if (!tiers.ApplyTierSettings(tierSettings, &code, &error)) {
+            return false;
+        }
+    }
+
+    if (tiers.Modified && !tiers.ValidateTiers(&code, &error)) {
         return false;
     }
 

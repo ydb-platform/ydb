@@ -300,6 +300,78 @@ column_families {
 )");
     }
 
+    Y_UNIT_TEST(Tiers) {
+        // strict storage pool
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillTiers, R"(
+PartitionConfig {
+  Tiers {
+    Name: "cold"
+    StorageConfig {
+      PreferredPoolKind: "hdd"
+      AllowOtherKinds: false
+    }
+  }
+})", R"(
+tiers {
+  name: "cold"
+  data {
+    media: "hdd"
+  }
+  compression: COMPRESSION_NONE
+}
+)");
+
+        // compression
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillTiers, R"(
+PartitionConfig {
+  Tiers {
+    Name: "cold"
+    Codec: ColumnCodecLZ4
+  }
+})", R"(
+tiers {
+  name: "cold"
+  compression: COMPRESSION_LZ4
+}
+)");
+
+        // cache mode
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillTiers, R"(
+PartitionConfig {
+  Tiers {
+    Name: "cold"
+    CacheMode: ColumnCacheModeTryKeepInMemory
+  }
+})", R"(
+tiers {
+  name: "cold"
+  compression: COMPRESSION_NONE
+  cache_mode: CACHE_MODE_IN_MEMORY
+}
+)");
+
+        // multiple tiers
+        Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(&FillTiers, R"(
+PartitionConfig {
+  Tiers {
+    Name: "default"
+  }
+  Tiers {
+    Name: "cold"
+    Codec: ColumnCodecLZ4
+  }
+})", R"(
+tiers {
+  name: "default"
+  compression: COMPRESSION_NONE
+}
+tiers {
+  name: "cold"
+  compression: COMPRESSION_LZ4
+}
+)");
+    }
+
     using TFillIndexDescFn = void(*)(Ydb::Table::DescribeTableResult&, const NKikimrSchemeOp::TTableDescription&);
 
     Y_UNIT_TEST(IndexDescriptionLocalBloomFilter) {

@@ -157,7 +157,8 @@
                 {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
                 {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"},
                 {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"},
-                {"Index": 15, "Name": "Statistics", "Type": "TCoStatisticsList"}
+                {"Index": 15, "Name": "Statistics", "Type": "TCoStatisticsList"},
+                {"Index": 16, "Name": "Tiers", "Type": "TExprList"}
             ]
         },
         {

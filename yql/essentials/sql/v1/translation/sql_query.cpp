@@ -2393,46 +2393,62 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction6: {
-            // SET (uncompat)
-            const auto& setRule = node.GetAlt_alter_table_action6().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
+            // ADD TIER
+            const auto& tierEntry = node.GetAlt_alter_table_action6().GetRule_alter_table_add_tier1().GetRule_tier_entry2();
+            if (!AlterTableAddTier(tierEntry, params)) {
                 return false;
             }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction7: {
-            // SET (compat)
-            const auto& setRule = node.GetAlt_alter_table_action7().GetRule_alter_table_set_table_setting_compat1();
-            if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
+            // ALTER TIER
+            const auto& alterRule = node.GetAlt_alter_table_action7().GetRule_alter_table_alter_tier1();
+            if (!AlterTableAlterTier(alterRule, params)) {
                 return false;
             }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction8: {
-            // RESET
-            const auto& setRule = node.GetAlt_alter_table_action8().GetRule_alter_table_reset_table_setting1();
-            if (!AlterTableResetTableSetting(setRule, params.TableSettings, params.TableType)) {
+            // SET (uncompat)
+            const auto& setRule = node.GetAlt_alter_table_action8().GetRule_alter_table_set_table_setting_uncompat1();
+            if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
                 return false;
             }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction9: {
-            // ADD INDEX
-            const auto& addIndex = node.GetAlt_alter_table_action9().GetRule_alter_table_add_index1();
-            if (!AlterTableAddIndex(addIndex, params)) {
+            // SET (compat)
+            const auto& setRule = node.GetAlt_alter_table_action9().GetRule_alter_table_set_table_setting_compat1();
+            if (!AlterTableSetTableSetting(setRule, params.TableSettings, params.TableType)) {
                 return false;
             }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction10: {
-            // DROP INDEX
-            const auto& dropIndex = node.GetAlt_alter_table_action10().GetRule_alter_table_drop_index1();
-            if (!AlterTableDropIndex(dropIndex, params)) {
+            // RESET
+            const auto& setRule = node.GetAlt_alter_table_action10().GetRule_alter_table_reset_table_setting1();
+            if (!AlterTableResetTableSetting(setRule, params.TableSettings, params.TableType)) {
                 return false;
             }
             break;
         }
         case TRule_alter_table_action::kAltAlterTableAction11: {
+            // ADD INDEX
+            const auto& addIndex = node.GetAlt_alter_table_action11().GetRule_alter_table_add_index1();
+            if (!AlterTableAddIndex(addIndex, params)) {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction12: {
+            // DROP INDEX
+            const auto& dropIndex = node.GetAlt_alter_table_action12().GetRule_alter_table_drop_index1();
+            if (!AlterTableDropIndex(dropIndex, params)) {
+                return false;
+            }
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction13: {
             // RENAME TO
             if (!params.IsEmpty()) {
                 // rename action follows some other actions
@@ -2440,33 +2456,33 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
                 return false;
             }
 
-            const auto& renameTo = node.GetAlt_alter_table_action11().GetRule_alter_table_rename_to1();
+            const auto& renameTo = node.GetAlt_alter_table_action13().GetRule_alter_table_rename_to1();
             AlterTableRenameTo(renameTo, params);
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction12: {
+        case TRule_alter_table_action::kAltAlterTableAction14: {
             // ADD CHANGEFEED
-            const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1();
+            const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_add_changefeed1();
             if (!AlterTableAddChangefeed(rule, params)) {
                 return false;
             }
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction13: {
+        case TRule_alter_table_action::kAltAlterTableAction15: {
             // ALTER CHANGEFEED
-            const auto& rule = node.GetAlt_alter_table_action13().GetRule_alter_table_alter_changefeed1();
+            const auto& rule = node.GetAlt_alter_table_action15().GetRule_alter_table_alter_changefeed1();
             if (!AlterTableAlterChangefeed(rule, params)) {
                 return false;
             }
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction14: {
+        case TRule_alter_table_action::kAltAlterTableAction16: {
             // DROP CHANGEFEED
-            const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_drop_changefeed1();
+            const auto& rule = node.GetAlt_alter_table_action16().GetRule_alter_table_drop_changefeed1();
             AlterTableDropChangefeed(rule, params);
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction15: {
+        case TRule_alter_table_action::kAltAlterTableAction17: {
             // RENAME INDEX TO
             if (!params.IsEmpty()) {
                 // rename action follows some other actions
@@ -2474,21 +2490,21 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
                 return false;
             }
 
-            const auto& renameTo = node.GetAlt_alter_table_action15().GetRule_alter_table_rename_index_to1();
+            const auto& renameTo = node.GetAlt_alter_table_action17().GetRule_alter_table_rename_index_to1();
             AlterTableRenameIndexTo(renameTo, params);
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction16: {
+        case TRule_alter_table_action::kAltAlterTableAction18: {
             // ALTER INDEX
-            const auto& rule = node.GetAlt_alter_table_action16().GetRule_alter_table_alter_index1();
+            const auto& rule = node.GetAlt_alter_table_action18().GetRule_alter_table_alter_index1();
             if (!AlterTableAlterIndex(rule, params)) {
                 return false;
             }
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction17: {
+        case TRule_alter_table_action::kAltAlterTableAction19: {
             // ALTER COLUMN id DROP NOT NULL
-            const auto& alterRule = node.GetAlt_alter_table_action17().GetRule_alter_table_alter_column_drop_not_null1();
+            const auto& alterRule = node.GetAlt_alter_table_action19().GetRule_alter_table_alter_column_drop_not_null1();
 
             if (!AlterTableAlterColumnDropNotNull(alterRule, params)) {
                 return false;
@@ -2496,9 +2512,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction18: {
+        case TRule_alter_table_action::kAltAlterTableAction20: {
             // ALTER COLUMN id SET NOT NULL
-            const auto& alterRule = node.GetAlt_alter_table_action18().GetRule_alter_table_alter_column_set_not_null1();
+            const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_alter_column_set_not_null1();
 
             if (!AlterTableAlterColumnSetNotNull(alterRule, params)) {
                 return false;
@@ -2506,9 +2522,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction19: {
+        case TRule_alter_table_action::kAltAlterTableAction21: {
             // ALTER COLUMN id SET COMPRESSION(...)
-            const auto& alterRule = node.GetAlt_alter_table_action19().GetRule_alter_table_alter_column_set_compression1();
+            const auto& alterRule = node.GetAlt_alter_table_action21().GetRule_alter_table_alter_column_set_compression1();
 
             if (!AlterTableAlterColumnSetCompression(alterRule, params)) {
                 return false;
@@ -2516,9 +2532,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction20: {
+        case TRule_alter_table_action::kAltAlterTableAction22: {
             // COMPACT WITH (...)
-            const auto& alterRule = node.GetAlt_alter_table_action20().GetRule_alter_table_compact1();
+            const auto& alterRule = node.GetAlt_alter_table_action22().GetRule_alter_table_compact1();
 
             if (!AlterTableCompact(alterRule, params)) {
                 return false;
@@ -2526,9 +2542,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction21: {
+        case TRule_alter_table_action::kAltAlterTableAction23: {
             // ALTER COLUMN id SET DEFAULT expr
-            const auto& alterRule = node.GetAlt_alter_table_action21().GetRule_alter_table_alter_column_set_default1();
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_default1();
 
             if (!AlterTableAlterColumnSetDefault(alterRule, params)) {
                 return false;
@@ -2536,9 +2552,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction22: {
+        case TRule_alter_table_action::kAltAlterTableAction24: {
             // ALTER COLUMN id DROP DEFAULT
-            const auto& alterRule = node.GetAlt_alter_table_action22().GetRule_alter_table_alter_column_drop_default1();
+            const auto& alterRule = node.GetAlt_alter_table_action24().GetRule_alter_table_alter_column_drop_default1();
 
             if (!AlterTableAlterColumnDropDefault(alterRule, params)) {
                 return false;
@@ -2546,9 +2562,9 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction23: {
+        case TRule_alter_table_action::kAltAlterTableAction25: {
             // ALTER COLUMN id SET ENCODING(...)
-            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_encoding1();
+            const auto& alterRule = node.GetAlt_alter_table_action25().GetRule_alter_table_alter_column_set_encoding1();
 
             if (!AlterTableAlterColumnSetEncoding(alterRule, params)) {
                 return false;
@@ -2556,26 +2572,26 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction24: {
+        case TRule_alter_table_action::kAltAlterTableAction26: {
             // ADD STATISTICS
-            const auto& addStatistics = node.GetAlt_alter_table_action24().GetRule_alter_table_add_statistics1();
+            const auto& addStatistics = node.GetAlt_alter_table_action26().GetRule_alter_table_add_statistics1();
             if (!AlterTableAddStatistics(addStatistics, params)) {
                 return false;
             }
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction25: {
+        case TRule_alter_table_action::kAltAlterTableAction27: {
             // DROP STATISTICS
-            const auto& dropStatistics = node.GetAlt_alter_table_action25().GetRule_alter_table_drop_statistics1();
+            const auto& dropStatistics = node.GetAlt_alter_table_action27().GetRule_alter_table_drop_statistics1();
             if (!AlterTableDropStatistics(dropStatistics, params)) {
                 return false;
             }
 
             break;
         }
-        case TRule_alter_table_action::kAltAlterTableAction26: {
+        case TRule_alter_table_action::kAltAlterTableAction28: {
             // REBUILD INDEX
-            const auto& rebuildRule = node.GetAlt_alter_table_action26().GetRule_alter_table_rebuild_index1();
+            const auto& rebuildRule = node.GetAlt_alter_table_action28().GetRule_alter_table_rebuild_index1();
 
             if (!AlterTableRebuildIndex(rebuildRule, params)) {
                 return false;
@@ -2747,6 +2763,77 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
     } else if (to_lower(settingName.Name) == "cache_mode") {
         if (entry->CacheMode) {
             Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for column family '" << name.Name
+                         << "' in one alter";
+            return false;
+        }
+        if (!StoreString(value, entry->CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
+    } else {
+        Ctx_.Error() << "Unknown table setting: " << settingName.Name;
+        return false;
+    }
+    return true;
+}
+
+bool TSqlQuery::AlterTableAddTier(const TRule_tier_entry& node, TAlterTableParameters& params) {
+    TTierEntry tier(IdEx(node.GetRule_an_id2(), *this));
+    if (!FillTierSettings(node.GetRule_family_settings3(), tier)) {
+        return false;
+    }
+    params.AddTiers.push_back(tier);
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterTier(const TRule_alter_table_alter_tier& node,
+                                     TAlterTableParameters& params)
+{
+    TTierEntry* entry = nullptr;
+    TIdentifier name = IdEx(node.GetRule_an_id3(), *this);
+    for (auto& tier : params.AlterTiers) {
+        if (tier.Name.Name == name.Name) {
+            entry = &tier;
+            break;
+        }
+    }
+    if (!entry) {
+        entry = &params.AlterTiers.emplace_back(name);
+    }
+    TIdentifier settingName = IdEx(node.GetRule_an_id5(), *this);
+    const TRule_family_setting_value& value = node.GetRule_family_setting_value6();
+    if (to_lower(settingName.Name) == "data") {
+        if (entry->Data) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for tier '" << name.Name
+                         << "' in one alter";
+            return false;
+        }
+        if (!StoreString(value, entry->Data, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(settingName.Name) == "compression") {
+        if (entry->Compression) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for tier '" << name.Name
+                         << "' in one alter";
+            return false;
+        }
+        if (!StoreString(value, entry->Compression, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(settingName.Name) == "compression_level") {
+        if (entry->CompressionLevel) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for tier '" << name.Name << "' in one alter";
+            return false;
+        }
+        if (!StoreInt(value, entry->CompressionLevel, Ctx_)) {
+            Ctx_.Error() << to_upper(settingName.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(settingName.Name) == "cache_mode") {
+        if (entry->CacheMode) {
+            Ctx_.Error() << "Redefinition of " << to_upper(settingName.Name) << " setting for tier '" << name.Name
                          << "' in one alter";
             return false;
         }

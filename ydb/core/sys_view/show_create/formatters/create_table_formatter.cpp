@@ -392,6 +392,21 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
                 return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
             }
         }
+
+        if (!partitionConfig.GetTiers().empty()) {
+            try {
+                for (const auto& tier : partitionConfig.GetTiers()) {
+                    if (isFamilyPrinted) {
+                        Stream << ",\n";
+                    }
+                    isFamilyPrinted = Format(tier);
+                }
+            } catch (const TFormatFail& ex) {
+                return TFormatResult(ex.Status, ex.Error);
+            } catch (const yexception& e) {
+                return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            }
+        }
     }
 
     Y_ENSURE(!tableDesc.GetKeyColumnIds().empty(), "Table description has no key columns (table may be in an intermediate schema state)");
@@ -972,6 +987,66 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (cacheMode) {
         Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
+    }
+
+    Stream << ")";
+    return true;
+}
+
+bool TCreateTableFormatter::Format(const TTierDescription& tierDesc) {
+    Y_ENSURE(tierDesc.HasName() && !tierDesc.GetName().empty(), "Tier name must not be empty");
+
+    TString dataName;
+    if (tierDesc.HasStorageConfig()) {
+        const auto& data = tierDesc.GetStorageConfig();
+        if (!data.GetAllowOtherKinds() && !data.GetPreferredPoolKind().empty()) {
+            dataName = data.GetPreferredPoolKind();
+        }
+    }
+
+    TString compression;
+    if (tierDesc.HasCodec()) {
+        switch (tierDesc.GetCodec()) {
+            case NKikimrSchemeOp::ColumnCodecPlain:
+                compression = "off";
+                break;
+            case NKikimrSchemeOp::ColumnCodecLZ4:
+                compression = "lz4";
+                break;
+            case NKikimrSchemeOp::ColumnCodecZSTD:
+                break; // not supported for tiers
+        }
+    }
+
+    TString cacheMode;
+    if (tierDesc.HasCacheMode()) {
+        switch (tierDesc.GetCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
+    Stream << "\tTIER ";
+    EscapeName(tierDesc.GetName(), Stream);
+    Stream << " (";
+
+    TString tierDel = "";
+    if (dataName) {
+        Stream << "DATA = " << "\"" << dataName << "\"";
+        tierDel = ", ";
+    }
+
+    if (compression) {
+        Stream << tierDel << "COMPRESSION = " << "\"" << compression << "\"";
+        tierDel = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << tierDel << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";

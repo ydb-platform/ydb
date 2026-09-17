@@ -1379,6 +1379,7 @@ public:
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
+                        .Tiers(settings.Tiers.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
                         .ReplaceIfExists<TCoAtom>()

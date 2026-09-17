@@ -17,6 +17,18 @@ enum class EColumnFamilyCacheMode {
     InMemory,
 };
 
+//! Tier compression codec
+enum class ETierCompression {
+    None,
+    LZ4,
+};
+
+//! Tier cache mode
+enum class ETierCacheMode {
+    Regular,
+    InMemory,
+};
+
 //! State of build index operation
 enum class EBuildIndexState {
     Unspecified = 0,

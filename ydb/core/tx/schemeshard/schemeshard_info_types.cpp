@@ -1253,6 +1253,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         return false;
     }
 
+    if (!ApplyChangesInTiers(result, src, changes, appData, isServerlessDomain, errDescr)) {
+        return false;
+    }
+
     if (changes.StorageRoomsSize()) {
         errDescr = TStringBuilder()
             << "StorageRooms should not be present in request.";
@@ -1637,6 +1641,82 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         if (!col.HasFamily() && col.HasFamilyName()) {
             if (!merger.AddOrGet(col.GetFamilyName(), errDescr)) {
                 return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool TPartitionConfigMerger::ApplyChangesInTiers(
+    NKikimrSchemeOp::TPartitionConfig &result,
+    const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const TAppData* appData,
+    const bool isServerlessDomain,
+    TString &errDescr)
+{
+    result.MutableTiers()->CopyFrom(src.GetTiers());
+
+    if (changes.TiersSize() == 0) {
+        return true;
+    }
+
+    if (!appData->FeatureFlags.GetEnableDataTiering()) {
+        errDescr = "TIER support is not enabled";
+        return false;
+    }
+
+    TTiersMerger merger(result);
+
+    THashSet<TString> changedTiers;
+
+    for (const auto& changesTier : changes.GetTiers()) {
+        if (!changesTier.HasName() || changesTier.GetName().empty()) {
+            errDescr = "Missing tier name";
+            return false;
+        }
+
+        const auto& tierName = changesTier.GetName();
+
+        if (!changedTiers.insert(tierName).second) {
+            errDescr = TStringBuilder()
+                << "Multiple changes for the same tier are not allowed. Tier name: " << tierName;
+            return false;
+        }
+
+        auto* dstTier = merger.AddOrGet(tierName, errDescr);
+        if (!dstTier) {
+            return false;
+        }
+
+        if (changesTier.HasCodec()) {
+            if (changesTier.GetCodec() == NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD) {
+                errDescr = TStringBuilder()
+                    << "Unsupported Codec. Tier name: " << tierName;
+                return false;
+            }
+            dstTier->SetCodec(changesTier.GetCodec());
+        }
+
+        if (changesTier.HasCacheMode()) {
+            if (isServerlessDomain && changesTier.GetCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory) {
+                errDescr = TStringBuilder()
+                    << "CacheMode InMemory is not supported in serverless databases. Tier name: " << tierName;
+                return false;
+            }
+            dstTier->SetCacheMode(changesTier.GetCacheMode());
+        }
+
+        if (changesTier.HasStorageConfig()) {
+            const auto& srcStorage = changesTier.GetStorageConfig();
+            auto& dstStorage = *dstTier->MutableStorageConfig();
+
+            if (srcStorage.HasPreferredPoolKind()) {
+                dstStorage.SetPreferredPoolKind(srcStorage.GetPreferredPoolKind());
+            }
+
+            if (srcStorage.HasAllowOtherKinds()) {
+                dstStorage.SetAllowOtherKinds(srcStorage.GetAllowOtherKinds());
             }
         }
     }
@@ -3196,6 +3276,37 @@ const TString &TColumnFamiliesMerger::CanonizeName(const TString &familyName) {
     }
 
     return familyName;
+}
+
+TTiersMerger::TTiersMerger(NKikimrSchemeOp::TPartitionConfig &container)
+    : Container(container)
+{
+    for (size_t index = 0; index < Container.TiersSize(); ++index) {
+        const auto& tier = Container.GetTiers(index);
+        if (tier.HasName()) {
+            IndexByName.emplace(tier.GetName(), index);
+        }
+        NextAutogenId = Max(NextAutogenId, tier.GetId());
+    }
+}
+
+NKikimrSchemeOp::TTierDescription *TTiersMerger::AddOrGet(const TString &tierName, TString &errDescr) {
+    auto it = IndexByName.find(tierName);
+    if (it != IndexByName.end()) {
+        return Container.MutableTiers(it->second);
+    }
+
+    if (NextAutogenId >= Max<ui32>() - 1) {
+        errDescr = TStringBuilder()
+            << "Tier id overflow at adding tier with name " << tierName;
+        return nullptr;
+    }
+
+    IndexByName[tierName] = Container.TiersSize();
+    auto* tier = Container.AddTiers();
+    tier->SetId(++NextAutogenId);
+    tier->SetName(tierName);
+    return tier;
 }
 
 void TTopicTabletInfo::TKeyRange::SerializeToProto(NKikimrPQ::TPartitionKeyRange& proto) const {

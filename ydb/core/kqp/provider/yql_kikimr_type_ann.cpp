@@ -1982,6 +1982,47 @@ private:
             }
         }
 
+        for (auto tier : create.Tiers()) {
+            if (auto maybeTupleList = tier.Maybe<TCoNameValueTupleList>()) {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataTiering()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tier.Pos()),
+                        "TIER support is not enabled"));
+                    return TStatus::Error;
+                }
+                if (meta->StoreType == EStoreType::Column) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tier.Pos()),
+                        "TIER is not supported for column tables"));
+                    return TStatus::Error;
+                }
+                TTier tierDesc;
+                for (auto tierSetting : maybeTupleList.Cast()) {
+                    auto name = tierSetting.Name().Value();
+                    if (name == "name") {
+                        tierDesc.Name = TString(tierSetting.Value().Cast<TCoAtom>().Value());
+                    } else if (name == "data") {
+                        tierDesc.Data = TString(
+                            tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                        );
+                    } else if (name == "compression") {
+                        tierDesc.Compression = TString(
+                            tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                        );
+                    } else if (name == "compression_level") {
+                        tierDesc.CompressionLevel = FromString<i32>(tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                    } else if (name == "cache_mode") {
+                        tierDesc.CacheMode = TString(
+                            tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                        );
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(tierSetting.Name().Pos()),
+                            TStringBuilder() << "Unknown tier setting name: " << name));
+                        return TStatus::Error;
+                    }
+                }
+                meta->Tiers.push_back(tierDesc);
+            }
+        }
+
         switch (meta->TableType) {
             case ETableType::Unknown:
             case ETableType::TableStore:
@@ -2594,6 +2635,17 @@ private:
                 if (table->Metadata->IsOlap()) {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         "Column FAMILY is not supported for column tables"));
+                    return TStatus::Error;
+                }
+            } else if (name == "addTiers" || name == "alterTiers") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataTiering()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                        "TIER support is not enabled"));
+                    return TStatus::Error;
+                }
+                if (table->Metadata->IsOlap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                        "TIER is not supported for column tables"));
                     return TStatus::Error;
                 }
             } else if (name == "addStatistics") {

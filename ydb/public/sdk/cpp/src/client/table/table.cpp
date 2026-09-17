@@ -177,6 +177,60 @@ std::optional<bool> TColumnFamilyDescription::GetKeepInMemory() const {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+class TTierDescription::TImpl {
+public:
+    explicit TImpl(const Ydb::Table::Tier& desc)
+        : Proto_(desc)
+    { }
+
+public:
+    const Ydb::Table::Tier Proto_;
+};
+
+TTierDescription::TTierDescription(const Ydb::Table::Tier& desc)
+    : Impl_(std::make_shared<TImpl>(desc))
+{ }
+
+const Ydb::Table::Tier& TTierDescription::GetProto() const {
+    return Impl_->Proto_;
+}
+
+const std::string& TTierDescription::GetName() const {
+    return GetProto().name();
+}
+
+std::optional<std::string> TTierDescription::GetData() const {
+    if (GetProto().has_data()) {
+        return GetProto().data().media();
+    } else {
+        return { };
+    }
+}
+
+std::optional<ETierCompression> TTierDescription::GetCompression() const {
+    switch (GetProto().compression()) {
+        case Ydb::Table::Tier::COMPRESSION_NONE:
+            return ETierCompression::None;
+        case Ydb::Table::Tier::COMPRESSION_LZ4:
+            return ETierCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+std::optional<ETierCacheMode> TTierDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::Tier::CACHE_MODE_REGULAR:
+            return ETierCacheMode::Regular;
+        case Ydb::Table::Tier::CACHE_MODE_IN_MEMORY:
+            return ETierCacheMode::InMemory;
+        default:
+            return { };
+    }
+}
+
 TBuildIndexOperation::TBuildIndexOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
     : TOperation(std::move(status), std::move(operation))
 {
@@ -431,6 +485,12 @@ class TTableDescription::TImpl {
         ColumnFamilies_.reserve(proto.column_families_size());
         for (const auto& family : proto.column_families()) {
             ColumnFamilies_.emplace_back(family);
+        }
+
+        // tiers
+        Tiers_.reserve(proto.tiers_size());
+        for (const auto& tier : proto.tiers()) {
+            Tiers_.emplace_back(tier);
         }
 
         // attributes
@@ -709,6 +769,10 @@ public:
         return ColumnFamilies_;
     }
 
+    const std::vector<TTierDescription>& GetTiers() const {
+        return Tiers_;
+    }
+
     const std::unordered_map<std::string, std::string>& GetAttributes() const {
         return Attributes_;
     }
@@ -767,6 +831,7 @@ private:
     std::vector<TPartitionStats> PartitionStats_;
     TTableStats TableStats;
     std::vector<TColumnFamilyDescription> ColumnFamilies_;
+    std::vector<TTierDescription> Tiers_;
     std::unordered_map<std::string, std::string> Attributes_;
     std::string CompactionPolicy_;
     std::optional<uint64_t> UniformPartitions_;
@@ -1029,6 +1094,10 @@ const TStorageSettings& TTableDescription::GetStorageSettings() const {
 
 const std::vector<TColumnFamilyDescription>& TTableDescription::GetColumnFamilies() const {
     return Impl_->GetColumnFamilies();
+}
+
+const std::vector<TTierDescription>& TTableDescription::GetTiers() const {
+    return Impl_->GetTiers();
 }
 
 const std::unordered_map<std::string, std::string>& TTableDescription::GetAttributes() const {

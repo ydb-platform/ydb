@@ -212,6 +212,7 @@ private:
 
                 FillStorageSettings(describeTableResult, tableDescription);
                 FillColumnFamilies(describeTableResult, tableDescription);
+                FillTiers(describeTableResult, tableDescription);
                 FillAttributes(describeTableResult, pathDescription);
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);

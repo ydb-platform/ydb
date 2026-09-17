@@ -500,6 +500,14 @@ struct TColumnFamily {
     TMaybe<TString> CacheMode;
 };
 
+struct TTier {
+    TString Name;
+    TMaybe<TString> Data;
+    TMaybe<TString> Compression;
+    TMaybe<i32> CompressionLevel;
+    TMaybe<TString> CacheMode;
+};
+
 struct TTtlSettings {
     enum class EUnit: ui32 {
         Seconds = 1,
@@ -906,6 +914,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
     TVector<TColumnFamily> ColumnFamilies;
+    TVector<TTier> Tiers;
     TTableSettings TableSettings;
 
     TExternalSource ExternalSource;

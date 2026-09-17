@@ -2441,6 +2441,82 @@ public:
                             }
                         }
                     }
+                } else if (name == "addTiers" || name == "alterTiers") {
+                    if (!SessionCtx->Config().FeatureFlags.GetEnableDataTiering()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "TIER support is not enabled"));
+                        return SyncError();
+                    }
+                    if (table.Metadata->IsOlap()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "TIER is not supported for column tables"));
+                        return SyncError();
+                    }
+                    auto listNode = action.Value().Cast<TExprList>();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        if (auto maybeTupleList = item.Maybe<TCoNameValueTupleList>()) {
+                            auto t = (name == "addTiers") ?
+                                alterTableRequest.add_add_tiers() :
+                                alterTableRequest.add_alter_tiers();
+
+                            for (auto tierSetting : maybeTupleList.Cast()) {
+                                auto name = tierSetting.Name().Value();
+                                if (name == "name") {
+                                    t->set_name(TString(tierSetting.Value().Cast<TCoAtom>().Value()));
+                                } else if (name == "data") {
+                                    auto data = TString(
+                                                tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
+                                                    .Value());
+                                    t->mutable_data()->set_media(data);
+                                } else if (name == "compression") {
+                                    // Actual acceptance/rejection of specific values (e.g. ZSTD is
+                                    // rejected for row tables) happens downstream in
+                                    // TTierManager::ApplyTierSettings; this layer only maps the SQL
+                                    // string to the proto enum, mirroring FAMILY's division of labor.
+                                    auto comp = TString(
+                                        tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>()
+                                            .Value()
+                                    );
+                                    if (to_lower(comp) == "off") {
+                                        t->set_compression(Ydb::Table::Tier::COMPRESSION_NONE);
+                                    } else if (to_lower(comp) == "lz4") {
+                                        t->set_compression(Ydb::Table::Tier::COMPRESSION_LZ4);
+                                    } else if (to_lower(comp) == "zstd") {
+                                        t->set_compression(Ydb::Table::Tier::COMPRESSION_ZSTD);
+                                    } else {
+                                        auto errText = TStringBuilder() << "Unknown compression '" << comp
+                                            << "' for a tier";
+                                        ctx.AddError(TIssue(ctx.GetPosition(tierSetting.Name().Pos()),
+                                            errText));
+                                        return SyncError();
+                                    }
+
+                                } else if (name == "compression_level") {
+                                    auto level = FromString<i32>(tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                                    t->set_compression_level(level);
+                                } else if (name == "cache_mode") {
+                                    auto cacheMode = TString(
+                                        tierSetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+                                    if (to_lower(cacheMode) == "regular") {
+                                        t->set_cache_mode(Ydb::Table::Tier::CACHE_MODE_REGULAR);
+                                    } else if (to_lower(cacheMode) == "in_memory") {
+                                        t->set_cache_mode(Ydb::Table::Tier::CACHE_MODE_IN_MEMORY);
+                                    } else {
+                                        ctx.AddError(TIssue(ctx.GetPosition(tierSetting.Name().Pos()),
+                                            TStringBuilder() << "Unknown cache mode '" << cacheMode
+                                                << "' for a tier"));
+                                        return SyncError();
+                                    }
+                                } else {
+                                    ctx.AddError(TIssue(ctx.GetPosition(tierSetting.Name().Pos()),
+                                        TStringBuilder() << "Unknown tier setting name: " << name));
+                                    return SyncError();
+                                }
+                            }
+                        }
+                    }
                 } else if (name == "setTableSettings") {
                     auto listNode = action.Value().Cast<TCoNameValueTupleList>();
 

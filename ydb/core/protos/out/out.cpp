@@ -198,6 +198,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EFreezeState, stream, value) {
     stream << NKikimrSchemeOp::EFreezeState_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EColumnCodec, stream, value) {
+    stream << NKikimrSchemeOp::EColumnCodec_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrSchemeOp::EIndexType, stream, value) {
     stream << NKikimrSchemeOp::EIndexType_Name(value);
 }

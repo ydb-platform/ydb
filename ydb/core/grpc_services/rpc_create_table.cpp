@@ -14,6 +14,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/tiers.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 
@@ -475,6 +476,22 @@ private:
         }
 
         if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(error));
+            return Reply(code, issues, ctx);
+        }
+
+        TTierManager tiers(tableDesc->MutablePartitionConfig());
+
+        for (const auto& tierSettings : req->tiers()) {
+            if (!tiers.ApplyTierSettings(tierSettings, &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
+        if (tiers.Modified && !tiers.ValidateTiers(&code, &error)) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);

@@ -1,4 +1,5 @@
 #include "column_families.h"
+#include "tiers.h"
 #include "table_description.h"
 #include "table_settings.h"
 #include "ydb_convert.h"
@@ -66,7 +67,8 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->has_alter_partitioning_settings() ||
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
         req->has_set_read_replicas_settings() ||
-        req->add_statistics_size() || req->drop_statistics_size())
+        req->add_statistics_size() || req->drop_statistics_size() ||
+        req->add_tiers_size() || req->alter_tiers_size())
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -739,8 +741,26 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             }
         }
 
+        TTierManager tiers(desc->MutablePartitionConfig());
+
+        for (const auto& tierSettings : req->add_tiers()) {
+            if (!tiers.ApplyTierSettings(tierSettings, &code, &error)) {
+                return false;
+            }
+        }
+
+        for (const auto& tierSettings : req->alter_tiers()) {
+            if (!tiers.ApplyTierSettings(tierSettings, &code, &error)) {
+                return false;
+            }
+        }
+
+        if (tiers.Modified && !tiers.ValidateTiers(&code, &error)) {
+            return false;
+        }
+
         // Avoid altering partition config unless we changed something
-        if (!families.Modified && !hadPartitionConfig) {
+        if (!families.Modified && !tiers.Modified && !hadPartitionConfig) {
             desc->ClearPartitionConfig();
         }
 
@@ -2690,6 +2710,63 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     FillColumnFamiliesImpl(out, in);
 }
 
+void FillTier(Ydb::Table::Tier& out, const NKikimrSchemeOp::TTierDescription& in) {
+    out.set_name(in.GetName());
+
+    if (in.HasStorageConfig() && in.GetStorageConfig().HasPreferredPoolKind()) {
+        FillStoragePool(&out, &Ydb::Table::Tier::mutable_data, in.GetStorageConfig());
+    }
+
+    if (in.HasCodec()) {
+        switch (in.GetCodec()) {
+            case NKikimrSchemeOp::ColumnCodecPlain:
+                out.set_compression(Ydb::Table::Tier::COMPRESSION_NONE);
+                break;
+            case NKikimrSchemeOp::ColumnCodecLZ4:
+                out.set_compression(Ydb::Table::Tier::COMPRESSION_LZ4);
+                break;
+            case NKikimrSchemeOp::ColumnCodecZSTD:
+                break; // not supported for tiers
+        }
+    } else {
+        out.set_compression(Ydb::Table::Tier::COMPRESSION_NONE);
+    }
+
+    if (in.HasCacheMode()) {
+        switch (in.GetCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                out.set_cache_mode(Ydb::Table::Tier::CACHE_MODE_REGULAR);
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                out.set_cache_mode(Ydb::Table::Tier::CACHE_MODE_IN_MEMORY);
+                break;
+        }
+    }
+}
+
+template <typename TYdbProto>
+void FillTiersImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
+    if (!in.HasPartitionConfig()) {
+        return;
+    }
+
+    const auto& partConfig = in.GetPartitionConfig();
+    for (size_t i = 0; i < partConfig.TiersSize(); ++i) {
+        const auto& tier = partConfig.GetTiers(i);
+        FillTier(*out.add_tiers(), tier);
+    }
+}
+
+void FillTiers(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillTiersImpl(out, in);
+}
+
+void FillTiers(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillTiersImpl(out, in);
+}
+
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
@@ -2840,6 +2917,13 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
     for (const auto& familySettings : in.column_families()) {
         if (!families.ApplyFamilySettings(familySettings, &status, &error)) {
+            return false;
+        }
+    }
+
+    TTierManager tiers(tableDesc->MutablePartitionConfig());
+    for (const auto& tierSettings : in.tiers()) {
+        if (!tiers.ApplyTierSettings(tierSettings, &status, &error)) {
             return false;
         }
     }

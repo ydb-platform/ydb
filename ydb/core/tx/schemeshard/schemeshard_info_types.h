@@ -261,6 +261,17 @@ private:
     ui32 NextAutogenId = 0;
 };
 
+struct TTiersMerger {
+    TTiersMerger(NKikimrSchemeOp::TPartitionConfig& container);
+
+    NKikimrSchemeOp::TTierDescription* AddOrGet(const TString& tierName, TString& errDescr);
+
+private:
+    NKikimrSchemeOp::TPartitionConfig& Container;
+    THashMap<TString, size_t> IndexByName;
+    ui32 NextAutogenId = 0;
+};
+
 struct TPartitionConfigMerger {
     static constexpr ui32 MaxFollowersCount = 3;
 
@@ -276,6 +287,11 @@ struct TPartitionConfigMerger {
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
         const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
+
+    static bool ApplyChangesInTiers(
+        NKikimrSchemeOp::TPartitionConfig& result,
+        const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
     static THashMap<ui32, size_t> DeduplicateStorageRoomsById(NKikimrSchemeOp::TPartitionConfig& config);

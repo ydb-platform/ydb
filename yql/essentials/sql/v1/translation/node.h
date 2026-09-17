@@ -1300,6 +1300,19 @@ struct TFamilyEntry {
     TNodePtr CacheMode;
 };
 
+struct TTierEntry {
+    explicit TTierEntry(TIdentifier name)
+        : Name(std::move(name))
+    {
+    }
+
+    TIdentifier Name;
+    TNodePtr Data;
+    TNodePtr Compression;
+    TNodePtr CompressionLevel;
+    TNodePtr CacheMode;
+};
+
 struct TIndexDescription {
     enum class EType {
         GlobalSync,
@@ -1389,6 +1402,7 @@ struct TCreateTableParameters {
     TVector<TIndexDescription> Indexes;
     TVector<TStatisticsDescription> Statistics;
     TVector<TFamilyEntry> ColumnFamilies;
+    TVector<TTierEntry> Tiers;
     TVector<TChangefeedDescription> Changefeeds;
     TTableSettings TableSettings;
     ETableType TableType = ETableType::Table;
@@ -1421,6 +1435,8 @@ struct TAlterTableParameters {
     TVector<TColumnSchema> AlterColumns;
     TVector<TFamilyEntry> AddColumnFamilies;
     TVector<TFamilyEntry> AlterColumnFamilies;
+    TVector<TTierEntry> AddTiers;
+    TVector<TTierEntry> AlterTiers;
     TTableSettings TableSettings;
     TVector<TIndexDescription> AddIndexes;
     TVector<TIndexDescription> AlterIndexes;
@@ -1442,6 +1458,8 @@ struct TAlterTableParameters {
                AlterColumns.empty() &&
                AddColumnFamilies.empty() &&
                AlterColumnFamilies.empty() &&
+               AddTiers.empty() &&
+               AlterTiers.empty() &&
                !TableSettings.IsSet() &&
                AddIndexes.empty() &&
                AlterIndexes.empty() &&

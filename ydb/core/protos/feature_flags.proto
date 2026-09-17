@@ -391,4 +391,6 @@ message TFeatureFlags {
     // it holds has been compacted, rather than by the color it is in while the
     // write is still cheap.
     optional bool EnableVDiskFreshSpaceProjection = 331 [default = false, (RequireRestart) = true];
+    // Enables TIER support for row tables (ADD TIER / ALTER TIER / TIER in CREATE TABLE).
+    optional bool EnableDataTiering = 332 [default = false];
 }

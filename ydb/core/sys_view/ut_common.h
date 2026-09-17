@@ -31,6 +31,7 @@ struct TTestEnvSettings {
     bool EnableSparsedColumns = false;
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
+    bool EnableDataTiering = false;
     bool EnableFulltextIndex = false;
     bool EnableSuperLemmer = false;
     bool EnableCsDictionaryEncoding = false;

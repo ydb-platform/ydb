@@ -39,6 +39,7 @@ public:
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
     bool Format(const NKikimrSchemeOp::TFamilyDescription& familyDesc);
+    bool Format(const NKikimrSchemeOp::TTierDescription& tierDesc);
     bool Format(const NKikimrSchemeOp::TPartitioningPolicy& policy, ui32 shardsToCreate, TString& del, bool needWith);
 
     void Format(const TString& tablePath, const NKikimrSchemeOp::TCdcStreamDescription& cdcStream,

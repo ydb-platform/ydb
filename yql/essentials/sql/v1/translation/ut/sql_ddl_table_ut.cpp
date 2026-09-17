@@ -503,6 +503,257 @@ Y_UNIT_TEST(AlterCacheModeFieldRedefinition) {
 
 } // Y_UNIT_TEST_SUITE(ColumnFamily)
 
+Y_UNIT_TEST_SUITE(Tier) {
+
+Y_UNIT_TEST(CreateTableWithTiers) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        Value String,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "ssd",
+                             COMPRESSION = "off"
+                        ),
+                        TIER cold (
+                             DATA = "rot",
+                             COMPRESSION = "lz4"
+                        )
+                    );
+                )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+    TWordCountHive elementStat = {{TString("Write"), 0}, {TString("tiers"), 0}};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["tiers"]);
+}
+
+Y_UNIT_TEST(CreateTableWithDuplicateTierName) {
+    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER cold (
+                             DATA = "rot"
+                        ),
+                        TIER cold (
+                             DATA = "ssd"
+                        )
+                    );
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Tier cold specified more than once");
+}
+
+Y_UNIT_TEST(TierNotSupportedForCreateTableAs) {
+    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+                    CREATE TABLE tableName (
+                        Key,
+                        TIER cold (
+                             DATA = "rot"
+                        )
+                    ) AS SELECT * FROM other;
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Tiers are not supported for CREATE TABLE AS");
+}
+
+Y_UNIT_TEST(CompressionLevelCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "test",
+                             COMPRESSION = "lz4",
+                             COMPRESSION_LEVEL = 5
+                        )
+                    );
+                )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+    TWordCountHive elementStat = {{TString("Write"), 0}, {TString("compression_level"), 0}};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["compression_level"]);
+}
+
+Y_UNIT_TEST(FieldDataIsNotString) {
+    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = 1,
+                             COMPRESSION = "lz4"
+                        )
+                    );
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "DATA value should be a string literal");
+}
+
+Y_UNIT_TEST(FieldCompressionIsNotString) {
+    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "test",
+                             COMPRESSION = 2
+                        ),
+                    );
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "COMPRESSION value should be a string literal");
+}
+
+Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
+    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "test",
+                             COMPRESSION_LEVEL = "5"
+                        )
+                    );
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "COMPRESSION_LEVEL value should be an integer");
+}
+
+Y_UNIT_TEST(FieldCacheModeCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "test",
+                             CACHE_MODE = "regular"
+                        )
+                    );
+                )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+    TWordCountHive elementStat = {{TString("Write"), 0}, {TString("cache_mode"), 0}};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["cache_mode"]);
+}
+
+Y_UNIT_TEST(FieldCacheModeIsNotString) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+                    CREATE TABLE tableName (
+                        Key Uint32,
+                        PRIMARY KEY (Key),
+                        TIER default (
+                             DATA = "test",
+                             CACHE_MODE = 42
+                        )
+                    );
+                )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "CACHE_MODE value should be a string literal");
+}
+
+Y_UNIT_TEST(AlterAddTierCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    ALTER TABLE tableName ADD TIER cold (
+                        DATA = "rot",
+                        COMPRESSION = "lz4"
+                    );
+                )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+}
+
+Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET COMPRESSION "lz4";
+                )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+}
+
+Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET COMPRESSION lz4;
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+#if ANTLR_VER == 3
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unexpected token 'lz4' : cannot match to any predicted input");
+#else
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "mismatched input 'lz4' expecting {STRING_VALUE, DIGITS, INTEGER_VALUE}");
+#endif
+}
+
+Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET COMPRESSION_LEVEL 5;
+                )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+}
+
+Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET COMPRESSION_LEVEL "5";
+                )");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "COMPRESSION_LEVEL value should be an integer");
+}
+
+Y_UNIT_TEST(AlterCompressionLevelFieldRedefinition) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
+                    ALTER TABLE tableName
+                        ALTER TIER cold SET COMPRESSION_LEVEL 3,
+                        ALTER TIER cold SET COMPRESSION_LEVEL 5;
+                )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Redefinition of COMPRESSION_LEVEL setting");
+}
+
+Y_UNIT_TEST(AlterCacheModeCorrectUsage) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET CACHE_MODE "in_memory";
+                )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT(res.Issues.Size() == 0);
+}
+
+Y_UNIT_TEST(AlterCacheModeFieldIsNotInteger) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
+                    ALTER TABLE tableName ALTER TIER cold SET CACHE_MODE 42;
+                )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "CACHE_MODE value should be a string literal");
+}
+
+Y_UNIT_TEST(AlterCacheModeFieldRedefinition) {
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
+                    ALTER TABLE tableName
+                        ALTER TIER cold SET CACHE_MODE "in_memory",
+                        ALTER TIER cold SET CACHE_MODE "regular";
+                )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT(res.Issues.Size() == 1);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Redefinition of CACHE_MODE setting");
+}
+
+} // Y_UNIT_TEST_SUITE(Tier)
+
 Y_UNIT_TEST_SUITE(ColumnCompression) {
 
 Y_UNIT_TEST(CreateCompressedColumn) {

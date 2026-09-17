@@ -969,6 +969,35 @@ message ColumnFamily {
     CacheMode cache_mode = 6;
 }
 
+message Tier {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        COMPRESSION_NONE = 1;
+        COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
+    }
+
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
+    }
+
+    // Name of the tier
+    string name = 1;
+
+    // This specifies data storage settings for the tier
+    StoragePool data = 2;
+
+    // Optionally specify how data should be compressed
+    Compression compression = 3;
+
+    // Set the compression level for selected compression type. Currently not supported.
+    optional int32 compression_level = 4;
+
+    CacheMode cache_mode = 5;
+}
+
 message PartitioningSettings {
     // List of columns to partition by
     repeated string partition_by = 1;
@@ -1108,6 +1137,8 @@ message CreateTableRequest {
     optional MetricsSettings metrics_settings = 21;
     // List of multi-column table statistics
     repeated TableMultiColumnStatistics statistics = 22;
+    // Tiers
+    repeated Tier tiers = 23;
 }
 
 message CreateTableResponse {
@@ -1248,6 +1279,9 @@ message AlterTableRequest {
     repeated TableMultiColumnStatistics add_statistics = 28;
     // Remove multi-column table statistics (by its names)
     repeated string drop_statistics = 29;
+    // Add/alter tiers
+    repeated Tier add_tiers = 30;
+    repeated Tier alter_tiers = 31;
 }
 
 message AlterTableResponse {
@@ -1381,6 +1415,8 @@ message DescribeTableResult {
     optional MetricsSettings metrics_settings = 19;
     // List of multi-column table statistics
     repeated TableMultiColumnStatisticsDescription statistics = 20;
+    // Tiers
+    repeated Tier tiers = 21;
 }
 
 message Query {

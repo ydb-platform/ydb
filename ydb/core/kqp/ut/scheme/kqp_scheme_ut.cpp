@@ -3353,6 +3353,174 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(CreateTableWithTiers, UseQueryService) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableDataTiering(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableWithTiers";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                TIER default (
+                     DATA = "test",
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
+                ),
+                TIER cold (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     CACHE_MODE = "in_memory"
+                )
+            );)";
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            const auto& tiers = describeResult.GetTableDescription().GetTiers();
+            UNIT_ASSERT_VALUES_EQUAL(tiers.size(), 2);
+            for (const auto& tier : tiers) {
+                UNIT_ASSERT_VALUES_EQUAL(tier.GetData(), "test");
+                if (tier.GetName() == "default") {
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetCompression().value(), ETierCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetCacheMode().value(), ETierCacheMode::Regular);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetName(), "cold");
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetCompression().value(), ETierCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetCacheMode().value(), ETierCacheMode::InMemory);
+                }
+            }
+        }
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ADD TIER archive (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ),
+                ALTER TIER cold SET COMPRESSION "off";)";
+        auto resultAlter = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter);
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::SUCCESS, resultAlter.GetIssues().ToString());
+
+        {
+            auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            const auto& tiers = describeResult.GetTableDescription().GetTiers();
+            UNIT_ASSERT_VALUES_EQUAL(tiers.size(), 3);
+            for (const auto& tier : tiers) {
+                if (tier.GetName() == "cold") {
+                    UNIT_ASSERT_VALUES_EQUAL(tier.GetCompression().value(), ETierCompression::None);
+                } else {
+                    UNIT_ASSERT(tier.GetName() == "default" || tier.GetName() == "archive");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CreateTierWithCompressionLevel) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableDataTiering(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithTierCompressionLevel";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName
+                                      << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                TIER cold (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for tiers", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CreateTierFeatureDisabled) {
+        TKikimrRunner kikimr; // EnableDataTiering is disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString tableName = "/Root/TableWithTierFeatureDisabled";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key),
+                TIER cold (
+                     DATA = "test"
+                ),
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "TIER support is not enabled", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AddTierFeatureDisabled) {
+        TKikimrRunner kikimr; // EnableDataTiering is disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString tableName = "/Root/TableWithTierFeatureDisabled";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ADD TIER cold (
+                     DATA = "test"
+                );)";
+        auto resultAlter = session.ExecuteSchemeQuery(queryAlter).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "TIER support is not enabled", resultAlter.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(TierNotSupportedForColumnTables) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableDataTiering(true);
+
+        TString tableName = "/Root/ColumnTableWithTierTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value String,
+            PRIMARY KEY (Key),
+            TIER cold (
+                DATA = "test"
+            ))
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "TIER is not supported for column tables",
+            result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
         TKikimrRunner kikimr; // EnableTableCacheModes should be enabled by default
         auto db = kikimr.GetTableClient();

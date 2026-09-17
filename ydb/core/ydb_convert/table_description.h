@@ -151,6 +151,12 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // out
+void FillTiers(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+void FillTiers(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
+// out
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TPathDescription& in);
 void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,

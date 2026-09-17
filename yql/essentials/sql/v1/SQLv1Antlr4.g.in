@@ -743,6 +743,7 @@ create_table_entry:
   | table_constraint
   | table_index
   | family_entry
+  | tier_entry
   | changefeed
   | an_id_schema
   | table_statistics
@@ -806,6 +807,8 @@ alter_table_action:
   | alter_table_alter_column
   | alter_table_add_column_family
   | alter_table_alter_column_family
+  | alter_table_add_tier
+  | alter_table_alter_tier
   | alter_table_set_table_setting_uncompat
   | alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
@@ -853,6 +856,8 @@ alter_table_alter_column_set_not_null: ALTER COLUMN an_id SET NOT NULL;
 alter_table_alter_column_set_compression: ALTER COLUMN an_id SET compression;
 alter_table_add_column_family: ADD family_entry;
 alter_table_alter_column_family: ALTER FAMILY an_id SET an_id family_setting_value;
+alter_table_add_tier: ADD tier_entry;
+alter_table_alter_tier: ALTER TIER an_id SET an_id family_setting_value;
 alter_table_set_table_setting_uncompat: SET an_id table_setting_value;
 alter_table_set_table_setting_compat: SET LPAREN alter_table_setting_entry (COMMA alter_table_setting_entry)* RPAREN;
 alter_table_reset_table_setting: RESET LPAREN an_id (COMMA an_id)* RPAREN;
@@ -979,6 +984,8 @@ family_setting_value:
         STRING_VALUE
       | integer
 ;
+
+tier_entry: TIER an_id family_settings;
 
 split_boundaries:
       LPAREN literal_value_list (COMMA literal_value_list)* RPAREN
@@ -1691,6 +1698,7 @@ keyword_as_compat:
   | TEMP
   | TEMPORARY
   | THEN
+  | TIER
   | TIES
   | TO
   | TOPIC
@@ -1936,6 +1944,7 @@ keyword_compat: (
   | TEMP
   | TEMPORARY
   | THEN
+  | TIER
   | TIES
   | TO
   | TOPIC
@@ -2335,6 +2344,7 @@ TAGGED: T A G G E D;
 TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
+TIER: T I E R;
 TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;

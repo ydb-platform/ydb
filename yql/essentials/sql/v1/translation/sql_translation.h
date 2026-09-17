@@ -216,6 +216,8 @@ protected:
 
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
+    bool FillTierSettingsEntry(const TRule_family_settings_entry& settingNode, TTierEntry& tier);
+    bool FillTierSettings(const TRule_family_settings& settingsNode, TTierEntry& tier);
     bool CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
                                  ETableType tableType, bool alter, bool reset);

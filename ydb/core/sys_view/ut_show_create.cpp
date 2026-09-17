@@ -1337,6 +1337,40 @@ Y_UNIT_TEST(TableTemporary) {
     );
 }
 
+Y_UNIT_TEST(TableWithTiers) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDataTiering = true});
+    NQuery::TQueryClient queryClient(env.GetDriver());
+    NQuery::TSession session(queryClient.GetSession().GetValueSync().GetSession());
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Int32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key),
+                TIER default (
+                    DATA = "test0",
+                    COMPRESSION = "off"
+                ),
+                TIER cold (
+                    DATA = "test1",
+                    COMPRESSION = "lz4"
+                )
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Int32 NOT NULL,
+                `Value` String,
+                TIER `default` (DATA = 'test0', COMPRESSION = 'off'),
+                TIER `cold` (DATA = 'test1', COMPRESSION = 'lz4'),
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+}
+
 Y_UNIT_TEST(Table) {
     TTestEnv env(1, 4, {
         .StoragePools = 3,

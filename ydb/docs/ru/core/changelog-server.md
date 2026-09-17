@@ -148,7 +148,7 @@
 * Значительно ускорен поиск по всем видам векторных индексов за счёт подсчёта расстояний локально на каждом даташарде до передачи по сети — см. [VIEW (векторный индекс)](./yql/reference/syntax/select/vector_index.md?version=v25.4) и [векторные индексы](./dev/vector-indexes.md?version=v25.4).
 * Ускорен полный векторный поиск без ANN-индекса за счёт pushdown (векторный поиск, KNN UDF) — см. [векторный поиск](./concepts/query_execution/vector_search.md?version=v25.4) и [модуль KNN](./yql/reference/udf/list/knn.md?version=v25.4).
 * Полноценно поддержан механизм работы с секретами, хранимыми в базе данных: создание, изменение, удаление и использование — см. [Секреты](./concepts/datamodel/secrets.md?version=v25.4). Обратите внимание, что [старый синтаксис](./concepts/datamodel/secrets.md?version=v25.3) объявлен устаревшим.
-* Улучшено выполнение [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all): теперь поддерживается параллельное выполнение, что повышает производительность аналитических запросов.
+* Улучшено выполнение [`UNION ALL`](./yql/reference/syntax/select/union.md?version=v26.2#union-all): теперь поддерживается параллельное выполнение, что повышает производительность аналитических запросов.
 
 #### Исправления ошибок
 

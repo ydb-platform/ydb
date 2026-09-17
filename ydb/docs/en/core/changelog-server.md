@@ -36,7 +36,7 @@ This functionality is present in the core to allow rollback from the future 26.3
 * QueryService can notify SDKs when a node or session is shutting down, allowing clients to stop sending new queries there.
 * Added database-level limits on the count and volume of small blobs for column-oriented tables. New writes are rejected when the hard limit is exceeded.
 * [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message.
-* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=main) for column-oriented tables.
+* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=v26.2) for column-oriented tables.
 * Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables.
 * Added online construction of unique secondary indexes.
 * Transactions between topics and tables can use optimized conflict checking.
@@ -148,7 +148,7 @@ Release date: June 5, 2026.
 * Vector index search is significantly faster across all index types because distances are computed locally on each DataShard before data is sent over the network — see [VIEW (vector index)](./yql/reference/syntax/select/vector_index.md?version=v25.4) and [Vector indexes](./dev/vector-indexes.md?version=v25.4).
 * Full vector search without an ANN index is faster thanks to pushdown (vector search, KNN UDF) — see [Vector search](./concepts/query_execution/vector_search.md?version=v25.4) and the [KNN](./yql/reference/udf/list/knn.md?version=v25.4) module.
 * Database-stored secrets are fully supported (create, alter, drop, and use) — see [Secrets](./concepts/datamodel/secrets.md?version=v25.4). Note that the [legacy syntax](./concepts/datamodel/secrets.md?version=v25.3) is deprecated.
-* [`UNION ALL`](./yql/reference/syntax/select/union.md?version=main#union-all) execution was improved with parallel execution, improving performance of analytical queries.
+* [`UNION ALL`](./yql/reference/syntax/select/union.md?version=v26.2#union-all) execution was improved with parallel execution, improving performance of analytical queries.
 
 #### Bug Fixes
 

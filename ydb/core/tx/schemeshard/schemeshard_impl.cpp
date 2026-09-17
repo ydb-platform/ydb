@@ -155,6 +155,12 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory
     if (needToMakeSysViewDir || sysViewDirExists) {
         for (const auto& [name, type] : sysViewsRegistry) {
+            // Keep the type in the registry for existing views, but do not persist
+            // it on databases that still need to support rollback to older binaries.
+            if (type == NKikimrSysView::EUdfModules &&
+                !AppData()->FeatureFlags.GetEnableUdfModulesSystemView()) {
+                continue;
+            }
             if (!sysViewDirContents.contains(name)) {
                 TModifySysViewRequestInfo createSysViewRequest;
                 createSysViewRequest.OperationType = NKikimrSchemeOp::ESchemeOpCreateSysView;

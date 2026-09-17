@@ -400,4 +400,8 @@ message TFeatureFlags {
     // Applied at PDisk start (Keeper.Reset). ICB PDisk_<id>_ChunkBaseLimitPerMille
     // still overrides the cyan permille; floors stay on while this flag is on.
     optional bool EnableTightPDiskSpaceColors = 333 [default = false, (RequireRestart) = true];
+    // Creating this sysview persists EUdfModules (47), unknown to older binaries.
+    // Enable only after rollback to those versions is no longer required.
+    // Disabling prevents creation but preserves existing views and their ACLs.
+    optional bool EnableUdfModulesSystemView = 334 [default = false, (RequireRestart) = true];
 }

@@ -281,6 +281,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
+    Y_UNIT_TEST(UdfModulesCreationFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto rebootAndWaitForRoster = [&] {
+            // Ensure the roster performs an operation even when udf_modules is
+            // skipped or already exists, so its completion event is emitted.
+            TestDropSysView(runtime, ++txId, "/MyRoot/.sys", "ds_pdisks");
+            env.TestWaitNotification(runtime, txId);
+            env.AddSysViewsRosterUpdateObserver(runtime);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            env.WaitForSysViewsRosterUpdate(runtime);
+            TestLs(runtime, "/MyRoot/.sys/ds_pdisks", false, NLs::PathExist);
+        };
+
+        UNIT_ASSERT(!runtime.GetAppData().FeatureFlags.GetEnableUdfModulesSystemView());
+        TestLs(runtime, "/MyRoot/.sys/udf_modules", false, NLs::PathNotExist);
+        rebootAndWaitForRoster();
+        TestLs(runtime, "/MyRoot/.sys/udf_modules", false, NLs::PathNotExist);
+
+        runtime.GetAppData().FeatureFlags.SetEnableUdfModulesSystemView(true);
+        rebootAndWaitForRoster();
+        const auto created = DescribePath(runtime, "/MyRoot/.sys/udf_modules");
+        TestDescribeResult(created, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+        const auto& domainKey = created.GetPathDescription().GetDomainDescription().GetDomainKey();
+        ExpectEqualSysViewDescription(created, "udf_modules", ESysViewType::EUdfModules,
+                                      TPathId::FromDomainKey(domainKey));
+
+        // Turning the flag off must not delete/recreate an existing object.
+        runtime.GetAppData().FeatureFlags.SetEnableUdfModulesSystemView(false);
+        rebootAndWaitForRoster();
+        const auto preserved = DescribePath(runtime, "/MyRoot/.sys/udf_modules");
+        TestDescribeResult(preserved, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
+        UNIT_ASSERT_VALUES_EQUAL(created.GetPathDescription().GetSelf().GetPathId(),
+                                 preserved.GetPathDescription().GetSelf().GetPathId());
+        ExpectEqualSysViewDescription(preserved, "udf_modules", ESysViewType::EUdfModules,
+                                      TPathId::FromDomainKey(domainKey));
+
+        TestDropSysView(runtime, ++txId, "/MyRoot/.sys", "udf_modules");
+        env.TestWaitNotification(runtime, txId);
+        rebootAndWaitForRoster();
+        TestLs(runtime, "/MyRoot/.sys/udf_modules", false, NLs::PathNotExist);
+    }
+
     Y_UNIT_TEST(CreateDirWithDomainSysViews) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

@@ -11,6 +11,14 @@ std::exception_ptr StoppedError() {
     return std::make_exception_ptr(TError("provider stopped", false, {}));
 }
 
+void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept {
+    try {
+        promise.TrySetException(std::move(error));
+    } catch (...) {
+        // The promise is already settled; a throwing subscriber must not interrupt cleanup.
+    }
+}
+
 } // namespace
 
 TProviderBase::TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility, bool standalone)
@@ -58,7 +66,7 @@ void TProviderBase::Stop() {
     }
     Changed.notify_all();
     Cancellation.Cancel();
-    pending.TrySetException(StoppedError());
+    SetException(pending, StoppedError());
     CancelDeliveries();
 }
 
@@ -124,6 +132,9 @@ void TRefreshingProviderBase::RunTokens() {
             if (!error.Retryable) {
                 throw;
             }
+            // Settle existing waiters while retrying in the background. GetAuthInfoAsync()
+            // keeps serving a still-valid token; Publish() clears the error on recovery.
+            Fail(std::current_exception());
             if (!Wait(retryDelay)) {
                 return;
             }
@@ -183,7 +194,7 @@ TTokenCache TRefreshingProviderBase::Update(const TTokenCache& current) {
         try {
             return Protocol.Refresh(*current.RefreshToken);
         } catch (const TError& error) {
-            if (error.Code != "invalid_grant") {
+            if (error.Retryable || error.Code != "invalid_grant") {
                 throw;
             }
         }
@@ -204,15 +215,15 @@ void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::opt
         }
     }
     if (stopped) {
-        pending.TrySetException(StoppedError());
+        SetException(pending, StoppedError());
         return;
     }
     auto completion = [pending, token = std::move(token), error, callbackLifetime]() mutable {
         Y_UNUSED(callbackLifetime);
         if (error) {
-            pending.TrySetException(error);
+            SetException(pending, error);
         } else if (!token->IsValid(TInstant::Now())) {
-            pending.TrySetException(std::make_exception_ptr(TError("access token expired before delivery", false, {})));
+            SetException(pending, std::make_exception_ptr(TError("access token expired before delivery", false, {})));
         } else {
             pending.TrySetValue("Bearer " + token->Token);
         }
@@ -223,10 +234,10 @@ void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::opt
         } else if (auto facility = Facility.lock()) {
             facility->PostToResponseQueue(std::move(completion));
         } else {
-            pending.TrySetException(StoppedError());
+            SetException(pending, StoppedError());
         }
     } catch (...) {
-        pending.TrySetException(std::current_exception());
+        SetException(pending, std::current_exception());
     }
 }
 
@@ -248,11 +259,7 @@ void TProviderBase::CompleteDiscardedDeliveries() {
     }
 
     for (auto& promise : discarded) {
-        try {
-            promise.TrySetException(StoppedError());
-        } catch (...) {
-            continue;
-        }
+        SetException(promise, StoppedError());
     }
 }
 
@@ -285,7 +292,7 @@ void TProviderBase::CancelDeliveries() {
         deliveries.swap(Deliveries);
     }
     for (auto& delivery : deliveries) {
-        delivery.Promise.TrySetException(StoppedError());
+        SetException(delivery.Promise, StoppedError());
     }
 }
 

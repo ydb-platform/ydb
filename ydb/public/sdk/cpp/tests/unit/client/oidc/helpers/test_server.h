@@ -41,6 +41,10 @@ public:
 
     void BlockTokenRepliesUntil(NThreading::TFuture<void> released);
 
+    void BlockTlsHandshakeUntil(NThreading::TFuture<void> released);
+
+    bool WaitForTlsHandshake();
+
     std::vector<TRequestInfo> Requests() const;
 
     size_t DiscoveryCount() const;
@@ -71,5 +75,7 @@ private:
     std::vector<TRequestInfo> Recorded;
     size_t Discoveries = 0;
     NThreading::TFuture<void> TokenReplyGate;
+    NThreading::TFuture<void> TlsHandshakeGate;
+    bool TlsHandshakeStarted = false;
     THttpServer Server;
 };

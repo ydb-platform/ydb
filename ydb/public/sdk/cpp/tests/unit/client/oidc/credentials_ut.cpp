@@ -98,12 +98,23 @@ Y_UNIT_TEST(ThrowingDiscardSubscriberDoesNotTerminateWorker) {
 
 Y_UNIT_TEST(ClientRetriesTransientError) {
     TOidcTestServer server;
+    auto replyGate = NThreading::NewPromise<void>();
+    server.BlockTokenRepliesUntil(replyGate.GetFuture());
     server.Enqueue(R"({"error":"temporarily_unavailable"})", HTTP_SERVICE_UNAVAILABLE);
     server.Enqueue(R"({"access_token":"retried","token_type":"Bearer","expires_in":600})", HTTP_OK);
-    auto provider = CreateOidcProviderFactory(server.ClientConfig())->CreateProvider();
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    auto provider = CreateOidcProviderFactory(server.ClientConfig())->CreateProvider(facility);
     auto token = provider->GetAuthInfoAsync();
+    replyGate.TrySetValue();
+    UNIT_ASSERT(facility->WaitForTask());
+    facility->RunTasks();
     UNIT_ASSERT(token.Wait(TDuration::Seconds(5)));
-    UNIT_ASSERT_VALUES_EQUAL(token.GetValueSync(), "Bearer retried");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(token.GetValueSync(), std::exception, "503");
+    if (!provider->GetAuthInfoAsync().HasValue()) {
+        UNIT_ASSERT(facility->WaitForTask());
+        facility->RunTasks();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer retried");
     UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 2);
 }
 
@@ -317,8 +328,7 @@ Y_UNIT_TEST(RejectsMalformedResponsesWithoutLeakingSecrets) {
     for (const TString& body : {
              TString("secret-response-is-not-json"),
              TString(R"({"access_token":"secret-access","token_type":"unsupported-secret","expires_in":600})"),
-             TString(R"({"access_token":"secret-access","token_type":"Bearer","expires_in":0})"),
-             TString(R"({"access_token":"secret-access","token_type":"Bearer"})")}) {
+             TString(R"({"access_token":"secret-access","token_type":"Bearer","expires_in":0})")}) {
         TOidcTestServer server;
         server.Enqueue(body, HTTP_OK);
         auto factory = CreateOidcProviderFactory(server.ClientConfig());
@@ -725,6 +735,118 @@ Y_UNIT_TEST(FacilityExpiredDuringCacheWriteCompletesWithError) {
     UNIT_ASSERT(pending.Wait(TDuration::Seconds(5)));
     UNIT_ASSERT(pending.HasException());
     UNIT_ASSERT(!provider->IsValid());
+}
+
+Y_UNIT_TEST(StopIgnoresThrowingPendingSubscriber) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
+    NOidc::NPrivate::TStaticProvider provider(config, std::weak_ptr<ICoreFacility>{}, true);
+    auto pending = provider.GetAuthInfoAsync();
+    pending.Subscribe([](const auto&) { throw std::runtime_error("subscriber failure"); });
+    UNIT_ASSERT_NO_EXCEPTION(provider.Stop());
+    UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT(!provider.IsValid());
+}
+
+Y_UNIT_TEST(StopIgnoresThrowingQueuedSubscriber) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    NOidc::NPrivate::TStaticProvider provider(config, facility, false);
+    auto pending = provider.GetAuthInfoAsync();
+    pending.Subscribe([](const auto&) { throw std::runtime_error("subscriber failure"); });
+    auto worker = std::async(std::launch::async, [&] { provider.Run(); });
+    const bool queued = facility->WaitForTask();
+    std::exception_ptr stopError;
+    try {
+        provider.Stop();
+    } catch (...) {
+        stopError = std::current_exception();
+    }
+    worker.get();
+    UNIT_ASSERT(queued);
+    UNIT_ASSERT(!stopError);
+    UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT_NO_EXCEPTION(facility->RunTasks());
+}
+
+Y_UNIT_TEST(TransientInvalidGrantRetriesRefreshWithoutStartingAnotherFlow) {
+    for (const bool device : {false, true}) {
+        TOidcTestServer server;
+        auto replyGate = NThreading::NewPromise<void>();
+        server.BlockTokenRepliesUntil(replyGate.GetFuture());
+        server.Enqueue(R"({"error":"invalid_grant"})", HTTP_SERVICE_UNAVAILABLE);
+        server.Enqueue(R"({"access_token":"refreshed","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        auto cache = std::make_shared<TMemoryTokenCacher>();
+        cache->Write({{"expired", TInstant::Seconds(1)}, TOAuthToken{"refresh", std::nullopt}});
+        auto config = server.ClientConfig().Cacher(cache);
+        if (device) {
+            config.FlowConfig = TDeviceOidcConfig{"client", {}};
+        }
+        auto facility = std::make_shared<TQueuedOidcFacility>();
+        auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+        auto firstAttempt = provider->GetAuthInfoAsync();
+        replyGate.TrySetValue();
+        UNIT_ASSERT(facility->WaitForTask());
+        facility->RunTasks();
+        UNIT_ASSERT(firstAttempt.HasException());
+        if (!provider->GetAuthInfoAsync().HasValue()) {
+            UNIT_ASSERT(facility->WaitForTask());
+            facility->RunTasks();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer refreshed");
+        const auto requests = server.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+        for (const auto& request : requests) {
+            UNIT_ASSERT_VALUES_EQUAL(request.Form.Get("grant_type"), "refresh_token");
+            UNIT_ASSERT_VALUES_EQUAL(request.Form.Get("refresh_token"), "refresh");
+        }
+    }
+}
+
+Y_UNIT_TEST(PersistentOutageSettlesPendingCredentials) {
+    TOidcTestServer server;
+    for (size_t i = 0; i < 10; ++i) {
+        server.Enqueue(R"({"error":"temporarily_unavailable"})", HTTP_SERVICE_UNAVAILABLE);
+    }
+    auto provider = CreateOidcProviderFactory(server.ClientConfig())->CreateProvider();
+    auto pending = provider->GetAuthInfoAsync();
+    UNIT_ASSERT(pending.Wait(TDuration::Seconds(2)));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(pending.GetValueSync(), std::exception, "503");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(provider->GetAuthInfo(), std::exception, "503");
+    UNIT_ASSERT(!provider->IsValid());
+}
+
+Y_UNIT_TEST(ShutdownDoesNotWaitForTlsHandshake) {
+    TOidcTestServer server;
+    auto gate = NThreading::NewPromise<void>();
+    server.BlockTlsHandshakeUntil(gate.GetFuture());
+    auto provider = CreateOidcProviderFactory(server.ClientConfig())->CreateProvider();
+    auto pending = provider->GetAuthInfoAsync();
+    const bool started = server.WaitForTlsHandshake();
+    auto stopped = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
+        provider.reset();
+    });
+    const bool completed = stopped.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+    gate.TrySetValue();
+    stopped.get();
+    UNIT_ASSERT(started);
+    UNIT_ASSERT(completed);
+    UNIT_ASSERT(pending.HasException());
+}
+
+Y_UNIT_TEST(ClientAcceptsOpaqueTokenWithoutLifetime) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"opaque","token_type":"Bearer"})", HTTP_OK);
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    auto provider = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache))->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "Bearer opaque");
+    UNIT_ASSERT(provider->IsValid());
+    const auto stored = cache->Read();
+    UNIT_ASSERT(stored && !stored->AccessToken.ExpiresAt);
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
 }
 
 } // Y_UNIT_TEST_SUITE(TOidcCredentials)

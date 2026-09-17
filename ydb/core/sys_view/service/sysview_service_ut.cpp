@@ -94,8 +94,8 @@ namespace NKikimr {
                 return {serviceId, pipeCacheEdge};
             }
 
-            TIntrusivePtr<TStubDetailedCounters> RegisterStream(TTestBasicRuntime& runtime, const TActorId& serviceId,
-                                                                NKikimrSysView::EDbCountersService service)
+            TIntrusivePtr<TStubDetailedCounters> RegisterRole(TTestBasicRuntime& runtime, const TActorId& serviceId,
+                                                            NKikimrSysView::EDbCountersService service)
             {
                 auto stub = MakeIntrusive<TStubDetailedCounters>();
                 auto ev = MakeHolder<TEvSysView::TEvRegisterDbDetailedCounters>(Database, service, stub);
@@ -127,8 +127,8 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                auto leaderStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
-                auto followerStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
+                auto leaderStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto followerStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
 
                 auto req = GrabRequest(runtime, pipeCacheEdge);
 
@@ -151,8 +151,8 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                auto leaderStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
-                auto followerStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
+                auto leaderStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto followerStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
 
                 auto req1 = GrabRequest(runtime, pipeCacheEdge);
                 auto gen1 = req1.GetGeneration();
@@ -177,7 +177,7 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                auto stub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto stub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
 
                 auto req1 = GrabRequest(runtime, pipeCacheEdge);
                 auto req2 = GrabRequest(runtime, pipeCacheEdge);
@@ -191,10 +191,10 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                auto leaderStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
+                auto leaderStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
                 auto req1 = GrabRequest(runtime, pipeCacheEdge);
 
-                auto followerStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
+                auto followerStub = RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
                 auto req2 = GrabRequest(runtime, pipeCacheEdge);
                 UNIT_ASSERT_VALUES_EQUAL(req1.SerializeAsString(), req2.SerializeAsString());
                 UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackCount, 1);
@@ -212,7 +212,7 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
+                RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
 
                 auto req1 = GrabRequest(runtime, pipeCacheEdge);
                 auto gen1 = req1.GetGeneration();
@@ -227,7 +227,7 @@ namespace NKikimr {
                 TTestBasicRuntime runtime(1);
                 auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
-                RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
+                RegisterRole(runtime, serviceId, NKikimrSysView::TABLETS);
 
                 auto req = GrabRequest(runtime, pipeCacheEdge);
 

@@ -399,16 +399,22 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
     }
 
     if (auto* aggregator = GetDetailedAggregator()) {
-        bool seen[2] = {false, false};
-        for (const auto& stream : record.GetDetailedCounters()) {
-            const bool isFollower = stream.GetService() == NKikimrSysView::TABLETS_FOLLOWERS;
-            seen[isFollower] = true;
-            aggregator->ApplyFromNode(nodeId, isFollower, stream.GetTables());
-        }
-        for (bool isFollower : {false, true}) {
-            if (!seen[isFollower]) {
-                aggregator->ApplyFromNode(nodeId, isFollower, {});
+        bool hasLeaderRole = false;
+        bool hasFollowerRole = false;
+        for (const auto& roleCounters : record.GetDetailedCounters()) {
+            const bool isFollower = roleCounters.GetService() == NKikimrSysView::TABLETS_FOLLOWERS;
+            if (isFollower) {
+                hasFollowerRole = true;
+            } else {
+                hasLeaderRole = true;
             }
+            aggregator->ApplyFromNode(nodeId, isFollower, roleCounters.GetTables());
+        }
+        if (!hasLeaderRole) {
+            aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ false, {});
+        }
+        if (!hasFollowerRole) {
+            aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ true, {});
         }
     }
 
@@ -417,7 +423,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         {"nodeId", nodeId},
         {"generation", state.Generation},
         {"serviceCount", incomingServicesSet.size()},
-        {"detailedStreamCount", record.DetailedCountersSize()},
+        {"detailedRoleCount", record.DetailedCountersSize()},
         {"recordByteSize", record.ByteSize()});
 
     auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();

@@ -416,11 +416,11 @@ private:
             }
         }
 
-        size_t detailedStreamCount = 0;
+        size_t detailedRoleCount = 0;
         size_t detailedTableCount = 0;
         if constexpr (!isLabeled) {
             record.MutableDetailedCounters()->CopyFrom(dbCounters.DetailedCurrent);
-            detailedStreamCount = record.DetailedCountersSize();
+            detailedRoleCount = record.DetailedCountersSize();
             for (const auto& entry : record.GetDetailedCounters()) {
                 detailedTableCount += entry.TablesSize();
             }
@@ -434,7 +434,7 @@ private:
             {"nodeId", record.GetNodeId()},
             {"retrying", dbCounters.IsRetrying},
             {"labeled", isLabeled},
-            {"detailedStreams", detailedStreamCount},
+            {"detailedRoles", detailedRoleCount},
             {"detailedTables", detailedTableCount});
 
         Send(MakePipePerNodeCacheID(false),

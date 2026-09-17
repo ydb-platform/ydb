@@ -39,7 +39,7 @@
   "aliases": {
     "area/appteam": "area/sdk",
     "area/cli": "area/sdk",
-    "area/actorsystem": "area/core",
+    "area/actorsystem": "area/blobstorage",
     "area/hive": "area/core",
     "area/schemeshard": "area/core",
     "area/system-infra": "area/core",

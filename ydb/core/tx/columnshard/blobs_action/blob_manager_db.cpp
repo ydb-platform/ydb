@@ -137,6 +137,40 @@ void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringNew()).Delete();
 }
 
+bool TBlobManagerDb::LoadMoveDataRows(std::vector<TMoveDataRow>& rows) {
+    rows.clear();
+    NIceDb::TNiceDb db(Database);
+    auto rowset = db.Table<Schema::MoveDataRows>().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+    while (!rowset.EndOfSet()) {
+        TMoveDataRow row;
+        row.Channel = rowset.GetValue<Schema::MoveDataRows::Channel>();
+        row.FromGeneration = rowset.GetValue<Schema::MoveDataRows::FromGeneration>();
+        row.ToGenerationExclusive = rowset.GetValue<Schema::MoveDataRows::ToGenerationExclusive>();
+        row.GroupId = rowset.GetValue<Schema::MoveDataRows::GroupId>();
+        rows.emplace_back(row);
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TBlobManagerDb::AddMoveDataRow(const ui32 channel, const ui32 fromGeneration, const ui32 toGenerationExclusive, const ui32 groupId) {
+    NIceDb::TNiceDb db(Database);
+    db.Table<Schema::MoveDataRows>()
+        .Key(channel, fromGeneration)
+        .Update(NIceDb::TUpdate<Schema::MoveDataRows::ToGenerationExclusive>(toGenerationExclusive),
+            NIceDb::TUpdate<Schema::MoveDataRows::GroupId>(groupId));
+}
+
+void TBlobManagerDb::EraseMoveDataRow(const ui32 channel, const ui32 fromGeneration) {
+    NIceDb::TNiceDb db(Database);
+    db.Table<Schema::MoveDataRows>().Key(channel, fromGeneration).Delete();
+}
+
 void TBlobManagerDb::AddBlobToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToDeleteWT>().Key(blobId.ToStringLegacy(), (ui64)tabletId).Update();

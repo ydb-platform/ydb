@@ -7470,6 +7470,51 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondSql) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/table` (
+                Key Uint64,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', BARRIERS_INTERVAL = Interval('PT0.5S')
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "barriers_interval must be at least 1 second");
+    }
+
+    Y_UNIT_TEST(ChangefeedBarriersIntervalBelowOneSecondApi) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.CreateTable("/Root/table", TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto changefeed = TChangefeedDescription("feed", EChangefeedMode::KeysOnly, EChangefeedFormat::Json)
+            .WithResolvedTimestamps(TDuration::MilliSeconds(500));
+        result = session.AlterTable("/Root/table", TAlterTableSettings()
+            .AppendAddChangefeeds(changefeed)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resolved timestamps interval must be at least 1 second");
+    }
+
     Y_UNIT_TEST(ChangefeedAwsRegion) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())

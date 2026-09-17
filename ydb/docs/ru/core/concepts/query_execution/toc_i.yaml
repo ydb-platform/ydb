@@ -11,13 +11,10 @@ items:
     href: vector_search.md
   - name: Полнотекстовый поиск
     href: fulltext_search.md
-<<<<<<< HEAD
-=======
   - name: Гибридный поиск
     href: hybrid_search.md
   - name: Поиск по JSON
     href: json_search.md
->>>>>>> c2575aeb6aa (feat: json index docs prototype (#41271))
   - name: Локальные индексы
     href: local_indexes.md
   - name: Федеративные запросы

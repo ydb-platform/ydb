@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_CLUSTER_TRACKER
 
 namespace NKikimr::NPQ::NClusterDiscovery::NWorker {
 
@@ -162,6 +163,9 @@ public:
         auto* result = TEvDiscoverPQClustersRequest::AllocateResult<DiscoverClustersResult>(Request);
 
         auto statusCode = Ydb::StatusIds::INTERNAL_ERROR;
+        const TString authority = Request->GetAuthority();
+        YDB_LOG_DEBUG_CTX(Ctx(), "DiscoverClusters",
+            {"authority", authority});
 
         if (ClustersList) {
             const TString address = NAddressClassifier::ExtractAddress(Request->GetPeerName());
@@ -172,7 +176,7 @@ public:
                 IsInfracloudClient = true;
             }
 
-            const auto& visibleClusters = ClustersList->GetClusters(Request->GetAuthority());
+            const auto& visibleClusters = ClustersList->GetClusters(authority);
 
             statusCode = ProcessWriteSessions(visibleClusters, *result);
             if (statusCode == Ydb::StatusIds::SUCCESS) {

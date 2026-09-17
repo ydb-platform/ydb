@@ -1,6 +1,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
 #include "v2_event_serializer.h"
+#include "xdc_limits.h"
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
@@ -712,9 +713,26 @@ namespace NActors {
                             {"marker", "ICIS00"});
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
+                    if (!IsXdcSectionGeometryInRange(size, headroom, tailroom, alignment)) {
+                        YDB_LOG_CRIT("XDC section geometry out of range",
+                            {"marker", "ICIS20"},
+                            {"size", size},
+                            {"headroom", headroom},
+                            {"tailroom", tailroom},
+                            {"alignment", alignment});
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
 
                     if (!IgnorePayload) { // process command if packet is being applied
                         auto& pendingEvent = context.PendingEvents.back();
+                        if (!FitsXdcDeclaredLimit(size, pendingEvent.DeclaredSize, EventMaxByteSize)) {
+                            YDB_LOG_CRIT("XDC declared size exceeds the maximum event size",
+                                {"marker", "ICIS21"},
+                                {"declaredSize", pendingEvent.DeclaredSize},
+                                {"size", size});
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
+                        pendingEvent.DeclaredSize += size;
                         const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
                             alignment, isInline});

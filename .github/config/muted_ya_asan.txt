@@ -133,6 +133,13 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.ConflictWrite+IsOlap+FillTables
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TBrokenLocksReadAfterUpsertOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TBrokenLocksReadAfterUpsertOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSerializableRW
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRO
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationSnapshotRW
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStaleRO
+ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationStrictSerializableRW
 ydb/core/kqp/ut/tx KqpTx.StrictSerializable_OlapTable_CommitTimestamp
 ydb/core/kqp/ut/tx KqpTxCommitTimestampCdc.ThreeUpsertsMultiShard
 ydb/core/kqp/ut/tx unittest.[*/*] chunk
@@ -501,6 +508,7 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror3DC.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v0-fifo]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor

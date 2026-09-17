@@ -2,7 +2,6 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/container/container.h>
-#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
@@ -93,12 +92,6 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     } else {
         data->RegisterAllocationGuard(std::move(guard));
     }
-    if (!ScheduleContinuation) {
-        // Allocation was satisfied inline (e.g. memory limiter disabled). The caller continues on the
-        // same stack — do not start a concurrent TStepAction that would race with it.
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc_inline"));
-        return true;
-    }
     if (NeedNextStep) {
         Step.Next();
     }
@@ -110,15 +103,13 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
 }
 
 TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem,
-    const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep,
-    const bool scheduleContinuation)
+    const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep)
     : TBase(mem)
     , Source(source)
     , Step(step)
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
     , NeedNextStep(needNextStep)
-    , ScheduleContinuation(scheduleContinuation)
 {
 }
 
@@ -177,23 +168,10 @@ TConclusion<TExecutionResult> TBuildStageResultStep::DoExecuteInplace(
 
 TExecutionResult StartProgramStepReserveMemory(
     const std::shared_ptr<IDataSource>& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
-    const auto limiterOperator =
-        source->GetContext()->GetCommonContext()->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator();
-
-    // Decide sync vs async once. scheduleContinuation must match that decision so we neither race with a
-    // concurrent TStepAction (inline path) nor stall without a continuation (async path).
-    if (IsScanMemoryLimiterEnabled(limiterOperator)) {
-        auto allocation = std::make_shared<TAllocateMemoryStep::TFetchingStepAllocation>(
-            source, sizeToReserve, source->GetExecutionContext().GetCursorStep(), stage, false /*needNextStep*/, true /*scheduleContinuation*/);
-        return TExecutionResult::Pending(
-            std::make_shared<TMemoryAllocationJob>(source->GetContext(), source->GetMemoryGroupId(), allocation, stage));
-    }
-
     auto allocation = std::make_shared<TAllocateMemoryStep::TFetchingStepAllocation>(
-        source, sizeToReserve, source->GetExecutionContext().GetCursorStep(), stage, false /*needNextStep*/, false /*scheduleContinuation*/);
-    AFL_VERIFY(allocation->OnAllocated(
-        std::make_shared<NGroupedMemoryManager::TAllocationGuard>(0, 0, 0, NActors::TActorId(), allocation->GetMemory(), nullptr), allocation));
-    return TExecutionResult::Done();
+        source, sizeToReserve, source->GetExecutionContext().GetCursorStep(), stage, false);
+    return TExecutionResult::Pending(
+        std::make_shared<TMemoryAllocationJob>(source->GetContext(), source->GetMemoryGroupId(), allocation, stage));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

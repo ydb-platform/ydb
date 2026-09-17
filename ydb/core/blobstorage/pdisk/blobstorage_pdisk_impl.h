@@ -125,7 +125,6 @@ public:
     TControlWrapper EnableFreeChunksSortingHDD;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
-    TControlWrapper IdleDeviceCheckIntervalSeconds;
     TControlWrapper ChunkBaseLimitPerMille;
     TControlWrapper SemiStrictSpaceIsolation;
     // If enabled (default), the merged (cross-source) device overestimation metric
@@ -154,9 +153,6 @@ public:
         }
     }
     bool UseNoopSchedulerCached = false;
-    std::atomic<bool> IdleDeviceCheckInFlight = false;
-    std::shared_ptr<std::atomic<ui64>> SharedUringLastIoActivityTimestamp =
-        std::make_shared<std::atomic<ui64>>(0);
 
     // SectorMap Controls
     TControlWrapper SectorMapFirstSectorReadRate;
@@ -324,7 +320,6 @@ public:
     // Destruction
     virtual ~TPDisk();
     void Stop(); // Called by actor
-    void StopDeviceIo();
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
@@ -532,7 +527,6 @@ public:
     void ProcessPendingActivities();
     void EnqueueAll();
     void GetJobsFromForsetti();
-    void MaybeStartIdleDeviceCheck(bool isNothingToDo);
     void Update() override;
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -543,7 +543,7 @@ void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op)
 }
 
 ui64 TUringRouter::GetInflight() const {
-    return InFlightCount.load(std::memory_order_acquire);
+    return InFlightCount.load(std::memory_order_relaxed);
 }
 
 bool TUringRouter::Submit(TUringOperationBase* op) {

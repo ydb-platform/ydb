@@ -506,7 +506,6 @@ class TRealBlockDevice : public IBlockDevice {
             Device.IdleCounter.Decrement();
             Device.DecrementMonInFlight(op->GetType(), opSize);
             Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
-            Device.FinishIo();
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -874,7 +873,6 @@ class TRealBlockDevice : public IBlockDevice {
                             }
                             LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
-                        Device.FinishIo();
                         completion->SetResult(EIoResult::Ok);
                         completion->Exec(Device.PCtx->ActorSystem);
                         Device.IoContext->DestroyAsyncIoOperation(op);
@@ -933,8 +931,6 @@ private:
     TString LastWarning;
     bool ReadOnly;
     const std::optional<TCpuMask> ThreadAffinity;
-    std::atomic<ui64> OutstandingIoCount = 0;
-    std::atomic<ui64> LastIoActivityTimestamp = 0;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
@@ -981,21 +977,9 @@ public:
     }
 
 protected:
-    void BeginIo() {
-        UpdateIoActivityTimestamp(LastIoActivityTimestamp, TMonotonic::Now().MicroSeconds());
-        OutstandingIoCount.fetch_add(1, std::memory_order_release);
-    }
-
-    void FinishIo() {
-        UpdateIoActivityTimestamp(LastIoActivityTimestamp, TMonotonic::Now().MicroSeconds());
-        const ui64 previous = OutstandingIoCount.fetch_sub(1, std::memory_order_release);
-        Y_VERIFY_S(previous > 0, PCtx->PDiskLogPrefix);
-    }
-
     void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
         PCtx = std::move(pCtx);
         Y_VERIFY(PCtx);
-        UpdateIoActivityTimestamp(LastIoActivityTimestamp, TMonotonic::Now().MicroSeconds());
         FlightControl.Initialize(PCtx->PDiskLogPrefix);
 
         TString errStr = TDeviceMode::Validate(Flags);
@@ -1121,7 +1105,6 @@ protected:
     void FreeOperation(IAsyncIoOperation *op) {
         TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
 
-        FinishIo();
         if (action->FlushAction) {
             action->FlushAction->Release(PCtx->ActorSystem);
         }
@@ -1133,7 +1116,6 @@ protected:
     }
 
     void Submit(IAsyncIoOperation *op) {
-        BeginIo();
         if (QuitCounter.IsBlocked()) {
             FreeOperation(op);
             return;
@@ -1166,9 +1148,7 @@ protected:
         Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
-        BeginIo();
         IsTrimEnabled = IoContext->DoTrim(op);
-        FinishIo();
         IoContext->DestroyAsyncIoOperation(op);
     }
 
@@ -1253,13 +1233,11 @@ protected:
     void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
         Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized || QuitCounter.IsBlocked()) {
-            completionAction->Release(PCtx->ActorSystem);
             return;
         }
 
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(completionAction, reqId, nullptr);
         IoContext->PreparePTrim(op, size, offset);
-        BeginIo();
         TrimThread->Schedule(op);
     }
 
@@ -1298,14 +1276,6 @@ protected:
 
     ui32 GetPDiskId() override {
         return PCtx->PDiskId;
-    }
-
-    ui64 GetOutstandingIoCount() const override {
-        return OutstandingIoCount.load(std::memory_order_acquire);
-    }
-
-    ui64 GetLastIoActivityTimestamp() const override {
-        return LastIoActivityTimestamp.load(std::memory_order_acquire);
     }
 
     TFileHandle DuplicateFd() override {

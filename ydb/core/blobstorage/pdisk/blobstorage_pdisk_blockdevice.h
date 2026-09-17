@@ -13,7 +13,6 @@
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/actors/util/cpumask.h>
 
-#include <atomic>
 #include <optional>
 
 #include <util/system/file.h>
@@ -25,13 +24,6 @@ struct TPDiskMon;
 namespace NPDisk {
 
 struct TPDiskCtx;
-
-inline void UpdateIoActivityTimestamp(std::atomic<ui64>& timestamp, ui64 value) {
-    ui64 current = timestamp.load(std::memory_order_relaxed);
-    while (current < value && !timestamp.compare_exchange_weak(current, value,
-            std::memory_order_release, std::memory_order_relaxed)) {
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////
 // IBlockDevice - PDisk Hardware abstraction layer
@@ -69,8 +61,6 @@ public:
     virtual bool GetIsTrimEnabled() = 0;
     virtual TDriveData GetDriveData() = 0;
     virtual ui32 GetPDiskId() = 0;
-    virtual ui64 GetOutstandingIoCount() const = 0;
-    virtual ui64 GetLastIoActivityTimestamp() const = 0;
     virtual void SetWriteCache(bool isEnable) = 0;
     virtual void Stop() = 0;
     virtual TString DebugInfo() = 0;

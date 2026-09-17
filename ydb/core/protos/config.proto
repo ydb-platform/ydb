@@ -2247,11 +2247,6 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
-        optional uint64 IdleDeviceCheckIntervalSeconds = 10 [(ControlOptions) = {
-            Description: "Interval in seconds between physical-device checks while PDisk has no I/O; 0 disables checks",
-            MinValue: 0,
-            MaxValue: 3600,
-            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {

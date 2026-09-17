@@ -12,7 +12,7 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     ydb/library/actors/testlib
-    library/cpp/testing/unittest
+    library/cpp/testing/common
     ydb/core/base
     ydb/core/mon
     ydb/core/mon_alloc
@@ -20,6 +20,12 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/testlib/audit_helpers
+)
+
+# TTestActorRuntime must stay usable from gtest binaries: they cannot link
+# library/cpp/testing/unittest, because both test frameworks PROVIDES(test_framework).
+CHECK_DEPENDENT_DIRS(
+    DENY library/cpp/testing/unittest
 )
 
 IF (GCC)

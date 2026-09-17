@@ -9,7 +9,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/regex/pcre
-    library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto
@@ -38,6 +37,12 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yt/yql/providers/yt/comp_nodes/dq/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16
+)
+
+# testlib must stay usable from gtest binaries: they cannot link
+# library/cpp/testing/unittest, because both test frameworks PROVIDES(test_framework).
+CHECK_DEPENDENT_DIRS(
+    DENY library/cpp/testing/unittest
 )
 
 YQL_LAST_ABI_VERSION()

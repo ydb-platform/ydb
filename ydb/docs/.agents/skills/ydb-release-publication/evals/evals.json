@@ -1,0 +1,48 @@
+{
+  "skill_name": "ydb-release-publication",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Выпусти YDB Server 26.2.1.14. Release-notes PR #52531 содержит только changelog files, Docker cell is TBD, а build-docs ещё выполняется.",
+      "expected_output": "Останавливает публикацию до любых внешних mutations и перечисляет каждый конкретный blocker.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Не запускает docs release, не создаёт GitHub Release, default-branch PR или Atushka post",
+        "Требует оба changelog и оба downloads files в release-notes PR",
+        "Требует проверенный Docker artifact вместо TBD",
+        "Требует завершившийся success build-docs",
+        "Возвращает BLOCKED с конкретными условиями снятия блокировки"
+      ],
+      "covers": "Release does not start from an incomplete release-notes PR"
+    },
+    {
+      "id": 2,
+      "prompt": "Опубликуй YDB Server 26.2.1.14 по приложенному готовому состоянию.",
+      "expected_output": "Выполняет процесс строго после пройденного preflight, публикует stable docs before GitHub Release, готовит default branch PR и Club YDB draft.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Проверяет merged main release-notes PR, четыре файла, artifacts, CI и review before external publication",
+        "Создаёт focused stable release-notes backport only from the merged main PR",
+        "Ждёт success docs_release, HTTP 200 и changelog anchor before GitHub Release",
+        "Создаёт public GitHub Release for exact existing tag",
+        "Создаёт default-branch PR that changes only ydb/docs/default-branch.txt",
+        "Создаёт MODERATORS draft in Club YDB with the approved template image and binary plus release-notes links",
+        "Возвращает links to each PR, workflow, published page, GitHub Release and Atushka draft"
+      ],
+      "covers": "Complete release workflow follows verified dependency order"
+    },
+    {
+      "id": 3,
+      "prompt": "После успешной публикации stable docs создай GitHub Release для 26.2.1.14.",
+      "expected_output": "Создаёт non-draft non-prerelease GitHub Release with the established English release-notes body, then reads it back.",
+      "files": ["fixtures/release-publication-state.json"],
+      "expectations": [
+        "Проверяет существование exact tag before creating the release",
+        "Использует body Release notes: https://ydb.tech/docs/en/changelog-server?version=v26.2#26-2-1-14",
+        "Не использует bare URL or RU URL in GitHub Release body",
+        "Проверяет created release body, tag, public state and URL after mutation"
+      ],
+      "covers": "GitHub Release body and post-mutation verification"
+    }
+  ]
+}

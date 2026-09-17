@@ -80,6 +80,9 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
+        // Upper bound on how many blob sequence numbers one TEvAllocateIds may claim; agents ask for 100 at a time
+        static constexpr ui32 MaxBlobSeqIdsPerAllocation = 1000;
+
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
@@ -97,6 +100,13 @@ namespace NKikimr::NBlobDepot {
             std::optional<TConnection> Connection;
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
+            bool SupportsIdRangeExpiry = false;
+            bool BlockingGC = false; // disconnected while holding at least one issued blob sequence number
+
+            // Channel -> highest step whose blob sequence numbers were reclaimed while this agent was away. Handed
+            // to the agent in every TEvRegisterAgentResult (not just the first one after the expiry: the result may
+            // be lost with the pipe, and re-applying it is a no-op) and kept for the rest of this generation.
+            THashMap<ui8, ui32> ExpiredSteps;
 
             THashMap<ui8, TGivenIdRange> GivenIdRanges;
 
@@ -119,10 +129,13 @@ namespace NKikimr::NBlobDepot {
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
             size_t InFlightDeliveries = 0;
+            ui64 ConnectionSeq = 0; // order in which this tablet saw the pipe servers appear
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;
+        ui64 NextPipeServerSeq = 0;
         THashMap<ui32, TAgent> Agents; // NodeId -> Agent
+        ui64 AgentsBlockingGC = 0; // maintained on agent state changes; do not recompute in periodic metrics paths
 
         struct TChannelKind : NBlobDepot::TChannelKind {
             std::vector<std::tuple<ui32, ui64>> GroupAccumWeights; // last one is the total weight
@@ -164,6 +177,15 @@ namespace NKikimr::NBlobDepot {
                 LastReportedLeastId.emplace(result);
                 return result;
             }
+
+            void AdvanceNextBlobSeqIdPastStep(ui32 generation, ui32 step) {
+                auto next = TBlobSeqId::FromSequentalNumber(Index, generation, NextBlobSeqId);
+                if (next.Step <= step) {
+                    next.Step = step + 1;
+                    next.Index = 0;
+                    NextBlobSeqId = next.ToSequentialNumber();
+                }
+            }
         };
         std::vector<TChannelInfo> Channels;
 
@@ -184,7 +206,31 @@ namespace NKikimr::NBlobDepot {
         // Same as GetAgent(pipeServerId), but returns nullptr instead of aborting when the pipe server is already
         // gone or has been superseded by a newer connection of the same agent
         TAgent *FindAgent(const TActorId& pipeServerId);
+
+        bool HasGivenIdRanges(const TAgent& agent) const {
+            for (const auto& item : agent.GivenIdRanges) {
+                if (!item.second.IsEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        // Connected agents do not contribute; only ResetAgent changes ranges while an agent is disconnected.
+        void UpdateAgentBlockingGC(TAgent& agent);
+
+        // True when this id falls into a range we reclaimed from the agent while it was disconnected. The tablet's
+        // own ExpiredSteps are in-memory, so every entry belongs to the current generation.
+        bool IsBlobSeqIdExpired(const TAgent& agent, const TBlobSeqId& blobSeqId) const {
+            const auto it = agent.ExpiredSteps.find(blobSeqId.Channel);
+            return it != agent.ExpiredSteps.end()
+                && blobSeqId.Generation == Executor()->Generation()
+                && blobSeqId.Step <= it->second;
+        }
         void ResetAgent(ui32 nodeId, TAgent& agent);
+        void ScheduleCheckExpiredAgents();
+        void HandleCheckExpiredAgents();
+        void ExpireAgent(ui32 nodeId, TAgent& agent);
+        bool CheckExpiredAgentsScheduled = false;
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 

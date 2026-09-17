@@ -77,6 +77,24 @@ namespace NKikimr::NBlobDepot {
                     << " NextExpectedMsgId# " << info.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
                     ev->GetTypeRewrite()) << " Id# " << GetLogId());
                 ++info.NextExpectedMsgId;
+
+                // The agent may have reconnected through another pipe server by now. A request that arrived on a
+                // superseded connection can no longer be answered -- the response is addressed through this pipe
+                // server and the agent drops anything not coming from its current one -- and every handler below
+                // resolves the agent through this very pipe server id, which would abort inside GetAgent(). This
+                // also discards a stale repeat of TEvRegisterAgent (registrations can sit in PostponeQ and be
+                // replayed later), which would otherwise move Connection backwards onto a dead pipe.
+                if (info.NodeId && !FindAgent(ev->Recipient)) {
+                    YDB_LOG_DEBUG("HandleDelivery dropped for superseded connection",
+                        {"marker", "BDT94"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
+                    return;
+                }
+
                 HandleFromAgent(ev);
             };
 
@@ -150,6 +168,7 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+                cFunc(TEvPrivate::EvCheckExpiredAgents, HandleCheckExpiredAgents);
 
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);

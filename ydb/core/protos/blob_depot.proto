@@ -80,6 +80,10 @@ message TEvApplyConfigResult {
 message TEvRegisterAgent {
     optional uint32 VirtualGroupId = 1; // for validation purposes
     optional fixed64 AgentInstanceId = 2; // randomly generated number every time agent starts from scratch
+    // Set by agents that honour TEvRegisterAgentResult.InvalidatedSteps. The tablet reclaims the blob sequence
+    // ranges of a long-gone agent only when this is set, so an older agent is simply never expired and the two
+    // sides may be updated in any order.
+    optional bool SupportsIdRangeExpiry = 3;
 }
 
 message TEvRegisterAgentResult {
@@ -98,6 +102,10 @@ message TEvRegisterAgentResult {
     optional float ApproximateFreeSpaceShare = 5;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 6;
     optional string Name = 7;
+    // Blob sequence numbers that the tablet reclaimed while this agent was disconnected. The agent must drop
+    // everything at or below these steps -- free ids and writes still in flight alike -- before it resumes serving
+    // queries, because the tablet may already have garbage collected the blobs behind them.
+    repeated TEvPushNotify.TInvalidatedStep InvalidatedSteps = 8;
 }
 
 message TEvAllocateIds {

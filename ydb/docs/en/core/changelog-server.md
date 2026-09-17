@@ -32,7 +32,7 @@ Release date: September 16, 2026.
 * Added database-level [limits on the count and volume of small blobs](https://github.com/ydb-platform/ydb/pull/43393) for column-oriented tables. New writes are rejected when the hard limit is exceeded. This functionality is disabled by a feature flag.
 * [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message. This functionality is disabled by a feature flag.
 * Streaming queries can read [user attributes of topic messages](https://github.com/ydb-platform/ydb/pull/40378). This functionality is disabled by a feature flag.
-* Added [min-max skip indexes](https://github.com/ydb-platform/ydb/pull/38585) for column-oriented tables. This functionality is disabled by a feature flag.
+* Added [min-max skip indexes](./yql/reference/syntax/create_table/min_max_index.md?version=main) for column-oriented tables. This functionality is disabled by a feature flag.
 * Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables. This functionality is disabled by a feature flag.
 * Added [online construction of unique secondary indexes](https://github.com/ydb-platform/ydb/pull/35981). This functionality is disabled by a feature flag.
 * [Transactions between topics and tables can use optimized conflict checking](https://github.com/ydb-platform/ydb/pull/36706). This functionality is disabled by a feature flag.

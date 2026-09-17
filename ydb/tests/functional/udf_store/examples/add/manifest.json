@@ -2,17 +2,16 @@
   "module_type": "module",
   "module_kind": "wasm",
   "module_name": "Add",
-  "calling_convention": "unversioned_value",
   "module_extension": "wasm",
   "required_libraries": [],
   "functions": [
     {
       "name": "add",
       "argument_types": [
-        {"value": "int64", "tag": "concrete_type"},
-        {"value": "int64", "tag": "concrete_type"}
+        "Optional<Int64>",
+        "Optional<Int64>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     }
   ]
 }

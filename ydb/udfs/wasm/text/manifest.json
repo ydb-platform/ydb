@@ -2,45 +2,46 @@
   "module_type": "module",
   "module_kind": "wasm",
   "module_name": "Text",
-  "calling_convention": "bridge",
   "module_extension": "wasm",
-  "required_libraries": ["sdk"],
+  "required_libraries": [
+    "sdk"
+  ],
   "functions": [
     {
       "name": "count_letters",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"}
+        "Optional<String>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "count_digits",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"}
+        "Optional<String>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "count_upper",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"}
+        "Optional<String>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "text_length",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"}
+        "Optional<String>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     },
     {
       "name": "byte_at",
       "argument_types": [
-        {"value": "string", "tag": "concrete_type"},
-        {"value": "int64", "tag": "concrete_type"}
+        "Optional<String>",
+        "Optional<Int64>"
       ],
-      "result_type": {"value": "int64", "tag": "concrete_type"}
+      "result_type": "Optional<Int64>"
     }
   ]
 }

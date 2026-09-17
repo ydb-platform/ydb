@@ -32,7 +32,7 @@ inline TString MakeManifest(const TString& moduleName, const TVector<TString>& r
     // A manifest without callable declarations is rejected outright, so even a
     // scheduling test has to name one function.
     sb << ",\"functions\":[{\"name\":\"f\",\"argument_types\":[],"
-       << "\"result_type\":{\"value\":\"int64\",\"tag\":\"concrete_type\"}}]}";
+       << "\"result_type\":\"Int64\"}]}";
     return sb;
 }
 

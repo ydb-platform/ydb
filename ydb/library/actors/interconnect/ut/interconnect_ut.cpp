@@ -1214,6 +1214,7 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
     auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
         settings.SubscriberLivenessCheckInterval = checkInterval;
         settings.V2.Enable = useSessionV2;
+        settings.V2.Threads = useSessionV2 ? 4 : 0; // non-zero Threads is what starts the v2 engine
     };
     auto logState = std::make_shared<TSubscriberLivenessLogState>();
     auto loggerSettings = MakeIntrusive<NLog::TSettings>(

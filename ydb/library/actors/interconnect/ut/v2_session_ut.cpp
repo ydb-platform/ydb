@@ -519,6 +519,7 @@ namespace {
             TDuration deadPeerTimeout = TDuration::Seconds(2)) {
         auto customizer = [tcpSocketBufferSize](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
+            settings.V2.Threads = 4; // non-zero Threads is what starts the v2 engine
             settings.V2.ChecksumEvents = true;
             if (tcpSocketBufferSize) {
                 settings.TCPSocketBufferSize = tcpSocketBufferSize;
@@ -548,6 +549,23 @@ namespace {
             Sleep(TDuration::MilliSeconds(10));
         }
         UNIT_FAIL(TStringBuilder() << "condition not met: " << what);
+    }
+
+    // Both session flavours render a "Session" panel heading; only v2 qualifies it with "(v2)". Waits
+    // for a session to exist and to be of the expected flavour, so it can be used to observe a switch.
+    void AssertSessionVersion(TTestICCluster& cluster, ui32 me, ui32 peer, bool expectV2) {
+        WaitFor(TDuration::Seconds(20), [&] {
+            auto httpResp = cluster.GetSessionDbg(me, peer);
+            if (!httpResp.Wait(TDuration::Seconds(2))) {
+                return false;
+            }
+            const TString& page = httpResp.GetValueSync();
+            if (!page.Contains("panel-heading\">Session")) {
+                return false; // no session at all yet
+            }
+            return page.Contains("Session (v2)") == expectV2;
+        }, TStringBuilder() << "session " << me << " -> " << peer << " is "
+            << (expectV2 ? "v2" : "v1"));
     }
 
     void AssertV2InUse(TTestICCluster& cluster, ui32 me, ui32 peer) {
@@ -808,6 +826,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         constexpr ui32 kNodes = 5;
         auto customizer = [](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
+            settings.V2.Threads = 4; // non-zero Threads is what starts the v2 engine
         };
         TLoadTrace trace;
         auto cluster = std::make_unique<TTestICCluster>(
@@ -859,6 +878,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         constexpr ui32 kNodes = 5;
         auto customizer = [](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
+            settings.V2.Threads = 4; // non-zero Threads is what starts the v2 engine
         };
         TLoadTrace trace;
         auto cluster = std::make_unique<TTestICCluster>(
@@ -1268,6 +1288,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         }
         auto customizer = [](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
+            settings.V2.Threads = 4; // non-zero Threads is what starts the v2 engine
             settings.V2.ChecksumEvents = true;
             settings.EnableExternalDataChannel = false;
             settings.V2.EnableProvidedBuffers = false;
@@ -1347,6 +1368,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         }
         auto customizer = [](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
+            settings.V2.Threads = 4; // non-zero Threads is what starts the v2 engine
             settings.V2.ChecksumEvents = true;
             settings.EnableExternalDataChannel = false;
         };
@@ -1381,5 +1403,70 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 0);
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "BytesSentXdc"), 0);
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 2, 1, "BytesReceivedXdc"), 0);
+    }
+
+    // Settings.V2.Enable is the one v2 setting applied online: a cluster config update flips it on the
+    // live TInterconnectProxyCommon (see TInterconnectConfigurator in ydb/core/cms/console). The engine
+    // is started from Settings.V2.Threads at node startup regardless of it, so toggling Enable must
+    // change what the next handshake negotiates -- in both directions -- and must leave the session that
+    // is already established alone.
+    Y_UNIT_TEST(EnableFlagAppliesToNewHandshakesOnly) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Threads = 4;    // the engine runs from the start...
+            settings.V2.Enable = false; // ...but v2 is not negotiated yet
+        };
+        TTestICCluster cluster(/*numNodes=*/2, TChannelsConfig(), nullptr, /*loggerSettings=*/nullptr,
+            TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
+            TDuration::Seconds(10), /*inflight=*/TNode::DefaultInflight(), customizer);
+
+        const TActorId echoId = cluster.RegisterActor(new TEchoActor, 2);
+
+        // Round-trips one event 1 -> 2 -> 1, which both establishes the session and proves it works.
+        auto roundTrip = [&](ui64 seqNo) {
+            auto* collector = new TResponseCollectorActor;
+            const TActorId collectorId = cluster.RegisterActor(collector, 1);
+            cluster.GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+                echoId, collectorId, new TEvTest(seqNo), IEventHandle::FlagTrackDelivery, seqNo));
+            WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1; },
+                TStringBuilder() << "echo reply " << seqNo << " received");
+        };
+
+        // What TInterconnectConfigurator does when the cluster config changes.
+        auto setEnable = [&](bool enable) {
+            for (ui32 nodeId : {1, 2}) {
+                cluster.GetNode(nodeId)->MutableInterconnectSettings().V2.Enable = enable;
+            }
+        };
+
+        // Drop the session so the peers have to handshake again, then wait until traffic flows.
+        auto reconnect = [&](ui64 seqNo) {
+            cluster.GetNode(1)->Send(cluster.InterconnectProxy(2, 1), new TEvInterconnect::TEvPoisonSession);
+            roundTrip(seqNo);
+        };
+
+        roundTrip(0);
+        AssertSessionVersion(cluster, 1, 2, /*expectV2=*/false);
+
+        // Enabling v2 must not disturb the session that is already up.
+        setEnable(true);
+        roundTrip(1);
+        AssertSessionVersion(cluster, 1, 2, /*expectV2=*/false);
+        AssertSessionVersion(cluster, 2, 1, /*expectV2=*/false);
+
+        // ...but the next handshake must negotiate v2, on both sides.
+        reconnect(2);
+        AssertSessionVersion(cluster, 1, 2, /*expectV2=*/true);
+        AssertSessionVersion(cluster, 2, 1, /*expectV2=*/true);
+
+        // And turning it back off must put the next handshake back on v1.
+        setEnable(false);
+        reconnect(3);
+        AssertSessionVersion(cluster, 1, 2, /*expectV2=*/false);
+        AssertSessionVersion(cluster, 2, 1, /*expectV2=*/false);
     }
 }

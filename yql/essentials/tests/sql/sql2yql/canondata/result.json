@@ -4087,6 +4087,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_expr-ensure_type_fail_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-evaluate_atom_expr_cache]": [
+        {
+            "checksum": "b3b5d27d9fe433a98d1a3fa83fac0e31",
+            "size": 1117,
+            "uri": "https://{canondata_backend}/1942278/7eb364bbdb3e483f579be638bd61028ee036db02/resource.tar.gz#test_sql2yql.test_expr-evaluate_atom_expr_cache_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-evaluate_expr_cache_hit]": [
         {
             "checksum": "3deb230f647f33d6081c1d618cf9ea81",
@@ -16070,6 +16077,11 @@
     "test_sql_format.test[expr-ensure_type_fail]": [
         {
             "uri": "file://test_sql_format.test_expr-ensure_type_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-evaluate_atom_expr_cache]": [
+        {
+            "uri": "file://test_sql_format.test_expr-evaluate_atom_expr_cache_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-evaluate_expr_cache_hit]": [

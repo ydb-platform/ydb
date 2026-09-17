@@ -22,7 +22,7 @@ def run_cli(argv):
             "--endpoint",
             "grpc://" + os.getenv("YDB_ENDPOINT"),
             "--database",
-            "/" + os.getenv("YDB_DATABASE"),
+            os.getenv("YDB_DATABASE"),
         ] + argv
     )
 
@@ -161,7 +161,7 @@ def test_run_determentistic(store):
 
     driver = ydb.Driver(
         ydb.DriverConfig(
-            database="/" + os.getenv("YDB_DATABASE"),
+            database=os.getenv("YDB_DATABASE"),
             endpoint=os.getenv("YDB_ENDPOINT"),
         )
     )
@@ -185,7 +185,7 @@ def test_plans(store):
 
     driver = ydb.Driver(
         ydb.DriverConfig(
-            database="/" + os.getenv("YDB_DATABASE"),
+            database=os.getenv("YDB_DATABASE"),
             endpoint=os.getenv("YDB_ENDPOINT"),
         )
     )

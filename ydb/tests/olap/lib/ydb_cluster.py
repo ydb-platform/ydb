@@ -255,7 +255,7 @@ class YdbCluster:
 
         driver_config = ydb.DriverConfig(
             endpoint,
-            database,
+            '/' + database.lstrip('/'),
             credentials=credentials,
             root_certificates=ydb.load_ydb_root_certificate(),
         )

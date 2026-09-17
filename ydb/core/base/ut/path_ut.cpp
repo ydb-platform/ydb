@@ -206,6 +206,25 @@ Y_UNIT_TEST_SUITE(Path) {
         UNIT_ASSERT_EQUAL(PathPartBrokenAt(pathPart, " "), pathPart.end());
     }
 
+    Y_UNIT_TEST(PrependClusterRootIfNeeded) {
+        const TVector<std::pair<TString, TString>> cases = {
+            {"mydb", "/ru/mydb"},
+            {"ru/mydb", "/ru/ru/mydb"},
+            {"ru", "/ru/ru"},
+            {"mydb//nested/", "/ru/mydb/nested"},
+            {"/ru/mydb", "/ru/mydb"},
+            {"/other/mydb", "/other/mydb"},
+            {"//other//mydb/", "//other//mydb/"},
+            {"/", "/"},
+            {"", ""},
+        };
+        for (const auto& [path, expected] : cases) {
+            const auto result = NKikimr::PrependClusterRootIfNeeded("/ru", path);
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
+            UNIT_ASSERT_VALUES_EQUAL(NKikimr::PrependClusterRootIfNeeded("/ru", result), expected);
+        }
+    }
+
     Y_UNIT_TEST(NormalizePath_AlreadyUnderDatabase) {
         const TString database = "/Root/Db";
         const TString path = "/Root/Db/account/topic";

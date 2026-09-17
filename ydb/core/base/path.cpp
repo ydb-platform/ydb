@@ -175,6 +175,13 @@ bool IsPathUnderDatabase(TStringBuf database, TStringBuf path) {
 
 } // namespace
 
+TString PrependClusterRootIfNeeded(TStringBuf clusterRoot, TStringBuf path) {
+    if (path.empty() || path.StartsWith('/')) {
+        return TString{path};
+    }
+    return NormalizePathJoin(clusterRoot, path);
+}
+
 TString NormalizePath(TStringBuf database, TStringBuf path) {
     if (database == path || IsPathUnderDatabase(database, path)) {
         return TString{path};

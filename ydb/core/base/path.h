@@ -23,6 +23,9 @@ TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf e
 bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);
 
+// Empty and slash-prefixed paths are unchanged; other paths are relative to clusterRoot.
+TString PrependClusterRootIfNeeded(TStringBuf clusterRoot, TStringBuf path);
+
 /**
  * If path is already under database (or equal), returns path as-is.
  * Otherwise joins database/path and canonizes.

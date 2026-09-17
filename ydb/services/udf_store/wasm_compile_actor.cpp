@@ -47,7 +47,7 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 "");
             break;
         case EStep::ReadModuleChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid);
+            NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid, SourceChunks_.size());
             break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
@@ -132,9 +132,16 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
     }
-    ReplyError(TStringBuilder()
+    const TString message = TStringBuilder()
         << "YQL request failed at compile step " << static_cast<int>(Step_)
-        << ": " << ev->Get()->GetErrorMessage());
+        << ": " << ev->Get()->GetErrorMessage();
+    if (Step_ == EStep::UpdateMetaFailed) {
+        // A failure to persist must terminate instead of recursively retrying
+        // the same update, and must keep the original compilation error.
+        ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
+    } else {
+        FailAndPersist(message);
+    }
 }
 
 void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response) {
@@ -165,24 +172,31 @@ void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRespons
                 return;
             }
             case EStep::ReadModuleChunks: {
-                TVector<TString> chunks;
-                if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder() << "Failed to read module source chunks for name=" << Name_);
+                const size_t previousChunkCount = SourceChunks_.size();
+                if (!NTableQuery::AppendSourceChunksResponse(response, SourceChunks_)) {
+                    FailAndPersist(TStringBuilder() << "Failed to read module source chunks for name=" << Name_);
+                    return;
+                }
+                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead
+                    && SourceChunks_.size() <= ModuleSource_.ChunkCount)
+                {
+                    ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                     return;
                 }
                 TString joinError;
                 if (!JoinAndVerifyBlobs(
-                        chunks,
+                        SourceChunks_,
                         ModuleSource_.ChunkCount,
                         ModuleSource_.Size,
                         ModuleSource_.Md5,
                         ModuleSource_.Body,
                         joinError))
                 {
-                    ReplyError(TStringBuilder()
+                    FailAndPersist(TStringBuilder()
                         << "Module source is corrupted for name=" << Name_ << ": " << joinError);
                     return;
                 }
+                SourceChunks_.clear();
                 Step_ = EStep::ReadLibraryArtifact;
                 StartNextLibrary();
                 return;

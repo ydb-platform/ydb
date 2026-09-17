@@ -45,7 +45,7 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 "");
             break;
         case EStep::ReadLibraryChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid);
+            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid, SourceChunks_.size());
             break;
         case EStep::DeleteArtifactChunks:
             NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_, LibrarySource_.Uid);
@@ -123,9 +123,16 @@ void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequest
         ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
         return;
     }
-    ReplyError(TStringBuilder()
+    const TString message = TStringBuilder()
         << "YQL request failed at library compile step " << static_cast<int>(Step_)
-        << ": " << ev->Get()->GetErrorMessage());
+        << ": " << ev->Get()->GetErrorMessage();
+    if (Step_ == EStep::UpdateMetaFailed) {
+        // A failure to persist must terminate instead of recursively retrying
+        // the same update, and must keep the original compilation error.
+        ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
+    } else {
+        FailAndPersist(message);
+    }
 }
 
 void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response) {
@@ -146,25 +153,32 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
             }
             case EStep::ReadLibraryChunks: {
-                TVector<TString> chunks;
-                if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder()
+                const size_t previousChunkCount = SourceChunks_.size();
+                if (!NTableQuery::AppendSourceChunksResponse(response, SourceChunks_)) {
+                    FailAndPersist(TStringBuilder()
                         << "Failed to read library source chunks for '" << LibraryName_ << "'");
+                    return;
+                }
+                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead
+                    && SourceChunks_.size() <= LibrarySource_.ChunkCount)
+                {
+                    ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                     return;
                 }
                 TString joinError;
                 if (!JoinAndVerifyBlobs(
-                        chunks,
+                        SourceChunks_,
                         LibrarySource_.ChunkCount,
                         LibrarySource_.Size,
                         LibrarySource_.Md5,
                         LibrarySource_.Body,
                         joinError))
                 {
-                    ReplyError(TStringBuilder()
+                    FailAndPersist(TStringBuilder()
                         << "Library '" << LibraryName_ << "' source is corrupted: " << joinError);
                     return;
                 }
+                SourceChunks_.clear();
                 CompileLibrary();
                 return;
             }

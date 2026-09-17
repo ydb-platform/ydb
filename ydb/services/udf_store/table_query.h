@@ -50,9 +50,14 @@ void SetSelectModuleByNameParams(
 
 bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row);
 
+// Four 8 MiB chunks leave room for result metadata below the 48 MiB query limit.
+constexpr ui64 ChunksPerRead = 4;
+
 TString BuildSelectSourceChunksQuery(const TString& tablePath);
-void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
-bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
+void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 firstChunk);
+//! Append a page, rejecting truncated results, gaps and duplicate indices.
+//! The next page starts at chunks.size(); a short page ends the read.
+bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
 //! Artifacts are keyed by the upload they were built from, so a lookup that
 //! finds nothing means this upload has not been compiled here yet, not that
@@ -88,8 +93,9 @@ void SetSelectArtifactChunksParams(
     const TString& id,
     const TString& kind,
     const TString& uid,
-    const TString& blobKind);
-bool ParseArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
+    const TString& blobKind,
+    ui64 firstChunk);
+bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
 TString BuildUpsertArtifactQuery(const TString& tablePath);
 void SetUpsertArtifactParams(

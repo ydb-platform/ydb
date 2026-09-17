@@ -131,7 +131,6 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("fnx Bool"));
-        UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));
         UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeBackfillFnxQuery(cluster).Contains("fnx IS NULL"));

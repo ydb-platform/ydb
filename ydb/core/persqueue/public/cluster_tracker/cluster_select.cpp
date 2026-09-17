@@ -135,7 +135,6 @@ TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
                    balancer Utf8,
                    weight Uint64,
                    advisable Bool,
-                   kikimrHost Utf8,
                    kikimrMessageBusMaxInFlight Int32,
                    kikimrMessageBusMaxMessageSize Int64,
                    kikimrPort Int32,

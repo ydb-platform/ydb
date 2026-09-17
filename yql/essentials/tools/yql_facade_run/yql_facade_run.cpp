@@ -871,6 +871,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.ClusterMapping = ClusterMapping_;
         ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
+        settings.Syntax = RunOptions_.Syntax;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;

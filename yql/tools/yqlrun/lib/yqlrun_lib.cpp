@@ -1,5 +1,9 @@
 #include "yqlrun_lib.h"
 
+#ifndef DONT_ADD_SPARK
+#include <yql/spark/tools/tool_lib/tool_lib.h>
+#endif
+
 #include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_services.h>
@@ -93,10 +97,18 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
+#ifndef DONT_ADD_SPARK
+        NSparkTool::AddSparkOptions(opts, SparkSettings_);
+#endif
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
         Y_UNUSED(res);
+
+#ifndef DONT_ADD_SPARK
+        NSparkTool::ValidateSparkSettings(SparkSettings_);
+        NSparkTool::ApplySparkSettings(GetRunOptions(), SparkSettings_);
+#endif
 
         if (GetRunOptions().GatewaysConfig) {
             auto ytConfig = GetRunOptions().GatewaysConfig->GetYt();
@@ -115,6 +127,15 @@ TYqlRunTool::TYqlRunTool()
     });
 
     SetPeepholePipelineConfigurator(&PEEPHOLE_CONFIG_INSTANCE);
+}
+
+int TYqlRunTool::DoRun(TProgramFactory& factory) {
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
+#ifndef DONT_ADD_SPARK
+    NSparkTool::AddSparkTranslator(translatorsRegistry, SparkSettings_);
+#endif
+    factory.SetTranslatorsRegistry(std::move(translatorsRegistry));
+    return TFacadeRunner::DoRun(factory);
 }
 
 IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {

@@ -2768,6 +2768,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup, "/Root/tenant", "/Root/tenant"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
+
+        auto relativeConfig = driver.GetConfig();
+        relativeConfig.SetDatabase("tenant");
+        auto relativeDriver = TDriver(relativeConfig);
+        CreateRestoreLambda(relativeDriver, pathToBackup, "./restoration/point")();
+        CompareResults(
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/view`;"),
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/restoration/point/view`;")
+        );
+        CreateRestoreLambda(relativeDriver, pathToBackup, "./")();
+
+        NDump::TClient backupClient(relativeDriver);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "").GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "/").GetStatus(), EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {

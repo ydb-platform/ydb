@@ -191,7 +191,9 @@ protected:
         return response;
     }
 
-    void TestTopicPaths(const TString& path1, const TString& path2) {
+    void TestTopicPaths(const TString& path1, const TString& path2,
+                       Ydb::StatusIds::StatusCode firstStatus = Ydb::StatusIds::SUCCESS,
+                       Ydb::StatusIds::StatusCode secondStatus = Ydb::StatusIds::BAD_REQUEST) {
         const auto PARTITION_ID = 1;
         const auto BEGIN = 4;
         const auto END = 7;
@@ -203,7 +205,12 @@ protected:
                 }}
             }}
         });
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), firstStatus);
+
+        if (firstStatus != Ydb::StatusIds::SUCCESS) {
+            // A failed offset update aborts the transaction.
+            tx = BeginTransaction(*session);
+        }
 
         response = Call_UpdateOffsetsInTransaction({
             TTopic{.Path=path2, .Partitions={
@@ -212,7 +219,7 @@ protected:
                 }}
             }}
         });
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), secondStatus);
     }
 };
 
@@ -330,6 +337,12 @@ Y_UNIT_TEST_F(UseDoubleSlashInTopicPath, TUpdateOffsetsInTransactionFixture) {
 
 Y_UNIT_TEST_F(RelativePath, TUpdateOffsetsInTransactionFixture) {
     TestTopicPaths("PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1");
+}
+
+Y_UNIT_TEST_F(FullPathWithoutLeadingSlash, TUpdateOffsetsInTransactionFixture) {
+    // The slashless path addresses /Root/Root/PQ/..., not the existing /Root/PQ/... topic.
+    TestTopicPaths("Root/PQ/rt3.dc1--topic1", "/Root/PQ/rt3.dc1--topic1",
+                   Ydb::StatusIds::SCHEME_ERROR, Ydb::StatusIds::SUCCESS);
 }
 
 Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {

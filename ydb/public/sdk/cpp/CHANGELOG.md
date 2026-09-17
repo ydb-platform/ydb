@@ -8,6 +8,8 @@
 
 ## v3.22.0
 
+* Fixed direct topic writes with database-relative paths. Only paths starting with `/` are absolute.
+
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
 
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.

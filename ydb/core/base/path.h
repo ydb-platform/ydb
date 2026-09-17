@@ -32,6 +32,9 @@ TString PrependClusterRootIfNeeded(TStringBuf clusterRoot, TStringBuf path);
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
+// Only paths starting with '/' are absolute; all others are relative to the
+// effective database.
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path);
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

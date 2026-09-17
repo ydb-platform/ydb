@@ -266,7 +266,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -312,7 +312,7 @@ public:
         SetAuthToken(navigateRequest, *this->Request_);
         SetDatabase(navigateRequest.get(), *this->Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(Request_->GetDatabaseRelativePath(req->path()));
 
         ctx.Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -373,7 +373,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);

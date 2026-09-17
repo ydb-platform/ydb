@@ -58,8 +58,8 @@ message ImportFromS3Settings {
         }
 
         // Database path to a database object to import the item to
-        // Resolved relative to the default destination_path
-        // May be omitted if the item's source_path is specified, in this case will be taken equal to it
+        // Only paths starting with '/' are absolute; otherwise relative to the database.
+        // May be omitted if the item's source_path is specified; then resolved under the default destination_path.
         string destination_path = 2;
     }
 
@@ -163,8 +163,8 @@ message ImportFromFsSettings {
         }
 
         // Database path to a database object to import the item to
-        // Resolved relative to the default destination_path
-        // May be omitted if the item's source_path_db is specified, in this case will be taken equal to it
+        // Only paths starting with '/' are absolute; otherwise relative to the database.
+        // May be omitted if the item's source_path_db is specified; then resolved under the default destination_path.
         string destination_path = 2;
     }
 

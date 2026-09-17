@@ -185,13 +185,12 @@ class TTypeParser {
 public:
     TTypeParser(
         TStringBuf str, TIssues& issues,
-        TPosition position, TMemoryPool& pool, ui32 maxDepth)
+        TPosition position, TMemoryPool& pool)
         : Str_(str)
         , Issues_(issues)
         , Position_(std::move(position))
         , Index_(0)
         , Pool_(pool)
-        , MaxDepth_(maxDepth)
     {
         GetNextToken();
     }
@@ -207,23 +206,6 @@ public:
 
 private:
     TAstNode* ParseType() {
-        if (TypeDepths_.size() > MaxDepth_) {
-            return AddError("Type nesting exceeds " + ToString(MaxDepth_) + " levels");
-        }
-        TypeDepths_.push_back(0);
-        auto* type = ParseTypeImpl();
-        const ui32 depth = TypeDepths_.back();
-        TypeDepths_.pop_back();
-        if (!TypeDepths_.empty()) {
-            TypeDepths_.back() = Max(TypeDepths_.back(), depth + 1);
-        }
-        if (depth > MaxDepth_) {
-            return AddError("Type nesting exceeds " + ToString(MaxDepth_) + " levels");
-        }
-        return type;
-    }
-
-    TAstNode* ParseTypeImpl() {
         TAstNode* type = nullptr;
 
         switch (Token_) {
@@ -401,9 +383,6 @@ private:
 
         if (type) {
             while (Token_ == '?') {
-                if (++TypeDepths_.back() > MaxDepth_) {
-                    return AddError("Type nesting exceeds " + ToString(MaxDepth_) + " levels");
-                }
                 type = MakeOptionalType(type);
                 GetNextToken();
             }
@@ -1358,8 +1337,6 @@ private:
     TString UnescapedIdentifier_;
     TStringBuf Identifier_;
     TMemoryPool& Pool_;
-    ui32 MaxDepth_;
-    TVector<ui32> TypeDepths_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1707,9 +1684,9 @@ private:
 } // namespace
 
 TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
-                    TPosition position /* = TPosition(1, 1) */, ui32 maxDepth)
+                    TPosition position /* = TPosition(1, 1) */)
 {
-    TTypeParser parser(str, issues, position, pool, maxDepth);
+    TTypeParser parser(str, issues, position, pool);
     return parser.ParseTopLevelType();
 }
 

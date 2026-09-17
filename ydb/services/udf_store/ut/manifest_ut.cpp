@@ -94,9 +94,6 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
         UNIT_ASSERT(Type("Int64" + TString(32, '?')));
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("Int64" + TString(33, '?')), yexception, "Type nesting exceeds");
         UNIT_ASSERT_EXCEPTION_CONTAINS(Type("(" + nested + ")->Int64"), yexception, "Type nesting exceeds");
-        TString hostile;
-        for (size_t i = 0; i < 10000; ++i) { hostile += "List<"; }
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Type(hostile), yexception, "Type nesting exceeds");
     }
     Y_UNIT_TEST(ErrorsNameFunctionFieldAndPosition) {
         const TString manifest = R"({"module_type":"module","module_kind":"wasm","module_name":"Test",

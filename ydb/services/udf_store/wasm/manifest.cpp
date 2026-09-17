@@ -149,7 +149,7 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& value, TStringBuf where)
         Y_ENSURE(value.IsString() && !Strip(value.GetString()).empty(), "Expected a non-empty YQL type string");
         TMemoryPool pool(4096);
         TIssues issues;
-        auto* ast = NYql::ParseType(value.GetString(), pool, issues, {1, 1}, MaxManifestTypeDepth);
+        auto* ast = NYql::ParseType(value.GetString(), pool, issues, {1, 1});
         Y_ENSURE(ast, issues.ToString());
         TExprContext ctx;
         return ConvertType(*ast, ctx).Node;

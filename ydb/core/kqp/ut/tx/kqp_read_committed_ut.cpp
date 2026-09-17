@@ -673,6 +673,74 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    class TUpsertWithDisablePessimisticLocksVisibility : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](auto& session, const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            auto result = execute(session1, Q_(R"(
+                PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (7u, "Anna", "Upserted");
+            )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            {
+                // The same transaction sees its own uncommitted writes.
+                result = execute(session1, Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group == 7u ORDER BY Name;
+                )"), TTxControl::Tx(*tx1));
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[#;["Upserted"];7u;"Anna"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                // Other transactions do not see uncommitted writes.
+                result = execute(session2, Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group == 7u ORDER BY Name;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                // Commit the upsert transaction.
+                result = execute(session1, Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group == 7u ORDER BY Name;
+                )"), TTxControl::Tx(*tx1).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[#;["Upserted"];7u;"Anna"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                // Other transactions see the writes after commit.
+                result = execute(session2, Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Group == 7u ORDER BY Name;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[#;["Upserted"];7u;"Anna"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TUpsertWithDisablePessimisticLocksVisibility) {
+        TUpsertWithDisablePessimisticLocksVisibility tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     Y_UNIT_TEST(TDisablePessimisticLocksNotReadCommitted) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);

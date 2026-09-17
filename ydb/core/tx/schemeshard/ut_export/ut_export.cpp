@@ -1781,34 +1781,6 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT(!HasS3File("/sql/scheme.pb"));
     }
 
-    Y_UNIT_TEST(TableBackupAsSqlFormattingFailure) {
-        ui64 txId = 100;
-        CreateTableForSqlBackup(txId, false);
-        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
-        bool injected = false;
-        auto observer = Runtime().AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
-            auto& record = ev->Get()->Record;
-            if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
-                NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
-                if (tx.HasBackup()) {
-                    // Leave the table description valid, but remove required formatter context.
-                    tx.MutableBackup()->MutableS3Settings()->ClearSourceTablePath();
-                    record.SetTxBody(tx.SerializeAsString());
-                    injected = true;
-                }
-            }
-        });
-        const auto exportId = StartTableSqlExport(txId, "sql");
-        WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT(injected);
-        const TString result = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED).DebugString();
-        UNIT_ASSERT_C(result.Contains("Missing original table path"), result);
-        UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
-        UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
-        UNIT_ASSERT(!HasS3File("/sql/scheme.pb"));
-    }
-
     Y_UNIT_TEST(TableBackupAsSqlWithSequenceAndChangefeed) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);

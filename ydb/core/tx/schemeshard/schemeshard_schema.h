@@ -638,7 +638,6 @@ struct Schema : NIceDb::Schema {
         struct NeedToBill : Column<10, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<11, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<12, NScheme::NTypeIds::Bool> {};
-        struct EnableTableBackupAsSql : Column<15, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<4, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<5, NScheme::NTypeIds::Bool> {};
@@ -658,8 +657,7 @@ struct Schema : NIceDb::Schema {
             EnableChecksums,
             EnablePermissions,
             ChangefeedUnderlyingTopics,
-            FSSettings,
-            EnableTableBackupAsSql
+            FSSettings
         >;
     };
 
@@ -678,7 +676,6 @@ struct Schema : NIceDb::Schema {
         struct NeedToBill : Column<11, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<12, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<13, NScheme::NTypeIds::Bool> {};
-        struct EnableTableBackupAsSql : Column<16, NScheme::NTypeIds::Bool> {};
         // deprecated
         struct CreateDestinationFlag : Column<5, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<6, NScheme::NTypeIds::Bool> {};
@@ -699,8 +696,7 @@ struct Schema : NIceDb::Schema {
             EnableChecksums,
             EnablePermissions,
             ChangefeedUnderlyingTopics,
-            FSSettings,
-            EnableTableBackupAsSql
+            FSSettings
         >;
     };
 

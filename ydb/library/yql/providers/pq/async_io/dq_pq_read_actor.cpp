@@ -519,42 +519,42 @@ private:
     void StartClusterDiscovery() {
         Y_ENSURE(Clusters.empty());
 
-            ui32 index = 0;
-            if (SourceParams.FederatedClustersSize()) {
-                for (const auto& federatedCluster : SourceParams.GetFederatedClusters()) {
-                    auto& cluster = Clusters.emplace_back(
-                        index++,
-                        NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                            .Name = federatedCluster.GetName(),
-                            .Endpoint = federatedCluster.GetEndpoint(),
-                            .Path = federatedCluster.GetDatabase(),
-                        },
-                        federatedCluster.GetPartitionsCount()
-                    );
-                    if (cluster.PartitionsCount == 0) {
-                        cluster.PartitionsCount = TopicPartitionsCount;
-                        SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
-                    }
-                }
-            } else {
-                Clusters.emplace_back(
+        ui32 index = 0;
+        if (SourceParams.FederatedClustersSize()) {
+            for (const auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+                auto& cluster = Clusters.emplace_back(
                     index++,
                     NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                        .Endpoint = SourceParams.GetEndpoint(),
-                        .Path =SourceParams.GetDatabase()
+                        .Name = federatedCluster.GetName(),
+                        .Endpoint = federatedCluster.GetEndpoint(),
+                        .Path = federatedCluster.GetDatabase(),
                     },
-                    TopicPartitionsCount
+                    federatedCluster.GetPartitionsCount()
                 );
-            }
-            for (const auto& cluster : Clusters) {
-                const auto& partitionsToRead = GetPartitionsToRead(cluster);
-                for (const auto partitionId : partitionsToRead) {
-                    Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+                if (cluster.PartitionsCount == 0) {
+                    cluster.PartitionsCount = TopicPartitionsCount;
+                    SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                 }
             }
+        } else {
+            Clusters.emplace_back(
+                index++,
+                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                    .Endpoint = SourceParams.GetEndpoint(),
+                    .Path =SourceParams.GetDatabase()
+                },
+                TopicPartitionsCount
+            );
+        }
+        for (const auto& cluster : Clusters) {
+            const auto& partitionsToRead = GetPartitionsToRead(cluster);
+            for (const auto partitionId : partitionsToRead) {
+                Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+            }
+        }
 
-            Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
-            SchedulePartitionCountTimer();
+        Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
+        SchedulePartitionCountTimer();
     }
 
     void Handle(TEvPrivate::TEvRequestPartitionStatus::TPtr&) {

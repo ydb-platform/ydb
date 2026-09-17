@@ -63,6 +63,49 @@ def prepare_table_service_config(table_service_config):
     return table_service_config
 
 
+def _cluster_units(cluster):
+    units = list(cluster.nodes.values())
+    if cluster.slots:
+        units.extend(cluster.slots.values())
+    return units
+
+
+def _driver_seed_endpoints(cluster, skip_unit=None):
+    alive = []
+    fallback = []
+    for unit in _cluster_units(cluster):
+        if skip_unit is not None and unit is skip_unit:
+            continue
+        fallback.append(unit.grpc_endpoint)
+        if unit.is_alive():
+            alive.append(unit.grpc_endpoint)
+        else:
+            logger.warning("Skipping dead cluster unit %s as driver seed", unit)
+    return alive or fallback
+
+
+def _create_ydb_driver(database_path, cluster, skip_unit=None, timeout=60):
+    seeds = _driver_seed_endpoints(cluster, skip_unit=skip_unit)
+    if not seeds:
+        raise RuntimeError("No gRPC endpoints available to create YDB driver")
+
+    discovery_timeout = max(1, min(5, int(timeout)))
+    driver = ydb.Driver(
+        ydb.DriverConfig(
+            database=database_path,
+            endpoint=seeds[0],
+            endpoints=seeds[1:],
+            discovery_request_timeout=discovery_timeout,
+        )
+    )
+    try:
+        driver.wait(timeout=timeout)
+        return driver
+    except Exception:
+        driver.stop()
+        raise
+
+
 current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))
 current_name = 'current'
 if current_binary_path is not None:
@@ -125,15 +168,8 @@ class RestartToAnotherVersionFixture:
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint,
-            )
-        )
-        driver.wait(timeout=60)
-        return driver
+    def create_driver(self, skip_unit=None, timeout=60):
+        return _create_ydb_driver(self.database_path, self.cluster, skip_unit=skip_unit, timeout=timeout)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -206,15 +242,8 @@ class MixedClusterFixture:
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoint
-            )
-        )
-        driver.wait(timeout=60)
-        return driver
+    def create_driver(self, skip_unit=None, timeout=60):
+        return _create_ydb_driver(self.database_path, self.cluster, skip_unit=skip_unit, timeout=timeout)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -276,25 +305,16 @@ class RollingUpgradeAndDowngradeFixture:
             self.driver.stop()
             self.driver = None
 
-    def create_driver(self):
-        driver = ydb.Driver(
-            ydb.DriverConfig(
-                database=self.database_path,
-                endpoint=self.endpoints[0]
-            )
-        )
-        driver.wait(timeout=60)
-        return driver
+    def create_driver(self, skip_unit=None, timeout=60):
+        return _create_ydb_driver(self.database_path, self.cluster, skip_unit=skip_unit, timeout=timeout)
 
-    def _wait_for_readiness(self):
-        if self.recreate_driver:
-            self.driver = self.create_driver()
-
-        query = """
+    def _wait_for_readiness(self, skip_unit=None):
+        create_query = """
             CREATE TABLE `test_readiness` (
             id Int64 NOT NULL,
             PRIMARY KEY (id)
         ) """
+        drop_query = """DROP TABLE IF EXISTS `test_readiness`"""
         timeout = 120  # seconds
         interval = 2  # seconds
         request_timeout = 10  # seconds
@@ -311,10 +331,20 @@ class RollingUpgradeAndDowngradeFixture:
             attempt = 0
             while time.time() - start_time < timeout:
                 attempt += 1
+                remaining = timeout - (time.time() - start_time)
                 try:
                     logger.info("Readiness check attempt %d", attempt)
+                    if self.recreate_driver and self.driver is None:
+                        self.driver = self.create_driver(
+                            skip_unit=skip_unit,
+                            timeout=min(15.0, max(remaining, 1.0)),
+                        )
                     with ydb.QuerySessionPool(self.driver) as session_pool:
-                        session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1), settings=settings)
+                        session_pool.execute_with_retries(
+                            create_query,
+                            retry_settings=ydb.RetrySettings(max_retries=1),
+                            settings=settings,
+                        )
                     break
                 except Exception as e:
                     last_exception = e
@@ -324,13 +354,18 @@ class RollingUpgradeAndDowngradeFixture:
                         time.time() - start_time,
                         e,
                     )
+                    if self.recreate_driver:
+                        self.stop_driver()
                     time.sleep(interval)
             else:
                 raise last_exception
         finally:
-            query = """DROP TABLE IF EXISTS `test_readiness`"""
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query, settings=settings)
+            if self.driver is not None:
+                try:
+                    with ydb.QuerySessionPool(self.driver) as session_pool:
+                        session_pool.execute_with_retries(drop_query, settings=settings)
+                except Exception as e:
+                    logger.warning("Failed to drop test_readiness table: %r", e)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -387,7 +422,7 @@ class RollingUpgradeAndDowngradeFixture:
             node.binary_path = self.all_binary_paths[1]
             node.set_log_file_prefix("logfile_upgraded_")
             node.start()
-            self._wait_for_readiness()
+            self._wait_for_readiness(skip_unit=node)
             yield
 
         # from new to old
@@ -401,7 +436,7 @@ class RollingUpgradeAndDowngradeFixture:
             node.binary_path = self.all_binary_paths[0]
             node.set_log_file_prefix("logfile_downgraded_")
             node.start()
-            self._wait_for_readiness()
+            self._wait_for_readiness(skip_unit=node)
             yield
 
 

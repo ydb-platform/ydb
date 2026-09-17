@@ -28,6 +28,9 @@ class KiKiMRClusterInterface(object):
         self.__scheme_client = None
         self.__config_client = None
         self.__monitors = None
+        self.__client_port = None
+        self.__kv_client_port = None
+        self.__scheme_client_port = None
 
     @property
     def monitors(self):
@@ -79,38 +82,48 @@ class KiKiMRClusterInterface(object):
         :return:
         """
 
+    def _live_grpc_node(self):
+        for node in self.nodes.values():
+            if node.is_alive():
+                return node
+        return self.nodes[1]
+
+    def _bind_legacy_client(self, client, bound_port, factory):
+        node = self._live_grpc_node()
+        if client is not None and bound_port == node.grpc_port:
+            return client, bound_port
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
+        return factory(
+            server=node.host,
+            port=node.grpc_port,
+            cluster=self,
+            retry_count=10,
+        ), node.grpc_port
+
     @property
     def client(self):
         # TODO(gvit): this a legacy method, please remove it
-        if self.__client is None:
-            self.__client = kikimr_client_factory(
-                server=self.nodes[1].host,
-                port=self.nodes[1].grpc_port,
-                cluster=self,
-                retry_count=10,
-            )
+        self.__client, self.__client_port = self._bind_legacy_client(
+            self.__client, self.__client_port, kikimr_client_factory
+        )
         return self.__client
 
     @property
     def kv_client(self):
-        if self.__kv_client is None:
-            self.__kv_client = keyvalue_client_factory(
-                server=self.nodes[1].host,
-                port=self.nodes[1].grpc_port,
-                cluster=self,
-                retry_count=10,
-            )
+        self.__kv_client, self.__kv_client_port = self._bind_legacy_client(
+            self.__kv_client, self.__kv_client_port, keyvalue_client_factory
+        )
         return self.__kv_client
 
     @property
     def scheme_client(self):
-        if self.__scheme_client is None:
-            self.__scheme_client = scheme_client_factory(
-                server=self.nodes[1].host,
-                port=self.nodes[1].grpc_port,
-                cluster=self,
-                retry_count=10,
-            )
+        self.__scheme_client, self.__scheme_client_port = self._bind_legacy_client(
+            self.__scheme_client, self.__scheme_client_port, scheme_client_factory
+        )
         return self.__scheme_client
 
     @property
@@ -128,6 +141,9 @@ class KiKiMRClusterInterface(object):
         self.__kv_client = None
         self.__scheme_client = None
         self.__config_client = None
+        self.__client_port = None
+        self.__kv_client_port = None
+        self.__scheme_client_port = None
 
     @abc.abstractmethod
     def _create_config_client(self):
@@ -170,16 +186,21 @@ class KiKiMRClusterInterface(object):
         )
 
     def _wait_tenant_usable(self, database_name, timeout_seconds=240, token=None):
-        entry_node = self.nodes[1]
-        driver_config = ydb.DriverConfig(
-            "%s:%d" % (entry_node.host, entry_node.grpc_port),
-            database_name,
-            auth_token=token,
-        )
-
         deadline = time.time() + timeout_seconds
         last_error = None
         while time.time() < deadline:
+            entry_node = self._live_grpc_node()
+            extra_endpoints = [
+                "%s:%d" % (node.host, node.grpc_port)
+                for node in self.nodes.values()
+                if node is not entry_node and node.is_alive()
+            ]
+            driver_config = ydb.DriverConfig(
+                "%s:%d" % (entry_node.host, entry_node.grpc_port),
+                database_name,
+                auth_token=token,
+                endpoints=extra_endpoints,
+            )
             driver = ydb.Driver(driver_config)
             try:
                 try:

@@ -39,7 +39,7 @@
 /ydb/tests/functional/hive @ydb-platform/core
 /ydb/core/tx/scheme_board @ydb-platform/core
 /ydb/core/tx/scheme_cache @ydb-platform/core
-/ydb/core/audit @ydb-platform/core
+/ydb/core/audit @ydb-platform/security
 /ydb/core/health_check @ydb-platform/core
 /ydb/library/aclib @ydb-platform/security
 /ydb/mvp/oidc_proxy @ydb-platform/security

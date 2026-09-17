@@ -167,7 +167,13 @@ public:
             const NWilson::TTraceId& traceId) override {
         if (!LookupActorSpan) {
             LookupActorSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::LookupActor,
-                NWilson::TTraceId(traceId), EQueryTracePhase::BufferLookup);
+                NWilson::TTraceId(traceId), {
+                    .Name = "Check rows",
+                    .Phase = "BufferLookup",
+                    .ActorType = "TKqpBufferLookupActor",
+                    .Component = "KqpBufferLookup",
+                    .PeerActorType = "DataShard",
+                });
         }
         TLookupSettings settings {
             .TablePath = Settings.TablePath,

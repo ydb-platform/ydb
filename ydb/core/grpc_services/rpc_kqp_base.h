@@ -10,8 +10,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <util/string/builder.h>
-
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -87,17 +85,7 @@ class TRpcKqpRequestActor : public TRpcOperationRequestActor<TDerived, TRequest>
 
 public:
     TRpcKqpRequestActor(IRequestOpCtx* request)
-        : TBase(request)
-    {
-        if (this->Span_) {
-            TString rpcMethod = request->GetRequestName();
-            if (rpcMethod.EndsWith("Request")) {
-                rpcMethod.resize(rpcMethod.size() - TStringBuf("Request").size());
-            }
-            this->Span_.Name(TStringBuilder() << "Rpc." << rpcMethod);
-            this->Span_.Attribute("rpc.method", rpcMethod);
-        }
-    }
+        : TBase(request) {}
 
     void OnOperationTimeout(const TActorContext& ctx) {
         Y_UNUSED(ctx);

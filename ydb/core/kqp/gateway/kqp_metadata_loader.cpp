@@ -104,7 +104,7 @@ ui64 GetExpectedVersion(const TString&) {
 }
 
 template<typename TRequest, typename TResponse, typename TResult, typename TTraceStatus>
-TFuture<TResult> SendTracedActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
+TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
     const NWilson::TTraceId& traceId, EMetadataTraceOperation operation, const TString& table,
     const char* purpose, TTraceStatus traceStatus)
@@ -1246,7 +1246,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const bool enableOnlineAddUniqueIndex = Config && Config->FeatureFlags.GetEnableOnlineAddUniqueIndex();
 
     auto ptr = weak_from_base();
-    auto future = SendTracedActorRequest<TRequest, TResponse, TResult>(
+    auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
@@ -1504,7 +1504,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
         auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
 
-        return SendTracedActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
+        return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
             actorSystem,
             statServiceId,
             event.Release(),

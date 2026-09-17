@@ -746,7 +746,7 @@ protected:
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
-    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr, bool partiallyPushedDown = false);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual const TVector<TInfoUnit>& GetUniqueRawInputIUs() const override;
@@ -766,6 +766,8 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     const TExpression& GetFilterExpression() const { return FilterExpr; }
     void SetFilterExpression(TExpression filterExpr);
+
+    bool PartiallyPushedDown = false;
 
 protected:
     void ComputeOutputIUs() override;

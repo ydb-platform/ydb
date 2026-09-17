@@ -131,9 +131,6 @@ struct TEvPrivate {
         EvPrintState = EvBegin + 20,
         EvProcessState = EvBegin + 21,
         EvNotifyCA = EvBegin + 22,
-        EvRefreshClusters = EvBegin + 23,
-        EvReceivedClusters = EvBegin + 24,
-        EvDescribeTopicResult = EvBegin + 25,
         EvPartitionIdleness = EvBegin + 26,
         EvCheckPartitionTimer = EvBegin + 27,
         EvCheckPartitionCount = EvBegin + 28,
@@ -1425,37 +1422,37 @@ void TDqPqRdReadActor::UpdateQueuedSize() {
 }
 
 void TDqPqRdReadActor::StartClusterDiscovery() {
-        if (SourceParams.FederatedClustersSize()) {
-            ui32 index = 0;
-            for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
-                auto& cluster = Clusters.emplace_back(
-                        index++,
-                        NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                            .Name = federatedCluster.GetName(),
-                            .Endpoint = federatedCluster.GetEndpoint(),
-                            .Path = federatedCluster.GetDatabase(),
-                        },
-                        federatedCluster.GetPartitionsCount()
-                    );
-                if (cluster.PartitionsCount == 0) {
-                    cluster.PartitionsCount = ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount();
-                    SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
-                }
+    if (SourceParams.FederatedClustersSize()) {
+        ui32 index = 0;
+        for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+            auto& cluster = Clusters.emplace_back(
+                    index++,
+                    NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                        .Name = federatedCluster.GetName(),
+                        .Endpoint = federatedCluster.GetEndpoint(),
+                        .Path = federatedCluster.GetDatabase(),
+                    },
+                    federatedCluster.GetPartitionsCount()
+                );
+            if (cluster.PartitionsCount == 0) {
+                cluster.PartitionsCount = ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount();
+                SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
             }
-        } else { // old AST fallback
-            Clusters.emplace_back(
-                0,
-                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
-                    .Endpoint = SourceParams.GetEndpoint(),
-                    .Path = SourceParams.GetDatabase(),
-                },
-                ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount()
-            );
         }
-        for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
-            StartCluster(clusterIndex);
-        }
-        SchedulePartitionCountTimer();
+    } else { // old AST fallback
+        Clusters.emplace_back(
+            0,
+            NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                .Endpoint = SourceParams.GetEndpoint(),
+                .Path = SourceParams.GetDatabase(),
+            },
+            ReadParams.front().GetPartitioningParams(0).GetTopicPartitionsCount()
+        );
+    }
+    for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
+        StartCluster(clusterIndex);
+    }
+    SchedulePartitionCountTimer();
 }
 
 void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
@@ -1507,10 +1504,6 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     actor->Init();
     actor->InitChild();
     ProcessState();
-}
-
-void TDqPqRdReadActor::Handle(TEvPrivate::TEvRefreshClusters::TPtr&) {
-    Y_ENSURE(false); // TBD
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {

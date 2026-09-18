@@ -50,7 +50,7 @@ private:
 
     bool ParseRequest() {
         TStringBuf url = Request.Request->URL;
-        if (!IsValidUrlText(url) || !url.SkipPrefix("/clusters/")) {
+        if (!IsValidUrlText(url) || !url.SkipPrefix("/cluster/")) {
             return false;
         }
         TStringBuf path = url.Before('?');
@@ -106,7 +106,7 @@ public:
 
     void Bootstrap() {
         if (!ParseRequest()) {
-            ReplyAndPassAway(Request.Request->CreateResponseBadRequest("Expected /clusters/<cluster_name>/<path>", "text/plain"));
+            ReplyAndPassAway(Request.Request->CreateResponseBadRequest("Expected /cluster/<cluster_name>/<path>", "text/plain"));
             return;
         }
         Become(&TMetaClusterRedirectActor::StateWork, GetTimeout(), new NActors::TEvents::TEvWakeup());

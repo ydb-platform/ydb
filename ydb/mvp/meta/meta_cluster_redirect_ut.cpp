@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
     Y_UNIT_TEST(RedirectsToConfiguredProxyAndPreservesQuery) {
         TTestContext context;
         const TStringBuf query = "?database=%2FRoot%2Ftest&name=another-cluster&limit=80&offset=20&x=a+b&x=a%20b&empty=";
-        auto request = BuildHttpRequest(TStringBuilder() << "/clusters/testing-global/viewer/json/nodes" << query);
+        auto request = BuildHttpRequest(TStringBuilder() << "/cluster/testing-global/viewer/json/nodes" << query);
         auto response = context.Run(request, MakeClusterResult(Balancer));
 
         UNIT_ASSERT_VALUES_EQUAL(context.SelectedCluster, "testing-global");
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         const TString body = R"({"database":"/Root/test","query":"SELECT 1"})";
         EatWholeString(request, TStringBuilder()
-            << "POST /clusters/testing-global/viewer/json/query?database=%2FRoot%2Ftest HTTP/1.1\r\n"
+            << "POST /cluster/testing-global/viewer/json/query?database=%2FRoot%2Ftest HTTP/1.1\r\n"
             << "Host: localhost\r\nContent-Type: application/json\r\nContent-Length: " << body.size()
             << "\r\n\r\n" << body);
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
                 "https://oidc.example.net/https://storage.example.net:8765/",
                 "https://oidc.example.net/https://storage.example.net:8765"}) {
             TTestContext context;
-            auto response = context.Run(BuildHttpRequest("/clusters/testing-global/counters/counters%20tablets/json"), MakeClusterResult(balancer));
+            auto response = context.Run(BuildHttpRequest("/cluster/testing-global/counters/counters%20tablets/json"), MakeClusterResult(balancer));
             UNIT_ASSERT_VALUES_EQUAL(response->Status, "307");
             UNIT_ASSERT_VALUES_EQUAL(NHttp::THeaders(response->Headers).Get("Location"),
                 "https://oidc.example.net/https://storage.example.net:8765/counters/counters%20tablets/json");
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
 
     Y_UNIT_TEST(DecodesClusterNameAndSupportsRootPath) {
         TTestContext context;
-        auto response = context.Run(BuildHttpRequest("/clusters/testing%2Dglobal/"), MakeClusterResult("http://storage.example.net:8765/viewer/json"));
+        auto response = context.Run(BuildHttpRequest("/cluster/testing%2Dglobal/"), MakeClusterResult("http://storage.example.net:8765/viewer/json"));
         UNIT_ASSERT_VALUES_EQUAL(context.SelectedCluster, "testing-global");
         UNIT_ASSERT_VALUES_EQUAL(response->Status, "307");
         UNIT_ASSERT_VALUES_EQUAL(NHttp::THeaders(response->Headers).Get("Location"), "http://storage.example.net:8765/");
@@ -126,20 +126,20 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
 
     Y_UNIT_TEST(UnknownClusterReturnsNotFound) {
         TTestContext context;
-        auto response = context.Run(BuildHttpRequest("/clusters/unknown/viewer/json/nodes"), MakeClusterResult({}, false));
+        auto response = context.Run(BuildHttpRequest("/cluster/unknown/viewer/json/nodes"), MakeClusterResult({}, false));
         UNIT_ASSERT_VALUES_EQUAL(response->Status, "404");
         UNIT_ASSERT(NHttp::THeaders(response->Headers).Get("Location").empty());
     }
 
     Y_UNIT_TEST(RejectsInvalidRoutesBeforeDatabaseLookup) {
         for (TStringBuf url : {
-                "/clusters/", "/clusters//viewer/json/nodes", "/clusters/testing-global",
-                "/clusters/testing-global?database=/Root/test", "/other/testing-global/viewer/json/nodes",
-                "/clusters/testing%2fglobal/", "/clusters/testing%/", "/clusters/../",
-                "/clusters/testing-global/../other-host/viewer/json/nodes",
-                "/clusters/testing-global/%2E%2e/other-host/viewer/json/nodes",
-                "/clusters/testing-global/%2e%2e%2fother-host/", "/clusters/testing-global/%5cother-host/",
-                "/clusters/testing-global/viewer/json/nodes#fragment"}) {
+                "/cluster/", "/cluster//viewer/json/nodes", "/cluster/testing-global",
+                "/cluster/testing-global?database=/Root/test", "/other/testing-global/viewer/json/nodes",
+                "/cluster/testing%2fglobal/", "/cluster/testing%/", "/cluster/../",
+                "/cluster/testing-global/../other-host/viewer/json/nodes",
+                "/cluster/testing-global/%2E%2e/other-host/viewer/json/nodes",
+                "/cluster/testing-global/%2e%2e%2fother-host/", "/cluster/testing-global/%5cother-host/",
+                "/cluster/testing-global/viewer/json/nodes#fragment"}) {
             TTestContext context;
             auto response = context.Run(BuildHttpRequest(url), MakeClusterResult(Balancer));
             UNIT_ASSERT_VALUES_EQUAL_C(response->Status, "400", url);
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
                 "https://oidc.example.net/storage/?query=1", "https://oidc.example.net/storage/#fragment",
                 "https://oidc.example.net/storage/\r\nX-Injected: yes"}) {
             TTestContext context;
-            auto response = context.Run(BuildHttpRequest("/clusters/testing-global/viewer/json/nodes"), MakeClusterResult(balancer));
+            auto response = context.Run(BuildHttpRequest("/cluster/testing-global/viewer/json/nodes"), MakeClusterResult(balancer));
             UNIT_ASSERT_VALUES_EQUAL_C(response->Status, "503", balancer);
             UNIT_ASSERT(NHttp::THeaders(response->Headers).Get("Location").empty());
         }
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
 
     Y_UNIT_TEST(DatabaseFailureIsNotReportedAsUnknownCluster) {
         TTestContext context;
-        auto response = context.Run(BuildHttpRequest("/clusters/testing-global/viewer/json/nodes"),
+        auto response = context.Run(BuildHttpRequest("/cluster/testing-global/viewer/json/nodes"),
             MakeClusterResult({}, false, NYdb::EStatus::UNAVAILABLE));
         UNIT_ASSERT_VALUES_EQUAL(response->Status, "503");
         UNIT_ASSERT(NHttp::THeaders(response->Headers).Get("Location").empty());
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(MetaClusterRedirect) {
 
     Y_UNIT_TEST(DatabaseTimeoutReturnsGatewayTimeout) {
         TTestContext context;
-        auto response = context.Run(BuildHttpRequest("/clusters/testing-global/viewer/json/nodes"), MakeClusterResult(Balancer), true);
+        auto response = context.Run(BuildHttpRequest("/cluster/testing-global/viewer/json/nodes"), MakeClusterResult(Balancer), true);
         UNIT_ASSERT_VALUES_EQUAL(response->Status, "504");
     }
 }

@@ -192,7 +192,7 @@ void TMVP::InitMeta() {
 
     RegisterMetaHandler(
         HttpProxyId,
-        "/clusters/",
+        "/cluster/",
         ActorSystem.Register(new NMVP::THandlerActorMetaClusterRedirect(MetaLocation))
     );
 

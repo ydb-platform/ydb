@@ -17,6 +17,10 @@
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
 
+#include <array>
+#include <atomic>
+#include <thread>
+
 using namespace NActors;
 using namespace NActors::NTests;
 
@@ -268,6 +272,130 @@ Y_UNIT_TEST_SUITE(SharedThreads) {
         actorSystem.Stop();
         UNIT_ASSERT_C(completed,
             "AllThreadsAreShared pool did not execute an actor without the legacy HasSharedThread flag");
+    }
+
+    class TWakerCountingActor : public TActorBootstrapped<TWakerCountingActor> {
+    public:
+        TWakerCountingActor(std::atomic<ui64>* completed, std::atomic<ui64>* shared)
+            : Completed(completed)
+            , Shared(shared)
+        {}
+
+        void Bootstrap() {
+            Become(&TWakerCountingActor::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                if (TlsThreadContext->IsShared()) {
+                    Shared->fetch_add(1, std::memory_order_relaxed);
+                }
+                Completed->fetch_add(1, std::memory_order_release);
+            }
+        }
+
+    private:
+        std::atomic<ui64>* const Completed;
+        std::atomic<ui64>* const Shared;
+    };
+
+    void RunSharedWakerBursts(bool sharedOnly, bool mixed, bool foreignOnly) {
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        constexpr ui32 poolCount = 3;
+        constexpr ui32 actorsPerPool = 16;
+        constexpr ui32 eventsPerPool = 256;
+        for (ui32 poolId = 0; poolId < poolCount; ++poolId) {
+            TBasicExecutorPoolConfig config;
+            config.PoolId = poolId;
+            config.PoolName = "SharedWakerTest";
+            config.Threads = sharedOnly ? 2 : 3;
+            config.MinThreadCount = config.Threads;
+            config.MaxThreadCount = config.Threads;
+            config.DefaultThreadCount = config.Threads;
+            config.SpinThreshold = 0;
+            config.EventsPerMailbox = 1;
+            config.HasSharedThread = !sharedOnly;
+            config.AllThreadsAreShared = sharedOnly;
+            config.EnableWaker = !mixed || poolId != 1;
+            if (foreignOnly && poolId == 2) {
+                config.Threads = 0;
+                config.MinThreadCount = 0;
+                config.MaxThreadCount = 0;
+                config.DefaultThreadCount = 0;
+                config.HasSharedThread = false;
+                config.AllThreadsAreShared = false;
+                config.ForcedForeignSlotCount = 2;
+            }
+            setup->CpuManager.Basic.push_back(config);
+        }
+
+        // These outlive the actor system, including forced teardown on failure.
+        std::array<std::atomic<ui64>, poolCount> completed{};
+        std::array<std::atomic<ui64>, poolCount> shared{};
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+        std::array<std::array<TActorId, actorsPerPool>, poolCount> actors;
+        for (ui32 poolId = 0; poolId < poolCount; ++poolId) {
+            for (auto& actor : actors[poolId]) {
+                actor = actorSystem.Register(new TWakerCountingActor(&completed[poolId], &shared[poolId]),
+                    TMailboxType::HTSwap, poolId);
+            }
+        }
+
+        bool drained = true;
+        TString failure;
+        for (ui32 round = 0; round < 20 && drained; ++round) {
+            // Exercise repeated idle/burst transitions as well as concurrent
+            // publication. This delay is not used as evidence of a sleep state.
+            Sleep(TDuration::MilliSeconds(5));
+            std::array<std::thread, poolCount> producers;
+            for (ui32 poolId = 0; poolId < poolCount; ++poolId) {
+                producers[poolId] = std::thread([&, poolId] {
+                    for (ui32 event = 0; event < eventsPerPool; ++event) {
+                        actorSystem.Send(actors[poolId][event % actorsPerPool], new TEvents::TEvWakeup());
+                    }
+                });
+            }
+            for (auto& producer : producers) {
+                producer.join();
+            }
+            const ui64 expected = (round + 1) * eventsPerPool;
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+            for (ui32 poolId = 0; poolId < poolCount; ++poolId) {
+                while (completed[poolId].load(std::memory_order_acquire) < expected && TInstant::Now() < deadline) {
+                    Sleep(TDuration::MilliSeconds(1));
+                }
+                const ui64 actual = completed[poolId].load(std::memory_order_acquire);
+                if (actual != expected) {
+                    drained = false;
+                    failure = TStringBuilder() << "pool# " << poolId << " round# " << round
+                        << " expected# " << expected << " actual# " << actual;
+                    break;
+                }
+            }
+        }
+        actorSystem.Stop();
+        UNIT_ASSERT_C(drained, failure);
+        if (sharedOnly || foreignOnly) {
+            const ui32 poolId = foreignOnly ? 2 : 0;
+            UNIT_ASSERT_VALUES_EQUAL(shared[poolId].load(), completed[poolId].load());
+        }
+    }
+
+    Y_UNIT_TEST(WakerMultiplePools) {
+        RunSharedWakerBursts(false, false, false);
+    }
+
+    Y_UNIT_TEST(WakerSharedOnly) {
+        RunSharedWakerBursts(true, false, false);
+    }
+
+    Y_UNIT_TEST(WakerMixedWithLegacyPool) {
+        RunSharedWakerBursts(false, true, false);
+    }
+
+    Y_UNIT_TEST(WakerForeignOnlyPool) {
+        RunSharedWakerBursts(true, false, true);
     }
 
 } // Y_UNIT_TEST_SUITE(ActorBenchmark)

@@ -97,6 +97,15 @@ namespace NActors {
         alignas(64) NThreading::TPadded<std::atomic<ui64>> ThreadsState;
         alignas(64) std::atomic<bool> StopFlag;
 
+        // Set during pool registration, before any executor thread starts.
+        bool HasWakerPools = false;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        std::atomic<i16> WakerWorkerId = -1;
+
+        void RequestWaker();
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop();
+
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         struct TThreadsState {

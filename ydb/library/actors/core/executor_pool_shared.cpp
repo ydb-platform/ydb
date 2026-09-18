@@ -205,6 +205,7 @@ namespace NActors {
 
     void TSharedExecutorPool::SwitchToPool(i16 poolId, NHPTimer::STime) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
+        RunWaker(workerId);
         TlsThreadContext->ExecutionStats->UpdateThreadTime();
         if (Threads[workerId].CurrentPoolId != poolId && !CheckPoolAdjacency(PoolManager, Threads[workerId].OwnerPoolId, Threads[workerId].CurrentPoolId)) {
             ui64 slots = ForeignThreadSlots[Threads[workerId].CurrentPoolId].fetch_add(1, std::memory_order_acq_rel);
@@ -228,6 +229,7 @@ namespace NActors {
         TMailbox *mailbox = nullptr;
         bool hasAdjacentPools = HasAdjacentPools(PoolManager, thread.OwnerPoolId);
         while (!StopFlag.load(std::memory_order_acquire)) {
+            RunWaker(workerId);
             bool adjacentPool = CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId);
             if (hpnow < thread.SoftDeadlineForPool || !hasAdjacentPools && adjacentPool) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
@@ -275,6 +277,7 @@ namespace NActors {
                 }
             }
             if (goToSleep) {
+                RunWaker(workerId);
                 bool allowedToSleep = false;
                 ui64 threadsStateRaw = ThreadsState.load(std::memory_order_acquire);
                 TThreadsState threadsState = TThreadsState::GetThreadsState(threadsStateRaw);
@@ -614,6 +617,97 @@ namespace NActors {
 
     void TSharedExecutorPool::SetBasicPool(TBasicExecutorPool* pool) {
         Pools[pool->PoolId] = pool;
+        HasWakerPools |= pool->EnableWaker;
+    }
+
+    void TSharedExecutorPool::RequestWaker() {
+        if (PoolThreads == 0 || WakerPending.exchange(true)) {
+            return;
+        }
+        // Paired seq_cst operations on pending and owner close the release
+        // handoff: either the owner sees pending or we notify another worker.
+        if (WakerWorkerId.load() != -1) {
+            return;
+        }
+
+        // Conservative routing for this prototype: publish in every Basic pool
+        // instead of racing a worker's non-atomic CurrentPoolId while it switches.
+        for (auto* pool : Pools) {
+            if (pool) {
+                pool->SharedWakerRequested.store(true, std::memory_order_release);
+            }
+        }
+        // Use the existing pre-park notification handshake, even when there
+        // are no foreign slots: running the shared waker needs no pool lease.
+        ui64 raw = ThreadsState.load(std::memory_order_acquire);
+        while (true) {
+            auto state = TThreadsState::GetThreadsState(raw);
+            if (state.Notifications != 0) {
+                break;
+            }
+            state.Notifications = 1;
+            if (ThreadsState.compare_exchange_weak(raw, state.ConvertToUI64(),
+                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                break;
+            }
+        }
+        for (i16 workerId = 0; workerId < PoolThreads; ++workerId) {
+            if (Threads[workerId].WakeUp()) {
+                break;
+            }
+        }
+    }
+
+    void TSharedExecutorPool::RunWaker(TWorkerId workerId) {
+        if (!HasWakerPools) {
+            return;
+        }
+        auto& thread = Threads[workerId];
+        const i16 poolId = thread.CurrentPoolId;
+        const bool requested = Pools[poolId]->SharedWakerRequested.exchange(false, std::memory_order_acq_rel);
+        if (!requested && !WakerPending.load()) {
+            return;
+        }
+        do {
+            i16 expected = -1;
+            if (!WakerWorkerId.compare_exchange_strong(expected, workerId)) {
+                return;
+            }
+            EThreadState resumeState;
+            Y_ABORT_UNLESS(thread.TryBecomeWaker(&resumeState));
+            Y_ABORT_UNLESS(resumeState == EThreadState::None);
+            do {
+                WakerPending.exchange(false);
+                WakerLoop();
+            } while (!StopFlag.load(std::memory_order_acquire) && WakerPending.load());
+
+            Y_DEBUG_ABORT_UNLESS(thread.CurrentPoolId == poolId);
+            EThreadState state = EThreadState::Waker;
+            Y_ABORT_UNLESS(thread.ReplaceState(state, resumeState));
+            WakerWorkerId.store(-1);
+            // A requester may have observed us between the last pending check
+            // and owner release. Do not leave its obligation behind.
+        } while (!StopFlag.load(std::memory_order_acquire) && WakerPending.load());
+    }
+
+    void TSharedExecutorPool::WakerLoop() {
+        for (i16 poolId : PoolManager.PriorityOrder) {
+            auto* pool = Pools[poolId];
+            if (!pool || !pool->EnableWaker) {
+                continue;
+            }
+            const i64 credits = pool->ActivationCredits.load(std::memory_order_acquire);
+            const i64 desired = pool->MaxFullThreadCount == 0
+                ? Min<i64>(credits, PoolThreads)
+                : Min<i64>(credits, pool->DesiredSharedThreads.load(std::memory_order_acquire));
+            // Keep the existing owner/adjacent/foreign-slot eligibility rules
+            // and parking accounting. Demand is a hint, not a reserved lease.
+            for (i64 i = 0; i < desired; ++i) {
+                if (!WakeUpLocalThreads(poolId) && !WakeUpAdjacentOwner(poolId)) {
+                    WakeUpGlobalThreads(poolId);
+                }
+            }
+        }
     }
 
     void TSharedExecutorPool::FillThreadOwners(std::vector<i16>& threadOwners) const {

@@ -1,7 +1,4 @@
-name: One-time documentation action integration check
-on:
-  push:
-    branches: [test-ydbdoc-action-20260918]
+name: Documentation storage progress (read only)
 permissions:
   contents: write
   pull-requests: write
@@ -11,42 +8,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Inspect existing YDB table schema (read only)
-        env:
-          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
-        run: |
-          python -m pip install --quiet 'ydb[yc]==3.32.0'
-          python - <<'PY'
-          import os, ydb
-          db='/ru-central1/b1g7gqj2vnq67gjseuva/etns0641qf73btm7j21k'
-          credentials=ydb.iam.ServiceAccountCredentials.from_content(os.environ['YDB_SA_KEY'])
-          driver=ydb.Driver(endpoint='grpcs://ydb.serverless.yandexcloud.net:2135', database=db, credentials=credentials)
-          try:
-              driver.wait(timeout=15, fail_fast=True)
-              with ydb.SessionPool(driver) as pool:
-                  for name in ['runs','run_objects']:
-                      desc=pool.retry_operation_sync(lambda session: session.describe_table(db+'/'+name))
-                      print(name, 'primary_key=', list(desc.primary_key), 'columns=', [(c.name,str(c.type)) for c in desc.columns])
-          finally:
-              driver.stop()
-          PY
-      - name: Translate PR 51079 with existing CI environment
-        uses: ydb-platform/ydbdoc-review@3241d560e933cb0f527de759e97d40937df70827
-        with:
-          repo: ydb-platform/ydb
-          pr: '51079'
-        env:
-          YANDEX_CLOUD_FOLDER_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}
-          YANDEX_CLOUD_API_KEY_DOC_REVIEW: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
-          YDBDOC_MODEL_CHECK: ${{ vars.YDBDOC_MODEL_CHECK }}
-          YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
-          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
-          YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE: ${{ vars.YDBDOC_MAX_DEPENDENCY_FILES_PER_ARTICLE }}
-          YDBDOC_MAX_SOURCE_CHARACTERS: ${{ vars.YDBDOC_MAX_SOURCE_CHARACTERS }}
-          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Inspect existing YDB table schema (read only)
+      env:
+        YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
+      run: "python -m pip install --quiet 'ydb[yc]==3.32.0'\npython - <<'PY'\nimport\
+        \ os, ydb\ndb='/ru-central1/b1g7gqj2vnq67gjseuva/etns0641qf73btm7j21k'\ncredentials=ydb.iam.ServiceAccountCredentials.from_content(os.environ['YDB_SA_KEY'])\n\
+        driver=ydb.Driver(endpoint='grpcs://ydb.serverless.yandexcloud.net:2135',\
+        \ database=db, credentials=credentials)\ntry:\n    driver.wait(timeout=15,\
+        \ fail_fast=True)\n    with ydb.SessionPool(driver) as pool:\n        for\
+        \ name in ['runs','run_objects','ci_backup_20260918/runs','ci_backup_20260918/run_objects']:\n\
+        \            desc=pool.retry_operation_sync(lambda session: session.describe_table(db+'/'+name))\n\
+        \            print(name, 'primary_key=', list(desc.primary_key))\n       \
+        \   if name.endswith('runs'):\n              result=pool.retry_operation_sync(lambda\
+        \ session: session.transaction().execute('SELECT COUNT(*) AS n FROM `'+db+'/'+name+'`;',\
+        \ commit_tx=True))\n              print('row_count',name,result[0].rows[0].n)\n\
+        finally:\n    driver.stop()\nPY\n"
+'on':
+  push:
+    branches:
+    - test-ydbdoc-action-20260918

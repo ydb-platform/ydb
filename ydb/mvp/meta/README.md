@@ -12,6 +12,34 @@ and returns it in a format suitable for UI and service-to-service usage.
 - `ydb/Forwards.db` - used for short-lived forwarding/cache ownership coordination between Meta instances.
 - `ydb/MasterClusterVersions.db` - stores version-to-color mapping (`version_str` -> `color_class`) used for cluster version visualization.
 
+## Cluster redirects
+
+`/clusters/<cluster_name>/<path>` returns a `307 Temporary Redirect` to the
+cluster's `balancer` URL from `ydb/MasterClusterExt.db`. This field must contain
+an absolute HTTP(S) URL, including the OIDC proxy prefix when one is used.
+The handler removes the trailing `/viewer/json` or `/viewer` from the stored
+URL, then appends the requested path and query without changing their encoding.
+
+For example, with `balancer` set to
+`https://oidc.example.net/storage.example.net:8765/viewer/json`:
+
+```text
+/clusters/testing-global/viewer/json/nodes?limit=80
+  -> https://oidc.example.net/storage.example.net:8765/viewer/json/nodes?limit=80
+```
+
+The redirect preserves the HTTP method and body. The browser sends the next
+request to the destination, where the existing authentication and CORS rules
+apply. Meta does not proxy the cluster response or add a service token.
+Through the website's `/api/meta` route, the example starts with
+`/api/meta/clusters/testing-global/viewer/json/nodes?limit=80`.
+
+Each request reads the cluster description from the meta database; redirect
+responses use `Cache-Control: no-store`. Target query parameters such as
+`database` do not change which database meta reads. Unknown clusters return
+`404`; missing or invalid balancer URLs return `503`; a meta lookup timeout
+returns `504`. Invalid paths, including parent-directory traversal, return `400`.
+
 ## Config Examples
 
 Generic auth/access_service_type examples are shared in:

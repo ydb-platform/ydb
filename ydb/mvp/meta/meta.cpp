@@ -2,6 +2,7 @@
 #include "meta_db_clusters.h"
 #include "meta_clusters.h"
 #include "meta_cluster.h"
+#include "meta_cluster_redirect.h"
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
@@ -188,6 +189,12 @@ void TMVP::InitMeta() {
     if (MetaCache) {
         httpIncomingProxyId = ActorSystem.Register(NMeta::CreateHttpMetaCache(httpIncomingProxyId, GetIncomingMetaCachePolicy, GetCacheOwnership));
     }
+
+    RegisterMetaHandler(
+        HttpProxyId,
+        "/clusters/",
+        ActorSystem.Register(new NMVP::THandlerActorMetaClusterRedirect(MetaLocation))
+    );
 
     RegisterMetaHandler(
         httpIncomingProxyId,

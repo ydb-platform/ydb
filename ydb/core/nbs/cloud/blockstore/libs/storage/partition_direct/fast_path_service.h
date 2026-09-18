@@ -117,7 +117,9 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkState(
+        const TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override;
 
     TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,

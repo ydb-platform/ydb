@@ -790,6 +790,22 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Reply UpdateConfig request.
         {
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                PartitionDirectService->UpdateConfigRequests.size());
+            const auto& request =
+                PartitionDirectService->UpdateConfigRequests.front();
+            auto persistedDirtyMap = std::make_shared<TBlocksDirtyMap>(
+                CreateArenaAllocatorPool(),
+                request.Config,
+                true,
+                request.Proto,
+                DefaultBlockSize,
+                VChunkBlockCount);
+            UNIT_ASSERT_VALUES_EQUAL(
+                "  H3: [0..32767]\n",
+                persistedDirtyMap->DebugPrintBehind());
+
             UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
             DrainExecutor(DirectBlockGroup->GetExecutor());
         }

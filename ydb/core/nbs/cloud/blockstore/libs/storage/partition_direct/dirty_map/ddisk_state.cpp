@@ -11,7 +11,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TDDiskState::TDDiskState(IArenaAllocatorPtr arenaAllocator, ui16 maxBlockCount)
     : ArenaAllocator(std::move(arenaAllocator))
-    , MaxBlockCount(maxBlockCount)
     , BehindField(ArenaAllocator, maxBlockCount)
 {}
 
@@ -41,15 +40,8 @@ void TDDiskState::Save(TDDiskStateProto* proto) const
 
 void TDDiskState::Load(const TDDiskStateProto& proto)
 {
-    TBlockRangeField loadedBehind(ArenaAllocator, MaxBlockCount);
-    LoadBlockField(proto.GetBehind(), &loadedBehind);
-
-    // An empty persisted slot may predate this host's promotion to a fresh
-    // DDisk. Keep the range initialized from the configuration in that case.
-    if (!loadedBehind.Empty()) {
-        BehindField.Clear();
-        BehindField.Add(loadedBehind);
-    }
+    BehindField.Clear();
+    LoadBlockField(proto.GetBehind(), &BehindField);
     UpdateState(false);
 }
 

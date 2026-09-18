@@ -1159,8 +1159,13 @@ void TVChunk::PersistNextPendingConfig()
         pending.Config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
     Y_ABORT_UNLESS(pending.Config.IsValid());
 
-    auto onPersisted =
-        PartitionDirectService->UpdateVChunkConfig(pending.Config);
+    auto dirtyMapState = BlocksDirtyMap->GetStateForConfigPersist(
+        pending.Config,
+        IsTouched(),
+        &pending.DirtyMapStateGeneration);
+    auto onPersisted = PartitionDirectService->UpdateVChunkState(
+        pending.Config,
+        std::move(dirtyMapState));
     onPersisted.Subscribe(
         [weakSelf = weak_from_this(), executor = Executor]   //
         (const TPersistResultFuture& f) mutable
@@ -1186,6 +1191,7 @@ void TVChunk::OnConfigPersisted()
     auto persisted = std::move(PendingVChunkConfigs.front());
     PendingVChunkConfigs.pop_front();
 
+    BlocksDirtyMap->StatePersisted(persisted.DirtyMapStateGeneration);
     ApplyConfig(std::move(persisted.Config), persisted.Message);
     PersistNextPendingConfig();
     DemoteUnavailableHostsIfNeeded();

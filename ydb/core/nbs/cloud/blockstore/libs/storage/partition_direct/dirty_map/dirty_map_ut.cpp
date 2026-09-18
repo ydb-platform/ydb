@@ -2755,6 +2755,35 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             target->DebugPrintBehind());
     }
 
+    Y_UNIT_TEST(ShouldBuildDirtyStateForConfigPersistWithoutApplyingConfig)
+    {
+        const auto currentConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(currentConfig);
+
+        auto nextConfig = currentConfig;
+        nextConfig.PromoteHost(3, true);
+        nextConfig.SetWatermark(3, DefaultBlockSize * 5);
+
+        ui32 generation = 0;
+        const auto persisted =
+            dirtyMap->GetStateForConfigPersist(nextConfig, true, &generation);
+        UNIT_ASSERT_VALUES_EQUAL(5, persisted.DDiskStatesSize());
+        UNIT_ASSERT_VALUES_EQUAL(dirtyMap->GetCurrentGeneration(), generation);
+
+        auto restored = std::make_shared<TBlocksDirtyMap>(
+            CreateArenaAllocatorPool(),
+            nextConfig,
+            true,
+            persisted,
+            DefaultBlockSize,
+            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [5..32767]\n",
+            restored->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+    }
+
     // A default-constructed proto keeps the initial DDisk state derived from
     // the VChunk config.
     Y_UNIT_TEST(ShouldConstructFromEmptyState)

@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
     }
 
-    Y_UNIT_TEST(ShouldKeepInitializedBehindWhenLoadedStateIsEmpty)
+    Y_UNIT_TEST(ShouldTreatLoadedEmptyBehindAsAuthoritative)
     {
         TTestBlockFieldMonitor monitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*operationalBlockCount=*/40);
         ddisk.Load({});
 
-        UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
     }
 
     Y_UNIT_TEST(ShouldAdvanceReadablePrefixOnCompletedFlush)

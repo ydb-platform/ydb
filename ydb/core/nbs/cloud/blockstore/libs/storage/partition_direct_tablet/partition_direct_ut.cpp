@@ -233,11 +233,13 @@ NKikimrBlockStore::TUpdateVolumeConfigResponse SendUpdateVolumeConfig(
 TPersistResultFuture SendVChunkConfigUpdate(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
-    TVChunkConfig config)
+    TVChunkConfig config,
+    TDirtyMapStateProto dirtyMapState = {})
 {
     auto request =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(
-            std::move(config));
+            std::move(config),
+            std::move(dirtyMapState));
     auto future = request->UpdateCompleted.GetFuture();
 
     const TActorId sender = env.Runtime->AllocateEdgeActor(
@@ -1421,7 +1423,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         StopFastPathService(env, partition, edge);
     }
 
-    Y_UNIT_TEST(ShouldBatchVChunkConfigUpdates)
+    Y_UNIT_TEST(ShouldBatchVChunkStateUpdatesInOneQueue)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -1466,9 +1468,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT(!first.HasValue());
 
         TVector<TPersistResultFuture> batched;
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 0));
         batched.push_back(SendVChunkConfigUpdate(env, partition, 1));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 2));
-        batched.push_back(SendVChunkConfigUpdate(env, partition, 3));
+        batched.push_back(SendDirtyMapStateUpdate(env, partition, 1));
         env.Sim(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommits.size());
@@ -1554,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto pendingConfig = SendVChunkConfigUpdate(env, partition, 1);
         auto executingDirtyMap = SendDirtyMapStateUpdate(env, partition, 0);
         env.Sim(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(2u, blockedCommitResults.size());
+        UNIT_ASSERT_VALUES_EQUAL(1u, blockedCommitResults.size());
 
         auto pendingDirtyMap = SendDirtyMapStateUpdate(env, partition, 1);
         env.Sim(TDuration::Seconds(1));

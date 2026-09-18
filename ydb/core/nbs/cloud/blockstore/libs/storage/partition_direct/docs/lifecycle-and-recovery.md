@@ -111,10 +111,12 @@ first Behind range can be read. Successful flush and copy operations remove
 their ranges from Behind, while a flush missed by a lagging DDisk adds its
 range.
 
-The configuration watermark initializes a fresh DDisk. Flush results update
-the Behind field, incrementing the dirty-map state generation. `DoPersistDirtyMap`
-sends that state to
-[part_updatedirtymapstate.cpp](../../partition_direct_tablet/part_updatedirtymapstate.cpp).
+The configuration watermark initializes a fresh DDisk. A configuration change
+and the corresponding Behind state are committed atomically. Flush results
+update the Behind field, incrementing the dirty-map state generation.
+`DoPersistDirtyMap` sends standalone state updates through the same ordered
+transaction queue in
+[part_updatevchunkstate.cpp](../../partition_direct_tablet/part_updatevchunkstate.cpp).
 Only transaction completion advances the dirty map's persisted generation.
 `CheckEraseAbility` records which generation must be durable before an
 overlapping PB record can be erased. This preserves the information needed

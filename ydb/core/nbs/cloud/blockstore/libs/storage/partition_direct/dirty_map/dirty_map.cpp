@@ -19,6 +19,29 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+void InitDDiskState(
+    TDDiskState& state,
+    IBehindMonitor* behindMonitor,
+    const TVChunkConfig& vChunkConfig,
+    THostIndex host,
+    bool isTouched,
+    ui32 blockSize,
+    ui16 blockCount)
+{
+    const auto watermark =
+        isTouched ? vChunkConfig.GetWatermark(host) : std::nullopt;
+    state.Init(
+        behindMonitor,
+        blockCount,
+        watermark ? IntegerCast<ui16>(*watermark / blockSize) : blockCount);
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
@@ -74,12 +97,14 @@ void TBlocksDirtyMap::UpdateConfig(
     // When a new disk appears, it doesn't have all the data. Need to set its
     // watermark level.
     for (auto indx: added) {
-        const auto watermark =
-            isTouched ? vChunkConfig.GetWatermark(indx) : std::nullopt;
-        DDiskStates[indx].Init(
+        InitDDiskState(
+            DDiskStates[indx],
             this,
-            BlockCount,
-            watermark ? IntegerCast<ui16>(*watermark / BlockSize) : BlockCount);
+            vChunkConfig,
+            indx,
+            isTouched,
+            BlockSize,
+            BlockCount);
     }
 
     for (THostIndex h = 0; h < GetHostCount(); ++h) {
@@ -796,12 +821,44 @@ TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
     return result;
 }
 
+TDirtyMapStateProto TBlocksDirtyMap::GetStateForConfigPersist(
+    const TVChunkConfig& vChunkConfig,
+    bool isTouched,
+    ui32* dirtyMapStateGeneration) const
+{
+    *dirtyMapStateGeneration = StateGeneration;
+    TDirtyMapStateProto result = GetStateForPersist();
+    while (result.DDiskStatesSize() < vChunkConfig.GetHostCount()) {
+        result.AddDDiskStates();
+    }
+
+    const THostMask newDDisks = vChunkConfig.GetDDisks();
+    const THostMask added = newDDisks.Exclude(DesiredDDisks);
+    const THostMask removed = DesiredDDisks.Exclude(newDDisks);
+
+    for (THostIndex host: added) {
+        TDDiskState state(ArenaAllocator, BlockCount);
+        InitDDiskState(
+            state,
+            nullptr,
+            vChunkConfig,
+            host,
+            isTouched,
+            BlockSize,
+            BlockCount);
+        state.Save(result.MutableDDiskStates(host));
+    }
+    for (THostIndex host: removed) {
+        result.MutableDDiskStates(host)->ClearBehind();
+    }
+
+    return result;
+}
+
 void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
 {
-    Y_ABORT_UNLESS(persistGeneration > PersistedStateGeneration);
     Y_ABORT_UNLESS(persistGeneration <= StateGeneration);
-
-    PersistedStateGeneration = persistGeneration;
+    PersistedStateGeneration = Max(PersistedStateGeneration, persistGeneration);
 }
 
 ui32 TBlocksDirtyMap::GetCurrentGeneration() const

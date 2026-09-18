@@ -131,6 +131,7 @@ private:
     {
         TPrepareConfigFunc PrepareConfig;
         TVChunkConfig Config;
+        ui32 DirtyMapStateGeneration = 0;
         TString Message;
     };
 

@@ -147,6 +147,12 @@ public:
     // Persist
     [[nodiscard]] bool NeedPersist() const;
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
+    // Returns the state after applying vChunkConfig without changing the
+    // in-memory state. Used to persist a config and its DDisk state atomically.
+    [[nodiscard]] TDirtyMapStateProto GetStateForConfigPersist(
+        const TVChunkConfig& vChunkConfig,
+        bool isTouched,
+        ui32* dirtyMapStateGeneration) const;
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 

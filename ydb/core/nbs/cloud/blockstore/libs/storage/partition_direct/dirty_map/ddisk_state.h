@@ -114,7 +114,6 @@ private:
     IBehindMonitor* BehindMonitor = nullptr;
 
     const IArenaAllocatorPtr ArenaAllocator;
-    const ui16 MaxBlockCount;
 
     EState State = EState::Disabled;
 

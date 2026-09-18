@@ -232,6 +232,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWithout
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic
+ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic

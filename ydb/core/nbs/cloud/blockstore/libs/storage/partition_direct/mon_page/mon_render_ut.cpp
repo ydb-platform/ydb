@@ -197,6 +197,28 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             "(9.00 MiB + 0 B) / 64.00 MiB");
     }
 
+    Y_UNIT_TEST(OverviewRendersCustomizedVChunks)
+    {
+        const TVChunkConfigs configs{
+            {0,
+             TVChunkConfig::MakeDefault(
+                 0,
+                 DirectBlockGroupHostCount,
+                 DefaultPrimaryCount)},
+            {1,
+             TVChunkConfig::MakeDefault(
+                 1,
+                 DirectBlockGroupHostCount,
+                 DefaultPrimaryCount)},
+        };
+
+        const TString html =
+            RenderMonPage(MakeData(), configs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Customized VChunks</td><td>2</td>");
+        UNIT_ASSERT(
+            html.find("Touched VChunks") < html.find("Customized VChunks"));
+    }
+
     Y_UNIT_TEST(OverviewRendersUsedPBuffers)
     {
         TMonPageData data = MakeData();
@@ -265,7 +287,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             CountOccurrences(html, "DDisk:&#10;Primary:12&#10;PBuffer: 20"));
     }
 
-    Y_UNIT_TEST(OverviewAppliesRealVChunkDDiskStates)
+    Y_UNIT_TEST(OverviewAppliesRealVChunkConfig)
     {
         TMonPageData data = MakeData();
         data.Dbgs = MakeOverviewDbgs();
@@ -275,6 +297,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
         config.PromoteHost(3, true);
+        config.DisableHost(0);
         const TVChunkConfigs configs{{0, std::move(config)}};
 
         TTestTouchedProvider touchedProvider;
@@ -288,7 +311,14 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             4,
             CountOccurrences(
                 html,
-                "DDisk:&#10;Primary:3&#10;Fresh:1&#10;PBuffer: 5"));
+                "DDisk:&#10;Primary:2&#10;Fresh:1&#10;Rotten:1&#10;PBuffer: "
+                "4"));
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "class=\"dbg-config-cell dbg-config-both dbg-config-rotten\"");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "class=\"dbg-config-cell dbg-config-total dbg-config-rotten\"");
     }
 
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)

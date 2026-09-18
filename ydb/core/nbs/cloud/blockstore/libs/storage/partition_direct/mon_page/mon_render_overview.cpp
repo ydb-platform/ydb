@@ -204,6 +204,7 @@ void ApplyRealConfigs(
         const auto& dbg = dbgs[dbgId];
         Y_ABORT_UNLESS(dbg.Connections.size() >= config.GetHostCount());
         const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
+        const auto disabledHosts = config.GetDisabledHosts();
         for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
             const auto& connection = dbg.Connections[host];
             if (config.GetDDiskRole(host) != EHostRole::None) {
@@ -211,7 +212,9 @@ void ApplyRealConfigs(
                 ++tableData->Table[connection.DDiskId.NodeId][columnIndex]
                       .DDiskStates[state];
             }
-            if (config.GetPBufferRole(host) != EHostRole::None) {
+            if (config.GetPBufferRole(host) != EHostRole::None &&
+                !disabledHosts.Get(host))
+            {
                 ++tableData->Table[connection.PBufferId.NodeId][columnIndex]
                       .PBufferCount;
             }
@@ -283,26 +286,31 @@ bool IsEmpty(const TDbgTableCell& cell)
     return cell.DDiskStates.empty() && cell.PBufferCount == 0;
 }
 
-TStringBuf GetDbgConfigCellClass(
+TString GetDbgConfigCellClass(
     const TDbgTableCell& cell,
     EDbgConfigCellKind kind)
 {
+    TString result = "dbg-config-cell";
     if (kind == EDbgConfigCellKind::Total) {
-        return "dbg-config-cell dbg-config-total";
+        result += " dbg-config-total";
+    } else {
+        const bool hasDDisks = !cell.DDiskStates.empty();
+        const bool hasPBuffers = cell.PBufferCount != 0;
+        if (hasDDisks && hasPBuffers) {
+            result += " dbg-config-both";
+        } else if (hasDDisks) {
+            result += " dbg-config-ddisk";
+        } else if (hasPBuffers) {
+            result += " dbg-config-pbuffer";
+        }
     }
 
-    const bool hasDDisks = !cell.DDiskStates.empty();
-    const bool hasPBuffers = cell.PBufferCount != 0;
-    if (hasDDisks && hasPBuffers) {
-        return "dbg-config-cell dbg-config-both";
+    if (cell.DDiskStates.contains(
+            TVChunkConfig::EHostHumanReadableState::Rotten))
+    {
+        result += " dbg-config-rotten";
     }
-    if (hasDDisks) {
-        return "dbg-config-cell dbg-config-ddisk";
-    }
-    if (hasPBuffers) {
-        return "dbg-config-cell dbg-config-pbuffer";
-    }
-    return "dbg-config-cell";
+    return result;
 }
 
 TString BuildDDisksStates(const TDbgTableCell& cell, EDDiskStatesFormat format)
@@ -454,6 +462,7 @@ void RenderDbgConfigTable(
 void RenderOverviewInfo(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
+    size_t customizedVChunkCount,
     const std::optional<TFastPathServiceInfo>& serviceInfo,
     const TCountAndSize& pBuffersUsage)
 {
@@ -531,6 +540,10 @@ void RenderOverviewInfo(
                                      << totalVChunkCount);
                 RenderValue(
                     str,
+                    "Customized VChunks",
+                    TStringBuilder() << customizedVChunkCount);
+                RenderValue(
+                    str,
                     "Touched DDisks size",
                     TStringBuilder()
                         << FormatByteSize(totalDDiskSize) << " = "
@@ -601,6 +614,7 @@ void RenderOverview(
     RenderOverviewInfo(
         str,
         data.TabletInfo,
+        vChunkConfigs.size(),
         data.FastPathServiceInfo,
         GetPBuffersUsage(data.Dbgs));
     RenderDbgConfigTable(

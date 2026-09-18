@@ -10,6 +10,7 @@
 #include <util/system/mutex.h>
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <set>
@@ -125,6 +126,7 @@ namespace NWilson {
 
     public:
         void AddSpan(const TOtelSpan& span) {
+            TGuard globalLock(*Mutex);
             TOtelSpan spanCopy;
             spanCopy.CopyFrom(span);
             Spans.push_back(std::move(spanCopy));
@@ -141,6 +143,7 @@ namespace NWilson {
         }
 
         [[nodiscard]] bool BuildTraceTrees() {
+            TGuard globalLock(*Mutex);
             for (auto& tracePair : Traces) {
                 Trace& trace = tracePair.second;
 
@@ -166,14 +169,18 @@ namespace NWilson {
         }
 
         void Clear() {
+            TGuard globalLock(*Mutex);
             Traces.clear();
+            Spans.clear();
         }
 
     public:
+        std::shared_ptr<TMutex> Mutex = std::make_shared<TMutex>();
         std::unordered_map<TString, Trace> Traces;
         std::vector<TOtelSpan> Spans;
 
         TString PrintTraces() const {
+            TGuard globalLock(*Mutex);
             TStringStream str;
             for (const auto& [_, trace] : Traces) {
                 str << "{ " << trace.ToString() << " } ";
@@ -201,6 +208,7 @@ namespace NWilson {
         }
 
         void Handle(TEvGetSnapshot::TPtr ev) {
+            TGuard lock(*Mutex);
             ev->Get()->Promise.SetValue(Spans);
         }
 

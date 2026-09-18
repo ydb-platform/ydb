@@ -312,7 +312,7 @@ TString QueryTraceSpanName(NKikimrKqp::EQueryAction action) {
     switch (action) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
         case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-            return "Query";
+            return "Query session";
         case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             return "Explain query";
         case NKikimrKqp::QUERY_ACTION_VALIDATE:

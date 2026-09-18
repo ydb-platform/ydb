@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             const auto query = std::ranges::find_if(spans, [&](const auto& span) {
                 const auto* text = FindAttribute(span, "db.query.text");
                 const auto* queryType = FindAttribute(span, "ydb.query.type");
-                return span.name() == "Query" && text && text->value().string_value() == sql
+                return span.name() == "Query session" && text && text->value().string_value() == sql
                     && queryType && queryType->value().string_value() == NKikimrKqp::EQueryType_Name(type);
             });
             if (query != spans.end()) {
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
-        AssertDescendant(*uploader, "Query", "Query Proxy");
+        AssertDescendant(*uploader, "Query session", "Query Proxy");
         AssertDescendant(*uploader, "Compile query", "Get query plan");
         AssertDescendant(*uploader, "Load metadata", "Compile query");
         AssertDescendant(*uploader, "Task: ", "Execute plan");
@@ -174,8 +174,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         AssertDescendant(*uploader, "Read shard", "Read table");
         AssertDescendant(*uploader, "Datashard.Unit", "Datashard.Read");
         AssertDescendant(*uploader, "Read table", "Task: ");
-        AssertStatus(*uploader, "Query", NTraceProto::Status::STATUS_CODE_OK);
-        const auto* query = FindSpan(*uploader, "Query");
+        AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_OK);
+        const auto* query = FindSpan(*uploader, "Query session");
         UNIT_ASSERT_VALUES_EQUAL_C(FindAttribute(*query, "db.operation.name")->value().string_value(), "SELECT", query->DebugString());
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "db.namespace")->value().string_value(), "/Root");
         UNIT_ASSERT(FindAttribute(*query, "ydb.cpu_us"));
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, sql, 0);
         UNIT_ASSERT(uploader->Spans.empty());
         ExecSQL(runtime, sender, sql, TComponentTracingLevels::TQueryProcessor::TopLevel);
-        const auto* query = FindSpan(*uploader, "Query");
+        const auto* query = FindSpan(*uploader, "Query session");
         UNIT_ASSERT(query);
         UNIT_ASSERT(!FindAttribute(*query, "ydb.wait_us"));
         UNIT_ASSERT(!FindAttribute(*query, "ydb.spilled_bytes"));
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     for (const auto& [actor, value] : taskCpu) {
                         cpu += value;
                     }
-                    const auto* query = FindSpan(*uploader, "Query");
+                    const auto* query = FindSpan(*uploader, "Query session");
                     UNIT_ASSERT(query);
                     UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.cpu_us")->value().int_value(), cpu);
                     UNIT_ASSERT(FindAttribute(*query, "ydb.compile.cpu_us"));
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 type == NKikimrKqp::QUERY_TYPE_SQL_DML ? "TKqpLiteralExecuter" : "DataExecuter");
             const auto cpu = FindAttribute(*execution, "ydb.cpu_us")->value().int_value();
             UNIT_ASSERT_C(cpu > 0, execution->DebugString());
-            const auto* query = FindSpan(*uploader, "Query");
+            const auto* query = FindSpan(*uploader, "Query session");
             UNIT_ASSERT(query);
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.cpu_us")->value().int_value(), cpu);
         }
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                         UNIT_ASSERT_VALUES_EQUAL(extra.GetSpilledBytes(), spilledBytes);
                         UNIT_ASSERT_VALUES_EQUAL(extra.GetMaxTaskSkew(), maxSkew);
                         UNIT_ASSERT_VALUES_EQUAL(extra.GetTaskStatsIncomplete(), incomplete);
-                        const auto* query = FindSpan(*uploader, "Query");
+                        const auto* query = FindSpan(*uploader, "Query session");
                         UNIT_ASSERT(query);
                         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.rows_written")->value().int_value(), changedRows);
                         UNIT_ASSERT(FindAttribute(*query, "ydb.cpu_us")->value().int_value() >= static_cast<i64>(cpuUs));
@@ -486,10 +486,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     hasStats = result.GetStats().has_value();
                 }
                 const auto type = streaming ? NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING : NKikimrKqp::QUERY_TYPE_SQL_SCRIPT;
-                const auto snapshot = WaitForQueryTrace(runtime, sql, type, {"Query", "Query Proxy", "Execute plan"});
+                const auto snapshot = WaitForQueryTrace(runtime, sql, type, {"Query session", "Query Proxy", "Execute plan"});
                 const auto query = std::ranges::find_if(snapshot.Spans, [&](const auto& span) {
                     const auto* queryType = FindAttribute(span, "ydb.query.type");
-                    return span.name() == "Query" && queryType
+                    return span.name() == "Query session" && queryType
                         && queryType->value().string_value() == NKikimrKqp::EQueryType_Name(type);
                 });
                 UNIT_ASSERT_C(query != snapshot.Spans.end(), snapshot.PrintTraces());
@@ -563,8 +563,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         snapshot = WaitForQueryTrace(runtime, "SELECT * FROM `/Root/table-1`;", NKikimrKqp::QUERY_TYPE_SQL_DML,
-            {"Query", "Query Proxy", "Datashard.Read", "Read table"});
-        AssertDescendant(snapshot, "Query", "Query Proxy");
+            {"Query session", "Query Proxy", "Datashard.Read", "Read table"});
+        AssertDescendant(snapshot, "Query session", "Query Proxy");
         AssertDescendant(snapshot, "Datashard.Read", "Read table");
 
         auto iterator = tableClient.StreamExecuteScanQuery("SELECT * FROM `/Root/table-1`;").GetValueSync();
@@ -577,17 +577,17 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             }
         }
         snapshot = WaitForQueryTrace(runtime, "SELECT * FROM `/Root/table-1`;", NKikimrKqp::QUERY_TYPE_SQL_SCAN,
-            {"Query", "Task: ", "Execute plan"});
+            {"Query session", "Task: ", "Execute plan"});
         AssertDescendant(snapshot, "Task: ", "Execute plan");
-        AssertStatus(snapshot, "Query", NTraceProto::Status::STATUS_CODE_OK);
+        AssertStatus(snapshot, "Query session", NTraceProto::Status::STATUS_CODE_OK);
 
         auto db = kikimr.GetQueryClient();
         auto queryResult = db.ExecuteQuery("SELECT * FROM `/Root/table-1`;",
             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
         snapshot = WaitForQueryTrace(runtime, "SELECT * FROM `/Root/table-1`;", NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY,
-            {"Query", "Query Proxy", "Datashard.Read", "Read table"});
-        AssertDescendant(snapshot, "Query", "Query Proxy");
+            {"Query session", "Query Proxy", "Datashard.Read", "Read table"});
+        AssertDescendant(snapshot, "Query session", "Query Proxy");
         AssertDescendant(snapshot, "Datashard.Read", "Read table");
 
         queryResult = db.ExecuteQuery(R"(
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         queryResult = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
         snapshot = WaitForQueryTrace(runtime, sql, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY,
-            {"Query", "Datashard.Read", "Full-text search"});
+            {"Query session", "Datashard.Read", "Full-text search"});
         AssertDescendant(snapshot, "Datashard.Read", "Full-text search");
     }
 
@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, sql, 15, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DML, true);
         ClearUploader(*uploader);
         ExecSQL(runtime, sender, sql, 15, Ydb::StatusIds::SUCCESS, {}, 0, NKikimrKqp::QUERY_TYPE_SQL_DML, true);
-        const auto* query = FindSpan(*uploader, "Query");
+        const auto* query = FindSpan(*uploader, "Query session");
         UNIT_ASSERT(query);
         const auto* hit = FindAttribute(*query, "ydb.compile.cache_hit");
         UNIT_ASSERT(hit && hit->value().bool_value());
@@ -774,7 +774,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*forwarded, "node_id")->value().int_value(), runtime.GetNodeId(1));
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*local, "node_id")->value().int_value(), runtime.GetNodeId(0));
                 UNIT_ASSERT_VALUES_EQUAL(local->parent_span_id(), forwarded->span_id());
-                UNIT_ASSERT_VALUES_EQUAL(FindSpan(*uploader, "Query")->parent_span_id(), local->span_id());
+                UNIT_ASSERT_VALUES_EQUAL(FindSpan(*uploader, "Query session")->parent_span_id(), local->span_id());
             }
         }
         ClearUploader(*uploader);
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     output += task.GetOutputRows();
                     wait += task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
                 }
-                const auto* query = FindSpan(*uploader, "Query");
+                const auto* query = FindSpan(*uploader, "Query session");
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.wait_us")->value().int_value(), wait);
                 UNIT_ASSERT(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
                 if (const auto* execution = FindSpan(*uploader, "Execute plan")) {
@@ -1085,7 +1085,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                         });
                     ExecSQL(runtime, sender, sql, level, Ydb::StatusIds::SUCCESS, {}, 0, type);
                     UNIT_ASSERT_C(finishedTasks, sql);
-                    const auto* query = FindSpan(*uploader, "Query");
+                    const auto* query = FindSpan(*uploader, "Query session");
                     UNIT_ASSERT(query);
                     UNIT_ASSERT_C(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(), sql);
                     size_t reported = 0;
@@ -1175,9 +1175,9 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 "SELECT Ensure(value, value = 0u, 'execution failed') FROM `/Root/table-1`;",
                 15, Ydb::StatusIds::PRECONDITION_FAILED, {}, 0, type);
             UNIT_ASSERT(failed);
-            AssertStatus(*uploader, "Query", NTraceProto::Status::STATUS_CODE_ERROR);
+            AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_ERROR);
             const auto* execution = FindSpan(*uploader, "Execute plan");
-            const auto* query = FindSpan(*uploader, "Query");
+            const auto* query = FindSpan(*uploader, "Query session");
             UNIT_ASSERT(execution && query);
             UNIT_ASSERT(FindAttribute(*execution, "ydb.task_stats_incomplete")->value().bool_value());
             UNIT_ASSERT(FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
@@ -1255,7 +1255,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 UNIT_ASSERT_VALUES_EQUAL(spilledBytes > 0, full);
                 UNIT_ASSERT(uploader->BuildTraceTrees());
-                const auto* query = FindSpan(*uploader, "Query");
+                const auto* query = FindSpan(*uploader, "Query session");
                 UNIT_ASSERT(query);
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.spilled_bytes_available")->value().bool_value(), full);
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.spilled_bytes")->value().int_value(), spilledBytes);
@@ -1313,7 +1313,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     });
                 }), "type=" << static_cast<int>(type) << " step=" << step << " " << uploader->PrintTraces());
                 UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
-                AssertDescendant(*uploader, "Check rows", "Query");
+                AssertDescendant(*uploader, "Check rows", "Query session");
                 AssertStatus(*uploader, "Buffer rows", NTraceProto::Status::STATUS_CODE_OK);
             }
         }
@@ -1358,7 +1358,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(uploader->BuildTraceTrees());
             AssertStatus(*uploader, "Acquire snapshot", NTraceProto::Status::STATUS_CODE_ERROR);
             const auto* snapshot = FindSpan(*uploader, "Acquire snapshot");
-            const auto* query = FindSpan(*uploader, "Query");
+            const auto* query = FindSpan(*uploader, "Query session");
             UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*snapshot, "ydb.status_code")->value().string_value(), "CANCELLED");
             UNIT_ASSERT(snapshot->end_time_unix_nano() <= query->end_time_unix_nano());
 
@@ -1370,7 +1370,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT(uploader->BuildTraceTrees());
             UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1);
             AssertStatus(*uploader, "Acquire snapshot", NTraceProto::Status::STATUS_CODE_OK);
-            AssertStatus(*uploader, "Query", NTraceProto::Status::STATUS_CODE_OK);
+            AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_OK);
         }
     }
 
@@ -1422,7 +1422,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         if (tracing) {
             UNIT_ASSERT(uploader->BuildTraceTrees());
             UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
-            AssertStatus(*uploader, "Query", NTraceProto::Status::STATUS_CODE_ERROR);
+            AssertStatus(*uploader, "Query session", NTraceProto::Status::STATUS_CODE_ERROR);
         } else {
             UNIT_ASSERT(uploader->Spans.empty());
         }

@@ -15,6 +15,7 @@
 
 #include <util/string/join.h>
 
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -25,6 +26,7 @@ namespace {
 
     struct TComponentState {
         ui64 ChunkCount = 0;
+        ui64 StripedBytes = 0;
         ui64 AllocatedBytes = 0;
         TSpaceBreakdown Breakdown;
     };
@@ -99,21 +101,24 @@ namespace {
         target->SetFreeChunkReserveBytes(source.FreeChunkReserveBytes);
         target->SetLockedOrQuarantinedBytes(source.LockedOrQuarantinedBytes);
         target->SetUnclassifiedBytes(source.UnclassifiedBytes);
+        target->SetFreeStripeBytes(source.FreeStripeBytes);
     }
 
     void FillComponent(const TComponentState& source, NKikimrVDisk::TVDiskSpaceComponent* target) {
         target->SetChunkCount(source.ChunkCount);
+        target->SetStripedBytes(source.StripedBytes);
         target->SetAllocatedBytes(source.AllocatedBytes);
         FillBreakdown(source.Breakdown, target->MutableBreakdown());
     }
 
     void AddPhysicalSsts(TComponentState& component, const TPhysicalSstEstimate& estimate) {
         component.ChunkCount += estimate.ChunkCount;
+        component.StripedBytes += estimate.StripedBytes;
         component.Breakdown.LiveMetadataBytes += estimate.StructuralMetadataBytes;
     }
 
     void FinishHullComponent(TComponentState& component, ui64 chunkSize) {
-        component.AllocatedBytes = component.ChunkCount * chunkSize;
+        component.AllocatedBytes = component.ChunkCount * chunkSize + component.StripedBytes;
         const ui64 accountedBytes = component.Breakdown.TotalBytes();
         if (accountedBytes < component.AllocatedBytes) {
             component.Breakdown.ChunkTailBytes += component.AllocatedBytes - accountedBytes;
@@ -166,8 +171,15 @@ namespace {
                 new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound));
 
             if (HugeKeeperId) {
-                ++AwaitedSources;
+                AwaitedSources += 2;
                 TThis::Send(HugeKeeperId, new TEvHugeSpaceStat);
+                TActivationContext::Send(new IEventHandle(
+                    TEvBlobStorage::EvHugeQueryStripeChunks,
+                    0,
+                    HugeKeeperId,
+                    TThis::SelfId(),
+                    nullptr,
+                    0));
             } else {
                 SourceErrors.emplace_back("HugeKeeper is unavailable");
             }
@@ -221,6 +233,18 @@ namespace {
         }
 
         void AddHugeBlob(const TClassifiedHugeBlob& blob) {
+            if (StripeChunksReceived && StripeChunks.contains(blob.Part.ChunkIdx)) {
+                AddClassifiedHugeBlob(StripedHugeBreakdown, blob);
+                const ui64 allocatedBytes = AlignUpAppendBlockSize(
+                    blob.Part.Size,
+                    PDiskCtx->Dsk->AppendBlockSize);
+                StripedHugeBreakdown.WritePaddingBytes += allocatedBytes - blob.Part.Size;
+                HugeStripedBytes += allocatedBytes;
+                return;
+            }
+            if (!StripeChunksReceived && HugeSource.StripeHeap.ChunkCount) {
+                return;
+            }
             if (!HugeBlobCtx || !HugeBlobCtx->HugeSlotsMap) {
                 return;
             }
@@ -292,7 +316,8 @@ namespace {
                 HullCtx->VCtx->Top->GType,
                 nullptr,
                 HullCtx->AllowKeepFlags,
-                true);
+                true,
+                PDiskCtx->Dsk->AppendBlockSize);
             auto aggregator = TPerKeySpaceAggregator(&merger,
                 [this](const TKeyBlock&, const TBlocksSpaceMerger& keyMerger) {
                     const auto& estimate = keyMerger.GetConclusion();
@@ -314,7 +339,8 @@ namespace {
                 HullCtx->VCtx->Top->GType,
                 barriers.Get(),
                 HullCtx->AllowKeepFlags,
-                true);
+                true,
+                PDiskCtx->Dsk->AppendBlockSize);
             auto aggregator = TPerKeySpaceAggregator(&merger,
                 [this](const TKeyBarrier&, const TBarriersSpaceMerger& keyMerger) {
                     const auto& estimate = keyMerger.GetConclusion();
@@ -383,7 +409,30 @@ namespace {
             const ui64 reserveBytes = HugeSource.FreeChunkCount * ChunkSize;
             huge.Breakdown.FreeChunkReserveBytes += reserveBytes;
             huge.ChunkCount += HugeSource.FreeChunkCount;
-            huge.AllocatedBytes = huge.ChunkCount * ChunkSize;
+
+            huge.StripedBytes = HugeStripedBytes;
+            huge.Breakdown += StripedHugeBreakdown;
+
+            const auto& stripes = HugeSource.StripeHeap;
+            const ui64 stripeCapacity = stripes.ChunkCount * ChunkSize;
+            const ui64 classifiedStripeBytes = LogoBlobs.StripedBytes
+                + Blocks.StripedBytes
+                + Barriers.StripedBytes
+                + huge.StripedBytes;
+            if (classifiedStripeBytes < stripeCapacity) {
+                ui64 remaining = stripeCapacity - classifiedStripeBytes;
+                const ui64 freeBytes = Min(stripes.FreeBytes, remaining);
+                huge.Breakdown.FreeStripeBytes += freeBytes;
+                remaining -= freeBytes;
+
+                const ui64 lockedFreeBytes = Min(stripes.LockedFreeBytes, remaining);
+                huge.Breakdown.LockedOrQuarantinedBytes += lockedFreeBytes;
+                remaining -= lockedFreeBytes;
+
+                huge.Breakdown.UnclassifiedBytes += remaining;
+                huge.StripedBytes += stripeCapacity - classifiedStripeBytes;
+            }
+            huge.AllocatedBytes = huge.ChunkCount * ChunkSize + huge.StripedBytes;
         }
 
         void FinishSyncLog() {
@@ -428,6 +477,7 @@ namespace {
             for (const auto& [_, component] : ChunkKeeper) {
                 namedChunks += component.ChunkCount;
             }
+            namedChunks += HugeSource.StripeHeap.ChunkCount;
 
             TComponentState unattributed;
             if (namedChunks < PDiskAllocatedChunks) {
@@ -490,6 +540,13 @@ namespace {
             }
             FillComponent(unattributed, report->MutableUnattributed());
 
+            auto* stripeReport = report->MutableStripeHeap();
+            stripeReport->SetChunkCount(HugeSource.StripeHeap.ChunkCount);
+            stripeReport->SetAllocatedBytes(HugeSource.StripeHeap.ChunkCount * ChunkSize);
+            stripeReport->SetUsedBytes(HugeSource.StripeHeap.UsedBytes);
+            stripeReport->SetFreeBytes(HugeSource.StripeHeap.FreeBytes);
+            stripeReport->SetLockedFreeBytes(HugeSource.StripeHeap.LockedFreeBytes);
+
             SendVDiskResponse(
                 TActivationContext::AsActorContext(),
                 Recipient,
@@ -533,6 +590,14 @@ namespace {
             SourceReceived();
         }
 
+        void Handle(TEvHugeStripeChunks::TPtr& ev) {
+            if (ScanStarted || std::exchange(StripeChunksReceived, true)) {
+                return;
+            }
+            StripeChunks.insert(ev->Get()->StripeChunks.begin(), ev->Get()->StripeChunks.end());
+            SourceReceived();
+        }
+
         void Handle(NSyncLog::TEvSyncLogSpaceStatResult::TPtr& ev) {
             if (ScanStarted || std::exchange(SyncLogReceived, true)) {
                 return;
@@ -567,6 +632,9 @@ namespace {
             }
             if (!HugeReceived && HugeKeeperId) {
                 SourceErrors.emplace_back("HugeKeeper space counters timed out");
+            }
+            if (!StripeChunksReceived && HugeKeeperId) {
+                SourceErrors.emplace_back("HugeKeeper stripe chunks timed out");
             }
             if (!SyncLogReceived && SyncLogId) {
                 SourceErrors.emplace_back("SyncLog space counters timed out");
@@ -627,6 +695,7 @@ namespace {
         STRICT_STFUNC(StateFunc, {
             hFunc(NPDisk::TEvCheckSpaceResult, Handle);
             hFunc(TEvHugeSpaceStatResult, Handle);
+            hFunc(TEvHugeStripeChunks, Handle);
             hFunc(NSyncLog::TEvSyncLogSpaceStatResult, Handle);
             hFunc(TEvChunkKeeperSpaceStatResult, Handle);
             hFunc(TEvSourceTimeout, Handle);
@@ -679,12 +748,14 @@ namespace {
         ui32 AwaitedSources = 0;
         bool PDiskReceived = false;
         bool HugeReceived = false;
+        bool StripeChunksReceived = false;
         bool SyncLogReceived = false;
         bool ChunkKeeperReceived = false;
         bool ScanStarted = false;
         bool SnapshotRequested = false;
         ui64 PDiskAllocatedChunks = 0;
         NHuge::THeapSpaceStat HugeSource;
+        std::unordered_set<TChunkIdx> StripeChunks;
         TSyncLogSourceState SyncLogSource;
         std::vector<TEvChunkKeeperSpaceStatResult::TSubsystemStat> ChunkKeeperSource;
         std::vector<TString> SourceErrors;
@@ -699,6 +770,8 @@ namespace {
         TComponentState SyncLog;
         std::vector<THugeClassState> HugeClasses;
         THashMap<ui64, size_t> HugeClassBySlotSize;
+        ui64 HugeStripedBytes = 0;
+        TSpaceBreakdown StripedHugeBreakdown;
         std::vector<std::pair<ui32, TComponentState>> ChunkKeeper;
     };
 

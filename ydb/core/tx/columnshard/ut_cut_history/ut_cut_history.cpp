@@ -96,7 +96,7 @@ public:
         }
     }
 
-    void Schema(const bool tieredIndex = false) {
+    void Schema(const bool tieredIndex = false, const ui32 tableCount = 1) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* init = tx.MutableInitShard();
         init->SetOwnerPath("/Root/olap");
@@ -121,18 +121,23 @@ public:
                                         .SerializeToProto();
             TTestSchema::InitTiersAndTtl(specials, table->MutableTtlSettings());
         }
+        for (ui32 i = 1; i < tableCount; ++i) {
+            auto* nextTable = init->AddTables();
+            *nextTable = *table;
+            TSchemeShardLocalPathId::FromRawValue(TableId + i).ToProto(*nextTable);
+        }
         ReadStep = SetupSchema(Runtime, Sender, tx.SerializeAsString(), 1000);
     }
 
-    void Write(ui64 txId, ui64 from, ui64 to) {
+    void Write(ui64 txId, ui64 from, ui64 to, ui64 tableId = TableId) {
         std::vector<ui64> ids;
-        UNIT_ASSERT(WriteData(Runtime, Sender, TabletId, txId, TableId, MakeTestBlob({ from, to }, Table.Schema), Table.Schema, &ids));
+        UNIT_ASSERT(WriteData(Runtime, Sender, TabletId, txId, tableId, MakeTestBlob({ from, to }, Table.Schema), Table.Schema, &ids));
         ReadStep = ProposeCommit(Runtime, Sender, TabletId, txId, ids);
         PlanCommit(Runtime, Sender, TabletId, ReadStep, TSet<ui64>{ txId });
     }
 
-    ui64 ReadRows() {
-        return ReadAllAsBatch(Runtime, TableId, NOlap::TSnapshot(ReadStep.Val(), 1), Table.Schema)->num_rows();
+    ui64 ReadRows(ui64 tableId = TableId) {
+        return ReadAllAsBatch(Runtime, tableId, NOlap::TSnapshot(ReadStep.Val(), 1), Table.Schema)->num_rows();
     }
 
     std::vector<TLogoBlobID> LiveOldBlobs() const {
@@ -328,17 +333,18 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
 
     Y_UNIT_TEST(ColdCacheBatchingAndLateSharing) {
         TFixture f;
-        f.Schema();
+        f.Schema(false, 2);
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
         f.Restart(NewGroup);
         for (ui32 i = 0; i < 40; ++i) {
-            f.Write(i + 1, i * 100, (i + 1) * 100);
+            f.Write(i + 1, i * 100, (i + 1) * 100, TableId + i % 2);
         }
         TAutoPtr<IEventHandle> continuation;
         IEventHandle* replaying = nullptr;
         ui32 batches = 0;
         ui32 misses = 0;
+        std::vector<ui64> scanPortions;
         ui32 cuts = 0;
         bool linksApplied = false;
         bool failMetadata = false;
@@ -372,6 +378,11 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             } else if (const auto* ask = dynamic_cast<TEvPrivate::TEvAskTabletDataAccessors*>(ev->GetBase())) {
                 for (const auto& [_, portions] : ask->GetPortions()) {
                     misses += portions.GetPortionsCount();
+                    for (const auto& [consumer, request] : portions.GetConsumers()) {
+                        if (consumer == NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN) {
+                            scanPortions.insert(scanPortions.end(), request.GetPortionIds().begin(), request.GetPortionIds().end());
+                        }
+                    }
                 }
             } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
                        cut && cut->Record.GetChannel() == FirstDataChannel) {
@@ -387,13 +398,29 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Restart();
         UNIT_ASSERT(continuation);
         UNIT_ASSERT_VALUES_EQUAL(misses, 0u);
+        std::vector<ui64> expectedPortions;
+        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
+        for (const auto& [_, granule] : index.GetTables()) {
+            for (const auto& [portionId, _] : granule->GetPortions()) {
+                expectedPortions.push_back(portionId);
+            }
+            for (const auto& [_, portion] : granule->GetInsertedPortions()) {
+                expectedPortions.push_back(portion->GetPortionId());
+            }
+        }
+        Sort(expectedPortions);
         resume();
         UNIT_ASSERT(continuation);
         UNIT_ASSERT_C(misses > 0 && misses <= 32, "first cold metadata batch must load at most 32 portions");
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 3900u);
+        UNIT_ASSERT_VALUES_EQUAL(scanPortions.size(), misses);
+        UNIT_ASSERT(expectedPortions.size() > scanPortions.size());
+        expectedPortions.resize(scanPortions.size());
+        Sort(scanPortions);
+        UNIT_ASSERT_VALUES_EQUAL_C(scanPortions, expectedPortions, "first batch must contain the lowest PortionIds across all tables");
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 3900u);
         misses = 0;
         f.Write(50, 5000, 5001);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 4000u);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows() + f.ReadRows(TableId + 1), 4000u);
         while (continuation) {
             resume();
         }

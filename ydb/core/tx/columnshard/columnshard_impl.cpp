@@ -1633,7 +1633,7 @@ public:
         bool reask = false;
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
-        std::map<std::pair<TInternalPathId, ui64>, NOlap::TPortionInfo::TConstPtr> portions;
+        std::map<std::pair<ui64, TInternalPathId>, NOlap::TPortionInfo::TConstPtr> portions;
         for (const auto& [pathId, byConsumer] : PortionsByPath) {
             const auto granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleOptional(pathId);
             if (!granule) {
@@ -1641,13 +1641,13 @@ public:
             }
             for (const auto& [_, consumer] : byConsumer.GetConsumers()) {
                 for (const auto& portion : consumer.GetPortions(*granule)) {
-                    portions.emplace(std::make_pair(pathId, portion->GetPortionId()), portion);
+                    portions.emplace(std::make_pair(portion->GetPortionId(), pathId), portion);
                 }
             }
         }
-        // Cache requests regroup addresses in hash maps; restore physical LocalDB order here.
+        // Cache requests regroup addresses in hash maps; restore global PortionId order here.
         for (const auto& [address, portion] : portions) {
-            const auto pathId = address.first;
+            const auto pathId = address.second;
             const ui64 p = portion->GetPortionId();
             const NOlap::TPortionAddress pAddress = portion->GetAddress();
             auto itPortionConstructor = Constructors.find(pAddress);

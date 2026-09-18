@@ -91,7 +91,9 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
             }
         }
     }
-    Sort(scan.Portions);
+    SortBy(scan.Portions, [](const auto& address) {
+        return std::make_pair(address.second, address.first);
+    });
     CutHistoryScan = std::move(scan);
     ctx.Schedule(CutHistoryContinuationDelay, new TEvPrivate::TEvContinueCutHistory());
 }
@@ -158,8 +160,13 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
             if (id.TabletID() != TabletID()) {
                 continue;
             }
-            for (auto& interval : scan.Intervals) {
-                if (id.Channel() == interval.Channel && interval.From <= id.Generation() && id.Generation() < interval.To) {
+            const auto nextInterval = UpperBoundBy(
+                scan.Intervals.begin(), scan.Intervals.end(), std::pair<ui32, ui32>{ id.Channel(), id.Generation() }, [](const auto& interval) {
+                    return std::make_pair(interval.Channel, interval.From);
+                });
+            if (nextInterval != scan.Intervals.begin()) {
+                auto& interval = *std::prev(nextInterval);
+                if (id.Channel() == interval.Channel && id.Generation() < interval.To) {
                     ++interval.BlobReferences;
                 }
             }

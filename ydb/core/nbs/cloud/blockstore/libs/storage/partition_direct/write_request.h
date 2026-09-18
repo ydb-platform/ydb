@@ -52,9 +52,7 @@ private:
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
 
-    void ReplyOrNotifyBelated(
-        NProto::TError error,
-        THostMask completedOnCurrentResponse);
+    void ReplyOrNotifyBelated(THostMask completedOnCurrentResponse);
     void Reply(NProto::TError error);
     void NotifyBelated(THostMask completedOnCurrentResponse);
 

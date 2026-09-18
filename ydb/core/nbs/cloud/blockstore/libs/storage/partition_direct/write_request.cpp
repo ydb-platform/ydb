@@ -166,11 +166,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (IsQuorumReached()) {
-        ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
-        return;
-    }
-
+    ReplyOrNotifyBelated(completedWritesOfCurrentResponse);
     SendAdditionalDirectWrites();
 }
 
@@ -317,9 +313,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (IsQuorumReached()) {
-            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
-        }
+        ReplyOrNotifyBelated(THostMask::MakeOne(host));
         return;
     }
 
@@ -364,14 +358,18 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 }
 
 void TWriteRequestExecutor::ReplyOrNotifyBelated(
-    NProto::TError error,
     THostMask completedOnCurrentResponse)
 {
-    if (!IsReplied) {
-        Reply(std::move(error));
+    if (IsReplied) {
+        // A write completed after the reply is belated: its copy is on the
+        // PBuffer and has to be erased from there.
+        NotifyBelated(completedOnCurrentResponse);
         return;
     }
-    NotifyBelated(completedOnCurrentResponse);
+
+    if (IsQuorumReached()) {
+        Reply(MakeError(S_OK));
+    }
 }
 
 void TWriteRequestExecutor::Reply(NProto::TError error)
@@ -511,7 +509,11 @@ void TWriteRequestExecutor::OnRequestTimeout()
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
-    ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
+    if (IsReplied) {
+        return;
+    }
+
+    Reply(MakeError(E_TIMEOUT, "Write request timeout"));
 }
 
 bool TWriteRequestExecutor::IsQuorumReached() const

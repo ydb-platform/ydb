@@ -896,7 +896,7 @@ private:
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix())
-            .MaxMemoryUsage(FreeSpace)
+            .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
             .DeduplicationEnabled(EnableDeduplication)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW

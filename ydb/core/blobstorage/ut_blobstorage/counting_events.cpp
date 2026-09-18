@@ -190,19 +190,19 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Put_Mirror3of4) {
-        CountingEventsTest("put", 116, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("put", 117, TBlobStorageGroupType::ErasureMirror3of4);
     }
 
     Y_UNIT_TEST(Put_Mirror3dc) {
-        CountingEventsTest("put", 49, TBlobStorageGroupType::ErasureMirror3dc);
+        CountingEventsTest("put", 50, TBlobStorageGroupType::ErasureMirror3dc);
     }
 
     Y_UNIT_TEST(Put_Block42) {
-        CountingEventsTest("put", 89, TBlobStorageGroupType::Erasure4Plus2Block);
+        CountingEventsTest("put", 90, TBlobStorageGroupType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(Put_None) {
-        CountingEventsTest("put", 19, TBlobStorageGroupType::ErasureNone);
+        CountingEventsTest("put", 20, TBlobStorageGroupType::ErasureNone);
     }
 
     Y_UNIT_TEST(Get_Mirror3of4) {
@@ -211,15 +211,15 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Get_Mirror3dc) {
-        CountingEventsTest("get", 14, TBlobStorageGroupType::ErasureMirror3dc);
+        CountingEventsTest("get", 15, TBlobStorageGroupType::ErasureMirror3dc);
     }
 
     Y_UNIT_TEST(Get_Block42) {
-        CountingEventsTest("get", 69, TBlobStorageGroupType::Erasure4Plus2Block);
+        CountingEventsTest("get", 70, TBlobStorageGroupType::Erasure4Plus2Block);
     }
 
     Y_UNIT_TEST(Get_None) {
-        CountingEventsTest("get", 14, TBlobStorageGroupType::ErasureNone);
+        CountingEventsTest("get", 15, TBlobStorageGroupType::ErasureNone);
     }
 
     Y_UNIT_TEST(Collect_Mirror3of4) {
@@ -238,4 +238,3 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         CountingEventsTest("collect", 16, TBlobStorageGroupType::ErasureNone);
     }
 }
-

@@ -14,6 +14,20 @@ namespace NKikimr {
 
 namespace NDSProxyCountersTest {
 
+namespace {
+
+void SimulateSleep(TTestBasicRuntime& runtime, TDuration duration) {
+    runtime.AdvanceCurrentTime(duration);
+    runtime.SimulateSleep(TDuration::MilliSeconds(1));
+}
+
+void SimulateSeconds(TTestBasicRuntime& runtime, ui32 seconds) {
+    for (ui32 i = 0; i < seconds; ++i) {
+        SimulateSleep(runtime, TDuration::Seconds(1));
+    }
+}
+
+} // namespace
 
 void SetLogPriorities(TTestBasicRuntime &runtime) {
     bool IsVerbose = false;
@@ -137,6 +151,69 @@ Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.RequestBytes->Val(), 254);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequests->Val(), 6);
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequestBytes->Val(), 64 * 6);
+}
+
+Y_UNIT_TEST(GetInFlightLatencyCounters) {
+    NKikimr::TBlobStorageGroupType erasure = TErasureType::Erasure4Plus2Block;
+    TTestBasicRuntime runtime(1, false);
+    SetLogPriorities(runtime);
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, erasure, 1, 0, TBlobStorageGroupInfo::EEM_ENC_V1, true);
+    TTestState testState(runtime, erasure, env.Info);
+
+    TLogoBlobID blobId = TLogoBlobID(72075186224047637, 1, 863, 1, 254, 24576);
+    TString buffer = TString::Uninitialized(blobId.BlobSize());
+    for (char& ch : buffer) {
+        ch = 'a';
+    }
+    testState.PutBlobsToGroupMock(TVector<TBlobTestSet::TBlob>{
+        TBlobTestSet::TBlob(blobId, buffer),
+    });
+
+    const ui32 requestBytes = blobId.BlobSize();
+    TRequestMonItem& requestMonItem = env.ProxyStoragePoolCounters->GetItem(
+        TStoragePoolCounters::EHandleClass::HcGetFast,
+        requestBytes);
+
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightResponseTimeUsSum->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightResponseTimeUsMax->Val(), 0);
+
+    runtime.Send(new IEventHandle(
+        env.RealProxyActorId,
+        testState.EdgeActor,
+        new TEvBlobStorage::TEvGet(
+            blobId,
+            0,
+            blobId.BlobSize(),
+            TInstant::Max(),
+            NKikimrBlobStorage::EGetHandleClass::FastRead)));
+    runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+
+    SimulateSeconds(runtime, 2);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 1);
+    UNIT_ASSERT_C(requestMonItem.InFlightResponseTimeUsSum->Val() >= static_cast<i64>(TDuration::Seconds(1).MicroSeconds()),
+        "InFlightResponseTimeUsSum# " << requestMonItem.InFlightResponseTimeUsSum->Val());
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightResponseTimeUsSum->Val(),
+        requestMonItem.InFlightResponseTimeUsMax->Val());
+
+    testState.HandleVGetsWithMock(env.Info->Type.TotalPartCount());
+
+    TAutoPtr<IEventHandle> handle;
+    auto getResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvGetResult>(handle);
+    UNIT_ASSERT(getResult);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
+    UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.ResponseTimeCompletedCount->Val(), 1);
+
+    SimulateSeconds(runtime, 2);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightResponseTimeUsSum->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightCount->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.InFlightResponseTimeUsMax->Val(), 0);
 }
 
 

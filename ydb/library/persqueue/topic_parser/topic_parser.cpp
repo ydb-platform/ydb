@@ -1,6 +1,7 @@
 #include "topic_parser.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/folder/path.h>
@@ -723,13 +724,53 @@ TTopicNameConverter::TTopicNameConverter(
         const TString& ydbDatabaseRootOverride,
         const TMaybe<TString>& clientsideNameOverride
 )
-    : TDiscoveryConverter(firstClass, pqPrefix, pqTabletConfig, ydbDatabaseRootOverride)
 {
-    if (Valid) {
-        BuildInternals(pqTabletConfig);
-        if (clientsideNameOverride) {
-            ClientsideName = *clientsideNameOverride;
+    FstClass = firstClass;
+    PQPrefix = pqPrefix;
+    OriginalTopic = pqTabletConfig.GetTopicPath();
+
+    const auto names = NKikimr::NPQ::NNameResolver::NamesFromConfig(
+        pqTabletConfig, TString(), firstClass, pqPrefix, ydbDatabaseRootOverride);
+    Valid = names.Valid;
+    Reason = names.Reason;
+    if (!Valid) {
+        return;
+    }
+
+    PrimaryPath = names.Path;
+    ClientsideName = names.ClientsideName;
+    ShortClientsideName = names.ShortClientsideName;
+    FullModernName = names.ModernName;
+    Account = names.Account;
+    if (!names.Account.empty()) {
+        Account_ = names.Account;
+    }
+    Dc = names.Cluster;
+    LegacyProducer = names.LegacyProducer;
+    LegacyLogtype = names.LegacyLogtype;
+    InternalName = names.InternalName;
+
+    TStringBuf db = pqTabletConfig.GetYdbDatabasePath();
+    db.SkipPrefix("/");
+    db.ChopSuffix("/");
+    Database = db;
+
+    if (FstClass) {
+        FullModernPath = names.Path;
+    } else {
+        ShortLegacyName = names.TopicForSrcIdHash;
+        FullLegacyName = names.InternalName;
+        if (!names.FederationPath.empty()) {
+            LbPath = names.FederationPath;
         }
+        if (!names.SecondaryPath.empty()) {
+            SecondaryPath = names.SecondaryPath;
+            FullModernPath = names.SecondaryPath;
+        }
+    }
+
+    if (clientsideNameOverride) {
+        ClientsideName = *clientsideNameOverride;
     }
 }
 
@@ -743,44 +784,6 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(const TString& pqPrefix,
                                                       const TString& ydbDatabaseRootOverride) {
     auto* converter = new TTopicNameConverter{false, pqPrefix, pqTabletConfig, ydbDatabaseRootOverride};
     return TTopicConverterPtr(converter);
-}
-
-void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& config) {
-    if (!config.GetFederationAccount().empty()) {
-        Account = config.GetFederationAccount();
-    } else {
-        Account = Account_.GetOrElse("");
-    }
-    TStringBuf path = config.GetTopicPath();
-    TStringBuf db = config.GetYdbDatabasePath();
-    path.SkipPrefix("/");
-    db.SkipPrefix("/");
-    db.ChopSuffix("/");
-    Database = db;
-    if (FstClass) {
-        AFL_ENSURE(!path.empty())("topic_path", config.GetTopicPath())("database", db);
-        path.SkipPrefix(db);
-        path.SkipPrefix("/");
-        ClientsideName = path;
-        ShortClientsideName = path;
-        FullModernName = path;
-        InternalName = PrimaryPath;
-    } else {
-        SetDatabase(*Database);
-        AFL_ENSURE(!FullLegacyName.empty())("topic_path", config.GetTopicPath())("database", db);
-        ClientsideName = FullLegacyName;
-        ShortClientsideName = ShortLegacyName;
-        auto& producer = config.GetProducer();
-        if (!producer.empty()) {
-            LegacyProducer = producer;
-            LegacyLogtype = config.GetTopic();
-        }
-        if (LegacyProducer.empty()) {
-            LegacyProducer = Account;
-        }
-        AFL_ENSURE(!FullModernName.empty())("topic_path", config.GetTopicPath())("database", db);
-        InternalName = FullLegacyName;
-    }
 }
 
 const TString& TTopicNameConverter::GetAccount() const {

@@ -270,9 +270,6 @@ public:
     operator bool() const { return Valid && !ClientsideName; };
 
 private:
-    void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);
-
-private:
     TString ClientsideName;
     TString ShortClientsideName;
     TString Account;

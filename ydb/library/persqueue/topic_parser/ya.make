@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/base
+    ydb/core/persqueue/public/nameresolver
     ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public
     ydb/public/api/protos
 )

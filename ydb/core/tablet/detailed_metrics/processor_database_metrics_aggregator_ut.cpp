@@ -751,4 +751,196 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot, "Renamed"),
                                                        "table.datashard.row_count"), 10);
     }
+
+    Y_UNIT_TEST(FollowerOnlyReportRetireLeaderContributionViaEmptyFallback) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        // Node1: both leader and follower
+        TFakeTablet node1Leader(1000, 0);
+        node1Leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 30)
+            .AddCumulative(CONSUMED_CPU, 10)
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        TFakeTablet node1Follower(1000, 1);
+        node1Follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 15)
+            .AddCumulative(CONSUMED_CPU, 5)
+            .Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        // Node2: leader only
+        TFakeTablet node2Leader(2000, 0);
+        node2Leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 40)
+            .AddCumulative(CONSUMED_CPU, 8)
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        // Initial report with both nodes contributing both roles
+        fixture.ApplyNode(1, node1);
+        fixture.ApplyNode(2, node2);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 0));
+        // row_count is leader-only, so node1's follower 15 never reaches it: 30 + 40.
+        // consumed_cpu_us is cumulative and does count followers: 10 + 5 + 8, and it
+        // stays put when a contribution is retired below.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 70u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 23u);
+
+        // Node1 now reports follower only; leader role gets empty fallback
+        node1Leader.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+        node1.Leaders->ForgetTablet(node1Leader.TabletId, node1Leader.FollowerId);
+
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> followerTables;
+        node1.Followers->Pack(followerTables);
+        fixture.Processor->ApplyFromNode(1, false, {});  // Leader role fallback: empty
+        fixture.Processor->ApplyFromNode(1, true, followerTables);  // Follower role: has data
+
+        fixture.Processor->RecalculateAllCounters();
+
+        // Node1's leader contribution is retired, but follower survives
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 0));
+        // Only node2's leader 40 is left feeding row_count.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 40u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 23u);
+    }
+
+    Y_UNIT_TEST(LeaderOnlyReportRetireFollowerContributionViaEmptyFallback) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        // Node1: both leader and follower
+        TFakeTablet node1Leader(1000, 0);
+        node1Leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 25)
+            .AddCumulative(CONSUMED_CPU, 9)
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        TFakeTablet node1Follower(1000, 1);
+        node1Follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20)
+            .AddCumulative(CONSUMED_CPU, 6)
+            .Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        // Node2: follower only
+        TFakeTablet node2Follower(2000, 1);
+        node2Follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 35)
+            .AddCumulative(CONSUMED_CPU, 7)
+            .Report(node2.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        // Initial report with both nodes contributing both roles
+        fixture.ApplyNode(1, node1);
+        fixture.ApplyNode(2, node2);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        // row_count is leader-only, and node1's leader is the only leader here: 25.
+        // consumed_cpu_us counts both roles on both nodes: 9 + 6 + 7.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 25u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
+
+        // Node1 now reports leader only; follower role gets empty fallback
+        node1Follower.Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+        node1.Followers->ForgetTablet(node1Follower.TabletId, node1Follower.FollowerId);
+
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> leaderTables;
+        node1.Leaders->Pack(leaderTables);
+        fixture.Processor->ApplyFromNode(1, false, leaderTables);  // Leader role: has data
+        fixture.Processor->ApplyFromNode(1, true, {});  // Follower role fallback: empty
+
+        fixture.Processor->RecalculateAllCounters();
+
+        // Node1's follower contribution is retired, but leader survives
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        // Retiring a follower leaves row_count untouched - it never counted it. The
+        // retire is observable in the leaf group above, not in this gauge.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 25u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
+    }
+
+    Y_UNIT_TEST(PartialReportThenDropNodeRetiresDependingOnRole) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        // Node1: both leader and follower
+        TFakeTablet node1Leader(1000, 0);
+        node1Leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20)
+            .AddCumulative(CONSUMED_CPU, 7)
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        TFakeTablet node1Follower(1000, 1);
+        node1Follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 12)
+            .AddCumulative(CONSUMED_CPU, 4)
+            .Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        // Node2: both leader and follower
+        TFakeTablet node2Leader(2000, 0);
+        node2Leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 30)
+            .AddCumulative(CONSUMED_CPU, 6)
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        TFakeTablet node2Follower(2000, 1);
+        node2Follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 18)
+            .AddCumulative(CONSUMED_CPU, 5)
+            .Report(node2.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        fixture.ApplyNode(1, node1);
+        fixture.ApplyNode(2, node2);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        // row_count takes the two leaders only: 20 + 30. consumed_cpu_us takes all
+        // four contributions: 7 + 4 + 6 + 5.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 50u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
+
+        // Node1 now reports follower only; leader role gets empty fallback
+        node1Leader.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+        node1.Leaders->ForgetTablet(node1Leader.TabletId, node1Leader.FollowerId);
+
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> node1FollowerTables;
+        node1.Followers->Pack(node1FollowerTables);
+        fixture.Processor->ApplyFromNode(1, false, {});  // Leader role fallback: empty
+        fixture.Processor->ApplyFromNode(1, true, node1FollowerTables);  // Follower role: has data
+
+        fixture.Processor->RecalculateAllCounters();
+
+        // Node1's leader contribution is retired, but follower and node2 both survive
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        // Node1's leader is gone, so only node2's leader 30 feeds row_count now.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 30u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
+
+        // Now drop node1 completely
+        fixture.Processor->DropNode(1);
+        fixture.Processor->RecalculateAllCounters();
+
+        // Node1 completely gone, node2 has both
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 1000, 0));
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 1000, 1));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 0));
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        // Node1's leader was already retired above, so row_count is unchanged at 30 -
+        // what DropNode removes here is node1's follower leaf, asserted above.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 30u);
+        // DropNode retires the live gauges but keeps the cumulative history, matching
+        // NodeRemovalDropsLiveHistogramsAndRetainsCumulativeHistory.
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), 22u);
+    }
 } // Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest)

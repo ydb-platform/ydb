@@ -1,5 +1,6 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
+#include "v2_event_serializer.h"
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
@@ -652,7 +653,7 @@ namespace NActors {
         }
     }
 
-    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
             auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
@@ -663,7 +664,7 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
-            return TRcBuf::Uninitialized(size, headroom, tailroom);
+            return AllocateXdcSectionBuffer(size, headroom, tailroom, alignment);
         }
     }
 
@@ -695,7 +696,7 @@ namespace NActors {
                         if (!isInline) {
                             // allocate buffer and push it into the payload
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
-                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -936,7 +937,12 @@ namespace NActors {
                 ev.reset();
             }
             if (ev) {
-                TActivationContext::Send(ev.release());
+                // Give the direct-session interface a chance to consume the event via a registered
+                // receiver; otherwise fall back to normal actor-system delivery.
+                TAutoPtr<IEventHandle> evPtr(ev.release());
+                if (!Context->DirectSession->DeliverIncoming(evPtr)) {
+                    TActivationContext::Send(evPtr.Release());
+                }
             }
         }
     }

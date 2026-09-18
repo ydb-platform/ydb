@@ -7,7 +7,13 @@
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 
+#include <memory>
+
 namespace NActors {
+    // Defined in ydb/library/actors/interconnect/interconnect_direct_session.h; forward declared here to
+    // avoid a dependency from actors/core onto actors/interconnect. Only referenced through shared_ptr.
+    class IDirectSession;
+
     class TNodeLocation {
     public:
         struct TKeys {
@@ -179,7 +185,15 @@ namespace NActors {
                 : NodeId(node)
             {
             }
+            TEvNodeConnected(ui32 node, std::shared_ptr<IDirectSession> directSession) noexcept
+                : NodeId(node)
+                , DirectSession(std::move(directSession))
+            {
+            }
             const ui32 NodeId;
+            // Set only for TInterconnectSessionTCPv2 sessions; carries a thread-safe direct send/receive
+            // interface that bypasses the actor system. Null for classic (v1) sessions.
+            std::shared_ptr<IDirectSession> DirectSession;
         };
 
         struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {

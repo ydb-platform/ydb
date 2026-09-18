@@ -52,6 +52,8 @@ private:
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
     const TString Database;
+    const TString DatabaseId;
+    const TString PoolId;
     const NYql::NDq::TTxId TxId;
     const TMaybe<ui64> LockTxId;
     const ui32 LockNodeId;
@@ -69,7 +71,7 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
         TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
-        bool useBatchPool = false);
+        TString databaseId, TString poolId, bool useBatchPool = false);
 
     static TVector<TSerializedTableRange> BuildSerializedTableRanges(
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);

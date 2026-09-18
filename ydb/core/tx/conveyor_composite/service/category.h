@@ -51,9 +51,17 @@ public:
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);
 
-    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope) {
+    void RegisterProcess(const ui64 internalProcessId, std::shared_ptr<TProcessScope>&& scope,
+        std::shared_ptr<TWorkloadManagerQuery> workloadManagerQuery = nullptr) {
         scope->IncProcesses();
-        AFL_VERIFY(Processes.emplace(internalProcessId, std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount)).second);
+        AFL_VERIFY(Processes.emplace(internalProcessId,
+            std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount, std::move(workloadManagerQuery))).second);
+    }
+
+    const TProcess& GetProcessVerified(const ui64 processId) const {
+        const auto it = Processes.find(processId);
+        AFL_VERIFY(it != Processes.end())("process_id", processId);
+        return *it->second;
     }
 
     void UnregisterProcess(const ui64 processId) {

@@ -17,6 +17,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NColumnShard::TConcreteScanCounters& counters,
     const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
     const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+    const std::optional<NConveyorComposite::TWorkloadManagerQueryIdentity>& workloadManagerQueryIdentity,
     const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
@@ -30,7 +31,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     , ComputeShardingPolicy(computeShardingPolicy)
     , ConveyorProcessGuard(
           NConveyorComposite::TScanServiceOperator::StartProcess(ScanId, cpuLimits.GetCPUGroupNameDef(NResourcePool::DEFAULT_POOL_ID), cpuLimits,
-              HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId))
+              HasAppData() && scanActorId.PoolID() != AppDataVerified().UserPoolId, workloadManagerQueryIdentity))
     , ScanOrbit(scanOrbit)
 {
     Y_ABORT_UNLESS(ReadMetadata);

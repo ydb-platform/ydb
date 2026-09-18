@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/data_sharing/protos
     ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/program
 )
 

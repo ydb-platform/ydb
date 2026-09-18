@@ -49,8 +49,8 @@ Database Storage = Tablet Storage × RF × Overhead
 ```
 
 In all calculations:
-1 KB = 1000 byte, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;
-1 KiB = 1024 byte, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
+1 KB = 1000 bytes, 1 MB = 1000 KB, 1 GB = 1000 MB, 1 TB = 1000 GB;
+1 KiB = 1024 bytes, 1 MiB = 1024 KiB, 1 GiB = 1024 MiB, 1 TiB = 1024 GiB.
 
 ## Estimating Required Equipment {#hardware-estimation}
 

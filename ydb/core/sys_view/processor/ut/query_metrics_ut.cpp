@@ -28,7 +28,8 @@ public:
     TInstant IntervalEnd;
 
     explicit TQueryMetricsEnv(ui32 nodes = 1,
-        TInstant start = TInstant::Seconds(1'800'001'800))
+        TInstant start = TInstant::Seconds(1'800'001'800),
+        bool collectHourMetric = true)
         : Runtime(nodes)
         , NodeMetrics(nodes)
         , IntervalEnd(start)
@@ -36,6 +37,7 @@ public:
         TAppPrepare app;
         app.SetEnablePersistentQueryStats(true);
         app.SetEnableDbCounters(false);
+        app.FeatureFlags.SetCollectHourMetric(collectHourMetric);
         SetupTabletServices(Runtime, &app, /* mockDisk */ true);
         Runtime.UpdateCurrentTime(start);
         Runtime.SetScheduledLimit(1'000);
@@ -192,6 +194,17 @@ void TestStaleFailure(bool disconnect) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryMetricsProcessorTest) {
+    Y_UNIT_TEST(DoesNotCollectHourMetricsWhenFeatureFlagIsOff) {
+        TQueryMetricsEnv env(1, TInstant::Seconds(1'800'001'800), false);
+        env.Add(0, 42, 10);
+        env.Collect();
+
+        const auto minutes = env.Read(NKikimrSysView::METRICS_ONE_MINUTE);
+        UNIT_ASSERT_VALUES_EQUAL(minutes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(minutes[0].GetMetrics().GetCpuTimeUs().GetSum(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.Read(NKikimrSysView::METRICS_ONE_HOUR).size(), 0);
+    }
+
     Y_UNIT_TEST(CollectsBeyondMinuteTopAfterReboot) {
         TQueryMetricsEnv env;
         constexpr ui64 recurringHash = NQueryMetricsLimits::MetricsFetchCount;

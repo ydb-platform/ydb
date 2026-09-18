@@ -22,9 +22,9 @@ jobs:
         \ name in ['runs','run_objects','ci_backup_20260918/runs','ci_backup_20260918/run_objects']:\n\
         \            desc=pool.retry_operation_sync(lambda session: session.describe_table(db+'/'+name))\n\
         \            print(name, 'primary_key=', list(desc.primary_key))\n       \
-        \   if name.endswith('runs'):\n              result=pool.retry_operation_sync(lambda\
+        \     if name.endswith('runs'):\n                result=pool.retry_operation_sync(lambda\
         \ session: session.transaction().execute('SELECT COUNT(*) AS n FROM `'+db+'/'+name+'`;',\
-        \ commit_tx=True))\n              print('row_count',name,result[0].rows[0].n)\n\
+        \ commit_tx=True))\n                print('row_count',name,result[0].rows[0].n)\n\
         finally:\n    driver.stop()\nPY\n"
 'on':
   push:

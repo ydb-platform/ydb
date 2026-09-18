@@ -3,6 +3,12 @@ UNITTEST_FOR(ydb/services/keyvalue)
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
 SRCS(
     grpc_service_ut.cpp
 )

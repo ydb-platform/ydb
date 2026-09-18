@@ -31,6 +31,32 @@ TEvConnectResult TStorageTransportMock::MakeConnectResult(
     return result;
 }
 
+TStorageTransportMock::TEvListPersistentBufferResult
+TStorageTransportMock::MakeListing(
+    const TVector<TPBufferKey>& keys,
+    ui32 vChunkIndex)
+{
+    TEvListPersistentBufferResult result;
+    result.SetStatus(TReplyStatus::OK);
+    for (const auto& key: keys) {
+        auto* record = result.AddRecords();
+        record->SetGeneration(key.Generation);
+        record->SetLsn(key.Lsn);
+        record->MutableSelector()->SetVChunkIndex(vChunkIndex);
+        record->MutableSelector()->SetOffsetInBytes(0);
+        record->MutableSelector()->SetSize(DefaultBlockSize);
+    }
+    return result;
+}
+
+void TStorageTransportMock::SetPBufferListing(
+    const TVector<TPBufferKey>& keys,
+    ui32 vChunkIndex)
+{
+    ListPBufferEntriesResult =
+        NThreading::MakeFuture(MakeListing(keys, vChunkIndex));
+}
+
 TStorageTransportMock::TConnectPromise TStorageTransportMock::SetPendingConnect(
     EConnectionType type,
     const TDDiskId& ddiskId)
@@ -288,15 +314,22 @@ TStorageTransportMock::BarrierEraseFromPBuffer(
     ui64 lsn,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, lsn, span);
+    Y_UNUSED(span);
 
-    Y_ABORT("BarrierEraseFromPBuffer is not expected in this test");
+    BarrierErases.emplace_back(connection.DDiskId.NodeId, lsn);
+    TEvErasePersistentBufferResult result;
+    result.SetStatus(TReplyStatus::OK);
+    return NThreading::MakeFuture(std::move(result));
 }
 
 NThreading::TFuture<TEvListPersistentBufferResult>
 TStorageTransportMock::ListPBufferEntries(const THostConnection& connection)
 {
     Y_UNUSED(connection);
+
+    if (ListPBufferEntriesResult.Initialized()) {
+        return ListPBufferEntriesResult;
+    }
 
     TEvListPersistentBufferResult result;
     result.SetStatus(TReplyStatus::OK);

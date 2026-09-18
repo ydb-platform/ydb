@@ -142,7 +142,7 @@ message TActorSystemConfig {
     optional uint32 CpuCount = 13;
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
-    optional bool UseSharedThreads = 18;
+    optional bool UseSharedThreads = 18 [default = true];
     optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
 
@@ -558,6 +558,11 @@ message TInterconnectConfig {
     optional bool EnableRdmaSendReceive = 69 [default = false];
 
     message TV2Config {
+        // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config
+        // that is applied online: it is picked up from a cluster config update without restarting the node
+        // (see TInterconnectConfigurator), and affects new handshakes only -- sessions already established
+        // keep the version they negotiated. It has no effect unless the node was started with Threads > 0.
+        // Every other field here is read once, at startup, and needs a restart to change.
         optional bool Enable = 1 [default = false];
         optional bool ChecksumEvents = 2 [default = false];
 
@@ -568,8 +573,11 @@ message TInterconnectConfig {
         // If set, this enables event preserialization in IC actor system pool.
         optional bool EnablePreserializeEvents = 4 [default = false];
 
-        // Number of worker threads of ICv2 thread pool (not counting uring internal ones).
-        optional uint32 Threads = 5 [default = 4];
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones). Zero -- the
+        // default -- means the v2 engine is not started at all on this node and v2 can never be negotiated,
+        // regardless of Enable. Changing it requires a restart, so a cluster that intends to switch to v2
+        // online is first rolled out with Threads set, and then flips Enable through a config update.
+        optional uint32 Threads = 5 [default = 0];
 
         // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
         // 1:1 ring/worker topology. Raise this when poller-bound; raise Threads when serializer-bound.
@@ -3583,7 +3591,6 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
-    optional TTracingConfig UserFacingTracingConfig = 123;
     optional TFailureInjectionConfig FailureInjectionConfig = 56;
     optional THttpProxyConfig PublicHttpConfig = 57;
     optional TMetadataProviderConfig MetadataProviderConfig = 59;

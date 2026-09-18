@@ -69,6 +69,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
+    REGISTER_SETTING(*this, KqpDisablePessimisticLocks);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -177,6 +178,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
             }
         });
     REGISTER_SETTING(*this, UseKqpTasksGraphV2);
+    REGISTER_SETTING(*this, EnableCsWriteAffinity);
 
     /* CBO internal constants for tuning */
     REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
@@ -417,6 +419,10 @@ bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
 
 bool TKikimrConfiguration::GetWindowFunctionsV2() const {
     return WindowFunctionsV2.Get().GetOrElse(TTableServiceConfig::GetEnableWindowFunctionsV2());
+}
+
+bool TKikimrConfiguration::GetEnableCsWriteAffinity() const {
+    return EnableCsWriteAffinity.Get().GetOrElse(false);
 }
 
 } // namespace NYql

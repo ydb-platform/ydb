@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -196,7 +197,11 @@ def _run_upload_udf(
 
 
 def _run_upload_library(endpoint, database, library_file_path, library_name):
-    """Upload a WASM library via upload_udf --kind library."""
+    """Upload a textual WASM fixture with its library manifest."""
+    manifest_path = yatest.common.output_path(library_name + ".manifest.json")
+    with open(manifest_path, "w") as output:
+        json.dump(dict(module_name=library_name, module_type="library", module_kind="wasm",
+                       module_extension="wat"), output)
     return _run_upload_udf(
         endpoint,
         database,
@@ -204,6 +209,7 @@ def _run_upload_library(endpoint, database, library_file_path, library_name):
         udf_type="WASM",
         kind="library",
         library_name=library_name,
+        manifest_path=manifest_path,
     )
 
 
@@ -360,7 +366,23 @@ def test_using_native_unsafe_udf():
         cluster.stop()
 
 
-def test_using_wasm_udf():
+def _pad_wat(path, size):
+    # Whitespace keeps compilation cheap while exercising multi-page source
+    # and wasm_data artifact reads with a payload above the 48 MiB limit.
+    padded_path = yatest.common.output_path("padded_" + os.path.basename(path))
+    shutil.copyfile(path, padded_path)
+    with open(padded_path, "ab") as output:
+        remaining = size - output.tell()
+        while remaining > 0:
+            padding = b" " * min(remaining, 1024 * 1024)
+            output.write(padding)
+            remaining -= len(padding)
+    return padded_path
+
+
+@pytest.mark.parametrize("source_size", [0, 64 * 1024 * 1024, 75 * 1024 * 1024],
+                         ids=["small", "full_pages", "partial_page"])
+def test_using_wasm_udf(source_size):
     """
     Upload a WASM UDF (.wat) with JSON manifest into modules(+chunks) tables,
     wait for TUdfStoreService to compile and load from the artifact table, then query.
@@ -391,6 +413,8 @@ def test_using_wasm_udf():
         manifest_path = yatest.common.source_path(
             "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
         )
+        if source_size:
+            wasm_file_path = _pad_wat(wasm_file_path, source_size)
 
         assert _wait_for_condition(
             lambda: _kv_volume_exists(endpoint, database),
@@ -456,6 +480,46 @@ def test_using_wasm_udf():
             "Expected LocalUdf::udf_rodata_cookie() == 0x0102030405060708, got %r" % cookie_value
         )
 
+    finally:
+        cluster.remove_database(database)
+        cluster.unregister_and_stop_slots(db_nodes)
+        cluster.stop()
+
+
+@pytest.mark.parametrize("module_type", ["WASM", "LIBRARY"])
+def test_wasm_chunk_query_error_is_persisted(module_type):
+    database = "/Root/test"
+    cluster = _make_cluster(enable_udf_store=True, enable_wasm_udf=True)
+    db_nodes = _create_database(cluster, database)
+    try:
+        node = cluster.nodes[1]
+        config = ydb.DriverConfig(endpoint="%s:%s" % (node.host, node.port), database=database)
+        assert _wait_for_condition(lambda: _table_exists(config, database))
+        chunks_path = ".metadata/udf_store/module_chunks"
+        assert _wait_for_condition(lambda: _table_exists(config, database, chunks_path))
+        # Publish metadata after removing the source table: ReadModuleChunks /
+        # ReadLibraryChunks must fail as a query, before parsing or compiling.
+        _run_query(config, f"DROP TABLE `{database}/{chunks_path}`")
+        manifest_path = yatest.common.source_path(
+            "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
+        )
+        with open(manifest_path) as manifest_file:
+            manifest = json.dumps(manifest_file.read())
+        _run_query(config, f'''UPSERT INTO `{database}/{UDF_TABLE_MODULES_PATH}`
+            (name, type, uid, md5, size, chunk_count, version, manifest, compile_status, created_at)
+            VALUES ("LocalUdf", "{module_type}", "missing-chunks", "00000000000000000000000000000000",
+                    1ul, 1ul, 1ul, CAST({manifest} AS Json), "pending", CurrentUtcTimestamp());''')
+        observed = {}
+
+        def failed():
+            result = _run_query(config, f'''SELECT compile_status, compile_error
+                FROM `{database}/{UDF_TABLE_MODULES_PATH}` WHERE name = "LocalUdf"''')
+            observed.update(result[0].rows[0])
+            return observed["compile_status"] == "failed"
+
+        assert _wait_for_condition(failed, timeout_seconds=60), observed
+        assert "YQL request failed" in observed["compile_error"], observed
+        assert "step 2" in observed["compile_error"], observed
     finally:
         cluster.remove_database(database)
         cluster.unregister_and_stop_slots(db_nodes)
@@ -580,7 +644,8 @@ def test_using_wasm_bridge_dict():
         cluster.stop()
 
 
-def test_using_wasm_udf_with_sdk_and_library():
+@pytest.mark.parametrize("large_library", [False, True], ids=["small", "large_library"])
+def test_using_wasm_udf_with_sdk_and_library(large_library):
     """
     Upload sdk + helpers libraries, then a WASM UDF that depends on both
     (required_libraries: ["sdk", "helpers"]), and run WithHelpers::scale(7).
@@ -615,6 +680,9 @@ def test_using_wasm_udf_with_sdk_and_library():
         helpers_path = yatest.common.source_path("%s/helpers.wat" % data_dir)
         udf_path = yatest.common.source_path("%s/with_helpers.wat" % data_dir)
         manifest_path = yatest.common.source_path("%s/with_helpers_manifest.json" % data_dir)
+
+        if large_library:
+            helpers_path = _pad_wat(helpers_path, 75 * 1024 * 1024)
 
         _run_upload_library(endpoint, database, sdk_path, "sdk")
         _run_upload_library(endpoint, database, helpers_path, "helpers")

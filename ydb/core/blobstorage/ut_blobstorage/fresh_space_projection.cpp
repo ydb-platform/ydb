@@ -3,6 +3,9 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompact.h>
 #include <ydb/core/util/lz4_data_generator.h>
 
 #include <map>
@@ -701,7 +704,162 @@ TOosSettings TinyDiskSettings() {
 
 } // namespace
 
+namespace {
+
+    void CheckFreshAbortReleasesChunks(bool restartBeforeRetry) {
+        TFeatureFlags ff;
+        ff.SetEnableVDiskFreshSpaceProjection(true);
+        ff.SetEnableVDiskHeapAllocator(false);
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                config.FreshBufSizeLogoBlobs = 256_MB;
+                config.LevelCompaction = false;
+            },
+            .FeatureFlags = ff,
+            .MinHugeBlobInBytes = 4_MB,
+            .PDiskChunkSize = 32_MB,
+        });
+        env.CreateBoxAndPool(1, 1, 0, NKikimrBlobStorage::EPDiskType::NVME);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const auto info = env.GetGroupInfo(groups.front());
+
+        std::map<TActorId, ui32> reserveRequests;
+        ui32 failures = 0;
+        ui32 aborts = 0;
+        ui32 releasedChunks = 0;
+        ui32 chunkReleases = 0;
+        bool readyToRestart = false;
+        std::set<ui32> abandoned;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvCutLog:
+                    // Keep the dataset together until the explicit fresh compaction request.
+                    return false;
+                case TEvBlobStorage::EvChunkReserve: {
+                    const auto* msg = ev->Get<NPDisk::TEvChunkReserve>();
+                    if (!msg->ForHousekeeping) {
+                        break;
+                    }
+                    const ui32 requestNo = ++reserveRequests[ev->Sender];
+                    if (requestNo == 1) {
+                        // Check before reuse: after this reservation the same chunk IDs
+                        // may legitimately hold output from the next attempt.
+                        for (const auto& [key, state] : env.PDiskMockStates) {
+                            Y_UNUSED(key);
+                            const auto chunks = state->GetChunks();
+                            for (const ui32 chunk : abandoned) {
+                                UNIT_ASSERT_C(!chunks.contains(chunk),
+                                    "fresh compaction retried before releasing chunk# " << chunk);
+                            }
+                        }
+                        releasedChunks += abandoned.size();
+                        abandoned.clear();
+                        if (restartBeforeRetry && failures == 4) {
+                            readyToRestart = true;
+                            return false;
+                        }
+                    }
+                    // First exercise an abort with no allocations, then three aborts
+                    // after an SST has been written, followed by a successful attempt.
+                    if (failures < 4 && (!failures || requestNo == 2)) {
+                        ++failures;
+                        auto* result = new NPDisk::TEvChunkReserveResult(NKikimrProto::OUT_OF_SPACE,
+                            ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation));
+                        result->ErrorReason = "injected compaction reservation failure";
+                        env.Runtime->Send(new IEventHandle(ev->Sender, ev->Recipient, result, 0, ev->Cookie), nodeId);
+                        return false;
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvHullChange: {
+                    const auto* msg = ev->Get<THullChange<TKeyLogoBlob, TMemRecLogoBlob>>();
+                    if (msg->FreshCompaction && msg->Aborted) {
+                        ++aborts;
+                        UNIT_ASSERT_VALUES_EQUAL(msg->ReservedChunks.size(), failures == 1 ? 0 : 1);
+                        UNIT_ASSERT(msg->CommitChunks.empty());
+                        abandoned.insert(msg->ReservedChunks.begin(), msg->ReservedChunks.end());
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvChunkForget: {
+                    // Other subsystems forget chunks too, so count only the releases that
+                    // hand back what the aborted fresh compaction had reserved.
+                    const auto* msg = ev->Get<NPDisk::TEvChunkForget>();
+                    for (const ui32 chunk : msg->ForgetChunks) {
+                        if (abandoned.contains(chunk)) {
+                            ++chunkReleases;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            return true;
+        };
+
+        // Forty MiB of in-place data requires two SST chunks in a single attempt.
+        const TString data = FastGenDataForLZ4(1_MB, 1);
+        for (ui32 step = 1; step <= 40; ++step) {
+            env.PutBlob(groups.front(), TLogoBlobID(1000, 1, step, 0, data.size(), 0), data);
+        }
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(info->GetActorId(0), edge,
+            TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FRESH_ONLY)), 1);
+        const TInstant compactDeadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+        if (restartBeforeRetry) {
+            env.Runtime->Sim([&] { return !readyToRestart && env.Runtime->GetClock() < compactDeadline; });
+            UNIT_ASSERT(readyToRestart);
+            env.Runtime->DestroyActor(edge);
+        } else {
+            auto result = env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, true, compactDeadline);
+            UNIT_ASSERT_C(result, "fresh compaction did not finish after injected failures stopped");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(failures, 4);
+        UNIT_ASSERT_VALUES_EQUAL(aborts, 4);
+        UNIT_ASSERT_VALUES_EQUAL(releasedChunks, 3);
+        UNIT_ASSERT_VALUES_EQUAL(chunkReleases, 3);
+        UNIT_ASSERT(abandoned.empty());
+        // Keep log-cut requests suppressed through recovery, as during the writes.
+        env.Runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() != TEvBlobStorage::EvCutLog;
+        };
+        env.RestartNode(info->GetActorId(0).NodeId());
+        env.Sim(TDuration::Seconds(30));
+        // Releasing the chunks must leave the old Fresh records alone until a successful
+        // attempt commits them. Verify the data through recovery as well.
+        for (ui32 step = 1; step <= 40; ++step) {
+            const TLogoBlobID id(1000, 1, step, 0, data.size(), 0);
+            const TActorId reader = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+            env.Runtime->WrapInActorContext(reader, [&] {
+                SendToBSProxy(reader, groups.front(), new TEvBlobStorage::TEvGet(id, 0, 0, deadline,
+                    NKikimrBlobStorage::EGetHandleClass::FastRead));
+            });
+            auto get = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(reader, true, deadline);
+            UNIT_ASSERT(get);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(get->Get()->Responses[0].Buffer.ConvertToString(), data);
+        }
+        env.Runtime->FilterFunction = {};
+    }
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(VDiskFreshSpaceProjection) {
+
+    Y_UNIT_TEST(FreshAbortReleasesChunksBeforeRetry) {
+        CheckFreshAbortReleasesChunks(false);
+    }
+
+    Y_UNIT_TEST(FreshAbortRecoveryBeforeRetry) {
+        CheckFreshAbortReleasesChunks(true);
+    }
 
     // Parallel USER puts are judged by the color the disk would be in after
     // compacting Fresh, so they must stop before ORANGE. SYSTEM puts may continue.

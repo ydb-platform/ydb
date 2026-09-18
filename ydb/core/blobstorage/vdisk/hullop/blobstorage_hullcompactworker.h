@@ -143,11 +143,18 @@ namespace NKikimr {
         // maximum number of chunks we use per SST
         ui32 ChunksToUse;
 
-        // chunks currently reserved and not used
+        // chunks obtained from TEvChunkReserve and not yet handed to a writer; these are ours
+        // to recycle, and nothing owned by anyone else may enter this deque
         TDeque<TChunkIdx> ReservedChunks;
 
-        // all reserved chunks during the compaction
+        // every chunk obtained from TEvChunkReserve during the compaction, used or not; never
+        // pruned, so it is a superset of ReservedChunks
         TDeque<TChunkIdx> AllocatedChunks;
+
+        // the chunk of the stripe-heap slot a small SST is written into, held separately from
+        // ReservedChunks because it belongs to the huge keeper: it is accounted by
+        // AllocatedStripeBlobs and released through the heap, never by us
+        TDeque<TChunkIdx> StripeChunk;
 
         // record merger for compaction
         TCompactRecordMerger IndexMerger;
@@ -681,11 +688,16 @@ namespace NKikimr {
                     if (StripeSstLocation.Empty()) {
                         return ETryProcessItemStatus::NeedStripeSlot;
                     }
-                    ReservedChunks.push_front(StripeSstLocation.ChunkIdx);
+                    // The writer draws its single chunk from here rather than from
+                    // ReservedChunks, so a stripe it never gets round to using cannot be
+                    // handed out as an ordinary SST chunk and committed as ours while the
+                    // heap still owns it. Left unused it stays here, accounted all along by
+                    // AllocatedStripeBlobs.
+                    StripeChunk.assign(1, StripeSstLocation.ChunkIdx);
                     WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
                         1, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, StripeSstLocation.Size,
                         PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
-                        false, ReservedChunks, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset);
+                        false, StripeChunk, Arena, HullCtx->VCfg->BlobHeaderMode, StripeSstLocation.Offset);
                     WriterHasPendingOperations = false;
                 } else {
                     // ensure we have enough reserved chunks to do operation; or else request for allocation and wait

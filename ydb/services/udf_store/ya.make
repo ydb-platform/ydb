@@ -16,6 +16,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/lib/udf/manifest
     ydb/library/actors/core
     ydb/core/base
     ydb/core/kqp/common

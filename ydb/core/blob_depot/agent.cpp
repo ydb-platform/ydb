@@ -25,6 +25,12 @@ namespace NKikimr::NBlobDepot {
 
         const auto it = PipeServers.find(ev->Get()->ServerId);
         Y_ABORT_UNLESS(it != PipeServers.end());
+
+        // Requests parked in tablet-wide queues still name this pipe server as their recipient. It is about to go
+        // away and there is no one left to answer to, so drop them before anything below may try to resolve the
+        // agent behind them.
+        S3Manager->DropPendingPrepareWrites(it->first);
+
         if (const auto& nodeId = it->second.NodeId) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end() && agentIt->second.Connection &&
                     agentIt->second.Connection->PipeServerId == it->first) {
@@ -38,12 +44,25 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
+        Y_ABORT_UNLESS(agent.Connection); // this releases what one particular connection held
+
+        // Anything still parked in a tablet-wide queue on behalf of this connection can no longer be answered. Drop
+        // it before releasing the write slots below, because that release runs the pending-write drain and it must
+        // not dispatch a request bound to the connection we are tearing down.
+        S3Manager->DropPendingPrepareWrites(agent.Connection->PipeServerId);
+
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
 
         for (TS3Locator locator : agent.S3WritesInFlight) {
             // they were not in InFlightTrashS3, so we just have to delete them
             S3Manager->AddTrashToCollect(locator);
+        }
+        if (const ui32 numAbandoned = agent.S3WritesInFlight.size()) {
+            // The agent is never going to commit or discard these writes now. Their slots have to be given back
+            // explicitly: otherwise they stay occupied for the rest of this tablet generation and, once enough of
+            // them leak, TEvPrepareWriteS3 from *every* agent gets queued in PendingPrepareWrites forever.
+            S3Manager->OnS3WritesInFlightAbandoned(numAbandoned);
         }
         agent.S3WritesInFlight.clear();
     }
@@ -66,6 +85,14 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
+        if (agent.Connection && agent.Connection->PipeServerId != pipeServerId) {
+            // This registration supersedes an older connection. Its TEvServerDisconnected either has not been
+            // processed yet or never will be -- either way the handler above skips it once Connection has moved on,
+            // so nothing else would ever release what that connection held. Note that this covers a plain reconnect
+            // of the same agent instance too, not just an AgentInstanceId change, and that it deliberately runs
+            // before Connection is replaced so the resources are attributed to the connection that held them.
+            OnAgentDisconnect(agent);
+        }
         if (!agent.Connection) {
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] += 1;
         }
@@ -79,7 +106,7 @@ namespace NKikimr::NBlobDepot {
         agent.LastPushedApproximateFreeSpaceShare = SpaceMonitor->GetApproximateFreeSpaceShare();
 
         if (agent.AgentInstanceId && *agent.AgentInstanceId != req.GetAgentInstanceId()) {
-            ResetAgent(agent);
+            ResetAgent(nodeId, agent);
         }
         agent.AgentInstanceId = req.GetAgentInstanceId();
 
@@ -113,7 +140,7 @@ namespace NKikimr::NBlobDepot {
 
         TActivationContext::Send(response.release());
 
-        if (!agent.InvalidatedStepInFlight.empty()) {
+        if (!agent.InvalidatedStepInFlight.empty() || !agent.BlockToDeliver.empty()) {
             const ui32 generation = Executor()->Generation();
             const ui64 id = ++agent.LastRequestId;
 
@@ -223,7 +250,20 @@ namespace NKikimr::NBlobDepot {
         return agent;
     }
 
-    void TBlobDepot::ResetAgent(TAgent& agent) {
+    TBlobDepot::TAgent *TBlobDepot::FindAgent(const TActorId& pipeServerId) {
+        const auto it = PipeServers.find(pipeServerId);
+        if (it == PipeServers.end() || !it->second.NodeId) {
+            return nullptr;
+        }
+        const auto agentIt = Agents.find(*it->second.NodeId);
+        if (agentIt == Agents.end()) {
+            return nullptr;
+        }
+        TAgent& agent = agentIt->second;
+        return agent.Connection && agent.Connection->PipeServerId == pipeServerId ? &agent : nullptr;
+    }
+
+    void TBlobDepot::ResetAgent(ui32 nodeId, TAgent& agent) {
         for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
             if (agentGivenIdRange.IsEmpty()) {
                 continue;
@@ -236,7 +276,7 @@ namespace NKikimr::NBlobDepot {
             YDB_LOG_DEBUG("ResetAgent",
                 {"marker", "BDT06"},
                 {"id", GetLogId()},
-                {"agentId", agent.Connection->NodeId},
+                {"agentId", nodeId},
                 {"channel", int(channel)},
                 {"givenIdRanges", givenIdRanges},
                 {"Agent.GivenIdRanges", agentGivenIdRange},
@@ -281,7 +321,10 @@ namespace NKikimr::NBlobDepot {
                 auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
                 ev->Record.SetSpaceColor(spaceColor);
                 ev->Record.SetApproximateFreeSpaceShare(approximateFreeSpaceShare);
-                Send(agent.Connection->AgentId, ev.release(), 0, id);
+                // Must be sent *from the pipe server*, like every other TEvPushNotify: the agent drops any push
+                // notification whose sender is not its current pipe server (see TBlobDepotAgent::Handle).
+                TActivationContext::Send(new IEventHandle(agent.Connection->AgentId, agent.Connection->PipeServerId,
+                    ev.release(), 0, id));
                 agent.LastPushedSpaceColor = spaceColor;
                 agent.LastPushedApproximateFreeSpaceShare = approximateFreeSpaceShare;
             }

@@ -630,6 +630,12 @@ namespace NKikimr {
 
         void ApplyCompactionResult(const TActorContext &ctx, TVector<ui32> chunksAdded, TVector<ui32> reservedChunksLeft,
                 ui64 wId) {
+            // Reservations the compaction never wrote into. They went into no SST, so no
+            // snapshot can be reading them and none of the delete-to-decommitted handling
+            // below applies: hand them straight back instead of parking them in
+            // DATA_DECOMMITTED until the previous slice's snapshots drain.
+            ForgetReservedChunks(ctx, reservedChunksLeft);
+
             // create new slice
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateWaitCommit);
 
@@ -645,9 +651,9 @@ namespace NKikimr {
                 LogRemovedHugeBlobs(ctx, CompactionTask->GetHugeBlobsToDelete(), true);
             }
 
-            // delete list, includes previous ChunksToDelete and reserved chunks
+            // delete list: chunks a previous snapshot may still be reading, so they have to go
+            // through the commit record that stops referencing them
             TVector<ui32> deleteChunks(std::move(prevSlice->ChunksToDelete));
-            deleteChunks.insert(deleteChunks.end(), reservedChunksLeft.begin(), reservedChunksLeft.end());
 
             // only delete chunks if we actually delete SST's from yard; otherwise it is move operation, we delete them from one
             // level and put to another
@@ -699,6 +705,24 @@ namespace NKikimr {
             prevSlice.Drop();
         }
 
+        // Hand back allocations of a compaction that produced nothing. They were never
+        // committed, so PDisk drops them outright -- no entry point, and nothing to write on
+        // a disk that is already out of space. Addressed from the skeleton, which vets PDisk
+        // replies for the whole VDisk: nothing here needs an answer, and waiting for one would
+        // let a reply that never comes wedge compaction for good.
+        void ForgetReservedChunks(const TActorContext &ctx, TVector<ui32>& chunks) {
+            if (!chunks) {
+                return;
+            }
+            const auto& pdisk = *HullDbCommitterCtx->PDiskCtx;
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS,
+                VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "FORGET: PDiskId# %s ChunksToForget# %s",
+                    pdisk.PDiskIdString.data(), FormatList(chunks).data()));
+            TActivationContext::Send(new IEventHandle(pdisk.PDiskId, RTCtx->SkeletonId,
+                new NPDisk::TEvChunkForget(pdisk.Dsk->Owner, pdisk.Dsk->OwnerRound, std::move(chunks))));
+            chunks.clear(); // released now; whoever looks at them next must see nothing left
+        }
+
         void LogRemovedHugeBlobs(const TActorContext &ctx, const TDiskPartVec &vec, bool level) const {
             for (const auto &x : vec) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, VDISKP(HullDs->HullCtx->VCtx, "%s: LogRemovedHugeBlobs: one slot: addr# %s level# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), x.ToString().data(), (level ? "true" : "false")));
@@ -734,16 +758,15 @@ namespace NKikimr {
             // handle commit msg differently
             if (msg->FreshCompaction) {
                 if (msg->Aborted) {
-                    // Nothing was written, so hand the segment back for another attempt.
-                    // Leaving it held would keep fresh compaction "in progress" forever:
-                    // Old would never be released, Hull retention would stay at its first
-                    // lsn and the recovery log could never be cut.
                     YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Fresh compaction aborted",
                         {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                         {"signature", PDiskSignatureForHullDbKey<TKey>()});
+                    // ReservedChunks contains every allocation made by the failed attempt,
+                    // including SST output already written. Return it before retrying;
+                    // otherwise each attempt can consume more of the remaining free space.
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
                     RTCtx->LevelIndex->FreshCompactionAborted();
-                    // As for level compactions: retrying at once would just fail the same
-                    // way, so let the scheduling interval pass first.
+                    // Give other space-reclaiming work a chance before retrying the same segment.
                     ScheduleCompactionWakeup(ctx);
                 } else {
                     TStringStream dbg;
@@ -771,6 +794,10 @@ namespace NKikimr {
                         for (auto &seg : msg->SegVec->Segments)
                             RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
                     }
+
+                    // as in ApplyCompactionResult: leftover reservations went into no SST, so
+                    // they go back directly rather than riding the commit record
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
 
                     // run fresh committer
                     auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
@@ -805,14 +832,18 @@ namespace NKikimr {
                     Y_VERIFY_S(CompactionTask->GetHugeBlobsToDelete().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(!msg->CommitChunks, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     Y_VERIFY_S(!msg->FreshSegment, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                    // The index did not change and there are no chunks to hand back, so a
-                    // commit would serialize the very same entry point into the recovery
-                    // log and buy nothing. With the explicit sst request still pending the
-                    // next selection returns the same job, and on a disk that is already
-                    // out of space that loop fills the log with unchanged entry points
-                    // until an ordinary log write is refused and the whole VDisk dies.
-                    nothingToCommit = msg->ReservedChunks.empty()
-                        && RTCtx->LevelIndex->CurSlice->ChunksToDelete.empty();
+                    // As for fresh: nothing the failed attempt allocated was committed, so it
+                    // goes back without a log record. ReservedChunks is GetAllocatedChunks()
+                    // here -- reservations only, never a stripe chunk owned by the huge keeper.
+                    ForgetReservedChunks(ctx, msg->ReservedChunks);
+                    // What is left to commit is the chunks a previous snapshot still holds.
+                    // Without them the index did not change either, so a commit would serialize
+                    // the very same entry point into the recovery log and buy nothing. With the
+                    // explicit sst request still pending the next selection returns the same
+                    // job, and on a disk that is already out of space that loop fills the log
+                    // with unchanged entry points until an ordinary log write is refused and
+                    // the whole VDisk dies.
+                    nothingToCommit = RTCtx->LevelIndex->CurSlice->ChunksToDelete.empty();
                 } else {
                     Y_VERIFY_S(!CompactionTask->GetSstsToDelete().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
                 }

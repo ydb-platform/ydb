@@ -30,5 +30,6 @@ RECURSE_FOR_TESTS(
     ut/purecalc
     ut/row_table
     ut/transfer_metrics
+    ut/unit
 )
 

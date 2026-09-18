@@ -924,6 +924,11 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            Counters->WriteActorLocalShardWrites->Inc();
+        } else {
+            Counters->WriteActorRemoteShardWrites->Inc();
+        }
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
@@ -3427,6 +3432,7 @@ struct TTransactionSettings {
     bool InconsistentTx = false;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     NKikimrDataEvents::ELockMode LockMode;
+    bool DisablePessimisticLocks = false;
     bool CollectAffectedRows = false;
 };
 
@@ -3994,7 +4000,8 @@ public:
 
             // Ensure lock actor for unique indexes with pessimistic_none
             if (indexSettings.IsUniq &&
-                    (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)) {
+                    (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE)
+                    && !settings.TransactionSettings.DisablePessimisticLocks) {
                 auto& lockInfo = LockInfos[indexSettings.TableId.PathId];
                 if (!lockInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     if (!EnsureLockActor(settings, lockInfo, indexSettings.TableId, indexSettings.TablePath)) {
@@ -4146,7 +4153,8 @@ public:
             }
 
             if (indexSettings.IsUniq) {
-                if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+                if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                        && !settings.TransactionSettings.DisablePessimisticLocks) {
                     // Lock Unique Index
                     auto& indexLockInfo = LockInfos.at(indexSettings.TableId.PathId);
                     auto& lockActor = indexLockInfo.Actors.at(indexSettings.TableId.PathId).LockActor;
@@ -4258,7 +4266,8 @@ public:
         });
 
         // Main table lock
-        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                && !settings.TransactionSettings.DisablePessimisticLocks) {
             auto& lockInfo = LockInfos.at(settings.TableId.PathId);
             auto& lockActor = lockInfo.Actors.at(settings.TableId.PathId).LockActor;
 
@@ -4365,7 +4374,8 @@ public:
         }
 
         // Ensure lock actor for main table (pessimistic_none only)
-        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
+        if (settings.TransactionSettings.LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+                && !settings.TransactionSettings.DisablePessimisticLocks) {
             auto& lockInfo = LockInfos[settings.TableId.PathId];
             if (!lockInfo.Actors.contains(settings.TableId.PathId)) {
                 if (!EnsureLockActor(settings, lockInfo, settings.TableId, settings.TablePath)) {
@@ -6726,6 +6736,7 @@ private:
                     .InconsistentTx = Settings.GetInconsistentTx(),
                     .MvccSnapshot = GetOptionalMvccSnapshot(Settings),
                     .LockMode = Settings.GetLockMode(),
+                    .DisablePessimisticLocks = Settings.GetDisablePessimisticLocks(),
                     .CollectAffectedRows = Settings.GetCollectAffectedRows(),
                 },
                 .Priority = Settings.GetPriority(),

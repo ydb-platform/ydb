@@ -13,10 +13,30 @@ from urllib.request import Request, urlopen
 from ydb.tools.ydb_bench.lib import cluster_templates, cluster_templates_ui, topology as topology_module, web
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.config import load_config
+from ydb.tools.ydb_bench.lib.distributed_plan import execution_template
+from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
 from ydb.tools.ydb_bench.lib.topology import CpuTopology
 
 
 class ClusterTemplatesTest(unittest.TestCase):
+    def test_temporary_disk_cleanup_is_scoped_and_rejects_symlinks(self):
+        with tempfile.TemporaryDirectory() as root:
+            worker = DistributedWorker("host", root, None, root)
+            directory = worker.file_disks / "session"
+            directory.mkdir(parents=True)
+            outside = Path(root) / "keep"
+            outside.write_text("keep")
+            (directory / "1-0.img").symlink_to(outside)
+            with self.assertRaises(BenchmarkError):
+                worker._cleanup_file_disks("session")
+            self.assertEqual(outside.read_text(), "keep")
+            (directory / "1-0.img").unlink()
+            (directory / "1-0.img").write_bytes(b"temporary")
+            worker._cleanup_file_disks("session")
+            self.assertFalse(directory.exists())
+            self.assertTrue(outside.exists())
+            worker._cleanup_file_disks("session")
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -46,6 +66,91 @@ class ClusterTemplatesTest(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    def test_disk_sources_round_trip_and_legacy_migration(self):
+        saved = self.store.save(self.value, {"amd", "sas"})
+        self.assertEqual(saved["nodes"][0]["disks"], [{"source": "sector_map", "media": "ssd", "size_gib": 64}])
+        self.assertNotIn("sector_map", saved["nodes"][0])
+        disks = [
+            {"source": "sector_map", "media": "ssd", "size_gib": 16},
+            {"source": "file", "media": "hdd", "path": "/data/disk.dat", "size_gib": 100},
+            {"source": "block_device", "media": "ssd", "path": "/dev/nvme1n1"},
+            {"source": "partlabel", "media": "ssd", "label": "ydb-01"},
+        ]
+        saved["nodes"][0]["disks"] = disks
+        saved = self.store.save(saved, {"amd", "sas"})
+        self.assertEqual(saved["nodes"][0]["disks"], disks)
+        self.assertEqual(self.store.list()[0]["nodes"][0]["disks"], disks)
+
+    def test_disk_validation(self):
+        temporary = {"source": "file", "media": "ssd", "size_gib": 4, "temporary": True}
+        self.assertEqual(cluster_templates.validate_disks({"disks": [temporary]}), [temporary])
+        with self.assertRaises(BenchmarkError):
+            cluster_templates.validate_disks({"disks": [{**temporary, "temporary": "yes"}]})
+        self.assertEqual(cluster_templates.validate_disks({"disks": []}), [])
+        invalid = [
+            [{"source": "unknown", "media": "ssd"}],
+            [{"source": "sector_map", "media": "ssd", "size_gib": 0}],
+            [{"source": "file", "media": "ssd", "size_gib": 1, "path": "relative"}],
+            [{"source": "partlabel", "media": "ssd", "label": "../disk"}],
+        ]
+        for disks in invalid:
+            with self.subTest(disks=disks), self.assertRaises(BenchmarkError):
+                cluster_templates.validate_disks({"disks": disks})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_disk_moves_preserve_identity_and_host_boundary(self):
+        script = cluster_templates_ui.JS[
+            cluster_templates_ui.JS.index("function ctDefaultNode(") : cluster_templates_ui.JS.index(
+                "function ctNormalizeNodePlacement("
+            )
+        ]
+        script += """
+const assert=require('assert/strict');
+const a=ctDefaultNode('amd','static',1),b=ctDefaultNode('amd','static',2),c=ctDefaultNode('sas','static',3);
+const record={nodes:[a,b,c]},disk=a.disks[0];
+assert.equal(ctNodePortable(a),true);
+a.disks.push({source:'file',temporary:true,size_gib:4,media:'ssd'});assert.equal(ctNodePortable(a),true);
+a.disks.push({source:'file',path:'/data/permanent',size_gib:4,media:'ssd'});assert.equal(ctNodePortable(a),false);
+a.disks.pop();a.disks.pop();
+ctMoveDisk(record,0,0,1);assert.equal(a.disks.length,0);assert.equal(b.disks[1],disk);
+const before=JSON.stringify(record);
+assert.throws(()=>ctMoveDisk(record,1,1,2),/between hosts/);assert.equal(JSON.stringify(record),before);
+c.role='dynamic';assert.throws(()=>ctMoveDisk(record,1,1,2),/storage node/);
+assert.throws(()=>ctMoveDisk(record,0,0,1),/no longer exists/);
+ctMoveDisk(record,1,1,0);assert.equal(a.disks[0],disk);assert.equal(b.disks.length,1);
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
+
+    def test_physical_disk_execution_is_validated_before_preparation(self):
+        self.value["data_centers"] = [{"name": "dc", "racks": ["rack"]}]
+        self.value["tenants"] = [{"path": "/Root/db", "storage_kind": "ssd", "storage_groups": 1}]
+        for node in self.value["nodes"]:
+            node["location"] = {"data_center": "dc", "rack": "rack"}
+        self.value["nodes"][1]["tenant"] = "/Root/db"
+        cli = copy.deepcopy(self.value["nodes"][1])
+        cli.update(name="cli", role="cli", tenant="", location={})
+        self.value["nodes"].append(cli)
+        for disk in [
+            {"source": "file", "media": "ssd", "path": "/data/disk", "size_gib": 64},
+            {"source": "block_device", "media": "ssd", "path": "/dev/nvme1n1"},
+            {"source": "partlabel", "media": "ssd", "label": "ydb-01"},
+        ]:
+            self.value["nodes"][0]["disks"] = [disk]
+            with self.subTest(disk=disk):
+                execution_template(self.value, {"amd", "sas"}, "/Root/db")
+
+    def test_disk_paths_cannot_be_assigned_twice_on_one_host(self):
+        node = self.value["nodes"][0]
+        node["disks"] = [{"source": "partlabel", "media": "ssd", "label": "ydb-01"}]
+        other = copy.deepcopy(node)
+        other["name"] = "storage-2"
+        other["disks"] = [{"source": "block_device", "media": "ssd", "path": "/dev/disk/by-partlabel/ydb-01"}]
+        self.value["nodes"].append(other)
+        with self.assertRaisesRegex(BenchmarkError, "only be assigned once"):
+            cluster_templates.validate_template(self.value, {"amd", "sas"})
+        other["host_id"] = "sas"
+        cluster_templates.validate_template(self.value, {"amd", "sas"})
 
     def test_actor_system_settings_belong_to_runs_not_templates(self):
         self.value["nodes"][0]["actor_system"] = {"use_united_pool": True}
@@ -222,7 +327,7 @@ assert.equal(ctDefaultNode('amd','dynamic',1).actor_system,undefined);
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required")
     def test_moves_change_only_the_selected_view(self):
-        script = cluster_templates_ui.JS.split("function ctDefaultNode")[0] + r"""
+        script = cluster_templates_ui.JS.split("function ctNormalizeNodePlacement")[0] + r"""
 const assert=require('assert');
 const n={name:'compute',host_id:'amd',role:'dynamic',vcpu:8,affinity:{kind:'manual',cpus:[0,1]},tenant:'/Root/a',
   location:{data_center:'dc',rack:'r1',body:'server'}};

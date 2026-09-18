@@ -12,6 +12,7 @@
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -179,13 +180,44 @@ public:
     }
 };
 
-using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
-using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
-using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
-
+// Log context for suboperations and their states.
+//
+// Every YDB_LOG_* call inside suboperation methods (Propose, AbortPropose,
+// ProgressState, HandleReply) automatically inherits a set of attributes
+// provided by YDB_LOG_CREATE_CONTEXT at the call sites in schemeshard__operation.cpp.
+// These attributes are pushed onto a thread-local log context stack and
+// merged into every nested log call — no need to pass them manually.
+//
+// Provided context attributes:
+//
+//   subop           Suboperation class name (ISubOperation::Name())
+//   subopId         Suboperation id (TOperationId)
+//   subopPhase      "Propose" | "AbortPropose" | "Run"
+//   subopState      State class name (TSubOperationState::Name()), only for Run
+//   subopStatePhase "ProgressState" | "HandleReply", only for Run
+//   event           Reply event type name, only for HandleReply
+//   schemeshard     Schemeshard tablet id
+//
+// Name() contract:
+//   - ISubOperationState::Name() returns the state class name without namespace
+//     (e.g. "TConfigureParts", "TProposedWaitParts", "TDone").
+//   - ISubOperation::Name() returns the suboperation class name without namespace
+//     (e.g. "TAlterTable", "TCreateTable").
+//   - Both use the prototype: const char* Name() const override
+//
+// Logging rules for wrapped methods:
+//   - Do NOT re-log attributes already in the context (schemeshard, subopId,
+//     subop, subopState, subopStatePhase, event).
+//   - Do NOT repeat subop/subopState/phase/event in the message string.
+//   - If after cleanup the message becomes empty, leave it as "" — the
+//     context attributes alone are valuable; do NOT remove the log call.
+//   - AbortUnsafe is NOT yet wrapped in YDB_LOG_CREATE_CONTEXT and keeps its
+//     inline schemeshard/operationId attributes until its context is added.
 class ISubOperationState {
 public:
     virtual ~ISubOperationState() = default;
+
+    virtual const char* Name() const = 0;
 
     template <EventBasePtr TEvPtr>
     static TString DebugReply(const TEvPtr& ev);
@@ -200,10 +232,7 @@ public:
 };
 
 class TSubOperationState: public ISubOperationState {
-    TString LogHint;
     TSet<ui32> MsgToIgnore;
-
-    virtual TString DebugHint() const = 0;
 
 public:
     using TPtr = THolder<TSubOperationState>;
@@ -214,12 +243,19 @@ public:
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-    void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
+    void IgnoreMessages(TSet<ui32> mgsIds);
 };
+
+// Simplifications for suboperation writers
+using TProposeResponse = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult;
+using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
 class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {
 public:
     using TPtr = TIntrusivePtr<ISubOperation>;
+
+    virtual const char* Name() const = 0;
+    virtual const char* CurrentStateName() const = 0;
 
     virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
 
@@ -230,8 +266,8 @@ public:
     virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;
 
     // getters
-    virtual const TOperationId& GetOperationId() const = 0;
-    virtual const TTxTransaction& GetTransaction() const = 0;
+    virtual const TOperationId GetId() const = 0;
+    virtual const NKikimrSchemeOp::TModifyScheme& GetModifyScheme() const = 0;
 };
 
 class TSubOperationBase: public ISubOperation {
@@ -251,11 +287,11 @@ public:
     {
     }
 
-    const TOperationId& GetOperationId() const override final {
+    const TOperationId GetId() const override final {
         return OperationId;
     }
 
-    const TTxTransaction& GetTransaction() const override final {
+    const NKikimrSchemeOp::TModifyScheme& GetModifyScheme() const override final {
         return Transaction;
     }
 };
@@ -279,6 +315,10 @@ protected:
         if (state != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
         }
+    }
+
+    virtual const char* CurrentStateName() const override final {
+        return (StateFunc ? StateFunc->Name() : "none");
     }
 
 public:
@@ -739,7 +779,7 @@ ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId
 // ChangePathState
 TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state, TOperationContext& context);
 
 // Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
@@ -805,7 +845,6 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
     NKikimrSchemeOp::TModifyScheme tx;
     tx.SetWorkingDir(workingDir);
     tx.SetOperationType(type);
-
     return tx;
 }
 

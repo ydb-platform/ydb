@@ -162,7 +162,7 @@ TResult ApplyChangesInt( // create and alter
 
     pqDescr->SetName(name);
 
-    auto minParts = 1;
+    i64 minParts = 1;
     auto* pqTabletConfig = pqDescr->MutablePQTabletConfig();
     auto partConfig = pqTabletConfig->MutablePartitionConfig();
 
@@ -198,14 +198,40 @@ TResult ApplyChangesInt( // create and alter
         minParts = settings.partitions_count();
     } else {
         const auto& autoPartitioningSettings = settings.auto_partitioning_settings();
-        if (autoPartitioningSettings.min_active_partitions() > 0) {
-            minParts = autoPartitioningSettings.min_active_partitions();
+        const auto autoMin = autoPartitioningSettings.min_active_partitions();
+        if (autoMin < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Partitions count must be positive, provided " << autoMin};
+        }
+        if (autoMin > 0) {
+            minParts = autoMin;
+        } else {
+            minParts = settings.partitions_count();
+        }
+    }
+    if (minParts <= 0) {
+        error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
+        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+    }
+    if (auto r = ValidateTopicPartitionCount(minParts, "Partitions count"); !r) {
+        return r;
+    }
+
+    if (settings.has_auto_partitioning_settings()) {
+        const auto& autoPartitioningSettings = settings.auto_partitioning_settings();
+        const auto maxParts = autoPartitioningSettings.max_active_partitions();
+        if (maxParts < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Max active partitions must be non-negative, provided " << maxParts};
+        }
+        if (auto r = ValidateTopicPartitionCount(maxParts, "Max active partitions"); !r) {
+            return r;
         }
 
         auto pqTabletConfigPartStrategy = pqTabletConfig->MutablePartitionStrategy();
 
         pqTabletConfigPartStrategy->SetMinPartitionCount(minParts);
-        pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(autoPartitioningSettings.max_active_partitions(), 0L, minParts));
+        pqTabletConfigPartStrategy->SetMaxPartitionCount(IfEqualThenDefault<int64_t>(maxParts, 0L, minParts));
         pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().up_utilization_percent(), 0 ,30));
         pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().down_utilization_percent(), 0, 90));
         pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoPartitioningSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
@@ -226,10 +252,6 @@ TResult ApplyChangesInt( // create and alter
         if (auto r = ValidatePartitionStrategy(*pqTabletConfig); !r) {
             return r;
         }
-    }
-    if (minParts <= 0) {
-        error = TStringBuilder() << "Partitions count must be positive, provided " << settings.partitions_count();
-        return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
     pqDescr->SetTotalGroupCount(minParts);
     pqTabletConfig->SetRequireAuthWrite(true);

@@ -27,6 +27,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/ptr.h>
+
 #include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -54,7 +56,8 @@ private:
     TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-    NActors::TActorId BSControllerPipeClient;
+
+    NActors::TActorId BscProxy;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
@@ -79,7 +82,6 @@ private:
         size_t DirectBlockGroupId = 0;
         ui32 LiveHostCount = 0;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one add-host runs at a time across the whole partition.
@@ -91,7 +93,6 @@ private:
         NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
         NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one remove-host runs at a time; mutually exclusive with
@@ -125,6 +126,15 @@ private:
     STFUNC(StateWork);
     // Remove tablet and wipe disk
     STFUNC(StateDelete);
+
+    // SendData via the BSC proxy actor (created on first use).
+    void SendToBsc(
+        const NActors::TActorContext& ctx,
+        THolder<NActors::IEventBase> request,
+        ui64 cookie = 0);
+
+    // Poison the BSC proxy and drop the id. No-op if it was never created.
+    void StopBscProxy(const NActors::TActorContext& ctx);
 
     // Common handlers in different states
     void HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev);
@@ -167,8 +177,6 @@ private:
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const NActors::TActorContext& ctx);
-
-    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 

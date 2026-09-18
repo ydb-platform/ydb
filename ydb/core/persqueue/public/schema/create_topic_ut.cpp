@@ -1,13 +1,37 @@
 #include "schema_ut_helpers.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ::NSchema {
 
 using namespace NTests;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+namespace {
+
+TNavigate::TEntry NavigateTopic(NActors::TTestActorRuntime& runtime, const TString& path) {
+    auto request = MakeHolder<TNavigate>();
+    request->DatabaseName = "/Root";
+    auto& navEntry = request->ResultSet.emplace_back();
+    navEntry.Path = SplitPath(path);
+    navEntry.Operation = TNavigate::OpTopic;
+    navEntry.SyncVersion = true;
+
+    const auto edge = runtime.AllocateEdgeActor();
+    runtime.Send(MakeSchemeCacheID(), edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+    auto ev = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(TDuration::Seconds(10));
+    UNIT_ASSERT(ev);
+    UNIT_ASSERT(ev->Request);
+    UNIT_ASSERT(!ev->Request->ResultSet.empty());
+    return ev->Request->ResultSet[0];
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(CreateTopic) {
 
@@ -35,6 +59,57 @@ Y_UNIT_TEST(CreateTopicSuccess) {
     UNIT_ASSERT_VALUES_EQUAL(
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(consumer->GetType()),
         NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING));
+}
+
+Y_UNIT_TEST(SchemeCacheFillsTopicNamesFirstClass) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    const TString path = "/Root/topic_scheme_cache_names";
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(path)), Ydb::StatusIds::SUCCESS);
+
+    const auto entry = NavigateTopic(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(entry.Status, TNavigate::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(entry.Kind, TNavigate::KindTopic);
+    UNIT_ASSERT(entry.PQGroupInfo);
+    UNIT_ASSERT(entry.PQGroupInfo->Names);
+
+    const auto& names = *entry.PQGroupInfo->Names;
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), path);
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "topic_scheme_cache_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), path);
+    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "Root/topic_scheme_cache_names");
+}
+
+Y_UNIT_TEST(SchemeCacheFillsTopicNamesFederation) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+    const TString path = "/Root/rt3.dc1--account--sc_names";
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(path)), Ydb::StatusIds::SUCCESS);
+
+    const auto entry = NavigateTopic(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL(entry.Status, TNavigate::EStatus::Ok);
+    UNIT_ASSERT_VALUES_EQUAL(entry.Kind, TNavigate::KindTopic);
+    UNIT_ASSERT(entry.PQGroupInfo);
+    UNIT_ASSERT(entry.PQGroupInfo->Names);
+
+    const auto& names = *entry.PQGroupInfo->Names;
+    UNIT_ASSERT_C(names.IsValid(), names.GetReason());
+    UNIT_ASSERT_VALUES_EQUAL(names.GetPrimaryPath(), path);
+    UNIT_ASSERT_VALUES_EQUAL(names.GetClientsideName(), "rt3.dc1--account--sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.ShortClientsideName, "account--sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetModernName(), "sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetFederationPath(), "account/sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetCluster(), "dc1");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetAccount(), "account");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetInternalName(), "rt3.dc1--account--sc_names");
+    UNIT_ASSERT_VALUES_EQUAL(names.GetTopicForSrcIdHash(), "account--sc_names");
 }
 
 Y_UNIT_TEST(CreateTopicKeepsLiteralDashDashName) {

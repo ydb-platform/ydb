@@ -133,9 +133,15 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
+<<<<<<< HEAD
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+=======
+            // The connection processes one in-flight Kafka request, so at most one EndTxn is pending
+            // while KQP commits. Extra EndTxn on this actor is rejected with CONCURRENT_TRANSACTIONS.
+            TEvKafka::TEvEndTxnRequest::TPtr PendingEndTxnRequest;
+>>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

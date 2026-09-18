@@ -90,7 +90,13 @@ namespace NKafka {
 
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
+<<<<<<< HEAD
             return; // we just ignore second and subsequent requests
+=======
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
+                "Commit already in progress");
+            return;
+>>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
             Die(ctx);
@@ -99,7 +105,11 @@ namespace NKafka {
             Die(ctx);
         } else {
             CommitStarted = true;
+<<<<<<< HEAD
             EndTxnRequestPtr = std::move(ev);
+=======
+            PendingEndTxnRequest = std::move(ev);
+>>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
             StartKqpSession(ctx);
         }
     }
@@ -222,6 +232,33 @@ namespace NKafka {
         TBase::Die(ctx);
     }
 
+<<<<<<< HEAD
+=======
+    void TTransactionActor::ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage) {
+        if (!PendingEndTxnRequest) {
+            return;
+        }
+        if (errorCode == EKafkaErrors::NONE_ERROR) {
+            SendOkResponse<TEndTxnResponseData>(PendingEndTxnRequest);
+        } else {
+            SendFailResponse<TEndTxnResponseData>(PendingEndTxnRequest, errorCode, errorMessage);
+        }
+        PendingEndTxnRequest.Reset();
+    }
+
+    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage, EKafkaErrors errorCode) {
+        ReplyPendingEndTxn(errorCode, errorMessage);
+        ++KqpCookie;
+        if (Kqp) {
+            Kqp->CloseKqpSession(ctx);
+            Kqp.reset();
+        }
+        KqpSessionId = "";
+        LastSentToKqpRequest = EKafkaTxnKqpRequests::NO_REQUEST;
+        CommitStarted = false;
+    }
+
+>>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
     bool TTransactionActor::TxnExpired() {
         return TAppData::TimeProvider->Now().MilliSeconds() - CreatedAt.MilliSeconds() > TxnTimeoutMs;
     }

@@ -618,7 +618,75 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->ProducerState.Epoch, ProducerEpoch);
         }
 
+<<<<<<< HEAD
         Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnBROKER_NOT_AVAILABLE) {
+=======
+        Y_UNIT_TEST(OnDuplicateEndTxnCommitWhileInFlight_shouldReturnCONCURRENT_TRANSACTIONS) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            SendEndTxnRequestAsync(true, 2);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                2,
+                NKafka::EKafkaErrors::CONCURRENT_TRANSACTIONS);
+
+            DummyKqpActor->ReleaseHeldCommit(*Ctx->Runtime);
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(OnPoisonDuringInFlightEndTxnCommit_shouldFencePending) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            SendPoisonPill();
+            AssertEndTxnResponse(
+                Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>(),
+                1,
+                NKafka::EKafkaErrors::PRODUCER_FENCED);
+
+            auto txnActorDiedEvent = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
+            UNIT_ASSERT(txnActorDiedEvent != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(txnActorDiedEvent->TransactionalId, TransactionalId);
+        }
+
+        Y_UNIT_TEST(OnFeatureFlagChangeDuringInFlightEndTxnCommit_shouldFailPendingRetryable) {
+            ui32 endTxnSeen = 0;
+            PrepareHeldCommit(endTxnSeen);
+
+            SendEndTxnRequestAsync(true, 1);
+            WaitUntilCommitHeld();
+
+            const bool currentFlag = Ctx->Runtime->GetAppData().FeatureFlags.GetEnableKafkaServerlessTransactions();
+            SendEndTxnRequestAsync(true, 2, !currentFlag);
+            WaitUntilEndTxnSeen(endTxnSeen, 2);
+
+            THashMap<ui64, NKafka::EKafkaErrors> errorByCorrelationId;
+            for (ui64 i = 0; i < 2; ++i) {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response != nullptr);
+                UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::END_TXN);
+                errorByCorrelationId[response->CorrelationId] = response->ErrorCode;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(errorByCorrelationId.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(errorByCorrelationId.at(1), NKafka::EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(errorByCorrelationId.at(2), NKafka::EKafkaErrors::INVALID_TXN_STATE);
+
+            auto txnActorDiedEvent = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvTransactionActorDied>();
+            UNIT_ASSERT(txnActorDiedEvent != nullptr);
+        }
+
+        Y_UNIT_TEST(OnEndTxnWithCommitAndAbortFromTxn_shouldReturnCOORDINATOR_NOT_AVAILABLE) {
+>>>>>>> 8871745c630 (Fix Kafka produce timeouts and process one request per connection (#53426))
             ui64 correlationId = 987;
             DummyKqpActor->SetCommitResponse(false);
 

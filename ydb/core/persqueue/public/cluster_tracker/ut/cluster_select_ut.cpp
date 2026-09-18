@@ -81,6 +81,21 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
             (TVector<TString>{"myt"}));
     }
 
+    Y_UNIT_TEST(MarkFnxFromBalancers) {
+        TClustersList list;
+        list.Clusters.push_back(MakeCluster("sas", false));
+        list.Clusters.push_back(MakeCluster("myt", false));
+        list.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt", "missing"};
+        list.MarkFnxFromBalancers();
+        UNIT_ASSERT(!list.Clusters[0].IsFnx);
+        UNIT_ASSERT(list.Clusters[1].IsFnx);
+
+        list.Balancers.clear();
+        list.MarkFnxFromBalancers();
+        UNIT_ASSERT(!list.Clusters[0].IsFnx);
+        UNIT_ASSERT(!list.Clusters[1].IsFnx);
+    }
+
     Y_UNIT_TEST(ClustersListEqualityAndDebugString) {
         TClustersList left;
         left.Clusters.push_back(MakeCluster("sas", false));
@@ -130,12 +145,13 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         const TString versions = "/Root/PQ/Config/V2/Versions";
 
         UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains(cluster));
-        UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
+        UNIT_ASSERT(!MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains(balancer));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
-        UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("fnx Bool"));
+        UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));
+        UNIT_ASSERT(!MakeCreateClusterQuery(cluster).Contains("fnx"));
         UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("CREATE TABLE IF NOT EXISTS"));
@@ -147,6 +163,7 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
     Y_UNIT_TEST(IssuesMatchers) {
         UNIT_ASSERT(IssuesLookLikeAlreadyExists("column already exists"));
         UNIT_ASSERT(IssuesLookLikeAlreadyExists("Already exists: fnx"));
+        UNIT_ASSERT(IssuesLookLikeAlreadyExists("Column: \"fnx\" already exists"));
         UNIT_ASSERT(IssuesLookLikeAlreadyExists("duplicate column"));
         UNIT_ASSERT(IssuesLookLikeAlreadyExists("Duplicate table"));
         UNIT_ASSERT(!IssuesLookLikeAlreadyExists("unrelated"));

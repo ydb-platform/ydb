@@ -826,13 +826,12 @@ public:
         const TString& balancer,
         bool local,
         bool enabled,
-        ui64 weight,
-        bool fnx)
+        ui64 weight)
     {
         TStringBuilder query;
-        query << "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight, fnx) VALUES (\""
+        query << "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) VALUES (\""
               << name << "\", \"" << balancer << "\", " << (local ? "true" : "false") << ", "
-              << (enabled ? "true" : "false") << ", " << weight << ", " << (fnx ? "true" : "false") << ");\n"
+              << (enabled ? "true" : "false") << ", " << weight << ");\n"
               << "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
               << "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";";
         RunYqlDataQuery(TString(query));

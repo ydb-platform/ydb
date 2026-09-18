@@ -38,10 +38,8 @@ private:
     enum class EQueryKind {
         None,
         MigrateCreateCluster,
-        MigrateAddFnx,
         MigrateCreateBalancer,
         MigrateCreateVersions,
-        MigrateBackfillFnx,
         ListClusters,
         ListBalancers,
     };
@@ -186,31 +184,34 @@ private:
         Send(NKqp::MakeKqpProxyID(Ctx().SelfID.NodeId()), req.Release());
     }
 
+    void StartListClusters() {
+        QueryInFlight = true;
+        CurrentQuery = EQueryKind::ListClusters;
+        SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
+    }
+
+    void BeginDdl(EQueryKind kind, const TString& query) {
+        QueryInFlight = true;
+        CurrentQuery = kind;
+        SendDdl(query);
+    }
+
     void StartMigrateOrList() {
         if (QueryInFlight) {
             return;
         }
-        QueryInFlight = true;
-        if (!SchemaMigrated) {
-            CurrentQuery = EQueryKind::MigrateCreateCluster;
-            YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: CREATE TABLE Cluster");
-            SendDdl(MakeCreateClusterQuery(Cfg().GetClusterTablePath()));
-        } else {
-            CurrentQuery = EQueryKind::ListClusters;
-            SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
-        }
+        // List first. DDL runs only after ListClusters/ListBalancers see a missing table.
+        StartListClusters();
     }
 
     void HandleWhileWorking(TEvents::TEvWakeup::TPtr&) {
         StartMigrateOrList();
     }
 
-    void FailAndRetry(bool remigrateSchema = true) {
+    void FailAndRetry() {
         QueryInFlight = false;
         CurrentQuery = EQueryKind::None;
-        if (remigrateSchema) {
-            SchemaMigrated = false;
-        }
+        FullSchemaChain = false;
         PendingClustersList = nullptr;
         ClustersList = nullptr;
         Schedule(TDuration::Seconds(Cfg().GetClustersUpdateTimeoutOnErrorSec()), new TEvents::TEvWakeup);
@@ -238,22 +239,8 @@ private:
                     FailAndRetry();
                     return;
                 }
-                QueryInFlight = true;
-                CurrentQuery = EQueryKind::MigrateAddFnx;
-                YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: ALTER ADD COLUMN fnx");
-                SendDdl(MakeAlterAddFnxQuery(Cfg().GetClusterTablePath()));
-                return;
-
-            case EQueryKind::MigrateAddFnx:
-                if (!SchemaChangeOk(success, issues)) {
-                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to ALTER ADD COLUMN fnx",
-                        {"record", record});
-                    FailAndRetry();
-                    return;
-                }
-                QueryInFlight = true;
-                CurrentQuery = EQueryKind::MigrateCreateBalancer;
-                SendDdl(MakeCreateBalancerQuery(GetBalancerTablePath()));
+                YDB_LOG_DEBUG_CTX(Ctx(), "Start schema migrate: CREATE TABLE Balancer");
+                BeginDdl(EQueryKind::MigrateCreateBalancer, MakeCreateBalancerQuery(GetBalancerTablePath()));
                 return;
 
             case EQueryKind::MigrateCreateBalancer:
@@ -263,9 +250,11 @@ private:
                     FailAndRetry();
                     return;
                 }
-                QueryInFlight = true;
-                CurrentQuery = EQueryKind::MigrateCreateVersions;
-                SendDdl(MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                if (FullSchemaChain) {
+                    BeginDdl(EQueryKind::MigrateCreateVersions, MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                    return;
+                }
+                StartListClusters();
                 return;
 
             case EQueryKind::MigrateCreateVersions:
@@ -275,22 +264,8 @@ private:
                     FailAndRetry();
                     return;
                 }
-                QueryInFlight = true;
-                CurrentQuery = EQueryKind::MigrateBackfillFnx;
-                SendDml(MakeBackfillFnxQuery(Cfg().GetClusterTablePath()));
-                return;
-
-            case EQueryKind::MigrateBackfillFnx:
-                if (!success) {
-                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to backfill Cluster.fnx",
-                        {"record", record});
-                    FailAndRetry(IssuesLookLikeMissingColumn(issues) || IssuesLookLikeMissingTable(issues));
-                    return;
-                }
-                SchemaMigrated = true;
-                QueryInFlight = true;
-                CurrentQuery = EQueryKind::ListClusters;
-                SendDml(MakeListClustersQuery(Cfg().GetClusterTablePath(), Cfg().GetVersionTablePath()));
+                FullSchemaChain = false;
+                StartListClusters();
                 return;
 
             case EQueryKind::ListClusters:
@@ -304,17 +279,26 @@ private:
                         return;
                     }
                 }
-                {
-                    const bool remigrate = !success && IssuesLookLikeClusterSchemaGone(issues);
-                    if (remigrate) {
-                        YDB_LOG_ERROR_CTX(Ctx(), "Failed to list clusters, remigrate schema",
-                            {"record", record});
-                    } else {
-                        YDB_LOG_ERROR_CTX(Ctx(), "Failed to list",
-                            {"clusters", record});
-                    }
-                    FailAndRetry(remigrate);
+                if (!success && IssuesLookLikeMissingVersionsTable(issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list clusters, CREATE TABLE Versions",
+                        {"record", record});
+                    ClustersList = nullptr;
+                    ReplyAllGetClustersListRequests(false);
+                    BeginDdl(EQueryKind::MigrateCreateVersions, MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                    return;
                 }
+                if (!success && IssuesLookLikeClusterSchemaGone(issues)) {
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list clusters, CREATE TABLE Cluster",
+                        {"record", record});
+                    ClustersList = nullptr;
+                    ReplyAllGetClustersListRequests(false);
+                    FullSchemaChain = true;
+                    BeginDdl(EQueryKind::MigrateCreateCluster, MakeCreateClusterQuery(Cfg().GetClusterTablePath()));
+                    return;
+                }
+                YDB_LOG_ERROR_CTX(Ctx(), "Failed to list",
+                    {"clusters", record});
+                FailAndRetry();
                 return;
 
             case EQueryKind::ListBalancers:
@@ -323,21 +307,25 @@ private:
                         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
                         UpdateBalancersList(parser);
                     } else if (PendingClustersList) {
+                        RememberBalancers(*PendingClustersList);
                         FinishClustersList(std::move(PendingClustersList));
                     }
                     return;
                 }
                 {
-                    const bool remigrate = IssuesLookLikeClusterSchemaGone(issues);
-                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with empty balancer cache",
+                    const bool missing = IssuesLookLikeClusterSchemaGone(issues);
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with last balancer cache",
                         {"record", record});
-                    if (remigrate) {
-                        SchemaMigrated = false;
-                    }
                     if (PendingClustersList) {
+                        PendingClustersList->BalancerVersion = LastBalancerVersion;
+                        PendingClustersList->Balancers = LastBalancers;
                         FinishClustersList(std::move(PendingClustersList));
                     } else {
-                        FailAndRetry(remigrate);
+                        FailAndRetry();
+                        return;
+                    }
+                    if (missing) {
+                        BeginDdl(EQueryKind::MigrateCreateBalancer, MakeCreateBalancerQuery(GetBalancerTablePath()));
                     }
                 }
                 return;
@@ -353,6 +341,7 @@ private:
         AFL_ENSURE(clustersList);
         AFL_ENSURE(clustersList->Clusters.size());
         clustersList->Version = clustersList->ClusterVersion + clustersList->BalancerVersion;
+        clustersList->MarkFnxFromBalancers();
         clustersList->BuildVisibleClusters();
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();
@@ -371,7 +360,7 @@ private:
 
         bool firstRow = parser.TryNextRow();
         YQL_ENSURE(firstRow);
-        clustersList->ClusterVersion = parser.ColumnParser(6).GetOptionalInt64().value_or(0);
+        clustersList->ClusterVersion = parser.ColumnParser(5).GetOptionalInt64().value_or(0);
         size_t i = 0;
 
         do {
@@ -384,7 +373,7 @@ private:
             cluster.IsLocal = parser.ColumnParser(2).GetOptionalBool().value_or(false);
             cluster.IsEnabled = parser.ColumnParser(3).GetOptionalBool().value_or(false);
             cluster.Weight = parser.ColumnParser(4).GetOptionalUint64().value_or(1000);
-            cluster.IsFnx = parser.ColumnParser(5).GetOptionalBool().value_or(false);
+            cluster.IsFnx = false;
 
             ++i;
         } while (parser.TryNextRow());
@@ -413,7 +402,13 @@ private:
                 parser.ColumnParser(2).GetOptionalInt64().value_or(0));
         }
 
+        RememberBalancers(*clustersList);
         FinishClustersList(std::move(clustersList));
+    }
+
+    void RememberBalancers(const TClustersList& clustersList) {
+        LastBalancerVersion = clustersList.BalancerVersion;
+        LastBalancers = clustersList.Balancers;
     }
 
 private:
@@ -425,9 +420,11 @@ private:
     TVector<TActorId> GetClustersListRequests;
     TString Database;
 
-    bool SchemaMigrated = false;
+    bool FullSchemaChain = false;
     bool QueryInFlight = false;
     EQueryKind CurrentQuery = EQueryKind::None;
+    i64 LastBalancerVersion = 0;
+    absl::flat_hash_map<TString, TVector<TString>> LastBalancers;
 };
 
 NActors::IActor* CreateClusterTracker() {

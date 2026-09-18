@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """Compatibility tests for Cluster Discovery on an old PQ Cluster schema.
 
-New ydbd auto-migrates Cluster.fnx and creates Balancer. DiscoverClusters must
-stay SUCCESS while rolling or restarting onto that binary, and must not leak
-FNX names before a Balancer row exists.
+New ydbd creates Balancer if missing and must not ALTER Cluster: CM DestPrepare
+CREATE TABLE Cluster matches the historical schema. DiscoverClusters stays
+SUCCESS while rolling or restarting onto that binary. FNX names stay hidden
+until a Balancer row lists them.
 """
 import logging
 import time
@@ -140,20 +141,19 @@ def seed_legacy_cluster_schema(driver):
         )
 
 
-def schema_has_fnx_and_balancer(driver, timeout_seconds=120):
+def schema_has_balancer(driver, timeout_seconds=120):
     deadline = time.time() + timeout_seconds
     last_error = None
     while time.time() < deadline:
         try:
             with ydb.QuerySessionPool(driver) as session_pool:
-                session_pool.execute_with_retries(f"SELECT fnx FROM `{CLUSTER_TABLE}` LIMIT 1;")
                 session_pool.execute_with_retries(f"SELECT name, clusters FROM `{BALANCER_TABLE}`;")
             return
         except Exception as exc:
             last_error = repr(exc)
-            logger.warning("Waiting for Cluster.fnx / Balancer migration: %s", last_error)
+            logger.warning("Waiting for Balancer table: %s", last_error)
             time.sleep(2)
-    raise AssertionError("Cluster.fnx / Balancer were not migrated: %s" % last_error)
+    raise AssertionError("Balancer table was not created: %s" % last_error)
 
 
 class TestClusterDiscoveryRolling(RollingUpgradeAndDowngradeFixture):
@@ -182,7 +182,7 @@ class TestClusterDiscoveryRestart(RestartToAnotherVersionFixture):
         result = discover_clusters(self.endpoint)
         assert_seeded_clusters(result)
 
-        # Cluster.fnx / Balancer are added only by this change's ydbd.
+        # Balancer is created only by this change's ydbd.
         # YDB_COMPAT_TARGET_REF defaults to a downloaded prestable, whose
         # name is not "current". Assert the auto-migration when the running
         # binary is the locally built one (YDB_COMPAT_TARGET_REF=current).
@@ -190,4 +190,4 @@ class TestClusterDiscoveryRestart(RestartToAnotherVersionFixture):
             current_name == "current"
             and self.all_binary_paths[self.current_binary_paths_index] == current_binary_path
         ):
-            schema_has_fnx_and_balancer(self.driver)
+            schema_has_balancer(self.driver)

@@ -40,6 +40,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TString DebugString() const;
 
     const TVector<TCluster>& GetClusters(TStringBuf authority) const;
+    void MarkFnxFromBalancers();
     void BuildVisibleClusters();
 
     TVector<TCluster> Clusters;

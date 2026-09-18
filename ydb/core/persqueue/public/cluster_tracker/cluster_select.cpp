@@ -92,7 +92,7 @@ TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTab
     return Sprintf(
         R"(
                --!syntax_v1
-               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, C.fnx, V.version FROM `%s` AS C
+               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, V.version FROM `%s` AS C
                CROSS JOIN
                (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
             )", TString(clusterTablePath).c_str(), TString(versionTablePath).c_str());
@@ -109,6 +109,9 @@ TString MakeListBalancersQuery(TStringBuf balancerTablePath, TStringBuf versionT
 }
 
 TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
+    // Match federation_recipe / CM Cluster schema, including kikimrHost.
+    // Do not add extra columns (fnx): DestPrepare CREATE TABLE then fails with
+    // "Table name conflict". FNX is taken from Balancer.clusters.
     return Sprintf(
         R"(
                --!syntax_v1
@@ -119,11 +122,11 @@ TString MakeCreateClusterQuery(TStringBuf clusterTablePath) {
                    balancer Utf8,
                    weight Uint64,
                    advisable Bool,
+                   kikimrHost Utf8,
                    kikimrMessageBusMaxInFlight Int32,
                    kikimrMessageBusMaxMessageSize Int64,
                    kikimrPort Int32,
                    zookeeperAddress Utf8,
-                   fnx Bool,
                    PRIMARY KEY (name)
                );
             )", TString(clusterTablePath).c_str());
@@ -172,6 +175,7 @@ TString MakeBackfillFnxQuery(TStringBuf clusterTablePath) {
 bool IssuesLookLikeAlreadyExists(TStringBuf issues) {
     return issues.Contains("already exists")
         || issues.Contains("Already exists")
+        || issues.Contains("already exist")
         || issues.Contains("duplicate")
         || issues.Contains("Duplicate");
 }

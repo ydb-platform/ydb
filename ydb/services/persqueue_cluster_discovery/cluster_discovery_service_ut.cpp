@@ -832,10 +832,13 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         for (size_t i = 0; i < 40; ++i) {
             auto clusterTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, balancer, local, enabled, weight, fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+                "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;");
             auto versionsTable = server.PQClient().TryRunYqlDataQuery(
                 "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
             if (clusterTable.Defined() && versionsTable.Defined()) {
+                auto kikimrHost = server.PQClient().TryRunYqlDataQuery(
+                    "SELECT kikimrHost FROM `/Root/PQ/Config/V2/Cluster`;");
+                UNIT_ASSERT(kikimrHost.Defined());
                 UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
 
                 server.PQClient().InitDCs();
@@ -862,8 +865,10 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.PQClient().InitDCs();
         server.WaitUntilHealthy();
 
-        auto fnxColumn = server.PQClient().RunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
-        UNIT_ASSERT(fnxColumn.Defined());
+        auto clusterTable = server.PQClient().RunYqlDataQuery("SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;");
+        UNIT_ASSERT(clusterTable.Defined());
+        auto fnxColumn = server.PQClient().TryRunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+        UNIT_ASSERT(!fnxColumn.Defined());
         auto balancerTable = server.PQClient().RunYqlDataQuery("SELECT name, clusters FROM `/Root/PQ/Config/V2/Balancer`;");
         UNIT_ASSERT(balancerTable.Defined());
 
@@ -906,7 +911,6 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
                 local Bool,
                 enabled Bool,
                 weight Uint64,
-                fnx Bool,
                 PRIMARY KEY (name)
             );
             CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Balancer` (
@@ -921,9 +925,9 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             );
         )___");
         server.PQClient().RunYqlDataQuery(R"___(
-            UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight, fnx) VALUES
-                ("dc1", "localhost", true, true, 1000, false),
-                ("dc2", "dc2.logbroker.yandex.net", false, true, 1000, false);
+            UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) VALUES
+                ("dc1", "localhost", true, true, 1000),
+                ("dc2", "dc2.logbroker.yandex.net", false, true, 1000);
             UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Cluster", 1), ("Topics", 0);
         )___");
 
@@ -949,19 +953,26 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
 
-        server.PQClient().UpsertCluster("myt", "myt.logbroker.yandex.net", false, true, 1000, true);
+        server.PQClient().UpsertCluster("myt", "myt.logbroker.yandex.net", false, true, 1000);
         wrapper.WaitForExactClustersDataVersion(2);
 
         auto assertOrdinaryOnly = [&](const TString& authority) {
             DiscoverClustersResult result;
             UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result, authority), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                ReadClusterNames(result),
+                (TVector<TString>{"dc1", "dc2"}),
+                TStringBuilder() << "authority=" << authority << " version=" << result.version());
+        };
+        auto assertWithMyt = [&](const TString& authority) {
+            DiscoverClustersResult result;
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result, authority), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
         };
 
-        assertOrdinaryOnly({});
-        assertOrdinaryOnly("localhost");
-        assertOrdinaryOnly("sas.logbroker.yandex.net");
-        assertOrdinaryOnly("logbroker.yandex.net");
+        // Until a Balancer row lists myt, it stays an ordinary cluster.
+        assertWithMyt({});
+        assertWithMyt("localhost");
 
         {
             DiscoverClustersRequest request;
@@ -970,20 +981,16 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             writeSessionParams->set_source_id("topic1.log");
             writeSessionParams->set_preferred_cluster_name("myt");
             DiscoverClustersResult result;
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(request, result), Ydb::StatusIds::SUCCESS);
         }
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(3);
 
-        assertOrdinaryOnly({});
         assertOrdinaryOnly("logbroker.yandex.net");
-
-        auto assertWithMyt = [&](const TString& authority) {
-            DiscoverClustersResult result;
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result, authority), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2", "myt"}));
-        };
+        assertOrdinaryOnly("localhost");
+        assertOrdinaryOnly("sas.logbroker.yandex.net");
+        assertOrdinaryOnly({});
 
         assertWithMyt("logbroker-fnx.yandex.net");
         assertWithMyt("LOGBROKER-FNX.YANDEX.NET:2135");
@@ -1003,11 +1010,14 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "", 2);
         wrapper.WaitForExactClustersDataVersion(4);
-        assertOrdinaryOnly("logbroker-fnx.yandex.net");
+        // Empty CSV: myt is no longer FNX and is visible for every host.
+        assertWithMyt("logbroker-fnx.yandex.net");
+        assertWithMyt({});
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt,missing", 3);
         wrapper.WaitForExactClustersDataVersion(5);
         assertWithMyt("logbroker-fnx.yandex.net");
+        assertOrdinaryOnly({});
     }
 
     Y_UNIT_TEST(TestGetClustersListWhileTrackerIsWaiting) {
@@ -1094,7 +1104,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
     }
 
-    Y_UNIT_TEST(TestTrackerRemigratesAfterDroppingFnxColumn) {
+    Y_UNIT_TEST(TestTrackerDoesNotAlterClusterSchema) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");
         server.Run();
@@ -1103,20 +1113,15 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.PQClient().InitDCs();
         server.WaitUntilHealthy();
 
-        server.PQClient().RunYqlSchemeQuery("ALTER TABLE `/Root/PQ/Config/V2/Cluster` DROP COLUMN fnx;");
+        auto fnxColumn = server.PQClient().TryRunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+        UNIT_ASSERT(!fnxColumn.Defined());
+        auto kikimrHost = server.PQClient().TryRunYqlDataQuery("SELECT kikimrHost FROM `/Root/PQ/Config/V2/Cluster`;");
+        UNIT_ASSERT(!kikimrHost.Defined());
 
-        for (size_t i = 0; i < 40; ++i) {
-            auto fnxColumn = server.PQClient().TryRunYqlDataQuery("SELECT fnx FROM `/Root/PQ/Config/V2/Cluster`;");
-            if (fnxColumn.Defined()) {
-                TFancyGRpcWrapper wrapper(server.GrpcPort());
-                DiscoverClustersResult result;
-                UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
-                UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_FAIL("Cluster.fnx was not recreated after DROP COLUMN");
+        TFancyGRpcWrapper wrapper(server.GrpcPort());
+        DiscoverClustersResult result;
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), result), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(ReadClusterNames(result), (TVector<TString>{"dc1", "dc2"}));
     }
 
     Y_UNIT_TEST(TestTrackerRecreatesDroppedBalancerTable) {
@@ -1131,6 +1136,14 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
 
+        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
+        wrapper.WaitForExactClustersDataVersion(2);
+
+        DiscoverClustersResult beforeDrop;
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.PerformRpc(AllOriginalRequest(), beforeDrop), Ydb::StatusIds::SUCCESS);
+        const i64 versionBeforeDrop = beforeDrop.version();
+        UNIT_ASSERT(versionBeforeDrop >= 2);
+
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Balancer`;");
 
         for (size_t i = 0; i < 40; ++i) {
@@ -1142,6 +1155,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
             if (balancerTable.Defined()) {
                 return;
             }
+            UNIT_ASSERT(result.version() >= versionBeforeDrop);
             wrapper.Wait();
         }
         UNIT_FAIL("Balancer table was not recreated");
@@ -1160,7 +1174,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         for (size_t i = 0; i < 40; ++i) {
             auto clusterTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, balancer, local, enabled, weight, fnx FROM `/Root/PQ/Config/V2/Cluster`;");
+                "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;");
             if (clusterTable.Defined()) {
                 UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
                 return;
@@ -1205,9 +1219,8 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
 
-        server.PQClient().UpsertCluster("dc1", "localhost", true, true, 1000, true);
-        server.PQClient().UpsertCluster("dc2", "dc2.logbroker.yandex.net", false, true, 1000, true);
-        wrapper.WaitForExactClustersDataVersion(3);
+        server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "dc1,dc2", 1);
+        wrapper.WaitForExactClustersDataVersion(2);
 
         {
             DiscoverClustersResult result;

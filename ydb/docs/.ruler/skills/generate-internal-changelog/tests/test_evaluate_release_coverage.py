@@ -185,6 +185,26 @@ def valid_ru():
 """
 
 
+def valid_downloads():
+    return """# Downloads
+
+## Linux
+
+|| **v26.3** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16/ydbd-26.3.1.16-linux-amd64.tar.gz) | [See list](../changelog-server.md#26-3-rc) ||
+
+## Docker
+
+|| **v26.3** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16` | [See list](../changelog-server.md#26-3-rc) ||
+
+## Source Code
+
+|| **v26.3** | > | > | > ||
+|| v.26.3.1.16 | 18.09.26 | [Source code](https://github.com/ydb-platform/ydb/tree/26.3.1.16) | [See list](../changelog-server.md#26-3-rc) ||
+"""
+
+
 class CoverageEvalTest(unittest.TestCase):
     def test_accepts_union_coverage_with_a_reasoned_exclusion(self):
         manifest = valid_manifest()
@@ -246,6 +266,8 @@ class CoverageEvalTest(unittest.TestCase):
                 "tracker": root / "tracker.json",
                 "en": root / "en.md",
                 "ru": root / "ru.md",
+                "en_downloads": root / "en-downloads.md",
+                "ru_downloads": root / "ru-downloads.md",
             }
             paths["manifest"].write_text(json.dumps(manifest), encoding="utf-8")
             paths["tracker"].write_text(
@@ -253,6 +275,8 @@ class CoverageEvalTest(unittest.TestCase):
             )
             paths["en"].write_text(valid_en(), encoding="utf-8")
             paths["ru"].write_text(valid_ru(), encoding="utf-8")
+            paths["en_downloads"].write_text(valid_downloads(), encoding="utf-8")
+            paths["ru_downloads"].write_text(valid_downloads(), encoding="utf-8")
 
             completed = subprocess.run(
                 [
@@ -266,6 +290,10 @@ class CoverageEvalTest(unittest.TestCase):
                     str(paths["en"]),
                     "--ru",
                     str(paths["ru"]),
+                    "--en-downloads",
+                    str(paths["en_downloads"]),
+                    "--ru-downloads",
+                    str(paths["ru_downloads"]),
                 ],
                 check=False,
                 capture_output=True,
@@ -282,6 +310,19 @@ class CoverageEvalTest(unittest.TestCase):
             },
             json.loads(completed.stdout),
         )
+
+    def test_rejects_missing_rc_download_artifact(self):
+        errors = coverage_eval._check_downloads(
+            valid_downloads().replace(
+                "cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16", ""
+            ),
+            "26.3.1.16",
+            "26.3",
+            "26-3-rc",
+            "en",
+        )
+
+        self.assertTrue(any("Docker image" in error for error in errors))
 
     def test_accepts_exact_bilingual_bijection_and_rendered_files(self):
         errors = coverage_eval.evaluate(

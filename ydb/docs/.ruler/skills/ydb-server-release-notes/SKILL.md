@@ -45,9 +45,9 @@ Use this skill for public server release notes. Use
 ## RC and final release shape
 
 An RC uses `Version X.Y RC` / `Версия X.Y RC` and anchor `x-y-rc`. Do not show
-its patch tag as the documentation version. A final server release normally
-changes four files: RU and EN changelogs plus RU and EN downloads tables. An
-internal RC may explicitly limit its diff to the two changelog files.
+its patch tag as the documentation version. Every server release-notes PR,
+including an internal RC, changes four files: RU and EN changelogs plus RU and
+EN downloads tables.
 
 Open the original PR against `main`. Only after it merges, create focused
 backports containing no later cleanup or translation changes. Verify CI and

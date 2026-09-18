@@ -146,6 +146,33 @@ def _check_links(note: dict[str, Any], docs_version: str, errors: list[str]) -> 
         errors.append(f"{ticket}: EN and RU link targets differ")
 
 
+def _check_downloads(
+    text: str, release_tag: str, docs_version: str, slug: str, locale: str
+) -> list[str]:
+    """Check the three public artifact rows for an internal RC release."""
+    label = locale.upper()
+    binary = (
+        "https://storage.yandexcloud.net/binaries.ydb.tech/release/"
+        f"{release_tag}/ydbd-{release_tag}-linux-amd64.tar.gz"
+    )
+    docker = f"cr.yandex/crptqonuodf51kdj7a7d/ydb:{release_tag}"
+    source = f"https://github.com/ydb-platform/ydb/tree/{release_tag}"
+    changelog = f"../changelog-server.md#{slug}"
+    expected = {
+        f"|| **v{docs_version}** | > | > | > ||": "version group",
+        f"|| v.{release_tag} |": "release row",
+        binary: "Linux archive",
+        docker: "Docker image",
+        source: "source tag",
+        changelog: "RC changelog anchor",
+    }
+    return [
+        f"{label} downloads missing {description}: {value}"
+        for value, description in expected.items()
+        if value not in text
+    ]
+
+
 def _derive_filter_keys(
     field_key: str,
     field_export: dict[str, Any],
@@ -395,6 +422,8 @@ def main() -> int:
     parser.add_argument("--tracker-export", required=True, type=Path)
     parser.add_argument("--en", required=True, type=Path)
     parser.add_argument("--ru", required=True, type=Path)
+    parser.add_argument("--en-downloads", required=True, type=Path)
+    parser.add_argument("--ru-downloads", required=True, type=Path)
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
@@ -405,6 +434,31 @@ def main() -> int:
         args.en.read_text(encoding="utf-8"),
         args.ru.read_text(encoding="utf-8"),
     )
+    release_tag = manifest.get("release_tag", "")
+    version_match = re.fullmatch(
+        r"v?([0-9]+)\.([0-9]+)\.[0-9]+\.[0-9]+", release_tag
+    )
+    if version_match:
+        docs_version = f"{version_match.group(1)}.{version_match.group(2)}"
+        slug = f"{version_match.group(1)}-{version_match.group(2)}-rc"
+        errors.extend(
+            _check_downloads(
+                args.en_downloads.read_text(encoding="utf-8"),
+                release_tag,
+                docs_version,
+                slug,
+                "en",
+            )
+        )
+        errors.extend(
+            _check_downloads(
+                args.ru_downloads.read_text(encoding="utf-8"),
+                release_tag,
+                docs_version,
+                slug,
+                "ru",
+            )
+        )
     if errors:
         print(json.dumps({"status": "fail", "errors": errors}, ensure_ascii=False, indent=2))
         return 1

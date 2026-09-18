@@ -85,7 +85,9 @@
         "Создаёт исходный PR против main, а не stable-26-3 или stable-26-3-1",
         "Сначала помещает default-on bullets, затем opt-in bullets под Disabled functionality / Отключенная функциональность без имён и значений флагов",
         "Для эквивалентной документации только в main использует ?version=main и перечисляет fallback в таблице handoff",
-        "Не использует implementation PR как fallback для документации и оставляет bullet без ссылки, если документации нет нигде"
+        "Не использует implementation PR как fallback для документации и оставляет bullet без ссылки, если документации нет нигде",
+        "Меняет ровно четыре release-файла: оба changelog и обе downloads-таблицы, добавляя строки Linux, Docker и Source Code для 26.3.1.16 с anchor 26-3-rc",
+        "Проверяет доступность Linux-архива, Docker manifest и source tag до создания PR"
       ],
       "covers": "RC tag boundary, public RC naming, default-state grouping and documentation fallback"
     }

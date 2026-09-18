@@ -43,8 +43,12 @@ This workflow changes only:
 
 - `ydb/docs/en/core/changelog-server.md`
 - `ydb/docs/ru/core/changelog-server.md`
+- `ydb/docs/en/core/downloads/ydb-open-source-database.md`
+- `ydb/docs/ru/core/downloads/ydb-open-source-database.md`
 
-Do not update downloads tables. Do not publish a Bug Fixes section.
+Do not publish a Bug Fixes section. In both downloads files, add the exact RC
+row to Linux, Docker, and Source Code tables above the preceding release line.
+The changelog link must use the RC anchor.
 
 ## 1. Resolve the RC boundary
 
@@ -327,14 +331,17 @@ python3 <skill-directory>/scripts/evaluate_release_coverage.py \
   --manifest <temporary-manifest.json> \
   --tracker-export <temporary-tracker-export.json> \
   --en ydb/docs/en/core/changelog-server.md \
-  --ru ydb/docs/ru/core/changelog-server.md
+  --ru ydb/docs/ru/core/changelog-server.md \
+  --en-downloads ydb/docs/en/core/downloads/ydb-open-source-database.md \
+  --ru-downloads ydb/docs/ru/core/downloads/ydb-open-source-database.md
 ```
 
 The evaluator derives `expected_feature_keys` from the union of both complete
 Tracker exports; it never trusts a denominator declared by the manifest. It
 checks both live totals, filters, pagination, exact ticket accounting, links,
-absence of patch and bug subsections, and exact ordered top-level bullets in
-both Markdown sections.
+absence of patch and bug subsections, exact ordered top-level bullets in both
+Markdown sections, and the Linux, Docker, Source Code, and RC-anchor targets in
+both downloads files.
 This is a structural coverage gate, not a semantic oracle: because public
 Markdown does not expose internal ticket keys, the evidence-table review must
 still verify that each manifest row accurately describes its named ticket and
@@ -364,7 +371,11 @@ Before committing, verify:
   flag name or activation value;
 - every feature link is versioned documentation, an audited `main` fallback,
   or deliberately absent, never an implementation PR fallback;
-- the diff contains only the two changelog files;
+- the diff contains exactly four release files: RU/EN changelogs and RU/EN
+  downloads tables;
+- Linux archive, Docker manifest, and source tag are independently verified;
+- every downloads table has the exact RC version, date, artifact coordinate,
+  and RC changelog anchor in both locales;
 - documentation build and link/style checks pass.
 
 Commit and push only the isolated branch. For mutations in `ydb-platform/ydb`,

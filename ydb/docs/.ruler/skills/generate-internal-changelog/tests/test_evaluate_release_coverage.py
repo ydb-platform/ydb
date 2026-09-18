@@ -22,12 +22,16 @@ def valid_manifest():
             {
                 "ticket_key": "YDBFEATURES-10",
                 "availability": "default",
+                "usefulness": "high",
+                "usefulness_rationale": "Improves a common user workflow.",
                 "en": "[Feature A](./a.md?version=v26.3) is available.",
                 "ru": "Доступна [функция A](./a.md?version=v26.3).",
             },
             {
                 "ticket_key": "YDBFEATURES-11",
                 "availability": "opt-in",
+                "usefulness": "medium",
+                "usefulness_rationale": "Improves a specialized workflow.",
                 "en": "[Feature B](./b.md?version=main) is available.",
                 "ru": "Доступна [функция B](./b.md?version=main).",
             },
@@ -392,6 +396,18 @@ class CoverageEvalTest(unittest.TestCase):
 
         self.assertTrue(any("unaccounted ticket keys: YDBFEATURES-11" in e for e in errors))
         self.assertTrue(any("extra ticket keys: YDBFEATURES-12" in e for e in errors))
+
+    def test_rejects_features_not_ordered_by_usefulness(self):
+        manifest = valid_manifest()
+        manifest["notes"][0]["usefulness"] = "low"
+        manifest["notes"][1]["availability"] = "default"
+        manifest["notes"][1]["usefulness"] = "high"
+
+        errors = coverage_eval.evaluate(
+            manifest, valid_tracker_export(), valid_en(), valid_ru()
+        )
+
+        self.assertTrue(any("default features are not ordered by usefulness" in e for e in errors))
 
     def test_rejects_manifest_that_does_not_match_markdown(self):
         en = valid_en().replace(

@@ -203,6 +203,17 @@ An excluded ticket does not block the release notes when the evidence supports
 one of these reasons. It does block the eval if it is omitted silently, appears
 both as a note and an exclusion, or has an empty or unsupported reason.
 
+Before writing, rank every published feature by its user usefulness. This is a
+model judgment grounded in the audited user impact, not a PR-title or code-size
+heuristic. Use `high` for broadly useful, material capabilities in common user
+workflows; `medium` for a clear benefit to a substantial but narrower audience;
+and `low` for specialist, administrative, connector-specific, or incremental
+capabilities. Record a concise evidence-based rationale for each choice. Within
+each default-state group, publish `high`, then `medium`, then `low`; retain
+default-enabled features before opt-in features. RU and EN must use the same
+order. Do not rank by implementation complexity, author, PR date, or marketing
+language.
+
 ## 6. Write RU and EN release notes
 
 Use the ticket's `Changelog entry` and user impact as the wording seed. Use the
@@ -231,7 +242,7 @@ Release date: TBD.
 
 Do not add a `26.3.1.16` subsection. Do not invent a date. Put
 `publish-default` bullets under `Functionality` / `Функциональность`, in the
-same audited order in both locales. Then use `Disabled functionality` /
+same usefulness order in both locales. Then use `Disabled functionality` /
 `Отключенная функциональность` for `publish-opt-in` bullets. Put this one
 introductory sentence immediately under the heading: `The following
 functionality is not enabled by default.` / `Перечисленная ниже
@@ -283,7 +294,7 @@ candidate. It does not declare its own Tracker denominator:
   "release_tag": "26.3.1.16",
   "release_line": "26.3 RC",
   "notes": [
-    {"ticket_key": "YDBFEATURES-...", "availability": "default", "en": "...", "ru": "..."}
+    {"ticket_key": "YDBFEATURES-...", "availability": "default", "usefulness": "high", "usefulness_rationale": "Broadly improves a common workflow.", "en": "...", "ru": "..."}
   ],
   "exclusions": [
     {
@@ -307,6 +318,8 @@ count(unique(exclusions.ticket_key)) == exclusion_count
 set(notes.ticket_key) intersection set(exclusions.ticket_key) == empty
 set(notes.ticket_key) union set(exclusions.ticket_key) == set(expected_feature_keys)
 every note has non-empty EN and RU text
+every note has usefulness high, medium, or low and a non-empty rationale
+within each availability group, notes are ordered high, medium, low
 every exclusion has an allowed reason_code and non-empty reason
 ```
 
@@ -370,6 +383,8 @@ Before committing, verify:
 - headings and anchors contain `26.3 RC` and `26-3-rc`, never `26.3.1.16`;
 - every `publish-opt-in` item is after default-enabled items and has no public
   flag name or activation value;
+- within each availability group, feature bullets are ordered by the documented
+  model usefulness judgment from high to low;
 - every feature link is versioned documentation, an audited `main` fallback,
   or deliberately absent, never an implementation PR fallback;
 - the diff contains exactly four release files: RU/EN changelogs and RU/EN

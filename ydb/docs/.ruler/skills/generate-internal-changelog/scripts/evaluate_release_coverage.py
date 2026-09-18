@@ -27,6 +27,7 @@ DISABLED_INTROS = {
     "en": "The following functionality is not enabled by default.",
     "ru": "Перечисленная ниже функциональность не включена по умолчанию.",
 }
+USEFULNESS_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
 def _normalize_block(value: str) -> str:
@@ -353,6 +354,14 @@ def evaluate(
         availability = note.get("availability")
         if availability not in {"default", "opt-in"}:
             errors.append(f"{ticket or f'note {index}'}: invalid availability")
+        usefulness = note.get("usefulness")
+        if usefulness not in USEFULNESS_ORDER:
+            errors.append(f"{ticket or f'note {index}'}: invalid usefulness")
+        rationale = note.get("usefulness_rationale")
+        if not isinstance(rationale, str) or not rationale.strip():
+            errors.append(
+                f"{ticket or f'note {index}'}: usefulness rationale is empty"
+            )
         _check_links(note, docs_version, errors)
 
     duplicates = sorted(key for key, count in Counter(note_keys).items() if count > 1)
@@ -362,6 +371,16 @@ def evaluate(
     availability = [note.get("availability") for note in notes if isinstance(note, dict)]
     if "opt-in" in availability and "default" in availability[availability.index("opt-in") :]:
         errors.append("default availability appears after opt-in availability")
+    for state in ("default", "opt-in"):
+        usefulness = [
+            USEFULNESS_ORDER[note["usefulness"]]
+            for note in notes
+            if isinstance(note, dict)
+            and note.get("availability") == state
+            and note.get("usefulness") in USEFULNESS_ORDER
+        ]
+        if usefulness != sorted(usefulness):
+            errors.append(f"{state} features are not ordered by usefulness")
 
     exclusions = manifest.get("exclusions", [])
     if not isinstance(exclusions, list):

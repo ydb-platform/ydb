@@ -486,7 +486,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
-    if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
+    if (EQPlayerMode::Replay != QPlayerMode && ProgramFile.empty()) {
         throw yexception() << "Either program or replay option should be specified";
     }
     if (GatewaysPatch && EQPlayerMode::Replay != QPlayerMode) {

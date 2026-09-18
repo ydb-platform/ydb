@@ -65,6 +65,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<ui32> TouchedVChunkIndices;
     TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
@@ -102,6 +103,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .Proto = std::move(state),
             .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
+    }
+
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override
+    {
+        TouchedVChunkIndices.push_back(vChunkIndex);
+        auto promise = NThreading::NewPromise<EPersistResult>();
+        promise.SetValue(EPersistResult::Success);
+        return promise.GetFuture();
     }
 
     void QueryAddHost(

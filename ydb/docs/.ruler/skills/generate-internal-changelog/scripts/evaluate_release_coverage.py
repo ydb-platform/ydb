@@ -23,6 +23,10 @@ EXCLUSION_REASON_CODES = {
     "bug-only",
     "already-released",
 }
+DISABLED_INTROS = {
+    "en": "The following functionality is not enabled by default.",
+    "ru": "Перечисленная ниже функциональность не включена по умолчанию.",
+}
 
 
 def _normalize_block(value: str) -> str:
@@ -31,9 +35,8 @@ def _normalize_block(value: str) -> str:
 
 
 def _extract_release_bullets(
-    text: str, release_line: str, locale: str, errors: list[str]
-) -> list[str]:
-    slug = release_line.replace(".", "-")
+    text: str, release_line: str, slug: str, locale: str, errors: list[str]
+) -> list[tuple[str, str]]:
     if locale == "en":
         release_heading = rf"^## Version {re.escape(release_line)} \{{#{slug}\}}\s*$"
         functionality_heading = r"^### Functionality\s*$"
@@ -64,9 +67,19 @@ def _extract_release_bullets(
     if re.search(bug_heading, section, re.MULTILINE):
         raise ValueError(f"{locale.upper()} release section contains a bug-fix subsection")
 
+    disabled_title = "Disabled functionality" if locale == "en" else "Отключенная функциональность"
     subsections = re.findall(r"^(#{3,})\s+(.+?)\s*$", section, re.MULTILINE)
-    if subsections != [("###", functionality_title)]:
+    allowed_subsections = [("###", functionality_title), ("###", disabled_title)]
+    if subsections not in ([("###", functionality_title)], allowed_subsections):
         errors.append(f"{locale.upper()} release section has unexpected subsections")
+
+    disabled_match = re.search(rf"^### {re.escape(disabled_title)}\s*$", section, re.MULTILINE)
+    if disabled_match:
+        disabled_body = section[disabled_match.end() :]
+        first_bullet = re.search(r"^(?:[*+-]|[0-9]+[.)])\s+", disabled_body, re.MULTILINE)
+        intro = disabled_body[: first_bullet.start()].strip() if first_bullet else ""
+        if intro != DISABLED_INTROS[locale]:
+            errors.append(f"{locale.upper()} disabled functionality intro is missing or incorrect")
 
     functionality_match = re.search(functionality_heading, section, re.MULTILINE)
     if not functionality_match:
@@ -79,19 +92,22 @@ def _extract_release_bullets(
         )
 
     body = section[functionality_match.end() :]
-    bullets: list[str] = []
+    bullets: list[tuple[str, str]] = []
     current: list[str] | None = None
+    availability = "default"
     reported_non_asterisk = False
     for line in body.splitlines():
         if re.match(r"^#+\s+", line):
             if current is not None:
-                bullets.append(_normalize_block("\n".join(current)))
+                bullets.append((_normalize_block("\n".join(current)), availability))
                 current = None
+            if re.fullmatch(rf"### {re.escape(disabled_title)}", line):
+                availability = "opt-in"
             continue
         bullet_match = re.match(r"^([*+-]|[0-9]+[.)])\s+(.*)$", line)
         if bullet_match:
             if current is not None:
-                bullets.append(_normalize_block("\n".join(current)))
+                bullets.append((_normalize_block("\n".join(current)), availability))
             if bullet_match.group(1) != "*" and not reported_non_asterisk:
                 errors.append(
                     f"{locale.upper()} release section uses a non-asterisk bullet"
@@ -101,27 +117,30 @@ def _extract_release_bullets(
         elif current is not None:
             current.append(line)
     if current is not None:
-        bullets.append(_normalize_block("\n".join(current)))
+        bullets.append((_normalize_block("\n".join(current)), availability))
     return bullets
 
 
-def _check_links(note: dict[str, Any], release_line: str, errors: list[str]) -> None:
+def _check_links(note: dict[str, Any], docs_version: str, errors: list[str]) -> None:
     ticket = note.get("ticket_key", "<missing>")
     locale_links: dict[str, list[str]] = {}
     for locale in ("en", "ru"):
         text = note.get(locale, "")
         links = LINK_RE.findall(text) if isinstance(text, str) else []
         locale_links[locale] = links
-        if not links:
-            errors.append(f"{ticket}: {locale.upper()} note has no public link")
         for link in links:
             if "st.yandex-team.ru" in link or "tracker.yandex" in link:
                 errors.append(f"{ticket}: {locale.upper()} note exposes an internal link")
             is_external = re.match(r"^[a-z][a-z0-9+.-]*://", link, re.IGNORECASE)
             is_docs_link = not is_external or "ydb.tech/docs/" in link
-            if is_docs_link and f"?version=v{release_line}" not in link:
+            if "github.com/ydb-platform/ydb/pull/" in link:
+                errors.append(f"{ticket}: {locale.upper()} note links an implementation PR")
+            if is_docs_link and (
+                f"?version=v{docs_version}" not in link
+                and "?version=main" not in link
+            ):
                 errors.append(
-                    f"{ticket}: {locale.upper()} note has an unversioned documentation link"
+                    f"{ticket}: {locale.upper()} note has an invalid documentation version"
                 )
     if locale_links["en"] != locale_links["ru"]:
         errors.append(f"{ticket}: EN and RU link targets differ")
@@ -226,12 +245,16 @@ def evaluate(
     ru_text: str,
 ) -> list[str]:
     errors: list[str] = []
-    release_input = manifest.get("release_input", "")
-    version_match = re.fullmatch(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)", release_input)
+    release_tag = manifest.get("release_tag", "")
+    version_match = re.fullmatch(
+        r"v?([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)", release_tag
+    )
     if not version_match:
-        return ["release_input must have three numeric components"]
+        return ["release_tag must have four numeric components"]
 
-    expected_line = f"{version_match.group(1)}.{version_match.group(2)}"
+    docs_version = f"{version_match.group(1)}.{version_match.group(2)}"
+    expected_line = f"{docs_version} RC"
+    expected_slug = f"{version_match.group(1)}-{version_match.group(2)}-rc"
     expected_tracker_value = (
         f"stable-{version_match.group(1)}-{version_match.group(2)}-"
         f"{version_match.group(3)}"
@@ -260,11 +283,18 @@ def evaluate(
             value = note.get(locale)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{ticket or f'note {index}'}: {locale.upper()} text is empty")
-        _check_links(note, expected_line, errors)
+        availability = note.get("availability")
+        if availability not in {"default", "opt-in"}:
+            errors.append(f"{ticket or f'note {index}'}: invalid availability")
+        _check_links(note, docs_version, errors)
 
     duplicates = sorted(key for key, count in Counter(note_keys).items() if count > 1)
     if duplicates:
         errors.append(f"duplicate note keys: {', '.join(duplicates)}")
+
+    availability = [note.get("availability") for note in notes if isinstance(note, dict)]
+    if "opt-in" in availability and "default" in availability[availability.index("opt-in") :]:
+        errors.append("default availability appears after opt-in availability")
 
     exclusions = manifest.get("exclusions", [])
     if not isinstance(exclusions, list):
@@ -307,25 +337,33 @@ def evaluate(
 
     if release_line == expected_line:
         try:
-            actual_en = _extract_release_bullets(en_text, release_line, "en", errors)
+            actual_en = _extract_release_bullets(en_text, release_line, expected_slug, "en", errors)
             expected_en = [
                 _normalize_block(note.get("en", ""))
                 for note in notes
                 if isinstance(note, dict)
             ]
-            if actual_en != expected_en:
+            if [bullet for bullet, _ in actual_en] != expected_en:
                 errors.append("EN bullets do not exactly match manifest order/content")
+            if [state for _, state in actual_en] != [
+                note.get("availability") for note in notes if isinstance(note, dict)
+            ]:
+                errors.append("EN bullet availability does not match manifest sections")
         except ValueError as error:
             errors.append(str(error))
         try:
-            actual_ru = _extract_release_bullets(ru_text, release_line, "ru", errors)
+            actual_ru = _extract_release_bullets(ru_text, release_line, expected_slug, "ru", errors)
             expected_ru = [
                 _normalize_block(note.get("ru", ""))
                 for note in notes
                 if isinstance(note, dict)
             ]
-            if actual_ru != expected_ru:
+            if [bullet for bullet, _ in actual_ru] != expected_ru:
                 errors.append("RU bullets do not exactly match manifest order/content")
+            if [state for _, state in actual_ru] != [
+                note.get("availability") for note in notes if isinstance(note, dict)
+            ]:
+                errors.append("RU bullet availability does not match manifest sections")
         except ValueError as error:
             errors.append(str(error))
 
@@ -336,7 +374,7 @@ def _coverage_counts(
     manifest: dict[str, Any], tracker_export: dict[str, Any]
 ) -> dict[str, int]:
     version_match = re.fullmatch(
-        r"v?([0-9]+)\.([0-9]+)\.([0-9]+)", manifest["release_input"]
+        r"v?([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)", manifest["release_tag"]
     )
     assert version_match is not None
     expected_tracker_value = (

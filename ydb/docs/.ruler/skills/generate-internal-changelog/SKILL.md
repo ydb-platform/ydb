@@ -7,35 +7,37 @@ description: >-
   YDBFEATURES and stable-X-Y branches.
 ---
 
-# Generate internal YDB Server changelog
+# Generate internal YDB Server release notes
 
 ## Overview
 
-Build feature-only release notes from the complete commit delta between two
-adjacent release-line branches. The union of the two factual Tracker release
-fields defines the candidate set; commits and PRs decide which candidates
-actually shipped. The release branch is the publication target.
+Prepare feature-only bilingual notes for an internal release candidate. The
+exact RC tag is the authoritative boundary for implementation, flag defaults,
+and artifacts. Tracker release fields produce candidates, but never prove that
+a feature is included, enabled by default, or ready for public wording.
 
-In this workflow, a release line is `X.Y`. An input such as `26.3.1` identifies
-release line `26.3`. The final component is input context only.
+An RC such as `26.3.1.16` is published as release line `26.3 RC`. Its patch
+components identify the exact code tag and Tracker value, but do not appear in
+a public changelog version.
 
 ## Non-negotiable invariants
 
-For input `26.3.1`:
+For RC tag `26.3.1.16`:
 
 | Item | Required value |
 |---|---|
-| Release line | `26.3` |
-| Target ref | `origin/stable-26-3` |
-| Previous ref | `origin/stable-26-2` |
-| PR base | `stable-26-3` |
+| Public heading and anchor | `Version 26.3 RC {#26-3-rc}` |
+| RU heading and anchor | `Версия 26.3 RC {#26-3-rc}` |
+| Exact implementation ref | Git tag `26.3.1.16` |
+| Code branch to verify tag containment | `origin/stable-26-3-1` |
+| Original release-notes PR base | `main` |
 | Docs selector | `?version=v26.3` |
-| Heading and anchor | `Version 26.3 {#26-3}` |
-| Tracker code-ready value | `stable-26-3-1` |
-| Tracker default-inclusion value | `stable-26-3-1` |
+| Tracker code-ready/default value | `stable-26-3-1` |
 
-Never write `26.3.1` in the changelog heading, anchor, docs selector, working
-branch, commit title, or PR title. Never target `main` or `stable-26-3-1`.
+Resolve the annotated tag to its commit and prove it is reachable from the
+matching `stable-X-Y-1` branch. Do not substitute the moving branch tip for
+the tag. Do not use `stable-26-3` for a `26.3.1.N` RC, and do not write
+`26.3.1.16` in public headings, anchors, or documentation selectors.
 
 This workflow changes only:
 
@@ -44,47 +46,44 @@ This workflow changes only:
 
 Do not update downloads tables. Do not publish a Bug Fixes section.
 
-## 1. Resolve adjacent release lines
+## 1. Resolve the RC boundary
 
-Fetch remote refs, then list only exact release-line branches matching
-`stable-[0-9]+-[0-9]+`. Exclude patch, enterprise, hotfix, and test branches.
-
-The target is `stable-X-Y`, where `X.Y` is the first two numeric components of
-the requested version. The previous branch is the greatest existing release
-line smaller than `X.Y`, not a guessed `X.(Y-1)` value. Thus `27.1` may follow
-`26.4`.
-
-Record both boundary SHAs before analysis:
+Require the exact tag from the owner. Fetch the tag and matching patch branch,
+then resolve both immutable SHAs and prove containment:
 
 ```bash
-git fetch origin --prune
-git rev-parse origin/stable-26-2
-git rev-parse origin/stable-26-3
-git rev-list --count origin/stable-26-2..origin/stable-26-3
+git fetch origin --tags stable-26-3-1
+git rev-parse 26.3.1.16^{} origin/stable-26-3-1
+git merge-base --is-ancestor 26.3.1.16 origin/stable-26-3-1
 ```
 
-Stop if either exact branch is missing or the predecessor is ambiguous.
+Stop if the tag is absent, does not belong to the expected `stable-X-Y-1`
+branch, or if the owner has not identified the prior publicly announced release
+line. A later patch-branch tip is not release evidence.
 
-## 2. Inventory every target-only commit
+## 2. Inventory the exact RC tag
 
-The authoritative raw inventory is the two-dot set difference: every commit
-reachable from the target and not reachable from the previous branch.
+Use the exact tag as the target of every implementation and flag check. First
+prove whether the previous release tag is an ancestor. When tags diverge,
+inventory the target tag and its source/backport PRs instead of treating a
+two-dot range as a chronological delta.
 
 ```bash
-git rev-list --reverse --topo-order \
-  origin/stable-26-2..origin/stable-26-3
+git merge-base <previous-tag> 26.3.1.16
+git rev-list --left-right --count <previous-tag>...26.3.1.16
+git rev-list --reverse --topo-order <previous-tag>..26.3.1.16
 ```
 
-Do not use a symmetric three-dot log as the raw inventory: it also contains
-commits unique to the previous branch. Do not sample, use only first-parent
-history, or drop merges before every raw commit has an audit row.
+Do not use a moving stable branch, a symmetric three-dot log, or first-parent
+history as the only raw inventory. Do not sample or drop merges before every
+raw commit has an audit row.
 
 Use patch equivalence only as a secondary deduplication signal:
 
 ```bash
 git log --right-only --cherry-pick --no-merges \
   --format='%H%x09%s' \
-  origin/stable-26-2...origin/stable-26-3
+  <previous-tag>...26.3.1.16
 ```
 
 Keep a temporary evidence table outside the public docs diff with these fields:
@@ -125,8 +124,9 @@ exclusion reasons has been proven. Never invent a Tracker match.
 
 ## 4. Build the authoritative Tracker candidate set
 
-The code release keeps all three input components even though the docs release
-line drops the last one. For input `26.3.1`, query `stable-26-3-1` in Tracker.
+The code release keeps the first three input components for Tracker even though
+the public RC heading uses only `X.Y RC`. For RC tag `26.3.1.16`, query
+`stable-26-3-1` in Tracker.
 
 1. Call Tracker MCP `GetQueueLocalFields` for queue `YDBFEATURES`.
 2. Find the fields whose short keys are `actualCodeReadyBranch` and
@@ -164,12 +164,19 @@ For each key in `expected_feature_keys`, make exactly one of two decisions:
 publish one bilingual release-note item, or record one exclusion. Publish only
 after all evidence conditions are true:
 
-- At least one surviving implementation change is in the raw target delta.
+- At least one surviving implementation change is reachable from the exact RC tag.
 - The confirmed ticket key is in `expected_feature_keys`.
 - PR code and ticket data show a new user-visible capability, not repair of
   existing behavior.
-- The complete enabling implementation is present in the target branch.
+- The complete enabling implementation is present at the exact RC tag.
 - The feature was not already documented in the previous release line.
+
+For every candidate, independently inspect the feature-flags documentation and
+the flag definition, default, runtime guard, effective overrides, and enabling
+tests at the exact tag. Tracker branch fields and an implementation PR do not
+prove default-on availability. Classify each published item as `publish-default`
+or `publish-opt-in`; use `TBD` when administrator-controlled activation is not
+a supported contract.
 
 Exclude bug tickets, bug-only PRs that merely mention a feature ticket,
 refactors, tests, CI/build work, dependencies, docs-only commits, reverts,
@@ -194,14 +201,15 @@ both as a note and an exclusion, or has an empty or unsupported reason.
 ## 6. Write RU and EN release notes
 
 Use the ticket's `Changelog entry` and user impact as the wording seed. Use the
-surviving PR diff to constrain what actually shipped, including feature flags,
-configuration, limitations, and supported interfaces. Do not copy raw PR titles.
+surviving PR diff to constrain what actually shipped, including limitations and
+supported interfaces. Do not copy raw PR titles, expose exact feature-flag names
+or values, or use a PR as a documentation fallback.
 
 Add or update only the release-line section. If no branch-local pattern exists,
 use:
 
 ```markdown
-## Version 26.3 {#26-3}
+## Version 26.3 RC {#26-3-rc}
 
 Release date: TBD.
 
@@ -209,21 +217,31 @@ Release date: TBD.
 ```
 
 ```markdown
-## Версия 26.3 {#26-3}
+## Версия 26.3 RC {#26-3-rc}
 
 Дата выхода: уточняется.
 
 ### Функциональность
 ```
 
-Do not add a `26.3.1` subsection. Do not invent a date.
+Do not add a `26.3.1.16` subsection. Do not invent a date. Put
+`publish-default` bullets under `Functionality` / `Функциональность`, in the
+same audited order in both locales. Then use `Disabled functionality` /
+`Отключенная функциональность` for `publish-opt-in` bullets. Put this one
+introductory sentence immediately under the heading: `The following
+functionality is not enabled by default.` / `Перечисленная ниже
+функциональность не включена по умолчанию.` Never repeat a per-bullet
+default-state sentence or claim a future default-on release unless the owner
+supplies release-specific wording.
 
-RU and EN must have identical feature sets, order, technical tokens, and public
-link targets. When public documentation exists, use the target-branch page with
-`?version=v26.3`; place an anchor after the query, for example
-`topic.md?version=v26.3#autopartitioning`. If Tracker says documentation is not
-ready or not required, the ticket still needs a note; use the public source PR
-as the link and describe only behavior proven by its surviving diff.
+RU and EN must have identical feature sets, default-state groups, order,
+technical tokens, and public link targets. Prefer verified public documentation
+for the target version with `?version=v26.3`; place an anchor after the query.
+If no versioned page exists, use only a semantically equivalent public `main`
+page with `?version=main`. If neither exists, leave the functionality bullet
+unlinked. When Tracker says `Документация не нужна`, do not add a documentation
+link or report a gap. Report every `main` fallback and every missing-documentation
+item at handoff in a table: problem, YDBFEATURES ticket, implementation PR.
 
 Tracker is an internal research source. Do not publish Tracker links or ticket
 descriptions. Link GitHub PRs only when the surrounding changelog style calls
@@ -257,10 +275,10 @@ candidate. It does not declare its own Tracker denominator:
 
 ```json
 {
-  "release_input": "26.3.1",
-  "release_line": "26.3",
+  "release_tag": "26.3.1.16",
+  "release_line": "26.3 RC",
   "notes": [
-    {"ticket_key": "YDBFEATURES-...", "en": "...", "ru": "..."}
+    {"ticket_key": "YDBFEATURES-...", "availability": "default", "en": "...", "ru": "..."}
   ],
   "exclusions": [
     {
@@ -324,10 +342,10 @@ surviving PRs.
 Static behavior cases live in [evals/evals.json](evals/evals.json); evaluator
 unit tests live in [tests/test_evaluate_release_coverage.py](tests/test_evaluate_release_coverage.py).
 
-## 8. Validate and open the release-branch PR
+## 8. Validate and open the RC release-notes PR
 
-Create an isolated worktree and working branch from the exact target ref, for
-example `docs/changelog-server-26-3` from `origin/stable-26-3`.
+Create an isolated working branch from current `main`. The implementation
+evidence remains the exact RC tag, not the branch used for documentation.
 
 Before committing, verify:
 
@@ -341,22 +359,22 @@ Before committing, verify:
 - no bug-only, reverted, duplicate, previously shipped, or unresolved item is
   present;
 - RU and EN are semantically aligned;
-- headings, anchors, and links contain `26.3`, never `26.3.1`;
-- the diff, working branch, commit title, PR title, and PR body do not leak the
-  final component `26.3.1` as the published docs version;
+- headings and anchors contain `26.3 RC` and `26-3-rc`, never `26.3.1.16`;
+- every `publish-opt-in` item is after default-enabled items and has no public
+  flag name or activation value;
+- every feature link is versioned documentation, an audited `main` fallback,
+  or deliberately absent, never an implementation PR fallback;
 - the diff contains only the two changelog files;
 - documentation build and link/style checks pass.
 
 Commit and push only the isolated branch. For mutations in `ydb-platform/ydb`,
-use `YDB_GH_TOKEN` without printing or persisting it. Create the PR with explicit
-base `stable-26-3`, then verify `baseRefName` through GitHub API/CLI. Also verify
-that the working branch was created from the recorded target SHA rather than
-from `main`.
+use `YDB_GH_TOKEN` without printing or persisting it. Create the original PR
+with explicit base `main`, then verify `baseRefName` through GitHub API/CLI.
 
 Suggested public title:
 
 ```text
-docs: add 26.3 server feature release notes
+docs: add YDB 26.3 RC server release notes
 ```
 
 The PR description records target/previous boundary SHAs, reviewed commit count,
@@ -369,9 +387,9 @@ reason.
 
 | Mistake | Correction |
 |---|---|
-| Publishing `26.3.1` | Normalize once to `26.3` and use it everywhere. |
-| Opening against `main` | Create from and target `stable-26-3`. |
-| Comparing with a patch branch | Compare exact adjacent `stable-X-Y` lines. |
+| Publishing `26.3.1.16` | Use it only as exact implementation tag; publish `26.3 RC`. |
+| Opening against a stable branch | Create the original RC release-notes PR against `main`. |
+| Comparing with a moving patch branch | Use the exact RC tag for implementation and default-state evidence. |
 | Treating every PR as a note | Audit every commit, then group by confirmed feature ticket. |
 | Inferring a feature from an “Add” title | Require Tracker type `feature` and shipped behavior. |
 | Adding fixes from the delta | Exclude them even when they are user-visible. |
@@ -380,3 +398,5 @@ reason.
 | Requiring notes to equal Tracker count | Require notes plus justified exclusions to partition the Tracker union. |
 | Silently omitting an unshipped ticket | Record `not-in-target` and report it in the completion status. |
 | Publishing internal evidence | Keep Tracker and audit details outside the docs diff. |
+| Linking a functionality bullet to a source PR because versioned docs are absent | Use verified `main` docs, otherwise leave it unlinked and report the gap. |
+| Treating a default-false flag as a reason to omit a feature | Put proven supported opt-in functionality after default-on bullets without exposing its flag. |

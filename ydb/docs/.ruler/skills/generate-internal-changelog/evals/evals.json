@@ -73,6 +73,21 @@
         "Runs the bundled evaluator from the runtime-provided skill directory instead of assuming a Cursor-only installation path"
       ],
       "covers": "natural-language internal-release trigger"
+    },
+    {
+      "id": 6,
+      "prompt": "Подготовь внутренние RC release notes для тега 26.3.1.16. Ветка stable-26-3 содержит более новые коммиты, а тег входит в stable-26-3-1. В Tracker есть default-on и opt-in фичи, а документация одной из них существует только в main.",
+      "expected_output": "Использует тег 26.3.1.16 как единственную границу реализации, публикует Version 26.3 RC, создаёт исходный PR в main и разделяет включённую и отключённую функциональность.",
+      "files": [],
+      "expectations": [
+        "Проверяет annotated tag, его commit SHA и containment в stable-26-3-1, не подменяя тег tip-ом stable-26-3 или stable-26-3-1",
+        "Пишет Version 26.3 RC / Версия 26.3 RC с anchor 26-3-rc и не публикует 26.3.1.16 как версию документации",
+        "Создаёт исходный PR против main, а не stable-26-3 или stable-26-3-1",
+        "Сначала помещает default-on bullets, затем opt-in bullets под Disabled functionality / Отключенная функциональность без имён и значений флагов",
+        "Для эквивалентной документации только в main использует ?version=main и перечисляет fallback в таблице handoff",
+        "Не использует implementation PR как fallback для документации и оставляет bullet без ссылки, если документации нет нигде"
+      ],
+      "covers": "RC tag boundary, public RC naming, default-state grouping and documentation fallback"
     }
   ]
 }

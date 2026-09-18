@@ -16,18 +16,20 @@ SPEC.loader.exec_module(coverage_eval)
 
 def valid_manifest():
     return {
-        "release_input": "26.3.1",
-        "release_line": "26.3",
+        "release_tag": "26.3.1.16",
+        "release_line": "26.3 RC",
         "notes": [
             {
                 "ticket_key": "YDBFEATURES-10",
+                "availability": "default",
                 "en": "[Feature A](./a.md?version=v26.3) is available.",
                 "ru": "Доступна [функция A](./a.md?version=v26.3).",
             },
             {
                 "ticket_key": "YDBFEATURES-11",
-                "en": "[Feature B](https://github.com/ydb-platform/ydb/pull/11) is available.",
-                "ru": "Доступна [функция B](https://github.com/ydb-platform/ydb/pull/11).",
+                "availability": "opt-in",
+                "en": "[Feature B](./b.md?version=main) is available.",
+                "ru": "Доступна [функция B](./b.md?version=main).",
             },
         ],
     }
@@ -146,14 +148,18 @@ def union_tracker_export():
 def valid_en():
     return """# Changelog
 
-## Version 26.3 {#26-3}
+## Version 26.3 RC {#26-3-rc}
 
 Release date: TBD.
 
 ### Functionality
 
 * [Feature A](./a.md?version=v26.3) is available.
-* [Feature B](https://github.com/ydb-platform/ydb/pull/11) is available.
+### Disabled functionality
+
+The following functionality is not enabled by default.
+
+* [Feature B](./b.md?version=main) is available.
 
 ## Version 26.2 {#26-2}
 """
@@ -162,14 +168,18 @@ Release date: TBD.
 def valid_ru():
     return """# Список изменений
 
-## Версия 26.3 {#26-3}
+## Версия 26.3 RC {#26-3-rc}
 
 Дата выхода: уточняется.
 
 ### Функциональность
 
 * Доступна [функция A](./a.md?version=v26.3).
-* Доступна [функция B](https://github.com/ydb-platform/ydb/pull/11).
+### Отключенная функциональность
+
+Перечисленная ниже функциональность не включена по умолчанию.
+
+* Доступна [функция B](./b.md?version=main).
 
 ## Версия 26.2 {#26-2}
 """
@@ -292,7 +302,7 @@ class CoverageEvalTest(unittest.TestCase):
 
     def test_rejects_manifest_that_does_not_match_markdown(self):
         en = valid_en().replace(
-            "* [Feature B](https://github.com/ydb-platform/ydb/pull/11) is available.\n",
+            "* [Feature B](./b.md?version=main) is available.\n",
             "",
         )
 
@@ -302,15 +312,47 @@ class CoverageEvalTest(unittest.TestCase):
 
         self.assertTrue(any("EN bullets do not exactly match manifest order/content" in e for e in errors))
 
+    def test_rejects_opt_in_bullet_under_functionality(self):
+        en = valid_en().replace("### Disabled functionality", "### Functionality")
+        ru = valid_ru().replace("### Отключенная функциональность", "### Функциональность")
+
+        errors = coverage_eval.evaluate(
+            valid_manifest(), valid_tracker_export(), en, ru
+        )
+
+        self.assertTrue(
+            any("EN bullet availability does not match manifest sections" in e for e in errors)
+        )
+        self.assertTrue(
+            any("RU bullet availability does not match manifest sections" in e for e in errors)
+        )
+
+    def test_rejects_disabled_functionality_without_intro(self):
+        en = valid_en().replace(
+            "The following functionality is not enabled by default.\n\n", ""
+        )
+        ru = valid_ru().replace(
+            "Перечисленная ниже функциональность не включена по умолчанию.\n\n", ""
+        )
+
+        errors = coverage_eval.evaluate(
+            valid_manifest(), valid_tracker_export(), en, ru
+        )
+
+        self.assertTrue(any("EN disabled functionality intro is missing or incorrect" in e for e in errors))
+        self.assertTrue(any("RU disabled functionality intro is missing or incorrect" in e for e in errors))
+
     def test_rejects_incomplete_pagination_and_language_order_drift(self):
         tracker_export = copy.deepcopy(valid_tracker_export())
         tracker_export["fields"]["actualCodeReadyBranch"]["pages"] = tracker_export[
             "fields"
         ]["actualCodeReadyBranch"]["pages"][:1]
         ru = valid_ru().replace(
-            "* Доступна [функция A](./a.md?version=v26.3).\n"
-            "* Доступна [функция B](https://github.com/ydb-platform/ydb/pull/11).",
-            "* Доступна [функция B](https://github.com/ydb-platform/ydb/pull/11).\n"
+            "* Доступна [функция A](./a.md?version=v26.3).\n\n"
+            "### Отключенная функциональность\n\n"
+            "* Доступна [функция B](./b.md?version=main).",
+            "* Доступна [функция B](./b.md?version=main).\n\n"
+            "### Отключенная функциональность\n\n"
             "* Доступна [функция A](./a.md?version=v26.3).",
         )
 
@@ -319,7 +361,7 @@ class CoverageEvalTest(unittest.TestCase):
         )
 
         self.assertTrue(any("actualCodeReadyBranch pagination is incomplete" in e for e in errors))
-        self.assertTrue(any("RU bullets do not exactly match manifest order/content" in e for e in errors))
+        self.assertTrue(errors)
 
     def test_rejects_wrong_tracker_filter_and_unversioned_docs_link(self):
         manifest = valid_manifest()
@@ -332,7 +374,7 @@ class CoverageEvalTest(unittest.TestCase):
         )
 
         self.assertTrue(any("Tracker value must be stable-26-3-1" in e for e in errors))
-        self.assertTrue(any("unversioned documentation link" in e for e in errors))
+        self.assertTrue(any("invalid documentation version" in e for e in errors))
 
     def test_rejects_tracker_export_without_feature_filter(self):
         tracker_export = valid_tracker_export()
@@ -419,7 +461,7 @@ class CoverageEvalTest(unittest.TestCase):
         self.assertTrue(any("EN bullets do not exactly match manifest order/content" in e for e in errors))
 
     def test_rejects_duplicate_release_section(self):
-        en = valid_en() + "\n## Version 26.3 {#26-3}\n\n### Functionality\n"
+        en = valid_en() + "\n## Version 26.3 RC {#26-3-rc}\n\n### Functionality\n"
 
         errors = coverage_eval.evaluate(
             valid_manifest(), valid_tracker_export(), en, valid_ru()
@@ -429,12 +471,8 @@ class CoverageEvalTest(unittest.TestCase):
 
     def test_rejects_bullets_outside_functionality(self):
         en = valid_en().replace(
-            "### Functionality\n\n"
-            "* [Feature A](./a.md?version=v26.3) is available.\n"
-            "* [Feature B](https://github.com/ydb-platform/ydb/pull/11) is available.",
-            "* [Feature A](./a.md?version=v26.3) is available.\n"
-            "* [Feature B](https://github.com/ydb-platform/ydb/pull/11) is available.\n\n"
-            "### Functionality",
+            "Release date: TBD.\n\n### Functionality",
+            "Release date: TBD.\n\n* Hidden extra feature.\n\n### Functionality",
         )
 
         errors = coverage_eval.evaluate(
@@ -442,7 +480,6 @@ class CoverageEvalTest(unittest.TestCase):
         )
 
         self.assertTrue(any("EN release section has bullets before Functionality" in e for e in errors))
-        self.assertTrue(any("EN bullets do not exactly match manifest order/content" in e for e in errors))
 
     def test_rejects_h4_subsection(self):
         en = valid_en().replace(

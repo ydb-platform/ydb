@@ -616,7 +616,16 @@ private:
     };
 
     std::optional<TCutHistoryScan> CutHistoryScan;
-    std::deque<TString> RecentCutHistoryRequests;
+    static constexpr ui64 CutHistoryRequestLimit = 64;
+
+    struct TCutHistoryRequest {
+        NKikimrTabletBase::TEvCutTabletHistory Record;
+        TInstant Timestamp;
+        TActorId Recipient;
+        ui32 ToGeneration;
+        ui32 SendingGeneration;
+    };
+    class TTxSaveCutHistoryRequests;
     class TCutHistoryResultProcessor;
     void StartCutHistoryScan(const TActorContext& ctx);
     void FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& result);

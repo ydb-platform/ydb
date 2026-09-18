@@ -7,7 +7,49 @@
 
 #include <util/generic/algorithm.h>
 
+#include <iterator>
+
 namespace NKikimr::NColumnShard {
+namespace {
+constexpr size_t CutHistoryScanBatchSize = 32;
+constexpr ui64 CutHistoryScanMemoryTarget = 8 * (1 << 20);
+constexpr TDuration CutHistoryContinuationDelay = TDuration::MilliSeconds(1);
+}   // namespace
+
+class TColumnShard::TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
+    const std::vector<TCutHistoryRequest> Requests;
+
+public:
+    TTxSaveCutHistoryRequests(TColumnShard* self, std::vector<TCutHistoryRequest>&& requests)
+        : TBase(self)
+        , Requests(std::move(requests))
+    {
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        using T = Schema::CutHistoryRequests;
+        NIceDb::TNiceDb db(txc.DB);
+        auto last = db.Table<T>().Reverse().Range().Select<T::Sequence>();
+        if (!last.IsReady()) {
+            return false;
+        }
+        ui64 sequence = last.EndOfSet() ? 0 : last.GetValue<T::Sequence>();
+        for (const auto& request : Requests) {
+            db.Table<T>().Key(++sequence).Update(NIceDb::TUpdate<T::TabletID>(request.Record.GetTabletID()),
+                NIceDb::TUpdate<T::Channel>(request.Record.GetChannel()), NIceDb::TUpdate<T::FromGeneration>(request.Record.GetFromGeneration()),
+                NIceDb::TUpdate<T::GroupID>(request.Record.GetGroupID()), NIceDb::TUpdate<T::TimestampUs>(request.Timestamp.MicroSeconds()),
+                NIceDb::TUpdate<T::Recipient>(request.Recipient), NIceDb::TUpdate<T::ToGeneration>(request.ToGeneration),
+                NIceDb::TUpdate<T::SendingGeneration>(request.SendingGeneration));
+            if (sequence > CutHistoryRequestLimit) {
+                db.Table<T>().Key(sequence - CutHistoryRequestLimit).Delete();
+            }
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+    }
+};
 
 class TColumnShard::TCutHistoryResultProcessor: public NOlap::IMetadataAccessorResultProcessor {
     TColumnShard* const Shard;
@@ -51,7 +93,7 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
     }
     Sort(scan.Portions);
     CutHistoryScan = std::move(scan);
-    ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvContinueCutHistory());
+    ctx.Schedule(CutHistoryContinuationDelay, new TEvPrivate::TEvContinueCutHistory());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActorContext& ctx) {
@@ -73,9 +115,9 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActor
     }
     const auto& index = GetIndexAs<NOlap::TColumnEngineForLogs>();
     auto request = std::make_shared<NOlap::TDataAccessorsRequest>(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
-    const size_t end = Min(scan.Position + 32, scan.Portions.size());
+    const size_t end = Min(scan.Position + CutHistoryScanBatchSize, scan.Portions.size());
     ui64 memory = 0;
-    while (scan.Position < end && (request->IsEmpty() || memory < 8 * (1 << 20))) {
+    while (scan.Position < end && (request->IsEmpty() || memory < CutHistoryScanMemoryTarget)) {
         const auto [pathId, portionId] = scan.Portions[scan.Position++];
         const auto granule = index.GetGranuleOptional(pathId);
         const auto portion = granule ? granule->GetPortionOptional(portionId, false) : nullptr;
@@ -86,7 +128,7 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActor
         }
     }
     if (request->IsEmpty()) {
-        ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvContinueCutHistory());
+        ctx.Schedule(CutHistoryContinuationDelay, new TEvPrivate::TEvContinueCutHistory());
         return;
     }
     scan.Pending = request->GetSize();
@@ -124,7 +166,7 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
         }
     }
     scan.Pending = 0;
-    Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvContinueCutHistory());
+    Schedule(CutHistoryContinuationDelay, new TEvPrivate::TEvContinueCutHistory());
 }
 
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
@@ -139,6 +181,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (!storage || !LauncherID()) {
         return;
     }
+    std::vector<TCutHistoryRequest> requests;
     for (auto& interval : CutHistoryScan->Intervals) {
         if (interval.NonEmpty || interval.Sent || interval.Channel >= Info()->Channels.size()) {
             continue;
@@ -147,8 +190,11 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         auto entry = FindIf(history, [&](const auto& item) {
             return item.FromGeneration == interval.From;
         });
-        if (entry == history.end() || entry->GroupID != interval.Group || entry + 1 == history.end() ||
-            (entry + 1)->FromGeneration != interval.To) {
+        if (entry == history.end() || entry->GroupID != interval.Group) {
+            continue;
+        }
+        const auto nextEntry = std::next(entry);
+        if (nextEntry == history.end() || nextEntry->FromGeneration != interval.To) {
             continue;
         }
         if (!storage->CanCutHistory(interval.Channel, interval.From, interval.To)) {
@@ -159,14 +205,14 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         event->Record.SetChannel(interval.Channel);
         event->Record.SetFromGeneration(interval.From);
         event->Record.SetGroupID(interval.Group);
-        if (RecentCutHistoryRequests.size() == 64) {
-            RecentCutHistoryRequests.pop_front();
-        }
-        RecentCutHistoryRequests.emplace_back(TStringBuilder() << ctx.Now() << " recipient=" << LauncherID() << " toGeneration=" << interval.To
-                                                               << " " << event->Record.ShortDebugString());
+        requests.push_back({ event->Record, ctx.Now(), LauncherID(), interval.To, Generation() });
         interval.Sent = true;
         Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *CutHistoryScan->Finished);
         ctx.Send(LauncherID(), event.release());
+    }
+    if (!requests.empty()) {
+        // A crash before this diagnostic transaction commits can lose the newest send attempts.
+        Execute(new TTxSaveCutHistoryRequests(this, std::move(requests)), ctx);
     }
 }
 

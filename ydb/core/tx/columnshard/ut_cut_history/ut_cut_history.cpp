@@ -213,10 +213,24 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.SendToPipe(
             TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
         const auto page = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "CutHistory requests sent this boot");
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Persisted CutHistory send attempts");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "toGeneration=");
         UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "recipient=");
-        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, ToString(OldGroup));
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "TabletID: " + ToString(TabletId));
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "Channel: 2");
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "FromGeneration: 0");
+        UNIT_ASSERT_STRING_CONTAINS(page->Get()->Html, "GroupID: " + ToString(OldGroup));
+        const auto journalStart = page->Get()->Html.find("<h3>Persisted CutHistory");
+        const auto journal = page->Get()->Html.substr(journalStart, page->Get()->Html.find("</pre>", journalStart) - journalStart);
+        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 2u);
+        f.Runtime.SendToPipe(
+            TabletId, f.Sender, new NMon::TEvRemoteHttpInfo("/app?TabletID=" + ToString(TabletId)), 0, GetPipeConfigWithRetries());
+        const auto rebootedPage = f.Runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(f.Sender);
+        UNIT_ASSERT_STRING_CONTAINS(rebootedPage->Get()->Html, "GroupID: " + ToString(OldGroup));
+        UNIT_ASSERT_STRING_CONTAINS(rebootedPage->Get()->Html, journal);
     }
 
     Y_UNIT_TEST(CleanedPortionWaitsForQueuedBlob) {

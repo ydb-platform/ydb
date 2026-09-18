@@ -519,6 +519,7 @@ public:
 private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
+    std::vector<TColumnShard::TCutHistoryRequest> CutHistoryRequests;
     TString RenderCompactionPage();
     TString RenderMainPage();
     TString RenderPortionsPage();
@@ -658,7 +659,34 @@ TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
 }
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
-    return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
+    CutHistoryRequests.clear();
+    if (!Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"])) {
+        return false;
+    }
+    const auto page = HttpInfoEvent->Get()->Cgi().Get("page");
+    if (page != "compaction" && page != "portions") {
+        using T = Schema::CutHistoryRequests;
+        NIceDb::TNiceDb db(txc.DB);
+        auto row = db.Table<T>().Range().Select();
+        if (!row.IsReady()) {
+            return false;
+        }
+        while (!row.EndOfSet()) {
+            auto& request = CutHistoryRequests.emplace_back();
+            request.Record.SetTabletID(row.GetValue<T::TabletID>());
+            request.Record.SetChannel(row.GetValue<T::Channel>());
+            request.Record.SetFromGeneration(row.GetValue<T::FromGeneration>());
+            request.Record.SetGroupID(row.GetValue<T::GroupID>());
+            request.Timestamp = TInstant::MicroSeconds(row.GetValue<T::TimestampUs>());
+            request.Recipient = row.GetValue<T::Recipient>();
+            request.ToGeneration = row.GetValue<T::ToGeneration>();
+            request.SendingGeneration = row.GetValue<T::SendingGeneration>();
+            if (!row.Next()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 template <typename T>
@@ -790,9 +818,13 @@ TString TTxMonitoring::RenderMainPage() {
         html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all portions on shard") << "</h3>";
     }
 
-    html << "<h3>CutHistory requests sent this boot (latest 64; Hive confirmation is not tracked)</h3><pre>";
-    for (const auto& request : Self->RecentCutHistoryRequests) {
-        html << TEscapeHtml(request) << "\n";
+    html << "<h3>Persisted CutHistory send attempts (latest " << TColumnShard::CutHistoryRequestLimit
+         << "; Hive confirmation is not tracked)</h3><pre>";
+    for (const auto& request : CutHistoryRequests) {
+        html << TEscapeHtml(TStringBuilder() << request.Timestamp << " recipient=" << request.Recipient
+                                             << " toGeneration=" << request.ToGeneration << " sendingGeneration=" << request.SendingGeneration
+                                             << " " << request.Record.ShortDebugString())
+             << "\n";
     }
     html << "</pre>";
 

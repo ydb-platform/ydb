@@ -1239,11 +1239,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     Y_UNIT_TEST(ShouldEraseOverlappingWritesInAscendingOrder)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
-        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocatorPool(),
-            vchunkConfig,
-            DefaultBlockSize,
-            GetVChunkBlockCount(DefaultBlockSize, DefaultVChunkSize));
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
 
         const auto range = TBlockRange16::WithLength(10, 10);
         const auto overlappingRange = TBlockRange16::WithLength(15, 10);

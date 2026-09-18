@@ -68,7 +68,21 @@ namespace NKikimr {
 
             NHullComp::TLevelRanks GetRanks() const {
                 auto snap = Ds->LogoBlobs->GetIndexSnapshot();
-                return NHullComp::TLevelRanks(*Boundaries, snap.SliceSnap);
+                return NHullComp::TLevelRanks(*Boundaries, snap.SliceSnap,
+                    Ds->HullCtx->LsmCompactionRankGroups[ui32(EHullDbType::LogoBlobs)]);
+            }
+
+            void CheckRankSensors(const TString &db, ui64 rank0, ui64 rank1to16, ui64 rank17plus) const {
+                auto lsm = Ds->HullCtx->VCtx->VDiskCounters->FindSubgroup("subsystem", "lsmhull");
+                UNIT_ASSERT(lsm);
+                auto counters = lsm->FindSubgroup("hull_db", db);
+                UNIT_ASSERT(counters);
+                for (const auto &[name, expected] : {std::make_pair("Rank0", rank0),
+                        std::make_pair("Rank1_16", rank1to16), std::make_pair("Rank17_", rank17plus)}) {
+                    auto counter = counters->FindCounter(name);
+                    UNIT_ASSERT_C(counter, name);
+                    UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), expected, name);
+                }
             }
 
             NHullComp::EAction Select(TTask &task, THashSet<ui64> tablesToCompact = {}) {
@@ -117,6 +131,77 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(ranks.FreePartiallySortedLevelsNum, 0);
             UNIT_ASSERT_VALUES_EQUAL(ranks.GetMaxRank(), 1000000.0);
             UNIT_ASSERT_VALUES_EQUAL(ranks.VirtualLevelToCompact, 1);
+            env.CheckRankSensors("LogoBlobs", 0, 100000000, 0);
+        }
+
+        Y_UNIT_TEST(RankSensorsTrackMaxAndReset) {
+            TPriorityTestEnv env;
+            env.AddSst(0, 8);
+            env.AddSst(1, 1);
+            env.AddSst(17, 192);
+            env.AddSst(18, 1024);
+            env.AddSst(19, 2048); // Rank17_ is the maximum, not the last level's rank.
+            env.GetRanks();
+            env.CheckRankSensors("LogoBlobs", 50, 6, 200);
+
+            env.Ds->LogoBlobs->CurSlice->SortedLevels.clear();
+            env.GetRanks();
+            env.CheckRankSensors("LogoBlobs", 50, 0, 0);
+        }
+
+        Y_UNIT_TEST(StrategyConstructorReportsRanksForEachDatabase) {
+            TPriorityTestEnv env;
+            env.AddSst(0, 8);
+            auto blocksSst = MakeIntrusive<TBlocksSst>(env.Contexts.GetVCtx());
+            blocksSst->AllChunks.resize(32, 1);
+            env.Ds->Blocks->CurSlice->Level0.Put(blocksSst);
+            auto barriersSst = MakeIntrusive<TBarriersSst>(env.Contexts.GetVCtx());
+            barriersSst->AllChunks.resize(4, 1);
+            env.Ds->Barriers->CurSlice->Level0.Put(barriersSst);
+            NHullComp::TSelectorParams params = {env.Boundaries, 1.0, TInstant::Zero(), {}};
+
+            // Construction alone publishes gauges; Select() has not run yet.
+            {
+                auto snap = env.Ds->GetIndexSnapshot();
+                TTask task;
+                TStrategy strategy(snap.HullCtx, params, std::move(snap.LogoBlobsSnap),
+                    std::move(snap.BarriersSnap), &task, false);
+                UNIT_ASSERT_VALUES_EQUAL(task.MaxRatio, 0.5);
+                env.CheckRankSensors("LogoBlobs", 50, 0, 0);
+                env.CheckRankSensors("Blocks", 0, 0, 0);
+                env.CheckRankSensors("Barriers", 0, 0, 0);
+            }
+            {
+                auto snap = env.Ds->GetIndexSnapshot();
+                NHullComp::TTask<TKeyBlock, TMemRecBlock> task;
+                NHullComp::TStrategy<TKeyBlock, TMemRecBlock> strategy(snap.HullCtx, params,
+                    std::move(snap.BlocksSnap), std::move(snap.BarriersSnap), &task, false);
+                UNIT_ASSERT_VALUES_EQUAL(task.MaxRatio, 2.0);
+                env.CheckRankSensors("Blocks", 200, 0, 0);
+                env.CheckRankSensors("LogoBlobs", 50, 0, 0);
+            }
+            {
+                auto snap = env.Ds->GetIndexSnapshot();
+                auto barriersSnap = env.Ds->Barriers->GetIndexSnapshot();
+                NHullComp::TTask<TKeyBarrier, TMemRecBarrier> task;
+                NHullComp::TStrategy<TKeyBarrier, TMemRecBarrier> strategy(snap.HullCtx, params,
+                    std::move(snap.BarriersSnap), std::move(barriersSnap), &task, false);
+                UNIT_ASSERT_VALUES_EQUAL(task.MaxRatio, 0.25);
+                env.CheckRankSensors("Barriers", 25, 0, 0);
+                env.CheckRankSensors("Blocks", 200, 0, 0);
+                env.CheckRankSensors("LogoBlobs", 50, 0, 0);
+            }
+        }
+
+        Y_UNIT_TEST(RankSensorsUpdatedBeforePromotion) {
+            TPriorityTestEnv env;
+            env.AddSst(17, 192);
+            env.Ds->LogoBlobs->CurSlice->SortedLevels.emplace_back(TKeyLogoBlob());
+            TTask task;
+            UNIT_ASSERT(env.Select(task) == NHullComp::ActMoveSsts);
+            UNIT_ASSERT(task.SelectStrategy == NHullComp::ESelectStrategy::PromoteSsts);
+            UNIT_ASSERT_VALUES_EQUAL(task.MaxRatio, 1.5);
+            env.CheckRankSensors("LogoBlobs", 0, 0, 150);
         }
 
         Y_UNIT_TEST(LevelRanksRespectSnapshotBoundary) {
@@ -124,7 +209,8 @@ namespace NKikimr {
             env.AddSst(0, 8);
             auto snap = env.Ds->LogoBlobs->GetIndexSnapshot();
             env.AddSst(0, 16);
-            const NHullComp::TLevelRanks oldRanks(*env.Boundaries, snap.SliceSnap);
+            const NHullComp::TLevelRanks oldRanks(*env.Boundaries, snap.SliceSnap,
+                env.Ds->HullCtx->LsmCompactionRankGroups[ui32(EHullDbType::LogoBlobs)]);
             UNIT_ASSERT_VALUES_EQUAL(oldRanks.Ranks[0], 0.5);
             UNIT_ASSERT_VALUES_EQUAL(env.GetRanks().Ranks[0], 1.5);
         }

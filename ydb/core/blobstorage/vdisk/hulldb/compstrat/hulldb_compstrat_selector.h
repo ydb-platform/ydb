@@ -41,7 +41,8 @@ namespace NKikimr {
                 , Task(task)
                 , Params(params)
                 , AllowGarbageCollection(allowGarbageCollection)
-                , Ranks(*Params.Boundaries, LevelSnap.SliceSnap)
+                , Ranks(*Params.Boundaries, LevelSnap.SliceSnap,
+                    HullCtx->LsmCompactionRankGroups[ui32(TKeyToEHullDbType<TKey>())])
             {
                 Y_DEBUG_ABORT_UNLESS(Task);
                 Task->Clear();

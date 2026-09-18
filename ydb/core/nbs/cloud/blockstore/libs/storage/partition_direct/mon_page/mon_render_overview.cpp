@@ -145,6 +145,37 @@ void FillDefaultConfigs(
     }
 }
 
+// Adds cached default config counters to node cells.
+void TransferDefaultConfigsToTable(
+    const TVector<TDbgSnapshot>& dbgs,
+    TDbgConfigTableData* tableData)
+{
+    for (const auto& dbg: dbgs) {
+        Y_ABORT_UNLESS(dbg.Index < tableData->DefaultConfigs.size());
+        const size_t columnIndex = dbg.Index % VChunkPerRegionCount;
+        for (const auto& entry: tableData->DefaultConfigs[dbg.Index]) {
+            if (entry.VChunkCount == 0) {
+                continue;
+            }
+
+            const auto& config = entry.Config;
+            Y_ABORT_UNLESS(dbg.Connections.size() >= config.GetHostCount());
+            for (THostIndex host = 0; host < config.GetHostCount(); ++host) {
+                const auto& connection = dbg.Connections[host];
+                if (config.GetDDiskRole(host) != EHostRole::None) {
+                    const auto state = config.GetHostHumanReadableState(host);
+                    tableData->Table[connection.DDiskId.NodeId][columnIndex]
+                        .DDiskStates[state] += entry.VChunkCount;
+                }
+                if (config.GetPBufferRole(host) != EHostRole::None) {
+                    tableData->Table[connection.PBufferId.NodeId][columnIndex]
+                        .PBufferCount += entry.VChunkCount;
+                }
+            }
+        }
+    }
+}
+
 // Builds table columns and node rows without calculating cell contents.
 TDbgConfigTableData BuildDbgConfigTable(const TVector<TDbgSnapshot>& dbgs)
 {
@@ -269,6 +300,7 @@ void RenderDbgConfigTable(
         tabletInfo.VolumeDirectBlockGroupCount,
         touchedProvider,
         &tableData);
+    TransferDefaultConfigsToTable(dbgs, &tableData);
 
     TVector<TNodeId> nodeIds;
     nodeIds.reserve(tableData.Table.size());

@@ -93,6 +93,9 @@ public:
 
     // Length of the arrays currently held (the row space the next filter must be built in).
     ui32 GetRecordsCountRobustVerified() const {
+        if (!Accessors.empty()) {
+            return Accessors.begin()->second->GetRecordsCount();
+        }
         if (UseFilter) {
             AFL_VERIFY(!!RecordsCountActual);
             return *RecordsCountActual;

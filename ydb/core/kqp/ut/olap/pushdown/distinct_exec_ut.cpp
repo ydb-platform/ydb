@@ -373,6 +373,47 @@ TCollectedStreamResult RunDistinctQuery(
         std::optional<ui64>(sqlLimit), true, std::nullopt);
 }
 
+void CheckDistinctLimitPastPkOrderedDuplicateRun(const TString& readerClass) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    if (!readerClass.empty()) {
+        settings.SetColumnShardReaderClassName(readerClass);
+    }
+    TKikimrRunner kikimr(settings);
+
+    TLocalHelperModuloTsSharding(kikimr).SetShardingMethod("HASH_FUNCTION_MODULO_N").CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+    constexpr ui32 kRun = 50;
+    constexpr ui32 kUniq = 50;
+    const auto ts = PickTimestampsForShard(0, 1, kRun + kUniq, 1);
+    std::vector<TString> rids;
+    rids.reserve(kRun + kUniq);
+    for (ui32 i = 0; i < kRun; ++i) {
+        rids.emplace_back("run_a");
+    }
+    for (ui32 i = 0; i < kUniq; ++i) {
+        rids.emplace_back(TStringBuilder() << "uniq_" << i);
+    }
+    TLocalHelperModuloTsSharding(kikimr).SendDataViaActorSystem("/Root/olapStore/olapTable", BuildBatchForRows(ts, rids, "u"));
+
+    auto tableClient = kikimr.GetTableClient();
+    constexpr ui64 kLimit = 5;
+    const TString tablePath = "/Root/olapStore/olapTable";
+    const i64 syncBefore = ReadDistinctLimitSyncPointInvocations(kikimr);
+    auto resOff = RunDistinctScanQuery(tableClient, tablePath, false, "resource_id", "resource_id", {}, {}, kLimit);
+    const i64 syncAfterOff = ReadDistinctLimitSyncPointInvocations(kikimr);
+    auto resOn = RunDistinctScanQuery(tableClient, tablePath, true, "resource_id", "resource_id", {}, {}, kLimit);
+    const i64 syncAfterOn = ReadDistinctLimitSyncPointInvocations(kikimr);
+
+    UNIT_ASSERT_VALUES_EQUAL(syncAfterOff, syncBefore);
+    UNIT_ASSERT_C(syncAfterOn > syncAfterOff,
+        TStringBuilder() << "DistinctLimit sync point expected with force; reader=" << readerClass
+                         << " before=" << syncBefore << " after_off=" << syncAfterOff << " after_on=" << syncAfterOn);
+    UNIT_ASSERT_VALUES_EQUAL(resOff.RowsCount, kLimit);
+    UNIT_ASSERT_VALUES_EQUAL(resOn.RowsCount, kLimit);
+    // Without ORDER BY the two engines may pick different keys; force-on must not stop after the duplicate run.
+    UNIT_ASSERT_C(resOn.ResultSetYson.find("run_a") != TString::npos, resOn.ResultSetYson);
+}
+
 void AssertQueryPlanContains(
     NYdb::NTable::TTableClient& tableClient,
     const TString& query,
@@ -779,6 +820,15 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdownE2E) {
         // ORDER BY + LIMIT together with OptForceOlapPushdownDistinctLimit is rejected at compile time (see PushOlapDistinct).
         auto res = RunDistinctScanQuery(tableClient, "/Root/olapStore/olapTable", false, "resource_id", "resource_id", {}, "ORDER BY resource_id", kLimit);
         UNIT_ASSERT_VALUES_EQUAL(res.RowsCount, kLimit);
+    }
+
+    // First LIMIT physical rows in PK order are the same DISTINCT key; DistinctLimit must keep scanning.
+    Y_UNIT_TEST(OneShard_DuplicateRunThenUniques_DistinctLimit_OnOff_SameResult) {
+        CheckDistinctLimitPastPkOrderedDuplicateRun("");
+    }
+
+    Y_UNIT_TEST(OneShard_DuplicateRunThenUniques_DistinctLimit_OnOff_SameResult_TrivialReader) {
+        CheckDistinctLimitPastPkOrderedDuplicateRun("TRIVIAL");
     }
 
     Y_UNIT_TEST(OneShard_AllUniques_DistinctOnOff_Limit_SameResult) {

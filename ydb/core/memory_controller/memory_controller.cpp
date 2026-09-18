@@ -465,6 +465,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -482,6 +483,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -498,6 +500,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
@@ -514,6 +517,12 @@ private:
                 {"limit", HumanReadableBytes(consumer.second)});
             Send(consumer.first->Owner, new TEvMemTableCompact(consumer.first->Table, consumer.second));
         }
+    }
+
+    // The kqp_rm queue limit with its self-config override, so the consumer limit is the same number
+    ui64 ResolveQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
+        const ui64* selfConfigLimit = ResourceBrokerSelfConfig.QueueLimits.FindPtr(NLocalDb::KqpResourceManagerQueue);
+        return selfConfigLimit ? *selfConfigLimit : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
@@ -535,14 +544,19 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        // The free-list size misses the pages queries hold, the mmapped bytes cover both
-        ui64 queryExecutionConsumption = Max<i64>(0, GetTotalMmapedBytes());
-        YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
-            {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-            {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
-        memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+        // A registered QueryExecution consumer reports for itself through the consumers loop
+        if (!Consumers.contains(EMemoryConsumerKind::QueryExecution)) {
+            // The free-list size misses the pages queries hold, the mmapped bytes cover both
+            ui64 queryExecutionConsumption = Max<i64>(0, GetTotalMmapedBytes());
+            YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
+                {"consumption", HumanReadableBytes(queryExecutionConsumption)},
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
+            Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Demand")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+            memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+            memoryStats.SetQueryExecutionDemand(memoryStats.GetQueryExecutionDemand() + queryExecutionConsumption);
+        }
         memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
@@ -629,7 +643,8 @@ private:
                 break;
             }
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
-            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory: {
+            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution: {
                 stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
                 stats.SetQueryExecutionDemand(stats.GetQueryExecutionDemand() + consumer.Demand);
                 stats.SetQueryExecutionReclaimable(stats.GetQueryExecutionReclaimable() + consumer.Reclaimable);
@@ -679,6 +694,11 @@ private:
             }
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache: {
                 result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
+                break;
+            }
+            case EMemoryConsumerKind::QueryExecution: {
+                // Static and report-only: the ResourceBroker queue limit stays the limit the RM applies
+                result.MinBytes = result.MaxBytes = ResolveQueryExecutionLimitBytes(hardLimitBytes);
                 break;
             }
         }

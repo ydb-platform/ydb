@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/localdb.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -20,6 +21,7 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -428,6 +430,7 @@ public:
         if (!hasScanQueryMemory) {
             Counters->RmNotEnoughMemory->Inc();
             tx.AckFailedMemoryAlloc(resources.Memory);
+            AckRefusedMemory(resources.Memory);
             TStringBuilder reason;
             reason << "TxId: " << txId << ", taskId: " << taskId << ". Not enough memory for query, requested: " << resources.Memory
                 << ". " << tx.ToString();
@@ -442,6 +445,7 @@ public:
             if (!result) {
                 Counters->RmNotEnoughMemory->Inc();
                 tx.AckFailedMemoryAlloc(resources.Memory);
+                AckRefusedMemory(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
                     if (tx.HasMemoryPoolLimit()) {
@@ -654,6 +658,14 @@ public:
         return SelfId.NodeId();
     }
 
+    // Refused bytes are the unmet part of Demand, the publish they fire carries them to MemoryController
+    void AckRefusedMemory(ui64 bytes) {
+        if (MemoryControllerReportEnabled.load()) {
+            RefusedMemoryBytes.fetch_add(bytes);
+            FireResourcesPublishing();
+        }
+    }
+
     void FireResourcesPublishing() {
         bool prev = PublishScheduled.test_and_set();
         if (!prev) {
@@ -740,6 +752,11 @@ public:
     // the spilling cookie attached at their construction (TTxState::PoolMemoryCookie, read lock-free), so the
     // resource that updates it has to stay the same one for as long as the pool is in use.
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
+
+    // Set once the RM actor is registered as the QueryExecution consumer
+    std::atomic<bool> MemoryControllerReportEnabled = false;
+    // Bytes of the memory requests refused since the previous report to MemoryController
+    std::atomic<ui64> RefusedMemoryBytes = 0;
 };
 
 struct TResourceManagers {
@@ -809,6 +826,11 @@ public:
         ToBroker(new TEvResourceBroker::TEvResourceBrokerRequest);
         ToBroker(new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true));
 
+        if (Config.GetEnableMemoryControllerReport()) {
+            MemoryControllerLimitBytes = ResourceManager->GetCounters()->GetKqpCounters()->GetSubgroup("subsystem", "RM")->GetCounter("MemoryControllerLimitBytes", false);
+            Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::QueryExecution));
+        }
+
         if (auto* mon = AppData()->Mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "kqp_resource_manager", "KQP Resource Manager", false,
@@ -876,6 +898,8 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
+            hFunc(NMemory::TEvConsumerRegistered, HandleWork);
+            hFunc(NMemory::TEvConsumerLimit, HandleWork);
             default: {
                 Y_ABORT("Unexpected event 0x%x at TKqpResourceManagerActor::WorkState", ev->GetTypeRewrite());
             }
@@ -915,6 +939,33 @@ private:
             ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
+        }
+    }
+
+    void HandleWork(NMemory::TEvConsumerRegistered::TPtr& ev) {
+        MemoryConsumer = std::move(ev->Get()->Consumer);
+        ResourceManager->MemoryControllerReportEnabled = true;
+        YDB_LOG_INFO("Registered as the QueryExecution consumer of MemoryController");
+        ReportToMemoryController();
+    }
+
+    void HandleWork(NMemory::TEvConsumerLimit::TPtr& ev) {
+        // Report-only: the ResourceBroker queue config stays the only source of the total limit
+        if (MemoryControllerLimitBytes) {
+            MemoryControllerLimitBytes->Set(ev->Get()->LimitBytes);
+        }
+    }
+
+    void ReportToMemoryController() {
+        if (!MemoryConsumer) {
+            return;
+        }
+        const ui64 used = Max<i64>(0, GetTotalMmapedBytes());
+        const ui64 refused = ResourceManager->RefusedMemoryBytes.exchange(0);
+        MemoryConsumer->SetReport({.Used = used, .Demand = used + refused, .Reclaimable = 0});
+        if (refused) {
+            // The next publish takes the refused bytes back out of Demand
+            ResourceManager->FireResourcesPublishing();
         }
     }
 
@@ -1021,6 +1072,10 @@ private:
     }
 
     void HandleWork(TEvents::TEvPoison::TPtr&) {
+        if (MemoryConsumer) {
+            ResourceManager->MemoryControllerReportEnabled = false;
+            Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::QueryExecution));
+        }
         PassAway();
     }
 
@@ -1162,6 +1217,8 @@ private:
         // saying resource manager that we are ready for the next publishing.
         ResourceManager->PublishScheduled.clear();
 
+        ReportToMemoryController();
+
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
@@ -1239,6 +1296,10 @@ private:
 
     bool WarmupInProgress = false;
     TDuration WarmupDeadline;
+
+    // Touched only from the RM actor
+    TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryControllerLimitBytes;
 };
 
 } // namespace NRm

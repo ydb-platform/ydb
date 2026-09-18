@@ -190,17 +190,17 @@ def valid_downloads(locale="en"):
 
 ## Linux
 
-|| **v26.3** | > | > | > ||
+|| **v26.3 RC** | > | > | > ||
 || v.26.3.1.16 | 18.09.26 | [Binary file](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.3.1.16/ydbd-26.3.1.16-linux-amd64.tar.gz) | [See list](../changelog-server.md#26-3-rc) ||
 
 ## Docker
 
-|| **v26.3** | > | > | > ||
+|| **v26.3 RC** | > | > | > ||
 || v.26.3.1.16 | 18.09.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.3.1.16` | [See list](../changelog-server.md#26-3-rc) ||
 
 ## Source Code
 
-|| **v26.3** | > | > | > ||
+|| **v26.3 RC** | > | > | > ||
 || v.26.3.1.16 | 18.09.26 | [Source code](https://github.com/ydb-platform/ydb/tree/26.3.1.16) | [See list](../changelog-server.md#26-3-rc) ||
 """
     return downloads if locale == "en" else downloads.replace("Source Code", "Исходный код")
@@ -363,6 +363,18 @@ class CoverageEvalTest(unittest.TestCase):
         )
 
         self.assertTrue(any("Linux table missing RC row" in error for error in errors))
+
+    def test_rejects_final_download_group_for_an_rc(self):
+        downloads = valid_downloads().replace("**v26.3 RC**", "**v26.3**")
+        errors = coverage_eval._check_downloads(
+            downloads,
+            "26.3.1.16",
+            "26.3",
+            "26-3-rc",
+            "en",
+        )
+
+        self.assertTrue(any("missing version group" in error for error in errors))
 
     def test_accepts_exact_bilingual_bijection_and_rendered_files(self):
         errors = coverage_eval.evaluate(

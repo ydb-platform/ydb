@@ -163,7 +163,7 @@ def _check_downloads(
         "ru": (("Linux", binary), ("Docker", docker), ("Исходный код", source)),
     }
     errors: list[str] = []
-    group = f"|| **v{docs_version}** | > | > | > ||"
+    group = f"|| **v{docs_version} RC** | > | > | > ||"
     row_pattern = re.compile(
         rf"^\|\| v\.{re.escape(release_tag)}\s*\|\s*"
         r"([0-3][0-9]\.[0-1][0-9]\.[0-9]{2})\s*\|(?P<payload>.*)\|\|$",
@@ -185,7 +185,7 @@ def _check_downloads(
             errors.append(f"{label} {title} table missing RC row: v.{release_tag}")
             continue
         next_group = re.search(
-            r"^\|\| \*\*v[0-9]+\.[0-9]+\*\* \|",
+            r"^\|\| \*\*v[0-9]+\.[0-9]+(?: RC)?\*\* \|",
             section[group_match.end() :],
             re.MULTILINE,
         )
@@ -196,7 +196,13 @@ def _check_downloads(
         if not row_match:
             errors.append(f"{label} {title} table missing RC row: v.{release_tag}")
             continue
-        version_groups = list(re.finditer(r"^\|\| \*\*v[0-9]+\.[0-9]+\*\* \|", section, re.MULTILINE))
+        version_groups = list(
+            re.finditer(
+                r"^\|\| \*\*v[0-9]+\.[0-9]+(?: RC)?\*\* \|",
+                section,
+                re.MULTILINE,
+            )
+        )
         if version_groups and version_groups[0].start() != group_match.start():
             errors.append(f"{label} {title} RC group is not above the preceding release")
         payload = row_match.group("payload")

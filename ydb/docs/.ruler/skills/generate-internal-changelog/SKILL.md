@@ -47,8 +47,9 @@ This workflow changes only:
 - `ydb/docs/ru/core/downloads/ydb-open-source-database.md`
 
 Do not publish a Bug Fixes section. In both downloads files, add the exact RC
-row to Linux, Docker, and Source Code tables above the preceding release line.
-The changelog link must use the RC anchor.
+row to Linux, Docker, and Source Code tables under the `v26.3 RC` group above
+the preceding release line. The changelog link must use the RC anchor. Never
+label an RC downloads group as final `v26.3`.
 
 ## 1. Resolve the RC boundary
 

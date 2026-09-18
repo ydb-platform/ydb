@@ -23,6 +23,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/ydb_issue
+    ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg_dummy
     library/cpp/json
 )

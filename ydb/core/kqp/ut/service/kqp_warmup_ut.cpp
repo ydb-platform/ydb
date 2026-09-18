@@ -1,6 +1,8 @@
 #include <atomic>
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/compilation/warmup_metadata.h>
@@ -8,6 +10,7 @@
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -916,6 +919,54 @@ namespace {
                 "Warmup should fail due to hard deadline: " << warmupComplete->Get()->Message);
         }
 
+        Y_UNIT_TEST(WarmupDatabaseTypeLookupHardDeadline) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.NodeCount = 1;
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            auto edge = runtime.AllocateEdgeActor();
+            TKqpWarmupConfig config;
+            config.SoftDeadline = TDuration::MilliSeconds(100);
+            config.HardDeadline = TDuration::Seconds(1);
+            auto actor = runtime.Register(CreateKqpWarmupActor(config, "/Root/no-console-reply", "", {edge}));
+            ui32 typeRequests = 0;
+            ui32 prepares = 0;
+            ui32 cacheReads = 0;
+            const auto typeObserver = runtime.AddObserver<TEvPipeCache::TEvForward>(
+                [&](TEvPipeCache::TEvForward::TPtr& event) {
+                    if (event->Sender == actor && event->Get()->TabletId == MakeConsoleID()) {
+                        ++typeRequests;
+                        event.Reset();
+                    }
+                });
+            const auto prepareObserver = runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& event) {
+                    prepares += event->Get()->Record.GetRequest().GetIsWarmupCompilation();
+                });
+            const auto scanObserver = runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
+                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr&) {
+                    ++cacheReads;
+                });
+
+            const auto start = runtime.GetCurrentTime();
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = [&] { return typeRequests == 1; };
+            runtime.DispatchEvents(opts, TDuration::Seconds(1));
+            runtime.Send(new IEventHandle(actor, edge, new TEvStartWarmup(1, {runtime.GetNodeId(0)})));
+            auto complete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(complete);
+            UNIT_ASSERT(!complete->Get()->Success);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->Message,
+                "Cannot determine database resource type for compile cache warmup");
+            UNIT_ASSERT(runtime.GetCurrentTime() >= start + config.HardDeadline);
+            UNIT_ASSERT_VALUES_EQUAL(typeRequests, 1);
+            UNIT_ASSERT_VALUES_EQUAL(prepares, 0);
+            UNIT_ASSERT_VALUES_EQUAL(cacheReads, 0);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
+            UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, 0);
+        }
+
         Y_UNIT_TEST(WarmupEmptyCache) {
             TWarmupTestParams params;
             params.UserSids = {"user0"};
@@ -1315,7 +1366,53 @@ namespace {
                 "No entries should fail for empty database");
         }
 
-        Y_UNIT_TEST(WarmupServerlessUnavailable) {
+        Y_UNIT_TEST_TWIN(WarmupUnsupportedDatabaseDoesNotRetry, Shared) {
+            TWarmupTestParams params;
+            params.UseRealThreads = false;
+            params.UserSids = {"user0"};
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            const TString reason = Shared
+                ? "Compile cache is not available for shared resource (serverless compute) databases"
+                : "Compile cache is not available for serverless databases";
+            ui32 readRequests = 0;
+            ui32 prepareRequests = 0;
+            const auto compileObserver = env.Runtime.AddObserver<TEvKqp::TEvQueryRequest>(
+                [&](TEvKqp::TEvQueryRequest::TPtr& ev) {
+                    if (ev->Get()->Record.GetRequest().GetIsWarmupCompilation()) {
+                        ++prepareRequests;
+                    }
+                });
+            const auto sysviewObserver = env.Runtime.AddObserver<TEvKqp::TEvListQueryCacheQueriesRequest>(
+                [&](TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
+                    ++readRequests;
+                    auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+                    response->Record.SetNodeId(ev->Cookie);
+                    response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+                    NYql::TIssues issues;
+                    issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::COMPILE_CACHE_UNSUPPORTED_DATABASE, reason));
+                    NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+                    env.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release()));
+                    ev.Reset();
+                });
+
+            TKqpWarmupConfig config;
+            config.SoftDeadline = TDuration::Seconds(5);
+            config.HardDeadline = TDuration::Seconds(10);
+            auto response = RunWarmup(env, config, TDuration::Seconds(11), true);
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_C(response->Get()->Success, response->Get()->Message);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Message, "Skipped: " + reason);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->EntriesLoaded, 0);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->EntriesFailed, 0);
+            UNIT_ASSERT_VALUES_EQUAL(prepareRequests, 0);
+            // The main fetch and the diagnostic count each make at most one read.
+            UNIT_ASSERT(readRequests > 0 && readRequests <= 2);
+        }
+
+        Y_UNIT_TEST(WarmupTenantMismatchUnavailable) {
             TWarmupTestParams params;
             params.UseRealThreads = false;
             params.UserSids = {"user0"};

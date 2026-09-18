@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/runtime
     ydb/core/sys_view/common
+    ydb/library/ydb_issue
 )
 
 YQL_LAST_ABI_VERSION()

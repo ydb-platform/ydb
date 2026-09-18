@@ -306,8 +306,8 @@ public:
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
             Stats->ExportExecStats(*response.MutableResult()->MutableStats());
-            if (auto currentStats = GetUserRequestContext()->CurrentQueryStats) {
-                Stats->ReportCurrentStats(*currentStats, true);
+            if (GetUserRequestContext()->CollectCurrentQueryStats) {
+                ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
             }
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {

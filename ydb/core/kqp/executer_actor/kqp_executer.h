@@ -2,6 +2,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -21,6 +22,14 @@ namespace NKikimr {
 namespace NKqp {
 
 struct TEvKqpExecuter {
+    struct TEvCurrentExecutionStats : public TEventLocal<TEvCurrentExecutionStats, TKqpExecuterEvents::EvCurrentExecutionStats> {
+        TCurrentExecStatsReport Report;
+
+        explicit TEvCurrentExecutionStats(TCurrentExecStatsReport report)
+            : Report(report)
+        {}
+    };
+
     struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
         TKqpExecuterEvents::EvTxRequest> {};
 
@@ -38,6 +47,7 @@ struct TEvKqpExecuter {
         std::optional<ui64> BrokenLockShardId;
         std::optional<ui64> BrokenLockQuerySpanId;
 
+        std::optional<TCurrentExecStatsReport> CurrentExecutionStats;
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
         ui64 LocksBrokenAsBreaker = 0;

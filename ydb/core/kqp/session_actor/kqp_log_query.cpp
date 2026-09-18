@@ -19,9 +19,9 @@ namespace NKikimr::NKqp {
 namespace {
 
 // Text limits exclude JSON/log escaping and metadata.
-constexpr size_t QUERY_TEXT_LIMIT = 3_KB;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
 constexpr size_t SQL_TEXT_MAX_SIZE = QUERY_TEXT_LIMIT;
-constexpr size_t AST_TEXT_MAX_SIZE = 2_KB;
+constexpr size_t AST_TEXT_MAX_SIZE = 3_KB;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;
 constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + AST_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
@@ -124,7 +124,7 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
         json.WriteKey("compute_memory_bytes").WriteULongLong(f.Resources->ComputeMemoryBytes);
         json.WriteKey("observed_peak_compute_memory_bytes").WriteULongLong(f.Resources->ObservedPeakComputeMemoryBytes);
         json.WriteKey("table_read_bytes").WriteULongLong(f.Resources->TableReadBytes);
-        json.WriteKey("source_read_bytes").WriteULongLong(f.Resources->SourceReadBytes);
+        json.WriteKey("read_ingress_bytes").WriteULongLong(f.Resources->ReadIngressBytes);
     }
     if (f.AstLen) {
         json.WriteKey("ast_len").WriteULongLong(f.AstLen);
@@ -328,9 +328,7 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
         fields.Database = state.Database;
         fields.AstLen = ast.size();
         fields.AstStatementIndex = state.CurrentStatementId;
-        if (userCtx && userCtx->CurrentQueryStats) {
-            fields.Resources = userCtx->CurrentQueryStats->Get();
-        }
+        fields.Resources = state.CurrentQueryStats.Get();
         if (userCtx) {
             fields.DatabaseId = userCtx->DatabaseId;
             fields.TraceId = userCtx->TraceId;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "query.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -18,6 +19,20 @@
 namespace NKikimr::NKqp {
 
 struct TEvKqp {
+    struct TEvCurrentQueryStats : public TEventLocal<TEvCurrentQueryStats, TKqpEvents::EvCurrentQueryStats> {
+        TString SessionId;
+        ui64 RequestId;
+        ui64 SequenceNo;
+        TCurrentQueryStats::TSnapshot Stats;
+
+        TEvCurrentQueryStats(TString sessionId, ui64 requestId, ui64 sequenceNo, TCurrentQueryStats::TSnapshot stats)
+            : SessionId(std::move(sessionId))
+            , RequestId(requestId)
+            , SequenceNo(sequenceNo)
+            , Stats(stats)
+        {}
+    };
+
     using TEvQueryRequestRemote = NPrivateEvents::TEvQueryRequestRemote;
 
     using TEvQueryRequest = NPrivateEvents::TEvQueryRequest;
